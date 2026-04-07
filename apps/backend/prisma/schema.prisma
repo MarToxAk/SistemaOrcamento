@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DataSource {
+  MANUAL
+  PDV
+  CHATWOOT
+}
+
+enum PriceSource {
+  MANUAL
+  PDV
+}
+
+enum QuoteStatus {
+  PENDENTE
+  APROVADO
+  EM_PRODUCAO
+  PRONTO_PARA_ENTREGA
+  ENTREGUE
+  CANCELADO
+}
+
+enum UserRole {
+  VENDEDOR
+  ATENDENTE
+  ADMIN
+}
+
+enum ExternalSystem {
+  PDV
+  CHATWOOT
+}
+
+model Customer {
+  id                String   @id @default(uuid())
+  fullName          String
+  phone             String?
+  email             String?
+  source            DataSource @default(MANUAL)
+  chatwootContactId BigInt?   @db.BigInt
+  quotes            Quote[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([phone])
+  @@index([email])
+}
+
+model User {
+  id            String               @id @default(uuid())
+  name          String
+  email         String?              @unique
+  role          UserRole             @default(VENDEDOR)
+  isActive      Boolean              @default(true)
+  createdQuotes Quote[]              @relation("QuoteCreatedBy")
+  statusChanges QuoteStatusHistory[] @relation("StatusChangedBy")
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+}
+
+model Quote {
+  id                 String               @id @default(uuid())
+  internalNumber     Int                  @unique @default(autoincrement())
+  externalQuoteId    BigInt?              @db.BigInt
+  customerId         String
+  createdById        String?
+  status             QuoteStatus           @default(PENDENTE)
+  source             DataSource            @default(MANUAL)
+  sellerExternalId   BigInt?               @db.BigInt
+  sellerName         String?
+  conversationId     BigInt?               @db.BigInt
+  chatwootContactId  BigInt?               @db.BigInt
+  validity           String?
+  deliveryDate       DateTime?
+  paymentTerms       String?
+  notes              String?
+  budgetDate         DateTime?
+  editedAt           DateTime?
+  subtotal           Decimal               @default(0) @db.Decimal(12, 2)
+  discount           Decimal               @default(0) @db.Decimal(12, 2)
+  surcharge          Decimal               @default(0) @db.Decimal(12, 2)
+  total              Decimal               @default(0) @db.Decimal(12, 2)
+  customer           Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy          User?                 @relation("QuoteCreatedBy", fields: [createdById], references: [id])
+  items              QuoteItem[]
+  stamps             QuoteStampItem[]
+  statusHistory      QuoteStatusHistory[]
+  documents          QuoteDocument[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([status, updatedAt])
+  @@index([externalQuoteId])
+  @@index([conversationId])
+  @@index([chatwootContactId])
+}
+
+model QuoteItem {
+  id                String      @id @default(uuid())
+  quoteId           String
+  parentItemId      String?
+  sequence          Int
+  externalItemId    BigInt?     @db.BigInt
+  productExternalId BigInt?     @db.BigInt
+  reference         String?
+  shortDescription  String
+  description       String
+  quantity          Decimal     @db.Decimal(10, 2)
+  unitPrice         Decimal     @db.Decimal(12, 2)
+  discount          Decimal     @default(0) @db.Decimal(12, 2)
+  finalPrice        Decimal     @db.Decimal(12, 2)
+  priceSource       PriceSource @default(MANUAL)
+  quote             Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  parentItem        QuoteItem?  @relation("QuoteItemChildren", fields: [parentItemId], references: [id], onDelete: SetNull)
+  children          QuoteItem[] @relation("QuoteItemChildren")
+  createdAt         DateTime    @default(now())
+
+  @@index([quoteId, sequence])
+  @@index([parentItemId])
+}
+
+model QuoteStampItem {
+  id          String   @id @default(uuid())
+  quoteId     String
+  number      Int
+  stampType   String
+  dimensions  String?
+  description String?
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([quoteId, number])
+}
+
+model QuoteStatusHistory {
+  id            String      @id @default(uuid())
+  quoteId       String
+  oldStatus     QuoteStatus?
+  newStatus     QuoteStatus
+  changedById   String?
+  changedByName String
+  changedAt     DateTime    @default(now())
+  quote         Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  changedBy     User?       @relation("StatusChangedBy", fields: [changedById], references: [id])
+}
+
+model QuoteDocument {
+  id           String   @id @default(uuid())
+  quoteId      String
+  fileName     String
+  contentType  String
+  storagePath  String
+  generatedBy  String
+  generatedAt  DateTime @default(now())
+  quote        Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId, generatedAt])
+}
+
+model ExternalReference {
+  id             String         @id @default(uuid())
+  entityType     String
+  entityId       String
+  externalSystem ExternalSystem
+  externalId     String
+  createdAt      DateTime       @default(now())
+
+  @@index([externalSystem, externalId])
+  @@unique([externalSystem, externalId, entityType])
+}
