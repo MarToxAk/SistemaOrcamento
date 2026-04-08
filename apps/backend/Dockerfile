@@ -20,6 +20,7 @@ RUN npm ci
 
 FROM deps AS build
 COPY . .
+RUN npm --workspace @bomcusto/backend run prisma:generate -- --schema prisma/schema.prisma
 RUN npm --workspace @bomcusto/backend run build
 
 FROM base AS runtime
@@ -34,4 +35,4 @@ COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
 COPY --from=build /app/package.json ./package.json
 
 EXPOSE 4000
-CMD ["sh", "-c", "npm --workspace @bomcusto/backend run prisma:deploy -- --schema apps/backend/prisma/schema.prisma && npm --workspace @bomcusto/backend run start"]
+CMD ["sh", "-c", "npm --workspace @bomcusto/backend run prisma:deploy -- --schema prisma/schema.prisma && npm --workspace @bomcusto/backend run start"]
