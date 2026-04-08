@@ -1,8 +1,23 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bomcusto-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-bomcusto}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+
   backend:
     image: ${BACKEND_IMAGE:-ghcr.io/martoxak/bomcusto-backend:latest}
     container_name: bomcusto-backend
     restart: always
+    depends_on:
+      - postgres
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -25,3 +40,6 @@ services:
       - stack.env
     ports:
       - "3000:3000"
+
+volumes:
+  postgres_data:
