@@ -1,4 +1,22 @@
 services:
+  ts-webserver2:
+    image: tailscale/tailscale:latest
+    container_name: bomcusto-ts-webserver2
+    hostname: bomcusto-webserver
+    restart: always
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_EXTRA_ARGS: --accept-routes --advertise-tags=tag:container
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: false
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+
   postgres:
     image: postgres:16-alpine
     container_name: bomcusto-postgres
@@ -18,11 +36,10 @@ services:
     restart: always
     depends_on:
       - postgres
+      - ts-webserver2
     env_file:
       - stack.env
-    networks:
-      - app_net
-      - shared_access_net
+    network_mode: service:ts-webserver2
     ports:
       - "4001:4000"
 
@@ -43,8 +60,7 @@ services:
 volumes:
   postgres_data:
 
+  tailscale_data:
+
 networks:
   app_net:
-  shared_access_net:
-    external: true
-    name: ts-webserver2
