@@ -31,7 +31,7 @@ services:
       MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-}
       MINIO_PATH_PREFIX: ${MINIO_PATH_PREFIX:-quotes}
     ports:
-      - "4000:4000"
+      - "${BACKEND_HOST_PORT:-4001}:4000"
 
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/bomcusto-frontend:latest}
@@ -44,4 +44,4 @@ services:
       PORT: 3000
       BACKEND_URL: ${BACKEND_URL:-http://backend:4000/api}
     ports:
-      - "3000:3000"
+      - "${FRONTEND_HOST_PORT:-3001}:3000"
