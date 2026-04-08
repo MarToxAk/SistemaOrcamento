@@ -18,10 +18,7 @@ services:
       - postgres
     env_file:
       - stack.env
-    networks:
-      - webserver2_net
-    ports:
-      - "4001:4000"
+    network_mode: container:ts-webserver2
 
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/bomcusto-frontend:latest}
@@ -31,15 +28,7 @@ services:
       - backend
     env_file:
       - stack.env
-    networks:
-      - webserver2_net
-    ports:
-      - "3001:3000"
+    network_mode: container:ts-webserver2
 
 volumes:
   postgres_data:
-
-networks:
-  webserver2_net:
-    external: true
-    name: ts-webserver2_network
