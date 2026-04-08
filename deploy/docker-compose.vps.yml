@@ -1,13 +1,28 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bomcusto-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-bomcusto}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5435}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   backend:
     image: ${BACKEND_IMAGE:-ghcr.io/martoxak/bomcusto-backend:latest}
     container_name: bomcusto-backend
     restart: always
+    depends_on:
+      - postgres
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-4000}
       APP_BASE_URL: ${APP_BASE_URL:-}
-      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bomcusto}}
       CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL:-}
       CHATWOOT_API_TOKEN: ${CHATWOOT_API_TOKEN:-}
       CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID:-}
@@ -45,3 +60,6 @@ services:
       BACKEND_URL: ${BACKEND_URL:-http://backend:4000/api}
     ports:
       - "${FRONTEND_HOST_PORT:-3001}:3000"
+
+volumes:
+  postgres_data:
