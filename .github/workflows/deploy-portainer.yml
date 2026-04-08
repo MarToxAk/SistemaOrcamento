@@ -49,7 +49,7 @@ jobs:
             ghcr.io/${{ steps.vars.outputs.owner }}/bomcusto-frontend:sha-${{ github.sha }}
 
       - name: Trigger Portainer Webhook
-        if: ${{ secrets.PORTAINER_WEBHOOK_URL != '' }}
+        if: ${{ vars.PORTAINER_WEBHOOK_ENABLED == 'true' }}
         env:
           PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
         run: curl -fsSL -X POST "$PORTAINER_WEBHOOK_URL"
