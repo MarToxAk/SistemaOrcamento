@@ -420,18 +420,16 @@ export default function PreencherOrcamentoPage() {
                 </div>
               </div>
             </div>
-            <div className="row mb-4">
-              <div className="col-12">
-                <div className="p-4 rounded" style={{ background: "#f8f9fa", borderLeft: "4px solid #7dc8aa" }}>
-                  <h5 className="mb-3"><i className="bi bi-stamp me-2"></i>Configuração do Carimbo Personalizado</h5>
-                  {quantidadeBorracha > 0 && quantidadeBorracha < quantidadeCarcaca && (
-                    <div className="alert alert-danger">
-                      <strong>Erro de proporção:</strong> {quantidadeCarcaca} carcaça(s) para apenas {quantidadeBorracha} borracha(s).
-                    </div>
-                  )}
-                  {form.carimbos.length === 0 ? (
-                    <div className="alert alert-light border mb-0">Sem carimbos neste orçamento.</div>
-                  ) : (
+            {form.carimbos.length > 0 && (
+              <div className="row mb-4">
+                <div className="col-12">
+                  <div className="p-4 rounded" style={{ background: "#f8f9fa", borderLeft: "4px solid #7dc8aa" }}>
+                    <h5 className="mb-3"><i className="bi bi-stamp me-2"></i>Configuração do Carimbo Personalizado</h5>
+                    {quantidadeBorracha > 0 && quantidadeBorracha < quantidadeCarcaca && (
+                      <div className="alert alert-danger">
+                        <strong>Erro de proporção:</strong> {quantidadeCarcaca} carcaça(s) para apenas {quantidadeBorracha} borracha(s).
+                      </div>
+                    )}
                     <>
                         {form.carimbos.length > 1 && (
                           <div className="alert alert-primary mb-3">
@@ -512,10 +510,10 @@ export default function PreencherOrcamentoPage() {
                         </ul>
                       </small>
                     </>
-                  )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
             <div className="row mt-4">
               <div className="col-12 d-flex justify-content-center">
                 <button type="submit" className="btn btn-primary" disabled={salvando || loading}>

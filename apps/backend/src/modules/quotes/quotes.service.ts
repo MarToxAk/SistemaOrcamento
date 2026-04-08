@@ -4,6 +4,7 @@ import { PriceSource, Prisma, QuoteStatus } from "@prisma/client";
 
 import { PrismaService } from "../database/prisma.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
+import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
 
 const statusTransitions: Record<QuoteStatus, QuoteStatus[]> = {
   PENDENTE: ["APROVADO", "CANCELADO"],
@@ -41,6 +42,7 @@ export class QuotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly athosService: AthosService,
+    private readonly quotesPdfStorageService: QuotesPdfStorageService,
   ) {}
 
   async buscarNoAthosPorNumero(numero: string, format: "raw" | "mapped" = "raw") {
@@ -72,7 +74,29 @@ export class QuotesService {
     if (!quote) {
       throw new NotFoundException("Orcamento nao encontrado");
     }
-    return this.mapQuoteBody(quote);
+
+    const mapped = this.mapQuoteBody(quote);
+
+    // Busca documentos salvos (including publicUrl do banco)
+    const documents = await this.prisma.quoteDocument.findMany({
+      where: { quoteId: quote.id },
+      orderBy: { generatedAt: "desc" },
+    });
+
+    return {
+      ...mapped,
+      body: {
+        ...mapped.body,
+        id: quote.id,
+        documentoPdf: documents.map((doc) => ({
+          filename: doc.fileName,
+          contentType: doc.contentType,
+          storagePath: doc.storagePath,
+          publicUrl: doc.publicUrl,
+          generatedAt: doc.generatedAt,
+        })),
+      },
+    };
   }
 
   async create(payload: CreateQuoteDto) {
@@ -241,7 +265,49 @@ export class QuotesService {
       return fullQuote;
     });
 
-    return this.mapQuoteBody(quote);
+    const mappedQuote = this.mapQuoteBody(quote);
+
+    try {
+      const stored = await this.quotesPdfStorageService.generateAndStore(mappedQuote.body);
+
+      const document = await this.prisma.quoteDocument.create({
+        data: {
+          quoteId: quote.id,
+          fileName: stored.fileName,
+          contentType: stored.contentType,
+          storagePath: stored.objectName,
+          publicUrl: stored.publicUrl,
+          generatedBy: payload.vendedorNome ?? "sistema",
+        },
+      });
+
+      return {
+        ...mappedQuote,
+        body: {
+          ...mappedQuote.body,
+          id: quote.id,
+          documentoPdf: {
+            filename: document.fileName,
+            contentType: document.contentType,
+            storagePath: document.storagePath,
+            publicUrl: document.publicUrl,
+            generatedAt: document.generatedAt,
+          },
+        },
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Falha ao gerar PDF.";
+
+      return {
+        ...mappedQuote,
+        body: {
+          ...mappedQuote.body,
+          documentoPdf: {
+            error: errorMessage,
+          },
+        },
+      };
+    }
   }
 
   async changeStatus(identifier: string, newStatusInput: string, changedBy: string) {
@@ -291,16 +357,15 @@ export class QuotesService {
       throw new NotFoundException("Orcamento nao encontrado");
     }
 
-    const timestamp = Date.now();
-    const filename = `orcamento-${quote.internalNumber}-${timestamp}.pdf`;
-    const storagePath = `/quotes/${quote.internalNumber}/${filename}`;
+    const mapped = this.mapQuoteBody(quote);
+    const stored = await this.quotesPdfStorageService.generateAndStore(mapped.body);
 
     const document = await this.prisma.quoteDocument.create({
       data: {
         quoteId: quote.id,
-        fileName: filename,
-        contentType: "application/pdf",
-        storagePath,
+        fileName: stored.fileName,
+        contentType: stored.contentType,
+        storagePath: stored.objectName,
         generatedBy: "sistema",
       },
     });
@@ -311,8 +376,9 @@ export class QuotesService {
       filename: document.fileName,
       contentType: document.contentType,
       storagePath: document.storagePath,
+      publicUrl: stored.publicUrl,
       generatedAt: document.generatedAt,
-      message: "Registro de documento criado. Integrar gerador real de PDF na proxima iteracao.",
+      message: "PDF gerado e salvo com sucesso.",
     };
   }
 

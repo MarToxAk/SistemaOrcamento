@@ -157,6 +157,7 @@ model QuoteDocument {
   fileName     String
   contentType  String
   storagePath  String
+  publicUrl    String?  @db.Text
   generatedBy  String
   generatedAt  DateTime @default(now())
   quote        Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)

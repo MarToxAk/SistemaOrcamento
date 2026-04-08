@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import path from "node:path";
 
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health.controller";
@@ -11,7 +12,11 @@ import { QuotesModule } from "./quotes/quotes.module";
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [`.env.${process.env.NODE_ENV ?? "development"}`, ".env"],
+      envFilePath: [
+        path.resolve(process.cwd(), `.env.${process.env.NODE_ENV ?? "development"}`),
+        path.resolve(process.cwd(), ".env"),
+        path.resolve(process.cwd(), "../../.env"),
+      ],
     }),
     DatabaseModule,
     QuotesModule,
