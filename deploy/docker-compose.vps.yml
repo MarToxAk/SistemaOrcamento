@@ -3,8 +3,10 @@ services:
     image: postgres:16-alpine
     container_name: bomcusto-postgres
     restart: always
-    env_file:
-      - stack.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-troque_essa_senha}
+      POSTGRES_DB: ${POSTGRES_DB:-bomcusto}
     networks:
       - app_net
     ports:
@@ -18,8 +20,33 @@ services:
     restart: always
     depends_on:
       - postgres
-    env_file:
-      - stack.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-4000}
+      APP_BASE_URL: ${APP_BASE_URL:-}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:troque_essa_senha@postgres:5432/bomcusto}
+      CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL:-}
+      CHATWOOT_API_TOKEN: ${CHATWOOT_API_TOKEN:-}
+      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID:-}
+      CHATWOOT_INBOX_ID: ${CHATWOOT_INBOX_ID:-}
+      ATHOS_PG_HOST: ${ATHOS_PG_HOST:-}
+      ATHOS_PG_DB: ${ATHOS_PG_DB:-}
+      ATHOS_PG_USER: ${ATHOS_PG_USER:-}
+      ATHOS_PG_PASS: ${ATHOS_PG_PASS:-}
+      ATHOS_PG_PORT: ${ATHOS_PG_PORT:-5432}
+      PDV_DB_URL: ${PDV_DB_URL:-}
+      PDV_DB_SCHEMA: ${PDV_DB_SCHEMA:-public}
+      PDV_DB_READONLY_USER: ${PDV_DB_READONLY_USER:-}
+      PDV_DB_READONLY_PASSWORD: ${PDV_DB_READONLY_PASSWORD:-}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-}
+      MINIO_PORT: ${MINIO_PORT:-443}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-true}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
+      MINIO_BUCKET: ${MINIO_BUCKET:-orcamento}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-}
+      MINIO_PATH_PREFIX: ${MINIO_PATH_PREFIX:-quotes}
     networks:
       - app_net
       - shared_access_net
@@ -32,8 +59,10 @@ services:
     restart: always
     depends_on:
       - backend
-    env_file:
-      - stack.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      BACKEND_URL: ${BACKEND_URL:-http://backend:4000/api}
     networks:
       - app_net
       - shared_access_net
