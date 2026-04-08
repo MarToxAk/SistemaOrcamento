@@ -47,4 +47,4 @@ networks:
   app_net:
   shared_access_net:
     external: true
-    name: ts-webserver2_default
+    name: ts-webserver2
