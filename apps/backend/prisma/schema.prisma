@@ -68,7 +68,7 @@ model User {
 model Quote {
   id                 String               @id @default(uuid())
   internalNumber     Int                  @unique @default(autoincrement())
-  externalQuoteId    BigInt?              @db.BigInt
+  externalQuoteId    BigInt?              @db.BigInt @unique
   customerId         String
   createdById        String?
   status             QuoteStatus           @default(PENDENTE)
@@ -97,7 +97,7 @@ model Quote {
   updatedAt          DateTime              @updatedAt
 
   @@index([status, updatedAt])
-  @@index([externalQuoteId])
+  
   @@index([conversationId])
   @@index([chatwootContactId])
 }

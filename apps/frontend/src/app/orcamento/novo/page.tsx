@@ -1,6 +1,6 @@
 "use client";
 import Script from "next/script";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CARIMBOS_CONFIG } from "./carimbos-config";
 
 type ItemForm = {
@@ -40,31 +40,239 @@ function ehCarimboModelo(descricao: string) {
   return CARIMBOS_CONFIG.isAutomatico(descricao) || CARIMBOS_CONFIG.isMadeira(descricao);
 }
 
+function parseMaybeNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizePhone(value: string) {
+  let telefone = (value || "").replace(/[\s\-()]/g, "");
+
+  if (telefone.startsWith("+55")) {
+    telefone = telefone.slice(3);
+  } else if (telefone.startsWith("55") && telefone.length >= 12) {
+    telefone = telefone.slice(2);
+  }
+
+  if (telefone.length === 11) {
+    return `(${telefone.slice(0, 2)}) ${telefone.slice(2, 7)}-${telefone.slice(7)}`;
+  }
+  if (telefone.length === 10) {
+    return `(${telefone.slice(0, 2)}) ${telefone.slice(2, 6)}-${telefone.slice(6)}`;
+  }
+
+  return value;
+}
+
+function parseIncomingMessagePayload(data: unknown): Record<string, any> | null {
+  if (!data) return null;
+  if (typeof data === "object") return data as Record<string, any>;
+  if (typeof data !== "string") return null;
+
+  try {
+    const parsed = JSON.parse(data) as unknown;
+    return typeof parsed === "object" && parsed ? (parsed as Record<string, any>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseObjectMaybe(value: unknown): Record<string, any> | null {
+  if (!value) return null;
+  if (typeof value === "object") return value as Record<string, any>;
+  if (typeof value !== "string") return null;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "object" && parsed ? (parsed as Record<string, any>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeChatwootPayload(raw: Record<string, any>) {
+  const dataObj = parseObjectMaybe(raw.data) ?? parseObjectMaybe(raw.payload) ?? raw;
+  const nestedDataObj = parseObjectMaybe(dataObj?.data) ?? dataObj;
+
+  const conversation =
+    nestedDataObj?.conversation ??
+    dataObj?.conversation ??
+    nestedDataObj?.meta?.conversation ??
+    raw?.conversation ??
+    {};
+
+  const contact =
+    nestedDataObj?.contact ??
+    dataObj?.contact ??
+    nestedDataObj?.meta?.sender ??
+    dataObj?.meta?.sender ??
+    raw?.meta?.sender ??
+    raw?.contact ??
+    raw?.sender ??
+    (nestedDataObj?.name || nestedDataObj?.email || nestedDataObj?.phone_number || nestedDataObj?.phone
+      ? nestedDataObj
+      : {});
+
+  return { conversation, contact };
+}
+
 const DADOS_EXEMPLO = {
-  numero: 6,
-  data: "2025-09-03",
-  cliente: "Maria Souza",
-  telefone: "(12) 99999-9999",
-  email: "maria@email.com",
-  vendedor: "João Silva",
-  validade: "2 dias",
-  prazoEntrega: "2025-09-10",
-  condPagamento: "À vista",
-  observacoes: "Não é possível fazer o cancelamento do pedido, após a confirmação do recebimento da proposta via email.",
-  itens: [
-    { descricao: "Cartão de Visita 4x4 300g", quantidade: 2, valor: 120, desconto: 0, total: 240 },
-    { descricao: "Panfleto A5 90g", quantidade: 1, valor: 110.5, desconto: 10, total: 100.5 }
-  ],
+  numero: 0,
+  data: "",
+  cliente: "",
+  telefone: "",
+  email: "",
+  vendedor: "",
+  validade: "",
+  prazoEntrega: "",
+  condPagamento: "",
+  observacoes: "",
+  itens: [] as ItemForm[],
   carimbos: [] as CarimboForm[],
 };
 
 export default function PreencherOrcamentoPage() {
   const [form, setForm] = useState({ ...DADOS_EXEMPLO });
   const [numeroBusca, setNumeroBusca] = useState("");
+  const [conversationId, setConversationId] = useState<number | undefined>(undefined);
+  const [chatwootContactId, setChatwootContactId] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [salvando, setSalvando] = useState(false);
+  const [sendingState, setSendingState] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
+  const [validationState, setValidationState] = useState<"checking" | "valid" | "invalid">("checking");
+  const [validationMessage, setValidationMessage] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    const parseOptionalNumber = (...keys: string[]) => {
+      for (const key of keys) {
+        const raw = params.get(key);
+        if (!raw) continue;
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+      return undefined;
+    };
+
+    // Compatibilidade com parametros de diferentes integrações Chatwoot.
+    setConversationId(parseOptionalNumber("chatid", "conversationId", "conversation_id"));
+    setChatwootContactId(parseOptionalNumber("chatwootContactId", "chatwoot_contact_id", "contact_id"));
+
+    const nomeQuery = params.get("nome") ?? params.get("name") ?? params.get("cliente") ?? "";
+    const telefoneQuery = params.get("telefone") ?? params.get("phone") ?? params.get("phone_number") ?? "";
+    const emailQuery = params.get("email") ?? "";
+
+    if (nomeQuery || telefoneQuery || emailQuery) {
+      setForm((current) => ({
+        ...current,
+        cliente: nomeQuery || current.cliente,
+        telefone: telefoneQuery ? normalizePhone(telefoneQuery) : current.telefone,
+        email: emailQuery || current.email,
+      }));
+    }
+
+    const applyChatwootData = (conversation: Record<string, unknown>, contact: Record<string, unknown>) => {
+      const convId = parseMaybeNumber(conversation?.id);
+      const contactId = parseMaybeNumber(contact?.id);
+
+      if (convId !== undefined) {
+        setConversationId(convId);
+      }
+      if (contactId !== undefined) {
+        setChatwootContactId(contactId);
+      }
+
+      const nome = String(
+        contact?.name ??
+          contact?.display_name ??
+          contact?.full_name ??
+          contact?.identifier ??
+          "",
+      ).trim();
+
+      const telefoneRaw = String(
+        contact?.phone_number ??
+          contact?.phoneNumber ??
+          contact?.phone ??
+          contact?.identifier ??
+          "",
+      ).trim();
+
+      const email = String(contact?.email ?? contact?.inbox_email ?? "").trim();
+
+      if (!nome && !telefoneRaw && !email) return;
+
+      setForm((current) => ({
+        ...current,
+        cliente: nome || current.cliente,
+        telefone: telefoneRaw ? normalizePhone(telefoneRaw) : current.telefone,
+        email: email || current.email,
+      }));
+    };
+
+    const handleMessage = (event: MessageEvent) => {
+      const payload = parseIncomingMessagePayload(event.data);
+      if (!payload) return;
+
+      const { conversation, contact } = normalizeChatwootPayload(payload);
+      const hasUsefulContext =
+        parseMaybeNumber(conversation?.id) !== undefined ||
+        parseMaybeNumber(contact?.id) !== undefined ||
+        Boolean(contact?.name || contact?.email || contact?.phone_number || contact?.phone || contact?.identifier);
+
+      if (!hasUsefulContext) return;
+
+      applyChatwootData(conversation, contact);
+    };
+
+    const requestChatwootInfo = () => {
+      try {
+        // Formato oficial da doc do Chatwoot.
+        window.parent?.postMessage("chatwoot-dashboard-app:fetch-info", "*");
+        // Compatibilidade com integrações antigas que escutam objeto.
+        window.parent?.postMessage({ event: "chatwoot-dashboard-app:fetch-info" }, "*");
+      } catch {
+        // Ignora falha fora de iframe/Chatwoot.
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    requestChatwootInfo();
+
+    const retryId = window.setTimeout(() => {
+      requestChatwootInfo();
+    }, 1200);
+
+    // Validazione: verificar se está no Chatwoot após timeout
+    const validationTimeout = window.setTimeout(() => {
+      const isInIframe = window.parent !== window;
+      if (!isInIframe) {
+        setValidationMessage("Esta página deve ser acessada através do Chatwoot");
+        setValidationState("invalid");
+      }
+    }, 3500);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      window.clearTimeout(retryId);
+      window.clearTimeout(validationTimeout);
+    };
+  }, []);
+
+  // Validação: marcar como válido quando receber dados do Chatwoot
+  useEffect(() => {
+    if (
+      conversationId !== undefined &&
+      conversationId > 0
+    ) {
+      setValidationState("valid");
+      setValidationMessage("");
+    }
+  }, [conversationId]);
 
   const avisosCarimbo = form.carimbos
     .map((item, idx) => ({
@@ -178,12 +386,14 @@ export default function PreencherOrcamentoPage() {
         }
       }
 
-      setForm({
+      // Campos de cliente, telefone e email são preservados do Chatwoot.
+      // A busca do Athos preenche apenas se ainda estiverem vazios.
+      setForm((current) => ({
         numero: data.numero || numeroBusca,
         data: data.data || new Date().toISOString().slice(0, 10),
-        cliente: data.cliente || "",
-        telefone: data.telefone || funcionario?.celular || funcionario?.telefone || "",
-        email: data.email || funcionario?.email || "",
+        cliente: current.cliente || data.cliente || "",
+        telefone: current.telefone || data.telefone || funcionario?.celular || funcionario?.telefone || "",
+        email: current.email || "",
         vendedor: data.vendedor || funcionario?.nome || "",
         validade: data.validade || "",
         prazoEntrega: data.prazoEntrega || "",
@@ -191,7 +401,7 @@ export default function PreencherOrcamentoPage() {
         observacoes: data.observacoes || "",
         itens: itens as ItemForm[],
         carimbos,
-      });
+      }));
       setErro("");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao carregar orçamento.";
@@ -215,6 +425,8 @@ export default function PreencherOrcamentoPage() {
       idorcamento: Number.isFinite(Number(form.numero)) ? Number(form.numero) : undefined,
       dataorcamento: form.data || undefined,
       vendedorNome: form.vendedor || undefined,
+      conversationId,
+      chatwootContactId,
       cliente: {
         nome: form.cliente,
         telefone: form.telefone || undefined,
@@ -260,7 +472,7 @@ export default function PreencherOrcamentoPage() {
       source: "MANUAL" as const,
     };
 
-    setSalvando(true);
+    setSendingState("sending");
     try {
       const res = await fetch("/api/quotes", {
         method: "POST",
@@ -279,11 +491,14 @@ export default function PreencherOrcamentoPage() {
           ? `Orcamento gerado com sucesso. Numero interno: ${numeroInterno}.`
           : "Orcamento gerado com sucesso.",
       );
+      setSendingState('success');
+      window.setTimeout(() => setSendingState('idle'), 2000);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao gerar orcamento.";
       setErro(message);
+      setSendingState('error');
+      window.setTimeout(() => setSendingState('idle'), 2000);
     }
-    setSalvando(false);
   }
 
   return (
@@ -292,27 +507,65 @@ export default function PreencherOrcamentoPage() {
       <Script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.js" strategy="beforeInteractive" />
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
       <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
-      <div className="container my-5">
-        <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top" style={{background: "linear-gradient(135deg,#c5f2e8 0%,#cbe1f9 25%,#e7d8f9 50%,#f9e7f5 75%,#f0cacb 100%)", color: "#222"}}>
-          <div className="d-flex align-items-center">
-            <img src="/media/logo_new.svg" alt="Logo Bom Custo" className="me-3" style={{maxWidth:180, maxHeight:120, background: "#fff", borderRadius:8, padding:4}} />
-            <div>
-              <h3 className="mb-0">Bom Custo Papelaria & Gráfica Rápida LTDA</h3>
-              <div className="small">CNPJ: 62.391.927/0001-57</div>
-              <div className="small">Rua Olímpio Leite da Silva, 39 - Loja 07, Perequê</div>
-              <div className="small">Ilhabela - SP, CEP: 11633-078</div>
-              <div className="small">
-                Telefones: (12) 99648-4918 / (12) 3896-1474 / (12) 99678-2405<br />
-                E-mail: orcamento@bomcustoilhabela.com.br
+      
+      {validationState === "checking" && (
+        <div className="container my-5">
+          <div className="row justify-content-center">
+            <div className="col-md-6 text-center">
+              <div className="spinner-border text-primary mb-3" role="status">
+                <span className="visually-hidden">Carregando...</span>
+              </div>
+              <h5 className="text-muted">Autenticando com Chatwoot...</h5>
+              <p className="text-secondary small">Por favor, aguarde...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {validationState === "invalid" && (
+        <div className="container my-5">
+          <div className="row justify-content-center">
+            <div className="col-md-6">
+              <div className="alert alert-danger d-flex gap-2 align-items-start" role="alert">
+                <i className="bi bi-exclamation-triangle-fill mt-1" style={{fontSize: "1.25rem"}}></i>
+                <div>
+                  <h5 className="alert-heading mb-2">Acesso Restrito</h5>
+                  <p className="mb-0">
+                    Esta página só pode ser acessada através do <strong>Chatwoot Dashboard</strong>.
+                  </p>
+                  <hr className="my-2" />
+                  <p className="mb-0 small text-muted">
+                    {validationMessage || "Por favor, volte ao Chatwoot e clique na opção de orçamento novamente."}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-          <div className="text-end">
-            <h5 className="mb-1">Proposta Nº {form.numero}</h5>
-            <div>{new Date(form.data).toLocaleDateString("pt-BR")}</div>
-          </div>
         </div>
-        <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
+      )}
+      
+      {validationState === "valid" && (
+        <div className="container my-5">
+          <div className="orcamento-header p-3 rounded-top" style={{background: "linear-gradient(135deg,#c5f2e8 0%,#cbe1f9 25%,#e7d8f9 50%,#f9e7f5 75%,#f0cacb 100%)", color: "#222"}}>
+            <div className="header-left d-flex align-items-start gap-3 flex-grow-1">
+              <img src="/media/logo_new.svg" alt="Logo Bom Custo" className="me-3 logo-img" style={{maxWidth:140, maxHeight:100, background: "#fff", borderRadius:8, padding:6}} />
+              <div className="header-info">
+                <h3 className="mb-0">Bom Custo Papelaria & Gráfica Rápida LTDA</h3>
+                <div className="small">CNPJ: 62.391.927/0001-57</div>
+                <div className="small">Rua Olímpio Leite da Silva, 39 - Loja 07, Perequê</div>
+                <div className="small">Ilhabela - SP, CEP: 11633-078</div>
+                <div className="small">
+                  Telefones: (12) 99648-4918 / (12) 3896-1474 / (12) 99678-2405<br />
+                  E-mail: orcamento@bomcustoilhabela.com.br
+                </div>
+              </div>
+            </div>
+            <div className="header-right d-flex flex-column align-items-end justify-content-start ms-3" style={{minWidth:160}}>
+              <h5 className="mb-1">Orçamento Nº {form.numero}</h5>
+              <div>{new Date(form.data || new Date()).toLocaleDateString("pt-BR")}</div>
+            </div>
+          </div>
+          <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
           <form className="needs-validation" noValidate onSubmit={gerarOrcamento}>
             <div className="row mb-4 justify-content-center">
               <div className="col-md-6 text-center">
@@ -516,27 +769,56 @@ export default function PreencherOrcamentoPage() {
             )}
             <div className="row mt-4">
               <div className="col-12 d-flex justify-content-center">
-                <button type="submit" className="btn btn-primary" disabled={salvando || loading}>
-                  {salvando ? "Gerando..." : "Gerar Orçamento"}
+                <button type="submit" className="btn btn-primary" disabled={sendingState === 'sending' || loading}>
+                  {sendingState === 'sending' && (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                      Enviando...
+                    </>
+                  )}
+                  {sendingState === 'success' && (
+                    <>
+                      <i className="bi bi-check-circle-fill me-2 success-icon"></i>
+                      Enviado
+                    </>
+                  )}
+                  {sendingState === 'error' && (
+                    <>
+                      <i className="bi bi-x-circle-fill me-2 error-icon"></i>
+                      Erro ao enviar
+                    </>
+                  )}
+                  {sendingState === 'idle' && 'Gerar Orçamento'}
                 </button>
               </div>
             </div>
           </form>
         </div>
       </div>
+      )}
       <style>{`
         body { background: #f9f7ed; }
         .logo { max-width: 180px; max-height: 120px; }
-        .orcamento-header { border-radius: 8px 8px 0 0; }
+        .orcamento-header { border-radius: 8px 8px 0 0; display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 1rem; }
         .orcamento-section { border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px #0001; }
         .orcamento-header .small { font-size: 0.85rem; opacity: 0.9; }
+        .header-right { text-align: right; display:flex; flex-direction:column; justify-content:flex-start; align-items:flex-end; }
+        .header-left { display:flex; align-items:flex-start; gap:1rem; }
+        .logo-img { max-width:140px; max-height:100px; }
         @media (max-width: 768px) {
-          .orcamento-header { flex-direction: column; text-align: center; }
-          .orcamento-header .d-flex { flex-direction: column; text-align: center; }
-          .orcamento-header .text-end { text-align: center !important; margin-top: 1rem; }
-          .logo { margin-bottom: 1rem; }
+          .orcamento-header { display:block; text-align: center; }
+          .header-left { display:flex; align-items:center; justify-content:center; gap:1rem; }
+          .header-right { text-align:center; align-items:center; margin-top:0.75rem; }
+          .logo-img { margin: 0 auto; }
         }
         @media print { .no-print { display: none !important; } }
+
+        /* Animações do botão de envio */ 
+        .success-icon { color: #28a745; font-size: 1.15rem; animation: pop 420ms cubic-bezier(.2,.9,.2,1); }
+        .error-icon { color: #dc3545; font-size: 1.15rem; animation: shake 620ms ease-in-out; }
+
+        @keyframes pop { 0% { transform: scale(.6); opacity: 0 } 60% { transform: scale(1.08); opacity: 1 } 100% { transform: scale(1); } }
+        @keyframes shake { 0%{ transform: translateX(0) } 20%{ transform: translateX(-3px) } 40%{ transform: translateX(3px) } 60%{ transform: translateX(-2px) } 80%{ transform: translateX(2px) } 100%{ transform: translateX(0) } }
       `}</style>
     </>
   );

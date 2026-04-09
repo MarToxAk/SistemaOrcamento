@@ -46,6 +46,31 @@ export class QuotesService {
   ) {}
 
   async buscarNoAthosPorNumero(numero: string, format: "raw" | "mapped" = "raw") {
+    // Se já existe um orcamento salvo com esse externalQuoteId, preferir os dados do banco
+    const parsed = Number(numero);
+    if (Number.isFinite(parsed)) {
+      const externalId = this.toBigInt(parsed);
+      if (externalId) {
+        const quote = await this.prisma.quote.findFirst({
+          where: { externalQuoteId: externalId },
+          include: {
+            customer: true,
+            items: {
+              where: { parentItemId: null },
+              orderBy: { sequence: "asc" },
+              include: { children: { orderBy: { sequence: "asc" } } },
+            },
+            stamps: { orderBy: { number: "asc" } },
+          },
+        });
+
+        if (quote) {
+          const mapped = this.mapQuoteToAthosMapped(quote);
+          return format === "mapped" ? mapped : [mapped];
+        }
+      }
+    }
+
     const data = await this.athosService.buscarOrcamentoPorNumero(numero);
     return format === "mapped" ? data.mapped : data.rawRows;
   }
@@ -104,6 +129,9 @@ export class QuotesService {
   }
 
   async create(payload: CreateQuoteDto) {
+    // Validação Chatwoot: se informado, deve ser válido
+    this.validateChatwootContext(payload);
+
     const customerInput = payload.cliente ?? payload.customer;
     const itemsInput = payload.itens ?? payload.items;
     if (!customerInput || !itemsInput || itemsInput.length === 0) {
@@ -172,6 +200,121 @@ export class QuotesService {
     const customer = await this.resolveCustomer(payload, customerInput);
 
     const quote = await this.prisma.$transaction(async (tx) => {
+      const externalId = this.toBigInt(payload.idorcamento);
+
+      if (externalId) {
+        const existing = await tx.quote.findFirst({ where: { externalQuoteId: externalId } });
+        if (existing) {
+          // Atualiza metadados do orçamento existente
+          const updated = await tx.quote.update({
+            where: { id: existing.id },
+            data: {
+              source: payload.source ?? "MANUAL",
+              status: initialStatus,
+              customerId: customer.id,
+              sellerExternalId: this.toBigInt(payload.idvendedor),
+              sellerName: payload.vendedorNome,
+              conversationId: this.toBigInt(payload.conversationId),
+              chatwootContactId: this.toBigInt(payload.chatwootContactId),
+              validity: payload.validade,
+              deliveryDate: payload.prazoEntrega ? new Date(payload.prazoEntrega) : undefined,
+              paymentTerms: payload.condicaoPagamento,
+              notes: payload.observacoes,
+              budgetDate: payload.dataorcamento ? new Date(payload.dataorcamento) : undefined,
+              editedAt: payload.dataEdicao ? new Date(payload.dataEdicao) : undefined,
+              subtotal: this.toDecimal(computedSubtotal),
+              discount: this.toDecimal(discount),
+              surcharge: this.toDecimal(surcharge),
+              total: this.toDecimal(total),
+            },
+          });
+
+          // Remove itens e carimbos antigos e recria com os novos dados
+          await tx.quoteItem.deleteMany({ where: { quoteId: updated.id } });
+          await tx.quoteStampItem.deleteMany({ where: { quoteId: updated.id } });
+
+          for (const item of calculatedItems) {
+            const parent = await tx.quoteItem.create({
+              data: {
+                quoteId: updated.id,
+                sequence: item.sequence,
+                externalItemId: item.externalItemId,
+                productExternalId: item.productExternalId,
+                reference: item.reference,
+                shortDescription: item.shortDescription,
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                discount: item.discount,
+                finalPrice: item.finalPrice,
+                priceSource: item.priceSource,
+              },
+            });
+
+            if (item.children.length > 0) {
+              await tx.quoteItem.createMany({
+                data: item.children.map((child) => ({
+                  quoteId: updated.id,
+                  parentItemId: parent.id,
+                  sequence: child.sequence,
+                  externalItemId: child.externalItemId,
+                  productExternalId: child.productExternalId,
+                  reference: child.reference,
+                  shortDescription: child.shortDescription,
+                  description: child.description,
+                  quantity: child.quantity,
+                  unitPrice: child.unitPrice,
+                  discount: child.discount,
+                  finalPrice: child.finalPrice,
+                  priceSource: child.priceSource,
+                })),
+              });
+            }
+          }
+
+          const stampsData = (payload.carimbos?.itens ?? []).map((stamp) => ({
+            quoteId: updated.id,
+            number: stamp.numero,
+            stampType: stamp.carimbo,
+            dimensions: stamp.dimensoes,
+            description: stamp.descricao,
+          }));
+
+          if (stampsData.length > 0) {
+            await tx.quoteStampItem.createMany({ data: stampsData });
+          }
+
+          await tx.quoteStatusHistory.create({
+            data: {
+              quoteId: updated.id,
+              oldStatus: null,
+              newStatus: initialStatus,
+              changedByName: payload.vendedorNome ?? "sistema",
+            },
+          });
+
+          const fullQuote = await tx.quote.findUnique({
+            where: { id: updated.id },
+            include: {
+              customer: true,
+              items: {
+                where: { parentItemId: null },
+                orderBy: { sequence: "asc" },
+                include: { children: { orderBy: { sequence: "asc" } } },
+              },
+              stamps: { orderBy: { number: "asc" } },
+            },
+          });
+
+          if (!fullQuote) {
+            throw new NotFoundException("Orcamento nao encontrado apos atualizacao");
+          }
+
+          return fullQuote;
+        }
+      }
+
+      // Se não existe externalId ou não foi encontrado, cria novo
       const createdQuote = await tx.quote.create({
         data: {
           externalQuoteId: this.toBigInt(payload.idorcamento),
@@ -428,7 +571,30 @@ export class QuotesService {
     });
   }
 
-  private normalizeStatus(input?: string): QuoteStatus {
+  private validateChatwootContext(payload: CreateQuoteDto): void {
+    // Se conversationId ou chatwootContactId forem informados, devem ser válidos (> 0)
+    if (payload.conversationId !== undefined && payload.conversationId !== null) {
+      if (!Number.isFinite(payload.conversationId) || payload.conversationId <= 0) {
+        throw new BadRequestException("conversationId invalido: deve ser um número positivo");
+      }
+    }
+
+    if (payload.chatwootContactId !== undefined && payload.chatwootContactId !== null) {
+      if (!Number.isFinite(payload.chatwootContactId) || payload.chatwootContactId <= 0) {
+        throw new BadRequestException("chatwootContactId invalido: deve ser um número positivo");
+      }
+    }
+
+    // Validação adicional: se tem um, é bom ter os dois
+    const hasChatContext = payload.conversationId || payload.chatwootContactId;
+    if (hasChatContext && !(payload.conversationId && payload.chatwootContactId)) {
+      console.warn(
+        `[Chatwoot] Contexto incompleto: conversationId=${payload.conversationId}, chatwootContactId=${payload.chatwootContactId}`,
+      );
+    }
+  }
+
+    private normalizeStatus(input?: string): QuoteStatus {
     if (!input) {
       return "PENDENTE";
     }
@@ -475,6 +641,162 @@ export class QuotesService {
         stamps: { orderBy: { number: "asc" } },
       },
     });
+  }
+
+  // Lista externalQuoteId duplicados com as ids das entradas
+  async listDuplicates() {
+    const rows: Array<{ externalQuoteId: string | null; ids: string[]; count: string }> =
+      await this.prisma.$queryRaw`
+        SELECT "externalQuoteId", array_agg(id) AS ids, COUNT(*) AS count
+        FROM "Quote"
+        WHERE "externalQuoteId" IS NOT NULL
+        GROUP BY "externalQuoteId"
+        HAVING COUNT(*) > 1
+        ORDER BY COUNT(*) DESC
+      `;
+
+    return rows.map((r) => ({
+      externalQuoteId: r.externalQuoteId ? Number(r.externalQuoteId) : null,
+      ids: r.ids,
+      count: Number(r.count),
+    }));
+  }
+
+  // Mescla duplicatas identificadas por externalQuoteId
+  async mergeDuplicates(payload: { externalQuoteId: number; keepId?: string; strategy?: "oldest" | "newest" }) {
+    if (!payload?.externalQuoteId) {
+      throw new BadRequestException("externalQuoteId é obrigatório");
+    }
+
+    const externalId = BigInt(Math.trunc(payload.externalQuoteId));
+
+    const quotes = await this.prisma.quote.findMany({
+      where: { externalQuoteId: externalId },
+      include: {
+        customer: true,
+        items: { where: { parentItemId: null }, orderBy: { sequence: "asc" }, include: { children: { orderBy: { sequence: "asc" } } } },
+        stamps: { orderBy: { number: "asc" } },
+        statusHistory: true,
+        documents: true,
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    if (!quotes || quotes.length < 2) {
+      throw new NotFoundException("Nenhuma duplicata encontrada para esse externalQuoteId");
+    }
+
+    let keepId: string;
+    const ids = quotes.map((q) => q.id);
+    if (payload.keepId) {
+      if (!ids.includes(payload.keepId)) throw new BadRequestException("keepId informado não pertence ao grupo de duplicatas");
+      keepId = payload.keepId;
+    } else {
+      const strategy = payload.strategy ?? "newest";
+      keepId = strategy === "oldest" ? quotes[quotes.length - 1].id : quotes[0].id;
+    }
+
+    const otherIds = ids.filter((id) => id !== keepId);
+
+    const merged = await this.prisma.$transaction(async (tx) => {
+      // Reunir todos os itens (pais e filhos)
+      const allParents: Array<any> = [];
+      for (const q of quotes) {
+        for (const parent of q.items) {
+          allParents.push({
+            ...parent,
+            children: parent.children ?? [],
+          });
+        }
+      }
+
+      // Recreate items on keepId: delete existing items for all involved quotes then create merged set
+      await tx.quoteItem.deleteMany({ where: { quoteId: { in: ids } } });
+
+      let seq = 1;
+      for (const parent of allParents) {
+        const createdParent = await tx.quoteItem.create({
+          data: {
+            quoteId: keepId,
+            sequence: seq++,
+            externalItemId: parent.externalItemId ?? undefined,
+            productExternalId: parent.productExternalId ?? undefined,
+            reference: parent.reference ?? undefined,
+            shortDescription: parent.shortDescription ?? parent.description ?? "",
+            description: parent.description ?? "",
+            quantity: parent.quantity ?? new Prisma.Decimal(0),
+            unitPrice: parent.unitPrice ?? new Prisma.Decimal(0),
+            discount: parent.discount ?? new Prisma.Decimal(0),
+            finalPrice: parent.finalPrice ?? new Prisma.Decimal(0),
+            priceSource: parent.priceSource ?? "MANUAL",
+          },
+        });
+
+        for (const child of parent.children ?? []) {
+          await tx.quoteItem.create({
+            data: {
+              quoteId: keepId,
+              parentItemId: createdParent.id,
+              sequence: child.sequence ?? 0,
+              externalItemId: child.externalItemId ?? undefined,
+              productExternalId: child.productExternalId ?? undefined,
+              reference: child.reference ?? undefined,
+              shortDescription: child.shortDescription ?? child.description ?? "",
+              description: child.description ?? "",
+              quantity: child.quantity ?? new Prisma.Decimal(0),
+              unitPrice: child.unitPrice ?? new Prisma.Decimal(0),
+              discount: child.discount ?? new Prisma.Decimal(0),
+              finalPrice: child.finalPrice ?? new Prisma.Decimal(0),
+              priceSource: child.priceSource ?? "MANUAL",
+            },
+          });
+        }
+      }
+
+      // Mesclar carimbos
+      const allStamps = quotes.flatMap((q) => q.stamps ?? []);
+      await tx.quoteStampItem.deleteMany({ where: { quoteId: { in: ids } } });
+      if (allStamps.length > 0) {
+        const stampsData = allStamps.map((stamp, idx) => ({ quoteId: keepId, number: idx + 1, stampType: stamp.stampType, dimensions: stamp.dimensions ?? undefined, description: stamp.description ?? undefined }));
+        await tx.quoteStampItem.createMany({ data: stampsData });
+      }
+
+      // Reatribuir documentos e historicos para keepId
+      await tx.quoteDocument.updateMany({ where: { quoteId: { in: otherIds } }, data: { quoteId: keepId } });
+      await tx.quoteStatusHistory.updateMany({ where: { quoteId: { in: otherIds } }, data: { quoteId: keepId } });
+
+      // Atualizar metadados do orçamento (totais calculados com base nos itens criados)
+      const recomputed = await tx.$queryRaw<Array<{ subtotal: string; discount: string; surcharge: string; total: string }>>`
+        SELECT COALESCE(SUM("finalPrice"::numeric),0) AS subtotal FROM "QuoteItem" WHERE "quoteId" = ${keepId}
+      `;
+
+      // Simplesmente atualiza updatedAt e mantém outros metadados do keep quote
+      await tx.quote.update({ where: { id: keepId }, data: { updatedAt: new Date() } });
+
+      // Deletar as entradas duplicadas (exclui as quotes que não são a keep)
+      for (const id of otherIds) {
+        await tx.quote.delete({ where: { id } });
+      }
+
+      const fullQuote = await tx.quote.findUnique({
+        where: { id: keepId },
+        include: {
+          customer: true,
+          items: {
+            where: { parentItemId: null },
+            orderBy: { sequence: "asc" },
+            include: { children: { orderBy: { sequence: "asc" } } },
+          },
+          stamps: { orderBy: { number: "asc" } },
+        },
+      });
+
+      if (!fullQuote) throw new NotFoundException("Erro ao recuperar orcamento mesclado");
+
+      return fullQuote;
+    });
+
+    return this.mapQuoteBody(merged);
   }
 
   private mapQuoteBody(quote: {
@@ -587,6 +909,62 @@ export class QuotesService {
         },
         dataEdicao: quote.editedAt?.toISOString(),
       },
+    };
+  }
+
+  // Converte um registro de Quote (do banco) para o formato semelhante ao 'mapped' retornado pelo AthosService
+  private mapQuoteToAthosMapped(quote: any) {
+    const mappedBody = this.mapQuoteBody(quote).body;
+
+    const rawItems = Array.isArray(mappedBody.itens) ? mappedBody.itens : [];
+
+    const itensDetalhados = rawItems.map((it: any) => {
+      const produto = it?.produto ?? {};
+      const descricao = it?.descricao ?? produto?.descricaoproduto ?? produto?.descricaocurta ?? "";
+      const quantidade = Number(it?.quantidadeitem ?? it?.quantidade ?? 0);
+      const valor = Number(it?.valoritem ?? it?.valor ?? 0);
+      const desconto = Number(it?.valordesconto ?? it?.desconto ?? 0);
+      const total = Number(it?.orcamentovalorfinalitem ?? it?.total ?? (quantidade * valor - desconto));
+
+      return {
+        ...it,
+        descricao,
+        produto,
+        quantidade,
+        valor,
+        desconto,
+        total,
+        itemRaw: it,
+      };
+    });
+
+    const itens = itensDetalhados.map((it: any) => ({
+      descricao: it.descricao,
+      quantidade: it.quantidade,
+      valor: it.valor,
+      desconto: it.desconto,
+      total: it.total,
+    }));
+
+    const carimbosItens = Array.isArray(mappedBody.carimbos?.itens) ? mappedBody.carimbos.itens : [];
+
+    return {
+      numero: mappedBody.idorcamento ?? String(mappedBody.idorcamento_interno ?? ""),
+      data: mappedBody.dataorcamento,
+      cliente: mappedBody.cliente?.nome ?? "",
+      telefone: mappedBody.cliente?.telefone ?? "",
+      email: mappedBody.cliente?.email ?? "",
+      vendedor: mappedBody.vendedorNome ?? undefined,
+      validade: mappedBody.validade ?? undefined,
+      prazoEntrega: mappedBody.prazoEntrega ?? undefined,
+      condPagamento: mappedBody.condicaoPagamento ?? undefined,
+      observacoes: mappedBody.observacoes ?? undefined,
+      itens,
+      itensDetalhados,
+      carimbos: carimbosItens.map((c: any) => ({ numero: c.numero, carimbo: c.carimbo, dimensoes: c.dimensions ?? c.dimensoes, descricao: c.description ?? c.descricao })),
+      carimbosDetalhados: carimbosItens.map((c: any) => ({ ...c, carimboRaw: null })),
+      funcionario: mappedBody.funcionario ?? null,
+      athosRaw: null,
     };
   }
 }

@@ -3,6 +3,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { UpdateStatusDto } from "./dto/update-status.dto";
 import { QuotesService } from "./quotes.service";
+import { MergeDuplicatesDto } from "./dto/merge-duplicates.dto";
 
 @Controller("quotes")
 export class QuotesController {
@@ -33,6 +34,16 @@ export class QuotesController {
   create(@Body() payload: unknown) {
     const resolved = (payload as { body?: CreateQuoteDto }).body ?? (payload as CreateQuoteDto);
     return this.quotesService.create(resolved);
+  }
+
+  @Get("duplicates")
+  listDuplicates() {
+    return this.quotesService.listDuplicates();
+  }
+
+  @Post("duplicates/merge")
+  mergeDuplicates(@Body() payload: MergeDuplicatesDto) {
+    return this.quotesService.mergeDuplicates(payload);
   }
 
   @Patch(":id/status")
