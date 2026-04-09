@@ -16,6 +16,8 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
+    networks:
+      - app_net # Adicionado à rede para que outros o vejam
 
   postgres:
     image: postgres:16-alpine
@@ -39,9 +41,11 @@ services:
       - ts-webserver2
     env_file:
       - stack.env
-    network_mode: service:ts-webserver2
+    networks:
+      - app_net # VOLTOU para networks normal
     ports:
-      - "4001:4000"
+      - "4001:4000" # AGORA FUNCIONA SEM ERRO
+    # REMOVIDO: network_mode: service:ts-webserver2
 
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/bomcusto-frontend:latest}
@@ -58,7 +62,6 @@ services:
 
 volumes:
   postgres_data:
-
   tailscale_data:
 
 networks:
