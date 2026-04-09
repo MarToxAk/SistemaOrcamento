@@ -271,6 +271,38 @@ export class AthosService {
     return { host, database, user, password, port };
   }
 
+  async testarConexao() {
+    const { host, database, user, password, port } = this.getDbConfig();
+    const client = new Client({
+      host,
+      database,
+      user,
+      password,
+      port,
+      connectionTimeoutMillis: 5000,
+    });
+
+    try {
+      await client.connect();
+      await client.query("SELECT 1");
+
+      return {
+        ok: true,
+        host,
+        port,
+        database,
+        user,
+        message: "Conexao com Athos estabelecida com sucesso.",
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "erro desconhecido";
+      this.logger.error(`Falha na conexao Athos (${host}:${port}/${database}): ${message}`);
+      throw new InternalServerErrorException(`Falha na conexao Athos: ${message}`);
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  }
+
   async buscarOrcamentoPorNumero(numero: string) {
     const client = new Client(this.getDbConfig());
 

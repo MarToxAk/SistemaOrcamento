@@ -50,6 +50,10 @@ export class QuotesService {
     return format === "mapped" ? data.mapped : data.rawRows;
   }
 
+  async testarConexaoAthos() {
+    return this.athosService.testarConexao();
+  }
+
   async list() {
     const quotes = await this.prisma.quote.findMany({
       orderBy: { updatedAt: "desc" },

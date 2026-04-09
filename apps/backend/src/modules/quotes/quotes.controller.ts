@@ -8,6 +8,11 @@ import { QuotesService } from "./quotes.service";
 export class QuotesController {
   constructor(private readonly quotesService: QuotesService) {}
 
+  @Get("athos-health")
+  testarConexaoAthos() {
+    return this.quotesService.testarConexaoAthos();
+  }
+
   @Get("athos/:numero")
   buscarNoAthos(@Param("numero") numero: string, @Query("format") format?: string) {
     const resolvedFormat = format === "mapped" ? "mapped" : "raw";
