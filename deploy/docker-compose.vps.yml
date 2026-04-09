@@ -35,7 +35,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   backend:
-    image: ${BACKEND_IMAGE}
+    image: ${BACKEND_IMAGE:-ghcr.io/martoxak/bomcusto-backend:latest}
     container_name: bomcusto-backend
     restart: always
     depends_on:
@@ -76,7 +76,7 @@ services:
     # REMOVIDO: network_mode: service:ts-webserver2
 
   frontend:
-    image: ${FRONTEND_IMAGE}
+    image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/bomcusto-frontend:latest}
     container_name: bomcusto-frontend
     restart: always
     depends_on:
