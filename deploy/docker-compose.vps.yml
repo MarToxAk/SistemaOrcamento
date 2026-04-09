@@ -23,6 +23,10 @@ services:
     image: postgres:16-alpine
     container_name: bomcusto-postgres
     restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     networks:
       - app_net
     ports:
@@ -31,12 +35,39 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/martoxak/bomcusto-backend:latest}
+    image: ${BACKEND_IMAGE}
     container_name: bomcusto-backend
     restart: always
     depends_on:
       - postgres
       - ts-webserver2
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${PORT}
+      APP_BASE_URL: ${APP_BASE_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL}
+      CHATWOOT_API_TOKEN: ${CHATWOOT_API_TOKEN}
+      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID}
+      CHATWOOT_INBOX_ID: ${CHATWOOT_INBOX_ID}
+      ATHOS_PG_HOST: ${ATHOS_PG_HOST}
+      ATHOS_PG_DB: ${ATHOS_PG_DB}
+      ATHOS_PG_USER: ${ATHOS_PG_USER}
+      ATHOS_PG_PASS: ${ATHOS_PG_PASS}
+      ATHOS_PG_PORT: ${ATHOS_PG_PORT}
+      PDV_DB_URL: ${PDV_DB_URL}
+      PDV_DB_SCHEMA: ${PDV_DB_SCHEMA}
+      PDV_DB_READONLY_USER: ${PDV_DB_READONLY_USER}
+      PDV_DB_READONLY_PASSWORD: ${PDV_DB_READONLY_PASSWORD}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PORT: ${MINIO_PORT}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_REGION: ${MINIO_REGION}
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL}
+      MINIO_PATH_PREFIX: ${MINIO_PATH_PREFIX}
 
     networks:
       - app_net # VOLTOU para networks normal
@@ -45,11 +76,13 @@ services:
     # REMOVIDO: network_mode: service:ts-webserver2
 
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/bomcusto-frontend:latest}
+    image: ${FRONTEND_IMAGE}
     container_name: bomcusto-frontend
     restart: always
     depends_on:
       - backend
+    environment:
+      BACKEND_URL: ${BACKEND_URL}
     networks:
       - app_net
     ports:

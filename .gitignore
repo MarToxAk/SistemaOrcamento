@@ -4,5 +4,6 @@ dist/
 .env
 .env.*
 !.env.example
+deploy/stack.env
 coverage/
 *.log
