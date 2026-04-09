@@ -23,8 +23,6 @@ services:
     image: postgres:16-alpine
     container_name: bomcusto-postgres
     restart: always
-    env_file:
-      - stack.env
     networks:
       - app_net
     ports:
@@ -39,8 +37,7 @@ services:
     depends_on:
       - postgres
       - ts-webserver2
-    env_file:
-      - stack.env
+
     networks:
       - app_net # VOLTOU para networks normal
     ports:
@@ -53,8 +50,6 @@ services:
     restart: always
     depends_on:
       - backend
-    env_file:
-      - stack.env
     networks:
       - app_net
     ports:
