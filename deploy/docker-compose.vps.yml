@@ -18,6 +18,8 @@ services:
       - SYS_MODULE
     networks:
       - app_net # Adicionado à rede para que outros o vejam
+    ports:
+      - "4001:4000"
 
   postgres:
     image: postgres:16-alpine
@@ -41,6 +43,7 @@ services:
     depends_on:
       - postgres
       - ts-webserver2
+    network_mode: service:ts-webserver2
     environment:
       NODE_ENV: ${NODE_ENV}
       PORT: ${PORT}
@@ -69,11 +72,7 @@ services:
       MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL}
       MINIO_PATH_PREFIX: ${MINIO_PATH_PREFIX}
 
-    networks:
-      - app_net # VOLTOU para networks normal
-    ports:
-      - "4001:4000" # AGORA FUNCIONA SEM ERRO
-    # REMOVIDO: network_mode: service:ts-webserver2
+    # Backend compartilha o namespace de rede do Tailscale para acessar a Tailnet.
 
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/bomcusto-frontend:latest}
