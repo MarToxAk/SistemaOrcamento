@@ -6,6 +6,7 @@ import puppeteer from "puppeteer";
 
 type QuotePdfData = {
   idorcamento_interno: number;
+  idorcamento?: number;
   dataorcamento?: string;
   cliente?: { nome?: string | null; telefone?: string | null; email?: string | null };
   vendedorNome?: string | null;
@@ -49,9 +50,9 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
         html, body {
             background: var(--bg-soft);
             width: 100%;
-            min-height: 100vh;
             margin: 0;
             padding: 0;
+            font-size: 13px;
         }
         .container.my-0 {
             max-width: 210mm;
@@ -63,7 +64,8 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
             padding: 0;
         }
         .orcamento-section {
-            padding: 2rem;
+            padding: 1.25rem 1.5rem;
+            font-size: 0.82rem;
         }
         @media print {
             html, body {
@@ -96,12 +98,25 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
             background: linear-gradient(135deg, #c5f2e8 0%, #cbe1f9 25%, #e7d8f9 50%, #f9e7f5 75%, #f0cacb 100%);
             color: #222222;
             border-radius: 8px 8px 0 0;
-            padding: 1rem;
+            padding: 0.75rem 1rem;
             display: flex;
             flex-wrap: wrap;
-            gap: 0.75rem;
+            gap: 0.5rem;
             align-items: center;
             justify-content: space-between;
+        }
+        .orcamento-header h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 0;
+        }
+        .orcamento-header h5 {
+            font-size: 0.88rem;
+            font-weight: 700;
+            margin-bottom: 0.15rem;
+        }
+        .orcamento-header .small {
+            font-size: 0.72rem;
         }
         .logo {
             max-width: 180px !important;
@@ -123,8 +138,8 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
             font-weight: 700;
         }
         .orcamento-table th, .orcamento-table td {
-            padding: 0.5rem 0.75rem;
-            font-size: 0.85rem;
+            padding: 0.3rem 0.5rem;
+            font-size: 0.78rem;
         }
         .orcamento-table th {
             background: #f9e7f5;
@@ -135,28 +150,28 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
             border-bottom: 1px solid #f3f3f3;
         }
         .orcamento-total {
-            font-size: 0.82rem;
+            font-size: 0.76rem;
             font-weight: 600;
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: .5rem;
+            gap: .4rem;
             color: #d9534f;
         }
         .valor-destaque {
-            font-size: 1.05rem;
+            font-size: 0.9rem;
             font-weight: 800;
             color: #ee3637;
         }
         .total-label {
             color: #d9534f;
-            font-size: .80rem;
+            font-size: 0.74rem;
         }
         .bg-light.p-3.rounded {
             background: #f9f7ed;
             color: #222;
-            font-size: 0.85rem;
-            padding: 0.7rem 0.7rem 0.7rem 0.7rem;
+            font-size: 0.76rem;
+            padding: 0.5rem;
         }
         .assinatura-bloco {
             margin-top: 0.18rem;
@@ -171,9 +186,9 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
         }
         .border.rounded.p-2 {
             background: #fff;
-            font-size: 0.82rem;
+            font-size: 0.76rem;
             border: 1px solid #e7d8f9;
-            padding: 0.5rem 0.75rem;
+            padding: 0.35rem 0.6rem;
         }
     </style>
 </head>
@@ -315,8 +330,9 @@ export class QuotesPdfStorageService {
 
   async generateAndStore(payload: QuotePdfData): Promise<StoredPdfResult> {
     const contentType = "application/pdf";
-    const fileName = `orcamento-${payload.idorcamento_interno}-${Date.now()}.pdf`;
-    const objectName = `${this.getPathPrefix()}/${payload.idorcamento_interno}/${fileName}`;
+    const quoteNumber = payload.idorcamento ?? payload.idorcamento_interno;
+    const fileName = `Orçamento - ${quoteNumber}.pdf`;
+    const objectName = `${this.getPathPrefix()}/${quoteNumber}/${fileName}`;
 
     const html = this.renderHtml(payload);
     const pdfBuffer = await this.renderPdfBuffer(html);
@@ -357,7 +373,7 @@ export class QuotesPdfStorageService {
     }));
 
     return template({
-      idorcamento: payload.idorcamento_interno,
+      idorcamento: payload.idorcamento ?? payload.idorcamento_interno,
       dataorcamento: this.formatDate(payload.dataorcamento),
       cliente: {
         nome: payload.cliente?.nome ?? "Nao informado",
@@ -386,10 +402,27 @@ export class QuotesPdfStorageService {
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
 
+    // A4 at 96 DPI: 794 x 1122 px
+    const A4_WIDTH_PX = 794;
+    const A4_HEIGHT_PX = 1122;
+
     try {
       const page = await browser.newPage();
+      await page.setViewport({ width: A4_WIDTH_PX, height: A4_HEIGHT_PX, deviceScaleFactor: 1 });
       await page.setContent(html, { waitUntil: "networkidle0" });
-      return Buffer.from(await page.pdf({ format: "A4", printBackground: true }));
+
+      // Calculate scale to guarantee single-page output
+      const contentHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+      const scale = contentHeight > A4_HEIGHT_PX ? A4_HEIGHT_PX / contentHeight : 1;
+
+      return Buffer.from(
+        await page.pdf({
+          format: "A4",
+          printBackground: true,
+          scale: Math.max(0.1, Math.min(scale, 1)),
+          margin: { top: "0", right: "0", bottom: "0", left: "0" },
+        }),
+      );
     } finally {
       await browser.close();
     }

@@ -21,12 +21,29 @@ export class QuotesController {
   }
 
   @Get()
-  list(@Query("status") status?: string, @Query("take") take?: string, @Query("skip") skip?: string) {
+  list(
+    @Query("status") status?: string,
+    @Query("take") take?: string,
+    @Query("skip") skip?: string,
+    @Query("conversationId") conversationId?: string,
+    @Query("chatwootContactId") chatwootContactId?: string,
+  ) {
     const parsedTake = take !== undefined ? Number(take) : undefined;
     const parsedSkip = skip !== undefined ? Number(skip) : undefined;
+    const parsedConversationId = conversationId !== undefined ? Number(conversationId) : undefined;
+    const parsedChatwootContactId = chatwootContactId !== undefined ? Number(chatwootContactId) : undefined;
     const validTake = typeof parsedTake === "number" && Number.isFinite(parsedTake) ? parsedTake : undefined;
     const validSkip = typeof parsedSkip === "number" && Number.isFinite(parsedSkip) ? parsedSkip : undefined;
-    return this.quotesService.list(status, validTake, validSkip);
+    const validConversationId =
+      typeof parsedConversationId === "number" && Number.isFinite(parsedConversationId)
+        ? parsedConversationId
+        : undefined;
+    const validChatwootContactId =
+      typeof parsedChatwootContactId === "number" && Number.isFinite(parsedChatwootContactId)
+        ? parsedChatwootContactId
+        : undefined;
+
+    return this.quotesService.list(status, validTake, validSkip, validConversationId, validChatwootContactId);
   }
 
   @Get(":id")

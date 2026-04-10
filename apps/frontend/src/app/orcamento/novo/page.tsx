@@ -485,10 +485,13 @@ export default function PreencherOrcamentoPage() {
         throw new Error(responseBody?.message || responseBody?.error || "Falha ao gerar orcamento.");
       }
 
+      const numeroAthos = responseBody?.body?.idorcamento;
       const numeroInterno = responseBody?.body?.idorcamento_interno;
       setSucesso(
-        numeroInterno
-          ? `Orcamento gerado com sucesso. Numero interno: ${numeroInterno}.`
+        numeroAthos
+          ? `Orcamento gerado com sucesso. Numero Athos: ${numeroAthos}.`
+          : numeroInterno
+            ? `Orcamento gerado com sucesso. Numero interno: ${numeroInterno}.`
           : "Orcamento gerado com sucesso.",
       );
       setSendingState('success');

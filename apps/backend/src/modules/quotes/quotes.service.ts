@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { AthosService } from "../integrations/athos/athos.service";
 import { PriceSource, Prisma, QuoteStatus } from "@prisma/client";
 
@@ -43,6 +44,7 @@ export class QuotesService {
     private readonly prisma: PrismaService,
     private readonly athosService: AthosService,
     private readonly quotesPdfStorageService: QuotesPdfStorageService,
+    private readonly configService: ConfigService,
   ) {}
 
   async buscarNoAthosPorNumero(numero: string, format: "raw" | "mapped" = "raw") {
@@ -61,6 +63,10 @@ export class QuotesService {
               include: { children: { orderBy: { sequence: "asc" } } },
             },
             stamps: { orderBy: { number: "asc" } },
+            documents: {
+              orderBy: { generatedAt: "desc" },
+              take: 1,
+            },
           },
         });
 
@@ -79,14 +85,42 @@ export class QuotesService {
     return this.athosService.testarConexao();
   }
 
-  async list(status?: string, take?: number, skip?: number) {
+  async list(
+    status?: string,
+    take?: number,
+    skip?: number,
+    conversationId?: number,
+    chatwootContactId?: number,
+  ) {
     const where: Prisma.QuoteWhereInput = {};
     if (status) {
-      try {
-        where.status = this.normalizeStatus(status);
-      } catch {
-        // ignore invalid status filter
+      const parsedStatuses = status
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .flatMap((entry) => {
+          try {
+            return [this.normalizeStatus(entry)];
+          } catch {
+            return [];
+          }
+        });
+
+      if (parsedStatuses.length === 1) {
+        where.status = parsedStatuses[0];
+      } else if (parsedStatuses.length > 1) {
+        where.status = { in: parsedStatuses };
       }
+    }
+
+    const parsedConversationId = this.toBigInt(conversationId);
+    if (parsedConversationId) {
+      where.conversationId = parsedConversationId;
+    }
+
+    const parsedChatwootContactId = this.toBigInt(chatwootContactId);
+    if (parsedChatwootContactId) {
+      where.chatwootContactId = parsedChatwootContactId;
     }
 
     const args: Prisma.QuoteFindManyArgs = {
@@ -102,6 +136,10 @@ export class QuotesService {
           },
         },
         stamps: { orderBy: { number: "asc" } },
+        documents: {
+          orderBy: { generatedAt: "desc" },
+          take: 1,
+        },
       },
     };
 
@@ -416,6 +454,10 @@ export class QuotesService {
             include: { children: { orderBy: { sequence: "asc" } } },
           },
           stamps: { orderBy: { number: "asc" } },
+          documents: {
+            orderBy: { generatedAt: "desc" },
+            take: 1,
+          },
         },
       });
 
@@ -506,6 +548,10 @@ export class QuotesService {
           include: { children: { orderBy: { sequence: "asc" } } },
         },
         stamps: { orderBy: { number: "asc" } },
+        documents: {
+          orderBy: { generatedAt: "desc" },
+          take: 1,
+        },
       },
     });
 
@@ -527,6 +573,7 @@ export class QuotesService {
         fileName: stored.fileName,
         contentType: stored.contentType,
         storagePath: stored.objectName,
+        publicUrl: stored.publicUrl,
         generatedBy: "sistema",
       },
     });
@@ -534,6 +581,7 @@ export class QuotesService {
     return {
       quoteId: quote.id,
       idorcamento_interno: quote.internalNumber,
+      idorcamento: quote.externalQuoteId ? Number(quote.externalQuoteId) : undefined,
       filename: document.fileName,
       contentType: document.contentType,
       storagePath: document.storagePath,
@@ -639,12 +687,50 @@ export class QuotesService {
   }
 
   private async findQuoteByIdentifier(identifier: string) {
-    const where = /^\d+$/.test(identifier)
-      ? { internalNumber: Number(identifier) }
-      : { id: identifier };
+    const numericIdentifier = /^\d+$/.test(identifier) ? Number(identifier) : null;
+
+    if (numericIdentifier !== null) {
+      const byExternalQuoteId = await this.prisma.quote.findFirst({
+        where: { externalQuoteId: BigInt(numericIdentifier) },
+        include: {
+          customer: true,
+          items: {
+            where: { parentItemId: null },
+            orderBy: { sequence: "asc" },
+            include: { children: { orderBy: { sequence: "asc" } } },
+          },
+          stamps: { orderBy: { number: "asc" } },
+          documents: {
+            orderBy: { generatedAt: "desc" },
+            take: 1,
+          },
+        },
+      });
+
+      if (byExternalQuoteId) {
+        return byExternalQuoteId;
+      }
+
+      return this.prisma.quote.findFirst({
+        where: { internalNumber: numericIdentifier },
+        include: {
+          customer: true,
+          items: {
+            where: { parentItemId: null },
+            orderBy: { sequence: "asc" },
+            include: { children: { orderBy: { sequence: "asc" } } },
+          },
+          stamps: { orderBy: { number: "asc" } },
+          documents: {
+            orderBy: { generatedAt: "desc" },
+            take: 1,
+          },
+        },
+      });
+    }
 
     return this.prisma.quote.findFirst({
-      where,
+      where: { id: identifier },
       include: {
         customer: true,
         items: {
@@ -653,6 +739,10 @@ export class QuotesService {
           include: { children: { orderBy: { sequence: "asc" } } },
         },
         stamps: { orderBy: { number: "asc" } },
+        documents: {
+          orderBy: { generatedAt: "desc" },
+          take: 1,
+        },
       },
     });
   }
@@ -802,6 +892,10 @@ export class QuotesService {
             include: { children: { orderBy: { sequence: "asc" } } },
           },
           stamps: { orderBy: { number: "asc" } },
+          documents: {
+            orderBy: { generatedAt: "desc" },
+            take: 1,
+          },
         },
       });
 
@@ -827,11 +921,14 @@ export class QuotesService {
     validity: string | null;
     deliveryDate: Date | null;
     paymentTerms: string | null;
+    createdAt: Date;
+    updatedAt: Date;
     editedAt: Date | null;
     discount: Prisma.Decimal;
     surcharge: Prisma.Decimal;
     total: Prisma.Decimal;
     customer: { fullName: string; phone: string | null; email: string | null };
+    documents?: Array<{ fileName: string; publicUrl: string | null; generatedAt: Date }>;
     items: Array<{
       externalItemId: bigint | null;
       sequence: number;
@@ -858,6 +955,8 @@ export class QuotesService {
     }>;
     stamps: Array<{ number: number; stampType: string; dimensions: string | null; description: string | null }>;
   }) {
+    const latestDocument = quote.documents?.[0];
+
     const items = quote.items.map((item) => ({
       idorcamentoitem: item.externalItemId ? Number(item.externalItemId) : undefined,
       sequenciaitem: item.sequence,
@@ -888,6 +987,19 @@ export class QuotesService {
     }));
 
     return {
+      id: quote.id,
+      internalNumber: quote.internalNumber,
+      createdAt: quote.createdAt.toISOString(),
+      updatedAt: quote.updatedAt.toISOString(),
+      statusKey: quote.status,
+      statusLabel: statusLabels[quote.status],
+      latestPdfUrl: latestDocument?.publicUrl ?? null,
+      latestPdfFileName: latestDocument?.fileName ?? null,
+      chatwootConversationUrl: this.buildChatwootConversationUrl(quote.conversationId),
+      availableNextStatuses: statusTransitions[quote.status].map((status) => ({
+        value: status,
+        label: statusLabels[status],
+      })),
       body: {
         idorcamento_interno: quote.internalNumber,
         idorcamento: quote.externalQuoteId ? Number(quote.externalQuoteId) : undefined,
@@ -925,6 +1037,21 @@ export class QuotesService {
         dataEdicao: quote.editedAt?.toISOString(),
       },
     };
+  }
+
+  private buildChatwootConversationUrl(conversationId: bigint | null): string | null {
+    if (!conversationId) {
+      return null;
+    }
+
+    const baseUrl = this.configService.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.configService.get<string>("CHATWOOT_ACCOUNT_ID");
+
+    if (!baseUrl || !accountId) {
+      return null;
+    }
+
+    return `${baseUrl.replace(/\/$/, "")}/app/accounts/${accountId}/conversations/${conversationId.toString()}`;
   }
 
   // Converte um registro de Quote (do banco) para o formato semelhante ao 'mapped' retornado pelo AthosService
