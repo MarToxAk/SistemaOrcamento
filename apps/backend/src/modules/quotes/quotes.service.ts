@@ -902,6 +902,7 @@ export class QuotesService {
             descricao: stamp.description,
           })),
         },
+        funcionario: null,
         totais: {
           desconto: Number(quote.discount.toString()),
           valoracrescimo: Number(quote.surcharge.toString()),
