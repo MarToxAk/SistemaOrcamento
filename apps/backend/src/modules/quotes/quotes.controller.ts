@@ -21,8 +21,12 @@ export class QuotesController {
   }
 
   @Get()
-  list() {
-    return this.quotesService.list();
+  list(@Query("status") status?: string, @Query("take") take?: string, @Query("skip") skip?: string) {
+    const parsedTake = take !== undefined ? Number(take) : undefined;
+    const parsedSkip = skip !== undefined ? Number(skip) : undefined;
+    const validTake = typeof parsedTake === "number" && Number.isFinite(parsedTake) ? parsedTake : undefined;
+    const validSkip = typeof parsedSkip === "number" && Number.isFinite(parsedSkip) ? parsedSkip : undefined;
+    return this.quotesService.list(status, validTake, validSkip);
   }
 
   @Get(":id")

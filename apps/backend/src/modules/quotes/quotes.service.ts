@@ -79,8 +79,18 @@ export class QuotesService {
     return this.athosService.testarConexao();
   }
 
-  async list() {
-    const quotes = await this.prisma.quote.findMany({
+  async list(status?: string, take?: number, skip?: number) {
+    const where: Prisma.QuoteWhereInput = {};
+    if (status) {
+      try {
+        where.status = this.normalizeStatus(status);
+      } catch {
+        // ignore invalid status filter
+      }
+    }
+
+    const args: Prisma.QuoteFindManyArgs = {
+      where,
       orderBy: { updatedAt: "desc" },
       include: {
         customer: true,
@@ -93,9 +103,13 @@ export class QuotesService {
         },
         stamps: { orderBy: { number: "asc" } },
       },
-    });
+    };
 
-    return quotes.map((quote) => this.mapQuoteBody(quote));
+    if (typeof take === "number") args.take = take;
+    if (typeof skip === "number") args.skip = skip;
+
+    const quotes = await this.prisma.quote.findMany(args);
+    return (quotes as any[]).map((quote: any) => this.mapQuoteBody(quote));
   }
 
   async getById(identifier: string) {
