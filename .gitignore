@@ -1,0 +1,9 @@
+node_modules/
+.next/
+dist/
+.env
+.env.*
+!.env.example
+deploy/stack.env
+coverage/
+*.log
