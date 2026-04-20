@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feat/orcamento-andamento
   workflow_dispatch:
 
 permissions:
