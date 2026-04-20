@@ -4,12 +4,24 @@ import { useEffect, useState } from "react";
 
 type Quote = {
   id: string;
+  internalNumber?: number;
+  body?: { idorcamento?: number };
   status: string;
   customer: { nome: string; nomefantasia?: string; };
   createdAt: string;
   updatedAt: string;
   total?: number;
 };
+
+function getQuoteIdentifier(quote: Quote): string {
+  if (quote.body?.idorcamento && Number.isFinite(quote.body.idorcamento)) {
+    return String(Math.trunc(quote.body.idorcamento));
+  }
+  if (quote.internalNumber && Number.isFinite(quote.internalNumber)) {
+    return String(Math.trunc(quote.internalNumber));
+  }
+  return quote.id;
+}
 
 function getParamFromUrl(param: string): string {
   if (typeof window === "undefined") return "";
@@ -74,14 +86,14 @@ export default function OrcamentosListPage() {
                 <tbody>
                   {quotes.map((q) => (
                     <tr key={q.id}>
-                      <td>{q.id}</td>
+                      <td>{q.body?.idorcamento ?? q.internalNumber ?? q.id}</td>
                       <td>{q.customer?.nomefantasia || q.customer?.nome}</td>
                       <td><span className={`orcamento-status orcamento-status-${q.status.toLowerCase()}`}>{q.status}</span></td>
                       <td>{new Date(q.updatedAt).toLocaleString("pt-BR")}</td>
                       <td>
                         <a
                           className="btn btn-accent btn-sm"
-                          href={`/orcamento/${q.id}?chatid=${chatid}&account_id=${accountId}`}
+                          href={`/orcamento/${getQuoteIdentifier(q)}?chatid=${chatid}&account_id=${accountId}`}
                         >Detalhes</a>
                       </td>
                     </tr>
