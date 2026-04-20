@@ -15,10 +15,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate Docker Hub secrets
+        id: dockerhub
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Docker Hub secrets ausentes; workflow sera encerrado sem push."
+          fi
+
       - name: Setup buildx
+        if: ${{ steps.dockerhub.outputs.enabled == 'true' }}
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
+        if: ${{ steps.dockerhub.outputs.enabled == 'true' }}
         uses: docker/login-action@v2
         with:
           registry: docker.io
@@ -26,6 +39,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push backend image
+        if: ${{ steps.dockerhub.outputs.enabled == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./apps/backend
@@ -36,6 +50,7 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/bomcusto-backend:latest
 
       - name: Build and push frontend image
+        if: ${{ steps.dockerhub.outputs.enabled == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./apps/frontend
@@ -44,3 +59,7 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/bomcusto-frontend:${{ github.sha }}
             ${{ secrets.DOCKERHUB_USERNAME }}/bomcusto-frontend:latest
+
+      - name: End gracefully when Docker Hub is not configured
+        if: ${{ steps.dockerhub.outputs.enabled != 'true' }}
+        run: echo "Build and publish ignorado porque DOCKERHUB_USERNAME/DOCKERHUB_TOKEN nao estao configurados."
