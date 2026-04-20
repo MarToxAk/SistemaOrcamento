@@ -10,7 +10,19 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Validate SSH deploy secrets
+        id: ssh
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.SSH_HOST }}" ] && [ -n "${{ secrets.SSH_USER }}" ] && [ -n "${{ secrets.SSH_PRIVATE_KEY }}" ] && [ -n "${{ secrets.SSH_PORT }}" ] && [ -n "${{ secrets.DEPLOY_PATH }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Segredos SSH ausentes; deploy remoto sera ignorado."
+          fi
+
       - name: Deploy on remote via SSH
+        if: ${{ steps.ssh.outputs.enabled == 'true' }}
         uses: appleboy/ssh-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -26,3 +38,7 @@ jobs:
             cd ${{ secrets.DEPLOY_PATH }}
             docker compose -f deploy/docker-compose.vps.yml pull
             docker compose -f deploy/docker-compose.vps.yml up -d --remove-orphans
+
+      - name: End gracefully when SSH deploy is not configured
+        if: ${{ steps.ssh.outputs.enabled != 'true' }}
+        run: echo "Deploy via SSH ignorado porque segredos obrigatorios nao estao configurados."
