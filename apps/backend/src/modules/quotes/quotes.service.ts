@@ -963,7 +963,7 @@ export class QuotesService {
       itensDetalhados,
       carimbos: carimbosItens.map((c: any) => ({ numero: c.numero, carimbo: c.carimbo, dimensoes: c.dimensions ?? c.dimensoes, descricao: c.description ?? c.descricao })),
       carimbosDetalhados: carimbosItens.map((c: any) => ({ ...c, carimboRaw: null })),
-      funcionario: mappedBody.vendedorNome ?? null,
+  funcionario: mappedBody.vendedorNome ?? null,
       athosRaw: null,
     };
   }
