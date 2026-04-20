@@ -39,6 +39,7 @@ function pickString(row: Row, keys: string[]) {
       return value.trim();
     }
   }
+
   return "";
 }
 
@@ -51,87 +52,91 @@ function pickNumber(row: Row, keys: string[], fallback = 0) {
     if (typeof value === "string" && value.trim() !== "") {
       const parsed = Number(value);
       if (Number.isFinite(parsed)) {
-      async listarContasPagar() {
-        const client = new Client(this.getDbConfig());
-
-        try {
-          await client.connect();
-
-          const candidates = [
-            "conta_pagar",
-            "contaspagar",
-            "contas_pagar",
-            "contaspagar",
-            "conta_pagar_fornecedor",
-            "conta_pagar_receber",
-            "contasapagar",
-            "contas_a_pagar",
-          ];
-
-          const table = await findExistingTable(client, candidates);
-
-          if (!table || !isSafeIdentifier(table.tableName)) {
-            throw new NotFoundException("Tabela de contas a pagar nao encontrada no Athos");
-          }
-
-          const dateCandidates = [
-            "datavencimento",
-            "data_vencimento",
-            "vencimento",
-            "dtvenc",
-            "dt_vencimento",
-            "dataemissao",
-            "data_emissao",
-            "data",
-            "datalancamento",
-            "datalanc",
-            "dt_emissao",
-          ];
-
-          const dateColumn = dateCandidates.find((c) => table.columns.has(c) && isSafeIdentifier(c));
-
-          if (!dateColumn) {
-            throw new InternalServerErrorException("Nao foi possivel identificar coluna de data de vencimento para filtrar");
-          }
-
-          const now = new Date();
-          const start = new Date(now);
-          start.setDate(now.getDate() - 30);
-          const end = new Date(now);
-          end.setDate(now.getDate() + 30);
-
-          const startISO = start.toISOString();
-          const endISO = end.toISOString();
-
-          const query = `SELECT * FROM ${table.tableName} WHERE ${dateColumn} IS NOT NULL AND CAST(${dateColumn} AS timestamp) BETWEEN $1 AND $2 ORDER BY CAST(${dateColumn} AS timestamp) DESC`;
-
-          const result = await client.query(query, [startISO, endISO]);
-
-          // Retornar somente os campos solicitados, com nomes consistentes
-          return (result.rows as Row[]).map((row) => ({
-            descricaoconta: pickString(row, ["descricaoconta", "descricao", "descricaocurta", "nome", "descricao_conta"]),
-            dataemissao: pickDateISO(row, ["dataemissao", "data_emissao", "dt_emissao", "dtemissao", "data"]),
-            datavencimento: pickDateISO(row, ["datavencimento", "data_vencimento", "vencimento", "dtvenc", "dt_vencimento"]),
-            valorconta: pickNumber(row, ["valorconta", "valor_conta", "valor", "valortotal", "valorconta"], 0),
-            observacao: pickString(row, ["observacao", "obs", "observacoes", "descricao", "observacao_conta"]),
-            statusconta: pickString(row, ["statusconta", "status_conta", "status", "situacao"]),
-            valorpago: pickNumber(row, ["valorpago", "valor_pago", "valorquitado", "valorpago"], 0),
-            datapagamento: pickDateISO(row, ["datapagamento", "data_pagamento", "dataquitacao", "datapagamento"]),
-            ultimaalteracao: pickDateTimeISO(row, ["ultimaalteracao", "ultima_alteracao", "ultimaAlteracao", "ultimaalteracao", "ultimaalteracao"]),
-            numerodocumento: pickString(row, ["numerodocumento", "numerodoc", "numero_documento", "numero", "documento", "numeronota"]),
-          }));
-        } catch (error) {
-          this.logger.error(`Erro ao listar contas a pagar no Athos: ${error}`);
-
-          if (error instanceof NotFoundException || error instanceof InternalServerErrorException) {
-            throw error;
-          }
-
-          throw new InternalServerErrorException("Erro ao listar contas a pagar no Athos");
-        } finally {
-          await client.end();
-        }
+        return parsed;
       }
+    }
+  }
+
+  return fallback;
+}
+
+function pickDateISO(row: Row, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (value instanceof Date) {
+      return value.toISOString().slice(0, 10);
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString().slice(0, 10);
+      }
+    }
+  }
+
+  return new Date().toISOString().slice(0, 10);
+}
+
+function pickDateTimeISO(row: Row, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString();
+      }
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+async function loadItems(client: Client, idOrcamento: string) {
+  const candidates = ["orcamento_item", "orcamentoitem"];
+
+  for (const tableName of candidates) {
+    const columnsResult = await client.query<{ column_name: string }>(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = $1
+      `,
+      [tableName],
+    );
+
+    if (columnsResult.rows.length === 0) {
+      continue;
+    }
+
+    const columns = new Set(columnsResult.rows.map((row) => row.column_name.toLowerCase()));
+    const quoteIdColumn = ["idorcamento", "orcamentoid", "id_orcamento"].find((name) => columns.has(name));
+    if (!quoteIdColumn) {
+      continue;
+    }
+
+    const orderColumns = ["sequenciaitem", "sequencia", "ordem", "idorcamentoitem", "iditem", "id"]
+      .filter((name) => columns.has(name))
+      .map((name) => `COALESCE(${name}, 0)`);
+    const orderBy = orderColumns.length > 0 ? ` ORDER BY ${orderColumns.join(", ")}` : "";
+
+    const itemsResult = await client.query(
+      `
+      SELECT *
+      FROM ${tableName}
+      WHERE CAST(${quoteIdColumn} AS TEXT) = $1${orderBy}
+      `,
+      [idOrcamento],
+    );
+
+    const rows = itemsResult.rows as Row[];
+
+    const productTable = await findExistingTable(client, ["produto", "produtos"]);
+    const productIdOnItem = ["idproduto", "produtoid", "id_produto"].find((name) => columns.has(name));
+    const productIdOnProduct = productTable
       ? ["idproduto", "produtoid", "id_produto", "id"].find((name) => productTable.columns.has(name))
       : undefined;
 
@@ -410,8 +415,6 @@ export class AthosService {
       await client.end();
     }
   }
-<<<<<<< HEAD
-
   async listarContasPagar() {
     const client = new Client(this.getDbConfig());
 
@@ -493,6 +496,4 @@ export class AthosService {
       await client.end();
     }
   }
-=======
->>>>>>> ea770db1e7ada942af921d53b6c65e68224d8b94
 }
