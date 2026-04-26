@@ -9,7 +9,7 @@ function isSafeIdentifier(value: string) {
 }
 
 async function getTableColumns(client: Client, tableName: string) {
-  const result = await client.query<{ column_name: string }>(
+  const result = await client.query(
     `
     SELECT column_name
     FROM information_schema.columns
@@ -18,7 +18,7 @@ async function getTableColumns(client: Client, tableName: string) {
     [tableName],
   );
 
-  return result.rows.map((row) => row.column_name.toLowerCase());
+  return result.rows.map((row: any) => String(row.column_name).toLowerCase());
 }
 
 async function findExistingTable(client: Client, tableCandidates: string[]) {
@@ -56,7 +56,6 @@ function pickNumber(row: Row, keys: string[], fallback = 0) {
       }
     }
   }
-
   return fallback;
 }
 
@@ -73,7 +72,6 @@ function pickDateISO(row: Row, keys: string[]) {
       }
     }
   }
-
   return new Date().toISOString().slice(0, 10);
 }
 
@@ -90,16 +88,21 @@ function pickDateTimeISO(row: Row, keys: string[]) {
       }
       return value.trim();
     }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString();
+      }
+    }
   }
-
-  return "";
+  return null;
 }
 
 async function loadItems(client: Client, idOrcamento: string) {
   const candidates = ["orcamento_item", "orcamentoitem"];
 
   for (const tableName of candidates) {
-    const columnsResult = await client.query<{ column_name: string }>(
+    const columnsResult = await client.query(
       `
       SELECT column_name
       FROM information_schema.columns
@@ -112,7 +115,7 @@ async function loadItems(client: Client, idOrcamento: string) {
       continue;
     }
 
-    const columns = new Set(columnsResult.rows.map((row) => row.column_name.toLowerCase()));
+    const columns = new Set(columnsResult.rows.map((r: any) => String(r.column_name).toLowerCase()));
     const quoteIdColumn = ["idorcamento", "orcamentoid", "id_orcamento"].find((name) => columns.has(name));
     if (!quoteIdColumn) {
       continue;
@@ -158,9 +161,7 @@ async function loadItems(client: Client, idOrcamento: string) {
           [Array.from(new Set(productIds))],
         );
 
-        productsById = new Map(
-          (productsResult.rows as Row[]).map((row) => [String(row[productIdOnProduct]), row]),
-        );
+        productsById = new Map((productsResult.rows as Row[]).map((row) => [String(row[productIdOnProduct]), row]));
       }
     }
 
@@ -189,8 +190,9 @@ async function loadItems(client: Client, idOrcamento: string) {
 }
 
 async function loadFuncionario(client: Client, quote: Row) {
-  const funcionarioId = [quote.idvendedor, quote.idfuncionariousuario, quote.idusuario]
-    .find((value) => value !== null && value !== undefined);
+  const funcionarioId = [quote.idvendedor, quote.idfuncionariousuario, quote.idusuario].find(
+    (value) => value !== null && value !== undefined,
+  );
 
   if (funcionarioId === undefined) {
     return null;
@@ -208,8 +210,9 @@ async function loadFuncionario(client: Client, quote: Row) {
     return null;
   }
 
-  const funcionarioIdColumn = ["idfuncionario", "idfuncionariousuario", "idusuario", "idvendedor", "id"]
-    .find((name) => funcionarioTable.columns.has(name));
+  const funcionarioIdColumn = ["idfuncionario", "idfuncionariousuario", "idusuario", "idvendedor", "id"].find((name) =>
+    funcionarioTable.columns.has(name),
+  );
 
   if (!funcionarioIdColumn || !isSafeIdentifier(funcionarioIdColumn)) {
     return null;
@@ -249,9 +252,9 @@ async function loadCarimbos(client: Client, idOrcamento: string) {
     return [];
   }
 
-  const orderColumns = ["numero", "idcarimbo", "id", "sequencia"]
-    .filter((name) => carimboTable.columns.has(name))
-    .map((name) => `COALESCE(${name}, 0)`);
+  const orderColumns = ["numero", "idcarimbo", "id", "sequencia"].filter((name) => carimboTable.columns.has(name)).map(
+    (name) => `COALESCE(${name}, 0)`,
+  );
   const orderBy = orderColumns.length > 0 ? ` ORDER BY ${orderColumns.join(", ")}` : "";
 
   const result = await client.query(
@@ -294,27 +297,12 @@ export class AthosService {
 
   async testarConexao() {
     const { host, database, user, password, port } = this.getDbConfig();
-    const client = new Client({
-      host,
-      database,
-      user,
-      password,
-      port,
-      connectionTimeoutMillis: 5000,
-    });
+    const client = new Client({ host, database, user, password, port, connectionTimeoutMillis: 5000 });
 
     try {
       await client.connect();
       await client.query("SELECT 1");
-
-      return {
-        ok: true,
-        host,
-        port,
-        database,
-        user,
-        message: "Conexao com Athos estabelecida com sucesso.",
-      };
+      return { ok: true, host, port, database, user, message: "Conexao com Athos estabelecida com sucesso." };
     } catch (error) {
       const message = error instanceof Error ? error.message : "erro desconhecido";
       this.logger.error(`Falha na conexao Athos (${host}:${port}/${database}): ${message}`);
@@ -330,7 +318,7 @@ export class AthosService {
     try {
       await client.connect();
 
-      const columnsResult = await client.query<{ column_name: string }>(
+      const columnsResult = await client.query(
         `
         SELECT column_name
         FROM information_schema.columns
@@ -338,7 +326,7 @@ export class AthosService {
         `,
       );
 
-      const available = new Set(columnsResult.rows.map((row) => row.column_name.toLowerCase()));
+      const available = new Set(columnsResult.rows.map((row: any) => String(row.column_name).toLowerCase()));
       const identifierColumn = ["numero", "idorcamento", "codorcamento", "orcamento", "codigo"].find((name) =>
         available.has(name),
       );
@@ -399,22 +387,18 @@ export class AthosService {
         athosRaw: quote,
       };
 
-      return {
-        rawRows: result.rows,
-        mapped,
-      };
+      return { rawRows: result.rows, mapped };
     } catch (error) {
       this.logger.error(`Erro ao buscar orçamento no Athos: ${error}`);
-
       if (error instanceof NotFoundException || error instanceof InternalServerErrorException) {
         throw error;
       }
-
       throw new InternalServerErrorException("Erro ao buscar orcamento no Athos");
     } finally {
       await client.end();
     }
   }
+
   async listarContasPagar() {
     const client = new Client(this.getDbConfig());
 
@@ -471,7 +455,6 @@ export class AthosService {
 
       const result = await client.query(query, [startISO, endISO]);
 
-      // Retornar somente os campos solicitados, com nomes consistentes
       return (result.rows as Row[]).map((row) => ({
         descricaoconta: pickString(row, ["descricaoconta", "descricao", "descricaocurta", "nome", "descricao_conta"]),
         dataemissao: pickDateISO(row, ["dataemissao", "data_emissao", "dt_emissao", "dtemissao", "data"]),
@@ -486,11 +469,9 @@ export class AthosService {
       }));
     } catch (error) {
       this.logger.error(`Erro ao listar contas a pagar no Athos: ${error}`);
-
       if (error instanceof NotFoundException || error instanceof InternalServerErrorException) {
         throw error;
       }
-
       throw new InternalServerErrorException("Erro ao listar contas a pagar no Athos");
     } finally {
       await client.end();
