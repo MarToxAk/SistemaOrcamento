@@ -51,6 +51,11 @@ export class QuotesController {
     return this.quotesService.getById(id);
   }
 
+  @Get(":id/payment-status")
+  checkPaymentStatus(@Param("id") id: string) {
+    return this.quotesService.checkPaymentStatus(id);
+  }
+
   @Post()
   create(@Body() payload: unknown) {
     const resolved = (payload as { body?: CreateQuoteDto }).body ?? (payload as CreateQuoteDto);
@@ -75,5 +80,21 @@ export class QuotesController {
   @Post(":id/pdf")
   generatePdf(@Param("id") id: string) {
     return this.quotesService.generatePdf(id);
+  }
+
+  @Post(":id/pdf/send")
+  resendPdf(@Param("id") id: string) {
+    return this.quotesService.resendPdfToChatwoot(id);
+  }
+
+  @Post(":id/enviar")
+  enviarParaCliente(@Param("id") id: string) {
+    return this.quotesService.enviarParaCliente(id);
+  }
+
+  @Post(":id/approve")
+  approve(@Param("id") id: string, @Query("token") token?: string, @Body() body?: { token?: string }) {
+    const t = token ?? (body && body.token) ?? undefined;
+    return this.quotesService.approveByToken(id, String(t ?? ""));
   }
 }

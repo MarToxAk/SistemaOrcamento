@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException, Inject, forwardRef } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { AthosService } from "../integrations/athos/athos.service";
@@ -59,6 +59,7 @@ export class QuotesService {
     private readonly quotesPdfStorageService: QuotesPdfStorageService,
     private readonly configService: ConfigService,
     private readonly chatwootService: ChatwootService,
+    @Inject(forwardRef(() => EfiService))
     private readonly efiService: EfiService,
   ) {}
 

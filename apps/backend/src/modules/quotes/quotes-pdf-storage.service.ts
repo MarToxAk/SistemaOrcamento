@@ -351,6 +351,22 @@ export class QuotesPdfStorageService {
     };
   }
 
+  async downloadObjectBuffer(objectName: string): Promise<Buffer> {
+    const client = this.buildMinioClient();
+    const bucket = this.requireEnv("MINIO_BUCKET");
+
+    const stream = await client.getObject(bucket, objectName);
+    const chunks: Buffer[] = [];
+
+    await new Promise<void>((resolve, reject) => {
+      stream.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      stream.on("end", () => resolve());
+      stream.on("error", (error) => reject(error));
+    });
+
+    return Buffer.concat(chunks);
+  }
+
   private renderHtml(payload: QuotePdfData): string {
     const template = Handlebars.compile(HTML_TEMPLATE);
     

@@ -58,4 +58,31 @@ export class ChatwootService {
 
     return { enabled: true, sent: true };
   }
+
+  async sendOutgoingMessage(conversationId: string, message: string) {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return { enabled: false, message: "Configuração do Chatwoot ausente." };
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
+    const response = await axios.post(
+      url,
+      {
+        content: message,
+        message_type: "outgoing",
+        private: false,
+      },
+      {
+        headers: {
+          api_access_token: token,
+        },
+      },
+    );
+
+    return { enabled: true, response: response.data };
+  }
 }

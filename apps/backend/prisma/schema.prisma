@@ -20,10 +20,12 @@ enum PriceSource {
 
 enum QuoteStatus {
   PENDENTE
+  PAGAMENTO_PARCIAL
   APROVADO
   EM_PRODUCAO
   PRONTO_PARA_ENTREGA
   ENTREGUE
+  ENVIADO
   CANCELADO
 }
 
@@ -74,9 +76,24 @@ model Quote {
   status             QuoteStatus           @default(PENDENTE)
   source             DataSource            @default(MANUAL)
   sellerExternalId   BigInt?               @db.BigInt
+  saleExternalId     BigInt?               @db.BigInt
   sellerName         String?
   conversationId     BigInt?               @db.BigInt
   chatwootContactId  BigInt?               @db.BigInt
+  paymentSource      String?
+  paymentMethod      String?
+  paymentExternalId  String?               @unique
+  paymentEventId     String?               @unique
+  paymentAmount      Decimal?              @db.Decimal(12, 2)
+  paymentDiscount    Decimal               @default(0) @db.Decimal(12, 2)
+  paidTotal          Decimal               @default(0) @db.Decimal(12, 2)
+  pendingTotal       Decimal               @default(0) @db.Decimal(12, 2)
+  firstInstallmentAmount Decimal?          @db.Decimal(12, 2)
+  secondInstallmentAmount Decimal?         @db.Decimal(12, 2)
+  secondInstallmentExternalId String?      @unique
+  paymentConfirmedAt DateTime?
+  paymentFailedAt    DateTime?
+  paymentFailureReason String?
   validity           String?
   deliveryDate       DateTime?
   paymentTerms       String?
@@ -93,6 +110,7 @@ model Quote {
   stamps             QuoteStampItem[]
   statusHistory      QuoteStatusHistory[]
   documents          QuoteDocument[]
+  paymentTransactions PaymentTransaction[]
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
 
@@ -100,6 +118,27 @@ model Quote {
   
   @@index([conversationId])
   @@index([chatwootContactId])
+  @@index([saleExternalId])
+  @@index([paymentSource, paymentMethod])
+  @@index([paymentConfirmedAt])
+}
+
+model PaymentTransaction {
+  id            String   @id @default(uuid())
+  quoteId       String
+  externalId    String?  @unique
+  eventId       String?  @unique
+  source        String
+  method        String
+  status        String
+  amount        Decimal  @db.Decimal(12, 2)
+  metadata      Json?
+  webhookPayload Json?
+  processedAt   DateTime @default(now())
+  quote         Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId, processedAt])
+  @@index([source, method, status])
 }
 
 model QuoteItem {

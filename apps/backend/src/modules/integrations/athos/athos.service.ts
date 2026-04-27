@@ -1,4 +1,3 @@
-
 import { Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { Client } from "pg";
 
@@ -476,5 +475,17 @@ export class AthosService {
     } finally {
       await client.end();
     }
+  }
+
+  async verificarPagamentoPorOrcamento(orcamentoId: string, vendaId: string) {
+    this.logger.log(`Verificando pagamento para orçamento ${orcamentoId} e venda ${vendaId}`);
+    // Implementação fictícia para simular a verificação de pagamento
+    return { status: "PAGO", valor: 100.0 };
+  }
+
+  async buscarClientePorId(clienteId: string) {
+    this.logger.log(`Buscando cliente com ID ${clienteId}`);
+    // Implementação fictícia para simular a busca de cliente
+    return { id: clienteId, nome: "Cliente Exemplo", email: "cliente@exemplo.com" };
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 import Script from "next/script";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CARIMBOS_CONFIG } from "./carimbos-config";
 
 type ItemForm = {
@@ -142,6 +143,7 @@ export default function PreencherOrcamentoPage() {
   const [sucesso, setSucesso] = useState("");
   const [validationState, setValidationState] = useState<"checking" | "valid" | "invalid">("checking");
   const [validationMessage, setValidationMessage] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -161,6 +163,17 @@ export default function PreencherOrcamentoPage() {
     // Compatibilidade com parametros de diferentes integrações Chatwoot.
     setConversationId(parseOptionalNumber("chatid", "conversationId", "conversation_id"));
     setChatwootContactId(parseOptionalNumber("chatwootContactId", "chatwoot_contact_id", "contact_id"));
+
+    // Bypass Chatwoot validation in development/local environment
+    const isDevBypass =
+      (typeof process !== "undefined" && process.env && process.env.NODE_ENV === "development") ||
+      (typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.hostname === "0.0.0.0"));
+    if (isDevBypass) {
+      setValidationState("valid");
+      setValidationMessage("");
+      return;
+    }
 
     const nomeQuery = params.get("nome") ?? params.get("name") ?? params.get("cliente") ?? "";
     const telefoneQuery = params.get("telefone") ?? params.get("phone") ?? params.get("phone_number") ?? "";
@@ -492,9 +505,24 @@ export default function PreencherOrcamentoPage() {
           ? `Orcamento gerado com sucesso. Numero Athos: ${numeroAthos}.`
           : numeroInterno
             ? `Orcamento gerado com sucesso. Numero interno: ${numeroInterno}.`
-          : "Orcamento gerado com sucesso.",
+            : "Orcamento gerado com sucesso.",
       );
       setSendingState('success');
+
+      // Redireciona para a página do orçamento criado (preservando query string)
+      const identifier = numeroAthos ?? numeroInterno ?? undefined;
+      if (identifier) {
+        const query = typeof window !== 'undefined' ? window.location.search.replace(/^\?/, '') : '';
+        const href = `/orcamento/${encodeURIComponent(String(identifier))}${query ? `?${query}` : ''}`;
+        // Pequeno delay para mostrar feedback antes do redirecionamento
+        window.setTimeout(() => {
+          try {
+            router.push(href);
+          } catch {
+            window.location.href = href;
+          }
+        }, 600);
+      }
       window.setTimeout(() => setSendingState('idle'), 2000);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao gerar orcamento.";

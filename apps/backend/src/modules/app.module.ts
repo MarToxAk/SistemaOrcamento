@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health.controller";
 import { ChatwootModule } from "./integrations/chatwoot/chatwoot.module";
+import { EfiModule } from "./integrations/efi/efi.module";
 import { PdvModule } from "./integrations/pdv/pdv.module";
 import { QuotesModule } from "./quotes/quotes.module";
 
@@ -21,6 +22,7 @@ import { QuotesModule } from "./quotes/quotes.module";
     DatabaseModule,
     QuotesModule,
     ChatwootModule,
+    EfiModule,
     PdvModule,
   ],
   controllers: [HealthController],

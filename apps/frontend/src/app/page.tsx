@@ -1,13 +1,15 @@
-
 "use client";
 import { useEffect, useState } from "react";
 
 type Quote = {
   id: string;
   internalNumber?: number;
-  body?: { idorcamento?: number };
-  status: string;
-  customer: { nome: string; nomefantasia?: string; };
+  body?: { idorcamento?: number; cliente?: { nome?: string; nomefantasia?: string; telefone?: string | null; email?: string | null } };
+  statusKey?: string;
+  statusLabel?: string;
+  customer?: { nome?: string; nomefantasia?: string };
+  chatwootConversationUrl?: string | null;
+  chatwootContactUrl?: string | null;
   createdAt: string;
   updatedAt: string;
   total?: number;
@@ -87,14 +89,27 @@ export default function OrcamentosListPage() {
                   {quotes.map((q) => (
                     <tr key={q.id}>
                       <td>{q.body?.idorcamento ?? q.internalNumber ?? q.id}</td>
-                      <td>{q.customer?.nomefantasia || q.customer?.nome}</td>
-                      <td><span className={`orcamento-status orcamento-status-${q.status.toLowerCase()}`}>{q.status}</span></td>
+                      <td>{q.body?.cliente?.nome || q.body?.cliente?.nomefantasia || q.customer?.nome || 'Nome não disponível'}</td>
+                      <td>
+                        <span className={`orcamento-status orcamento-status-${((q.statusKey ?? "").toString()).toLowerCase() || 'indefinido'}`}>
+                          {q.statusLabel ?? q.statusKey ?? 'Indefinido'}
+                        </span>
+                      </td>
                       <td>{new Date(q.updatedAt).toLocaleString("pt-BR")}</td>
                       <td>
                         <a
                           className="btn btn-accent btn-sm"
                           href={`/orcamento/${getQuoteIdentifier(q)}?chatid=${chatid}&account_id=${accountId}`}
                         >Detalhes</a>
+                        { (q.chatwootConversationUrl || q.chatwootContactUrl) && (
+                          <a
+                            className="btn btn-ghost btn-sm"
+                            style={{ marginLeft: 8 }}
+                            href={q.chatwootConversationUrl ?? q.chatwootContactUrl ?? "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >Abrir conversa</a>
+                        )}
                       </td>
                     </tr>
                   ))}
