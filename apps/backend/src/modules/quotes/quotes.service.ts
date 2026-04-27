@@ -1,23 +1,31 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import { randomBytes } from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { AthosService } from "../integrations/athos/athos.service";
+import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
+import { EfiService } from "../integrations/efi/efi.service";
 import { PriceSource, Prisma, QuoteStatus } from "@prisma/client";
 
 import { PrismaService } from "../database/prisma.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
 
-const statusTransitions: Record<QuoteStatus, QuoteStatus[]> = {
-  PENDENTE: ["APROVADO", "CANCELADO"],
+const statusTransitions = {
+  PENDENTE: ["ENVIADO", "PAGAMENTO_PARCIAL", "APROVADO", "CANCELADO"],
+  PAGAMENTO_PARCIAL: ["APROVADO", "CANCELADO"],
   APROVADO: ["EM_PRODUCAO", "CANCELADO"],
   EM_PRODUCAO: ["PRONTO_PARA_ENTREGA", "CANCELADO"],
   PRONTO_PARA_ENTREGA: ["ENTREGUE", "CANCELADO"],
   ENTREGUE: [],
+  ENVIADO: ["PAGAMENTO_PARCIAL", "APROVADO", "CANCELADO"],
   CANCELADO: [],
-};
+} as Record<QuoteStatus, QuoteStatus[]>;
 
-const statusAliases: Record<string, QuoteStatus> = {
+const statusAliases = {
   pendente: "PENDENTE",
+  pagamento_parcial: "PAGAMENTO_PARCIAL",
+  pagamentoparcial: "PAGAMENTO_PARCIAL",
+  "pagamento parcial": "PAGAMENTO_PARCIAL",
   aprovado: "APROVADO",
   emproducao: "EM_PRODUCAO",
   em_producao: "EM_PRODUCAO",
@@ -26,25 +34,32 @@ const statusAliases: Record<string, QuoteStatus> = {
   pronto_para_entrega: "PRONTO_PARA_ENTREGA",
   "pronto para entrega": "PRONTO_PARA_ENTREGA",
   entregue: "ENTREGUE",
+  enviado: "ENVIADO",
   cancelado: "CANCELADO",
-};
+} as unknown as Record<string, QuoteStatus>;
 
-const statusLabels: Record<QuoteStatus, string> = {
+const statusLabels = {
   PENDENTE: "Pendente",
+  PAGAMENTO_PARCIAL: "Pagamento parcial",
   APROVADO: "Aprovado",
   EM_PRODUCAO: "Em producao",
   PRONTO_PARA_ENTREGA: "Pronto para entrega",
   ENTREGUE: "Entregue",
+  ENVIADO: "Enviado",
   CANCELADO: "Cancelado",
-};
+} as Record<QuoteStatus, string>;
 
 @Injectable()
 export class QuotesService {
+  private readonly logger = new Logger(QuotesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly athosService: AthosService,
     private readonly quotesPdfStorageService: QuotesPdfStorageService,
     private readonly configService: ConfigService,
+    private readonly chatwootService: ChatwootService,
+    private readonly efiService: EfiService,
   ) {}
 
   async buscarNoAthosPorNumero(numero: string, format: "raw" | "mapped" = "raw") {
@@ -156,7 +171,34 @@ export class QuotesService {
       throw new NotFoundException("Orcamento nao encontrado");
     }
 
-    const mapped = this.mapQuoteBody(quote);
+    let resolvedQuote: any = quote;
+
+    if (!resolvedQuote.saleExternalId && resolvedQuote.externalQuoteId) {
+      try {
+        const athosData = await this.athosService.buscarOrcamentoPorNumero(String(Number(resolvedQuote.externalQuoteId)));
+        const numeroVenda = Number((athosData as any)?.mapped?.numeroVenda);
+
+        if (Number.isFinite(numeroVenda)) {
+          await this.prisma.quote.update({
+            where: { id: resolvedQuote.id },
+            data: { saleExternalId: this.toBigInt(numeroVenda) },
+          });
+
+          resolvedQuote = {
+            ...resolvedQuote,
+            saleExternalId: this.toBigInt(numeroVenda),
+          };
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Nao foi possivel preencher idvenda automaticamente para o orcamento ${resolvedQuote.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    const mapped = this.mapQuoteBody(resolvedQuote);
 
     // Busca documentos salvos (including publicUrl do banco)
     const documents = await this.prisma.quoteDocument.findMany({
@@ -168,7 +210,7 @@ export class QuotesService {
       ...mapped,
       body: {
         ...mapped.body,
-        id: quote.id,
+        id: resolvedQuote.id,
         documentoPdf: documents.map((doc) => ({
           filename: doc.fileName,
           contentType: doc.contentType,
@@ -176,6 +218,70 @@ export class QuotesService {
           publicUrl: doc.publicUrl,
           generatedAt: doc.generatedAt,
         })),
+      },
+    };
+  }
+
+  async checkPaymentStatus(identifier: string) {
+    const quote = await this.findQuoteByIdentifier(identifier);
+    if (!quote) {
+      throw new NotFoundException("Orcamento nao encontrado");
+    }
+
+    const mapped = this.mapQuoteBody(quote);
+    const idOrcamento = mapped.body.idorcamento ?? mapped.body.idorcamento_interno;
+    const idVenda = mapped.body.idvenda;
+
+    const payment = await this.athosService.verificarPagamentoPorOrcamento(String(idOrcamento ?? quote.internalNumber), idVenda);
+    let resolvedIdVenda = idVenda ?? payment.idVenda;
+
+    if (!idVenda && Number.isFinite(Number(payment.idVenda))) {
+      try {
+        const parsedIdVenda = Number(payment.idVenda);
+        await this.prisma.quote.update({
+          where: { id: quote.id },
+          data: { saleExternalId: this.toBigInt(parsedIdVenda) },
+        });
+        resolvedIdVenda = parsedIdVenda;
+      } catch (error) {
+        this.logger.warn(
+          `Nao foi possivel persistir idvenda (${payment.idVenda}) para o orcamento ${quote.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    let statusUpdated = false;
+    let previousStatus = quote.status;
+    let currentStatus = quote.status;
+    let statusSyncError: string | null = null;
+
+    if (payment.paid && ["PENDENTE", "ENVIADO"].includes(quote.status)) {
+      try {
+        await this.changeStatus(quote.id, "APROVADO", "Verificacao de pagamento Athos");
+        statusUpdated = true;
+        currentStatus = "APROVADO" as QuoteStatus;
+      } catch (error) {
+        statusSyncError = error instanceof Error ? error.message : "Falha ao sincronizar status";
+        this.logger.warn(
+          `Pagamento detectado, mas status nao foi atualizado automaticamente para o orcamento ${quote.id}: ${statusSyncError}`,
+        );
+      }
+    }
+
+    return {
+      quoteId: quote.id,
+      idorcamento: idOrcamento,
+      idvenda: resolvedIdVenda,
+      payment,
+      statusSync: {
+        updated: statusUpdated,
+        previousStatusKey: previousStatus,
+        previousStatusLabel: statusLabels[previousStatus],
+        currentStatusKey: currentStatus,
+        currentStatusLabel: statusLabels[currentStatus],
+        error: statusSyncError,
       },
     };
   }
@@ -265,6 +371,7 @@ export class QuotesService {
               status: initialStatus,
               customerId: customer.id,
               sellerExternalId: this.toBigInt(payload.idvendedor),
+              saleExternalId: this.toBigInt(payload.idvenda),
               sellerName: payload.vendedorNome,
               conversationId: this.toBigInt(payload.conversationId),
               chatwootContactId: this.toBigInt(payload.chatwootContactId),
@@ -374,6 +481,7 @@ export class QuotesService {
           status: initialStatus,
           customerId: customer.id,
           sellerExternalId: this.toBigInt(payload.idvendedor),
+          saleExternalId: this.toBigInt(payload.idvenda),
           sellerName: payload.vendedorNome,
           conversationId: this.toBigInt(payload.conversationId),
           chatwootContactId: this.toBigInt(payload.chatwootContactId),
@@ -527,6 +635,14 @@ export class QuotesService {
       );
     }
 
+    // Bloqueia avanço para EM_PRODUCAO se não aprovado e cliente não for associado
+    if (newStatus === "EM_PRODUCAO") {
+      const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false) || Boolean(quote.notes && String(quote.notes).includes("__associated__"));
+      if (!quote.approved && !isAssociated) {
+        throw new BadRequestException("Orçamento precisa ser aprovado pelo cliente antes de entrar em produção");
+      }
+    }
+
     const updated = await this.prisma.quote.update({
       where: { id: quote.id },
       data: {
@@ -589,6 +705,71 @@ export class QuotesService {
       generatedAt: document.generatedAt,
       message: "PDF gerado e salvo com sucesso.",
     };
+  }
+
+  async resendPdfToChatwoot(identifier: string) {
+    const quote = await this.findQuoteByIdentifier(identifier);
+    if (!quote) throw new NotFoundException("Orcamento nao encontrado");
+
+    const convId = quote.conversationId ? String(quote.conversationId) : undefined;
+    if (!convId) throw new BadRequestException("conversationId ausente no orcamento");
+
+    // Tentar pegar o documento PDF mais recente
+    let latestDocument = await this.prisma.quoteDocument.findFirst({ where: { quoteId: quote.id }, orderBy: { generatedAt: "desc" } });
+
+    let fileBuffer: Buffer | null = null;
+    let fileName = latestDocument?.fileName ?? `Orcamento-${quote.internalNumber}.pdf`;
+    let contentType = latestDocument?.contentType ?? "application/pdf";
+
+    if (latestDocument && latestDocument.storagePath) {
+      try {
+        fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(latestDocument.storagePath);
+      } catch (err) {
+        this.logger.warn(`Falha ao baixar PDF do storage para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+        fileBuffer = null;
+      }
+    }
+
+    // Se nao temos buffer do storage, gerar e salvar um novo PDF
+          if (!fileBuffer) {
+            try {
+              // Para gerar o PDF, use o formato esperado pelo gerador (mapQuoteBody)
+              const stored = await this.quotesPdfStorageService.generateAndStore(this.mapQuoteBody(quote).body);
+
+        // Persistir registro de documento
+        try {
+          await this.prisma.quoteDocument.create({
+            data: {
+              quoteId: quote.id,
+              fileName: stored.fileName,
+              contentType: stored.contentType,
+              storagePath: stored.objectName,
+              publicUrl: stored.publicUrl,
+              generatedBy: "resend",
+            },
+          });
+        } catch (err) {
+          this.logger.debug(`Falha ao persistir QuoteDocument apos gerar PDF para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+
+        fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(stored.objectName);
+        fileName = stored.fileName;
+        contentType = stored.contentType;
+      } catch (err) {
+        this.logger.warn(`Falha ao gerar PDF para reenvio do orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+        throw new BadRequestException("Falha ao obter/gerar PDF para reenvio");
+      }
+    }
+
+    // Envia o anexo para o Chatwoot
+    try {
+      await this.chatwootService.sendAttachment(convId, fileBuffer as Buffer, fileName, contentType);
+    } catch (err) {
+      this.logger.warn(`Falha ao enviar PDF ao Chatwoot para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+      throw new BadRequestException("Falha ao enviar PDF ao Chatwoot");
+    }
+
+    return { sent: true, message: "PDF reenviado ao Chatwoot" };
   }
 
   private async resolveCustomer(payload: CreateQuoteDto, customerInput: { nome: string; telefone?: string; email?: string }) {
@@ -913,6 +1094,7 @@ export class QuotesService {
     externalQuoteId: bigint | null;
     budgetDate: Date | null;
     sellerExternalId: bigint | null;
+    saleExternalId?: bigint | null;
     sellerName: string | null;
     conversationId: bigint | null;
     chatwootContactId: bigint | null;
@@ -996,6 +1178,7 @@ export class QuotesService {
       latestPdfUrl: latestDocument?.publicUrl ?? null,
       latestPdfFileName: latestDocument?.fileName ?? null,
       chatwootConversationUrl: this.buildChatwootConversationUrl(quote.conversationId),
+      chatwootContactUrl: this.buildChatwootContactUrl(quote.chatwootContactId),
       availableNextStatuses: statusTransitions[quote.status].map((status) => ({
         value: status,
         label: statusLabels[status],
@@ -1005,12 +1188,14 @@ export class QuotesService {
         idorcamento: quote.externalQuoteId ? Number(quote.externalQuoteId) : undefined,
         dataorcamento: quote.budgetDate?.toISOString(),
         idvendedor: quote.sellerExternalId ? Number(quote.sellerExternalId) : undefined,
+        idvenda: quote.saleExternalId ? Number(quote.saleExternalId) : undefined,
         vendedorNome: quote.sellerName,
         conversationId: quote.conversationId ? Number(quote.conversationId) : undefined,
         chatwootContactId: quote.chatwootContactId ? Number(quote.chatwootContactId) : undefined,
         status: statusLabels[quote.status],
         cliente: {
           nome: quote.customer.fullName,
+          nomefantasia: quote.customer.fullName, // Ajuste para compatibilidade com o frontend
           telefone: quote.customer.phone,
           email: quote.customer.email,
         },
@@ -1051,6 +1236,417 @@ export class QuotesService {
     }
 
     return `${baseUrl.replace(/\/$/, "")}/app/accounts/${accountId}/conversations/${conversationId.toString()}`;
+  }
+
+  private buildChatwootContactUrl(contactId: bigint | null): string | null {
+    if (!contactId) return null;
+
+    const baseUrl = this.configService.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.configService.get<string>("CHATWOOT_ACCOUNT_ID");
+
+    if (!baseUrl || !accountId) return null;
+
+    return `${baseUrl.replace(/\/$/, "")}/app/accounts/${accountId}/contacts/${contactId.toString()}`;
+  }
+
+  private buildPaymentMessage(
+    clienteNome: string,
+    numero: string | number,
+    total: number,
+    itens: Array<{ descricao: string; quantidade: number; total: number }>,
+    pixPayment: {
+      linkVisualizacao: string;
+      amount: number;
+      originalAmount: number;
+      discountAmount: number;
+      pixCopiaECola?: string | null;
+    },
+    paymentOptions: ReturnType<typeof this.efiService.resolvePaymentOptions>,
+    extra: {
+      pix5050Link?: string;
+      pix5050Half?: number;
+      cardLink?: string;
+    } = {},
+  ): string {
+    const fmt = (v: number) =>
+      v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    const linhasItens = itens
+      .slice(0, 10)
+      .map((it) => `• ${it.descricao} (${it.quantidade}x) — ${fmt(it.total)}`)
+      .join("\n");
+
+    const maisItens = itens.length > 10 ? `\n...e mais ${itens.length - 10} item(ns)` : "";
+
+    const opts = paymentOptions.options;
+    const pix = opts.find((o) => o.code === "PIX_AVISTA")!;
+    const meia = opts.find((o) => o.code === "ENTRADA_50_LOJA_50");
+    const cartao = opts.find((o) => o.code === "CARTAO_2X");
+
+    const linhasPagamento: string[] = [];
+
+    // PIX (sempre disponível)
+    const pixFinal = pix.finalAmount ?? pixPayment.amount;
+    const pixDiscount = pix.discountPercent ?? 0;
+    const pixLabel = pixDiscount > 0
+      ? `*1️⃣ PIX à vista* — ${fmt(pixFinal)} _(${pixDiscount}% de desconto)_`
+      : `*1️⃣ PIX à vista* — ${fmt(pixFinal)}`;
+    linhasPagamento.push(pixLabel);
+    linhasPagamento.push(`👉 ${pixPayment.linkVisualizacao}`);
+    if (pixPayment.pixCopiaECola) {
+      linhasPagamento.push(`Pix Copia e Cola:`);
+      linhasPagamento.push(pixPayment.pixCopiaECola);
+    }
+
+    // 50/50
+    if (meia?.enabled) {
+      const metade = fmt(extra.pix5050Half ?? Number((total * 0.5).toFixed(2)));
+      linhasPagamento.push(`\n*2️⃣ 50% entrada + 50% na loja*`);
+      linhasPagamento.push(`Entrada de ${metade} via PIX:`);
+      if (extra.pix5050Link) {
+        linhasPagamento.push(`👉 ${extra.pix5050Link}`);
+      }
+      linhasPagamento.push(`Restante (${metade}) na retirada do pedido.`);
+    }
+
+    // Cartão
+    if (cartao?.enabled) {
+      linhasPagamento.push(`\n*3️⃣ Cartão de crédito em até 2x*`);
+      if (extra.cardLink) {
+        linhasPagamento.push(`👉 ${extra.cardLink}`);
+      } else {
+        linhasPagamento.push(`Processamos na maquininha na retirada (${fmt(cartao.finalAmount ?? total)} em até 2x).`);
+      }
+    }
+
+    return [
+      `Olá, ${clienteNome.split(" ")[0]}! 👋 Segue o resumo do seu pedido:`,
+      ``,
+      `📋 *Orçamento #${numero}*`,
+      linhasItens + maisItens,
+      ``,
+      `💰 *Total: ${fmt(total)}*`,
+      ``,
+      `💳 *Formas de pagamento disponíveis:*`,
+      ...linhasPagamento,
+      ``,
+      `Qualquer dúvida, é só chamar! 😊`,
+    ].join("\n");
+  }
+
+  async enviarParaCliente(quoteId: string) {
+    const quote = await this.findQuoteByIdentifier(quoteId);
+    if (!quote) {
+      throw new NotFoundException("Orçamento não encontrado");
+    }
+    // Tenta resolver idcliente e nome (prioriza dados persistidos)
+    let clienteId: any = undefined;
+    let clienteNome = quote.customer?.fullName;
+
+    let athosMapped: any = null;
+    if (!clienteId) {
+      try {
+        const lookupId = String(quote.externalQuoteId ?? quote.internalNumber ?? "");
+        const athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
+        athosMapped = (athosData as any)?.mapped ?? null;
+        clienteId = athosMapped?.idcliente ?? athosMapped?.clienteid ?? clienteId;
+        clienteNome = clienteNome ?? athosMapped?.cliente_juridico ?? athosMapped?.cliente_fisico ?? athosMapped?.cliente;
+      } catch (err) {
+        // Não bloquear o envio se a consulta ao Athos falhar; apenas logar
+        this.logger.debug(`Athos lookup falhou para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // Prepara dados do orçamento para montar a mensagem
+    const mappedQuote = this.mapQuoteToAthosMapped(quote);
+    const numero = mappedQuote.numero ?? quote.internalNumber;
+    const itens = Array.isArray(mappedQuote.itens) ? mappedQuote.itens : [];
+    const total = Number(quote.total ?? 0);
+
+    // Preparar opções de pagamento e gerar links via EFI (se possível)
+    let paymentOptions: ReturnType<typeof this.efiService.resolvePaymentOptions> | null = null;
+    try {
+      paymentOptions = this.efiService.resolvePaymentOptions(total);
+    } catch (err) {
+      this.logger.warn(`Falha ao resolver opcoes de pagamento EFI para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+      paymentOptions = null;
+    }
+
+    let pixPayment: any = null;
+    let pix5050: any = null;
+    let cardLink: string | null = null;
+
+    if (paymentOptions) {
+      try {
+        pixPayment = await this.efiService.createPixPaymentLink({
+          quoteIdentifier: String(numero),
+          amount: total,
+          customerName: clienteNome ?? undefined,
+        });
+      } catch (err) {
+        this.logger.warn(`Falha ao gerar PIX EFI para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+        pixPayment = null;
+      }
+
+      const meia = paymentOptions.options.find((o) => o.code === "ENTRADA_50_LOJA_50");
+      if (meia?.enabled) {
+        try {
+          const res = await this.efiService.createPix5050Link({ quoteIdentifier: String(numero), totalAmount: total, customerName: clienteNome ?? undefined });
+          pix5050 = res;
+        } catch (err) {
+          this.logger.warn(`Falha ao gerar PIX 50% EFI para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+          pix5050 = null;
+        }
+      }
+
+      const cartao = paymentOptions.options.find((o) => o.code === "CARTAO_2X");
+      if (cartao?.enabled) {
+        try {
+          const card = await this.efiService.createCardPaymentLink({ quoteIdentifier: String(numero), amount: total });
+          cardLink = card.paymentUrl;
+        } catch (err) {
+          this.logger.warn(`Falha ao gerar link de cartao EFI para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+          cardLink = null;
+        }
+      }
+    }
+
+    // Se houver idcliente, garantir token de aprovacao e montar link de aprovacao
+    let approvalToken: string | undefined = undefined;
+    let approvalLink: string | undefined = undefined;
+    if (clienteId) {
+      if (quote.approvalToken && quote.approvalExpiresAt && new Date(quote.approvalExpiresAt) > new Date()) {
+        approvalToken = quote.approvalToken;
+      } else {
+        approvalToken = randomBytes(12).toString("hex");
+        const hours = Number(this.configService.get<number>("APP_APPROVAL_EXPIRES_HOURS") ?? 24 * 7);
+        const expiresAt = new Date(Date.now() + Math.max(1, hours) * 3600 * 1000);
+        try {
+          await this.prisma.quote.update({
+            where: { id: quote.id },
+            data: { approvalToken, approvalRequestedAt: new Date(), approvalExpiresAt: expiresAt },
+          });
+        } catch (err) {
+          this.logger.warn(`Falha ao persistir approvalToken para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+          approvalToken = undefined;
+        }
+      }
+
+      if (approvalToken) {
+        const base = this.configService.get<string>("APP_BASE_URL") ?? "http://localhost:3000";
+        approvalLink = `${base.replace(/\/$/, "")}/api/quotes/${quote.id}/approve?token=${approvalToken}`;
+      }
+    }
+
+    // Monta mensagem principal (pagamento)
+    let paymentMsg = "";
+    if (paymentOptions && pixPayment) {
+      paymentMsg = this.buildPaymentMessage(clienteNome ?? "Cliente", numero, total, itens, pixPayment, paymentOptions, {
+        pix5050Link: pix5050?.linkVisualizacao ?? undefined,
+        pix5050Half: pix5050?.halfAmount ?? undefined,
+        cardLink: cardLink ?? undefined,
+      });
+    } else if (paymentOptions) {
+      // Fallback textual quando não for possível gerar links
+      paymentMsg = `Olá, ${String(clienteNome ?? "Cliente").split(" ")[0]}! 👋\\n\\n📋 *Orçamento #${numero}*\\n\\n💰 *Total: R$ ${total.toFixed(2)}*\\n\\n${paymentOptions.customerMessage}\\n\\nQualquer dúvida, é só chamar! 😊`;
+    } else {
+      paymentMsg = `Olá, ${String(clienteNome ?? "Cliente").split(" ")[0]}! 👋\\n\\n📋 *Orçamento #${numero}*\\n\\n💰 *Total: R$ ${total.toFixed(2)}*\\n\\nQualquer dúvida, é só chamar! 😊`;
+    }
+
+    // Observacao sobre orcamento associado (se identificado)
+    let observacao = "";
+    const note = String(quote.notes ?? "");
+    if (note.includes("__associated__")) {
+      // Tentar obter nome mais preciso do cliente a partir do Athos (cliente_juridico / cliente_fisico)
+      let associatedName = clienteNome;
+      try {
+        if (clienteId) {
+          const clientInfo = await this.athosService.buscarClientePorId(clienteId);
+          if (clientInfo && clientInfo.name) associatedName = clientInfo.name;
+        }
+      } catch (err) {
+        this.logger.debug(`buscarClientePorId falhou para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      observacao = `*Observação:* identificamos que este orçamento está associado a "${associatedName ?? ""}".\n\n`;
+    }
+
+    // Compor mensagem final: observacao + paymentMsg + opcional link de aprovacao
+    let finalMessage = observacao + paymentMsg;
+    if (approvalLink) {
+      finalMessage += `\\n\\nSe estiver de acordo, aprove o orçamento aqui:\\n${approvalLink}`;
+    }
+
+    // Envia a mensagem ao Chatwoot (não bloquear se falhar)
+    try {
+      const convId = quote.conversationId ? String(quote.conversationId) : undefined;
+      if (convId) {
+        await this.chatwootService.sendOutgoingMessage(convId, finalMessage);
+
+        // Tentar anexar o PDF: usar documento salvo ou gerar um novo se necessário
+        try {
+          let latestDocument = await this.prisma.quoteDocument.findFirst({ where: { quoteId: quote.id }, orderBy: { generatedAt: "desc" } });
+
+          let fileBuffer: Buffer | null = null;
+          let fileName = latestDocument?.fileName ?? `Orcamento-${quote.internalNumber}.pdf`;
+          let contentType = latestDocument?.contentType ?? "application/pdf";
+
+          if (latestDocument && latestDocument.storagePath) {
+            try {
+              fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(latestDocument.storagePath);
+            } catch (err) {
+              this.logger.warn(`Falha ao baixar PDF do storage para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+              fileBuffer = null;
+            }
+          }
+
+          if (!fileBuffer) {
+            try {
+              // Gerar PDF a partir do formato interno esperado pelo gerador
+              const stored = await this.quotesPdfStorageService.generateAndStore(this.mapQuoteBody(quote).body);
+
+              try {
+                await this.prisma.quoteDocument.create({
+                  data: {
+                    quoteId: quote.id,
+                    fileName: stored.fileName,
+                    contentType: stored.contentType,
+                    storagePath: stored.objectName,
+                    publicUrl: stored.publicUrl,
+                    generatedBy: "enviar",
+                  },
+                });
+              } catch (err) {
+                this.logger.debug(`Falha ao persistir QuoteDocument apos gerar PDF para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+              }
+
+              fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(stored.objectName);
+              fileName = stored.fileName;
+              contentType = stored.contentType;
+            } catch (err) {
+              this.logger.warn(`Falha ao gerar PDF para anexo no enviarParaCliente ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+
+          if (fileBuffer) {
+            try {
+              await this.chatwootService.sendAttachment(convId, fileBuffer, fileName, contentType);
+            } catch (err) {
+              this.logger.warn(`Falha ao enviar anexo PDF ao Chatwoot para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        } catch (err) {
+          this.logger.debug(`Erro no fluxo de anexo de PDF para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else if (quote.conversationId) {
+        await this.chatwootService.sendOutgoingMessage(String(quote.conversationId), finalMessage);
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao enviar mensagem ao Chatwoot para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    return { message: "Mensagem enviada (ou tentativa realizada).", approvalLink: approvalLink ?? null };
+  }
+
+  async approveByToken(identifier: string, token: string) {
+    const quote = await this.findQuoteByIdentifier(identifier);
+    if (!quote) throw new NotFoundException("Orcamento nao encontrado");
+
+    // Valida token usando campos dedicados
+    if (!quote.approvalToken) throw new BadRequestException("Token de aprovacao nao encontrado");
+    if (quote.approvalToken !== token) throw new BadRequestException("Token de aprovacao invalido");
+    if (quote.approvalExpiresAt && new Date(quote.approvalExpiresAt) < new Date()) throw new BadRequestException("Token expirado");
+
+    // Atualiza status para EM_PRODUCAO e marca aprovado
+    const nextStatus = "EM_PRODUCAO" as QuoteStatus;
+
+    const updated = await this.prisma.quote.update({
+      where: { id: quote.id },
+      data: {
+        status: nextStatus,
+        approved: true,
+        approvedAt: new Date(),
+        approvalToken: null,
+        updatedAt: new Date(),
+        // registra historico
+        statusHistory: { create: { oldStatus: quote.status, newStatus: nextStatus, changedByName: "Aprovacao pelo cliente" } },
+      },
+      include: { customer: true },
+    });
+
+    // Notifica via Chatwoot (inclui nome completo do cliente e número correto do orçamento)
+    try {
+      const convId = quote.conversationId ? String(quote.conversationId) : undefined;
+      if (convId) {
+        // Tentativa de resolver nome do cliente: preferir nome persistido no cliente, senão buscar no Athos
+        let clienteNome = (updated as any)?.customer?.fullName ?? (quote as any).customer?.fullName ?? undefined;
+
+        // Obter mapeamento para número do orçamento e dados auxiliares
+        const mapped = this.mapQuoteToAthosMapped(quote);
+        // Preferir externalQuoteId (número visível), depois mapped.numero, depois internalNumber
+        const numero = quote.externalQuoteId ?? mapped?.numero ?? quote.internalNumber ?? "";
+
+        // Se ainda não tivermos nome, tentar obter a partir do mapeamento Athos ou buscar por idcliente
+        if (!clienteNome) {
+          if (mapped && mapped.cliente) clienteNome = mapped.cliente;
+
+          // tentar descobrir idcliente e buscar nome
+                let clienteIdForLookup: any = null;
+          if (!clienteIdForLookup) {
+            // tentar extrair do mapped (caso venha de uma consulta anterior)
+            try {
+              const lookupId = String(quote.externalQuoteId ?? quote.internalNumber ?? "");
+              const athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
+              const athosMapped = (athosData as any)?.mapped ?? null;
+              clienteIdForLookup = clienteIdForLookup ?? athosMapped?.idcliente ?? athosMapped?.clienteid ?? null;
+              if (!clienteNome && athosMapped) clienteNome = athosMapped?.cliente_juridico ?? athosMapped?.cliente_fisico ?? athosMapped?.cliente ?? clienteNome;
+            } catch (err) {
+              this.logger.debug(`Consulta Athos falhou durante resolucao de nome apos aprovacao: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+
+          if (!clienteNome && clienteIdForLookup) {
+            try {
+              const clientInfo = await this.athosService.buscarClientePorId(clienteIdForLookup);
+              if (clientInfo && clientInfo.name) clienteNome = clientInfo.name;
+            } catch (err) {
+              this.logger.debug(`buscarClientePorId falhou apos aprovacao para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
+
+        const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+        // Obter data prevista de entrega a partir do mapeamento (se disponível)
+        let entregaTexto = "";
+        const prazoRaw = mapped?.prazoEntrega ?? mapped?.validade ?? mapped?.data ?? null;
+        if (prazoRaw) {
+          let prazoFmt = String(prazoRaw);
+          try {
+            const parsed = new Date(prazoRaw);
+            if (!isNaN(parsed.getTime())) prazoFmt = parsed.toLocaleDateString("pt-BR");
+          } catch (e) {}
+          entregaTexto = `\n\n📅 Previsão de entrega: ${prazoFmt} (conforme consta no orçamento)`;
+        }
+
+        const mensagem = `Olá, ${clienteNome ?? "Cliente"}! 👋\n\nAgradecemos pela parceria. Vamos dar sequência ao seu pedido: agendaremos a execução do serviço ou separaremos o(s) produto(s) e avisaremos assim que estiver pronto.${entregaTexto}\n\n📋 Orçamento #${numero}\n\n💰 Total: ${fmt(Number(quote.total ?? 0))}\n\nSe tiver alguma dúvida, responda por esta conversa — estamos à disposição.`;
+        await this.chatwootService.sendOutgoingMessage(convId, mensagem);
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao notificar via Chatwoot apos aprovacao: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    return { approved: true, quoteId: quote.id, status: updated.status };
+  }
+
+  async approveByConversation(conversationId: string, token: string) {
+    const convBig = this.toBigInt(Number(conversationId));
+    if (!convBig) throw new BadRequestException("conversationId invalido");
+
+    const quote = await this.prisma.quote.findFirst({ where: { conversationId: convBig } });
+    if (!quote) throw new NotFoundException("Orcamento para essa conversa nao encontrado");
+
+    return this.approveByToken(quote.id, token);
   }
 
   // Converte um registro de Quote (do banco) para o formato semelhante ao 'mapped' retornado pelo AthosService
@@ -1096,6 +1692,7 @@ export class QuotesService {
       telefone: mappedBody.cliente?.telefone ?? "",
       email: mappedBody.cliente?.email ?? "",
       vendedor: mappedBody.vendedorNome ?? undefined,
+      numeroVenda: mappedBody.idvenda ?? undefined,
       validade: mappedBody.validade ?? undefined,
       prazoEntrega: mappedBody.prazoEntrega ?? undefined,
       condPagamento: mappedBody.condicaoPagamento ?? undefined,
