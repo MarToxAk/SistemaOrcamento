@@ -231,6 +231,15 @@ export default function OrcamentoDetailPage() {
     }
   }
 
+  const isDevEnv =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "0.0.0.0");
+
+  const canEnviar =
+    isDevEnv || Boolean(quote?.availableNextStatuses?.some((s) => s.value === "ENVIADO"));
+
   const body = quote?.body;
   const itens = body?.itens ?? [];
   const carimbos = body?.carimbos?.itens ?? [];
@@ -402,7 +411,7 @@ export default function OrcamentoDetailPage() {
                 ) : null}
 
                 <div className="d-flex gap-2 flex-wrap">
-                  {quote?.availableNextStatuses?.some((s) => s.value === "ENVIADO") ? (
+                  {canEnviar ? (
                     <button
                       type="button"
                       className="btn btn-success"

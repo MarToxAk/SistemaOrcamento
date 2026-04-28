@@ -1272,12 +1272,14 @@ export class QuotesService {
     const fmt = (v: number) =>
       v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+    const primeiroNome = clienteNome.split(" ")[0];
+    const sep = "━━━━━━━━━━━━";
+
     const linhasItens = itens
       .slice(0, 10)
       .map((it) => `• ${it.descricao} (${it.quantidade}x) — ${fmt(it.total)}`)
       .join("\n");
-
-    const maisItens = itens.length > 10 ? `\n...e mais ${itens.length - 10} item(ns)` : "";
+    const maisItens = itens.length > 10 ? `\n_...e mais ${itens.length - 10} item(s)_` : "";
 
     const opts = paymentOptions.options;
     const pix = opts.find((o) => o.code === "PIX_AVISTA")!;
@@ -1289,25 +1291,23 @@ export class QuotesService {
     // PIX (sempre disponível)
     const pixFinal = pix.finalAmount ?? pixPayment.amount;
     const pixDiscount = pix.discountPercent ?? 0;
-    const pixLabel = pixDiscount > 0
-      ? `*1️⃣ PIX à vista* — ${fmt(pixFinal)} _(${pixDiscount}% de desconto)_`
-      : `*1️⃣ PIX à vista* — ${fmt(pixFinal)}`;
-    linhasPagamento.push(pixLabel);
-    linhasPagamento.push(`👉 ${pixPayment.linkVisualizacao}`);
-    if (pixPayment.pixCopiaECola) {
-      linhasPagamento.push(`Pix Copia e Cola:`);
-      linhasPagamento.push(pixPayment.pixCopiaECola);
+    if (pixDiscount > 0) {
+      linhasPagamento.push(`*1️⃣ PIX à vista — ${fmt(pixFinal)}*`);
+      linhasPagamento.push(`_Economize ${pixDiscount}% pagando com PIX agora!_ 🎉`);
+    } else {
+      linhasPagamento.push(`*1️⃣ PIX à vista — ${fmt(pixFinal)}*`);
     }
+    linhasPagamento.push(`👉 ${pixPayment.linkVisualizacao}`);
 
     // 50/50
     if (meia?.enabled) {
       const metade = fmt(extra.pix5050Half ?? Number((total * 0.5).toFixed(2)));
-      linhasPagamento.push(`\n*2️⃣ 50% entrada + 50% na loja*`);
-      linhasPagamento.push(`Entrada de ${metade} via PIX:`);
+      linhasPagamento.push(`\n*2️⃣ 50% entrada + 50% na retirada*`);
+      linhasPagamento.push(`• Entrada agora: *${metade}* via PIX`);
       if (extra.pix5050Link) {
         linhasPagamento.push(`👉 ${extra.pix5050Link}`);
       }
-      linhasPagamento.push(`Restante (${metade}) na retirada do pedido.`);
+      linhasPagamento.push(`• Restante *${metade}* paga na hora de buscar`);
     }
 
     // Cartão
@@ -1316,23 +1316,37 @@ export class QuotesService {
       if (extra.cardLink) {
         linhasPagamento.push(`👉 ${extra.cardLink}`);
       } else {
-        linhasPagamento.push(`Processamos na maquininha na retirada (${fmt(cartao.finalAmount ?? total)} em até 2x).`);
+        linhasPagamento.push(`_Processamos na maquininha na retirada (${fmt(cartao.finalAmount ?? total)} em até 2x)._`);
       }
     }
 
-    return [
-      `Olá, ${clienteNome.split(" ")[0]}! 👋 Segue o resumo do seu pedido:`,
+    const linhas = [
+      `Olá, ${primeiroNome}! 👋`,
+      ``,
+      `Segue o resumo do seu pedido:`,
       ``,
       `📋 *Orçamento #${numero}*`,
+      ``,
       linhasItens + maisItens,
       ``,
       `💰 *Total: ${fmt(total)}*`,
       ``,
-      `💳 *Formas de pagamento disponíveis:*`,
+      sep,
+      `*Como você prefere pagar?*`,
+      ``,
       ...linhasPagamento,
       ``,
+      sep,
       `Qualquer dúvida, é só chamar! 😊`,
-    ].join("\n");
+    ];
+
+    // Pix Copia e Cola ao final (separado para não poluir a mensagem principal)
+    if (pixPayment.pixCopiaECola) {
+      linhas.push(``, `_Pix Copia e Cola (caso prefira copiar o código):_`);
+      linhas.push(pixPayment.pixCopiaECola);
+    }
+
+    return linhas.join("\n");
   }
 
   async enviarParaCliente(quoteId: string) {
