@@ -111,6 +111,11 @@ model Quote {
   statusHistory      QuoteStatusHistory[]
   documents          QuoteDocument[]
   paymentTransactions PaymentTransaction[]
+  approvalToken       String?
+  approvalRequestedAt DateTime?
+  approvalExpiresAt   DateTime?
+  approved            Boolean               @default(false)
+  approvedAt          DateTime?
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
 

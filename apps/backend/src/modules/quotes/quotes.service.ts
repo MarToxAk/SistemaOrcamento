@@ -1340,6 +1340,24 @@ export class QuotesService {
     if (!quote) {
       throw new NotFoundException("Orçamento não encontrado");
     }
+
+    if (statusTransitions[quote.status]?.includes("ENVIADO" as QuoteStatus)) {
+      await this.prisma.quote.update({
+        where: { id: quote.id },
+        data: {
+          status: "ENVIADO" as QuoteStatus,
+          editedAt: new Date(),
+          statusHistory: {
+            create: {
+              oldStatus: quote.status,
+              newStatus: "ENVIADO" as QuoteStatus,
+              changedByName: "envio ao cliente",
+            },
+          },
+        },
+      });
+    }
+
     // Tenta resolver idcliente e nome (prioriza dados persistidos)
     let clienteId: any = undefined;
     let clienteNome = quote.customer?.fullName;

@@ -109,8 +109,21 @@ export default function StatusPage() {
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
   const [validationState, setValidationState] = useState<"checking" | "valid" | "invalid">("checking");
   const [validationMessage, setValidationMessage] = useState("");
+  const [efiStatus, setEfiStatus] = useState<{ enabled: boolean; message?: string } | null>(null);
 
   useEffect(() => {
+    const isDevBypass =
+      (typeof process !== "undefined" && process.env.NODE_ENV === "development") ||
+      (typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1" ||
+          window.location.hostname === "0.0.0.0"));
+    if (isDevBypass) {
+      setValidationState("valid");
+      setValidationMessage("");
+      return;
+    }
+
     let validated = false;
 
     const handleMessage = (event: MessageEvent) => {
@@ -161,6 +174,10 @@ export default function StatusPage() {
   useEffect(() => {
     if (validationState === "valid") {
       void fetchQuotes();
+      void fetch("/api/efi/status")
+        .then((r) => r.json())
+        .then((d) => setEfiStatus(d as { enabled: boolean; message?: string }))
+        .catch(() => setEfiStatus({ enabled: false, message: "Falha ao verificar EFI" }));
     }
   }, [validationState]);
 
@@ -323,6 +340,16 @@ export default function StatusPage() {
             <div className="text-end">
               <div className="small">Fluxo operacional</div>
               <strong>{quotes.length} orçamento(s)</strong>
+              {efiStatus !== null && (
+                <div className="mt-1">
+                  <span
+                    className={`badge ${efiStatus.enabled ? "bg-success" : "bg-danger"}`}
+                    title={efiStatus.message ?? ""}
+                  >
+                    EFI: {efiStatus.enabled ? "Configurado ✓" : "Não configurado ✗"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

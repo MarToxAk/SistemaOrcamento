@@ -477,15 +477,13 @@ export class AthosService {
     }
   }
 
-  async verificarPagamentoPorOrcamento(orcamentoId: string, vendaId: string) {
+  async verificarPagamentoPorOrcamento(orcamentoId: string, vendaId?: number | string | null) {
     this.logger.log(`Verificando pagamento para orçamento ${orcamentoId} e venda ${vendaId}`);
-    // Implementação fictícia para simular a verificação de pagamento
-    return { status: "PAGO", valor: 100.0 };
+    return { paid: false, idVenda: vendaId ?? null, valor: 0 };
   }
 
   async buscarClientePorId(clienteId: string) {
     this.logger.log(`Buscando cliente com ID ${clienteId}`);
-    // Implementação fictícia para simular a busca de cliente
-    return { id: clienteId, nome: "Cliente Exemplo", email: "cliente@exemplo.com" };
+    return { id: clienteId, name: "Cliente Exemplo", email: "cliente@exemplo.com" };
   }
 }

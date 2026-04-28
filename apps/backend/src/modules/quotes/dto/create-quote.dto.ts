@@ -174,6 +174,10 @@ export class CreateQuoteDto {
   idvendedor?: number;
 
   @IsOptional()
+  @IsNumber()
+  idvenda?: number;
+
+  @IsOptional()
   @IsString()
   vendedorNome?: string;
 
