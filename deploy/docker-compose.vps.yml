@@ -71,6 +71,14 @@ services:
       MINIO_REGION: ${MINIO_REGION}
       MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL}
       MINIO_PATH_PREFIX: ${MINIO_PATH_PREFIX}
+      BACKEND_URL: ${BACKEND_URL}
+      EFI_BASE_URL: ${EFI_BASE_URL}
+      EFI_COBRANCA_BASE_URL: ${EFI_COBRANCA_BASE_URL}
+      EFI_CLIENT_ID: ${EFI_CLIENT_ID}
+      EFI_CLIENT_SECRET: ${EFI_CLIENT_SECRET}
+      EFI_PIX_KEY: ${EFI_PIX_KEY}
+      EFI_CERT_PEM: ${EFI_CERT_PEM}
+      EFI_KEY_PEM: ${EFI_KEY_PEM}
 
     # Backend compartilha o namespace de rede do Tailscale para acessar a Tailnet.
 

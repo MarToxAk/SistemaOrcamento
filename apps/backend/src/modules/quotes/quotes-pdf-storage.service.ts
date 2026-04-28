@@ -445,19 +445,20 @@ export class QuotesPdfStorageService {
   }
 
   private buildMinioClient(): MinioClient {
-    const endPoint = this.requireEnv("MINIO_ENDPOINT");
+    const endPointRaw = this.requireEnv("MINIO_ENDPOINT").replace(/\/$/, "");
+    // URL protocol is the source of truth for SSL — overrides MINIO_USE_SSL when protocol is explicit
+    const useSSL = endPointRaw.startsWith("https://")
+      ? true
+      : endPointRaw.startsWith("http://")
+        ? false
+        : (this.configService.get<string>("MINIO_USE_SSL") ?? "true").toLowerCase() !== "false";
+    // MinioClient expects hostname only — strip protocol
+    const endPoint = endPointRaw.replace(/^https?:\/\//, "");
     const accessKey = this.requireEnv("MINIO_ACCESS_KEY");
     const secretKey = this.requireEnv("MINIO_SECRET_KEY");
-    const port = Number(this.configService.get<string>("MINIO_PORT") ?? 443);
-    const useSSL = (this.configService.get<string>("MINIO_USE_SSL") ?? "true").toLowerCase() !== "false";
+    const port = Number(this.configService.get<string>("MINIO_PORT") ?? (useSSL ? 443 : 80));
 
-    return new MinioClient({
-      endPoint,
-      port,
-      useSSL,
-      accessKey,
-      secretKey,
-    });
+    return new MinioClient({ endPoint, port, useSSL, accessKey, secretKey });
   }
 
   private async ensureBucket(client: MinioClient, bucket: string) {

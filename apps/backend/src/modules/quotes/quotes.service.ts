@@ -1372,9 +1372,10 @@ export class QuotesService {
       });
     }
 
-    // Tenta resolver idcliente e nome (prioriza dados persistidos)
+    // Tenta resolver idcliente, nome e email (prioriza dados persistidos)
     let clienteId: any = undefined;
     let clienteNome = quote.customer?.fullName;
+    let clienteEmail: string | undefined = (quote.customer as any)?.email ?? undefined;
 
     let athosMapped: any = null;
     if (!clienteId) {
@@ -1384,6 +1385,7 @@ export class QuotesService {
         athosMapped = (athosData as any)?.mapped ?? null;
         clienteId = athosMapped?.idcliente ?? athosMapped?.clienteid ?? clienteId;
         clienteNome = clienteNome ?? athosMapped?.cliente_juridico ?? athosMapped?.cliente_fisico ?? athosMapped?.cliente;
+        clienteEmail = clienteEmail ?? athosMapped?.email ?? undefined;
       } catch (err) {
         // Não bloquear o envio se a consulta ao Athos falhar; apenas logar
         this.logger.debug(`Athos lookup falhou para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
@@ -1435,11 +1437,28 @@ export class QuotesService {
       const cartao = paymentOptions.options.find((o) => o.code === "CARTAO_2X");
       if (cartao?.enabled) {
         try {
-          const card = await this.efiService.createCardPaymentLink({ quoteIdentifier: String(numero), amount: total });
+          const card = await this.efiService.createCardPaymentLink({ quoteIdentifier: String(numero), amount: total, customerName: clienteNome, customerEmail: clienteEmail });
           cardLink = card.paymentUrl;
         } catch (err) {
           this.logger.warn(`Falha ao gerar link de cartao EFI para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
           cardLink = null;
+        }
+      }
+
+      // Persiste txid(s) no orçamento para que o webhook EFI consiga localizar o pedido
+      if (pixPayment?.txid || pix5050?.txid) {
+        try {
+          await this.prisma.quote.update({
+            where: { id: quote.id },
+            data: {
+              ...(pixPayment?.txid ? { paymentExternalId: String(pixPayment.txid) } : {}),
+              ...(pix5050?.txid ? { secondInstallmentExternalId: String(pix5050.txid) } : {}),
+              paymentSource: "EFI",
+              paymentMethod: "PIX",
+            },
+          });
+        } catch (err) {
+          this.logger.warn(`Falha ao persistir txid EFI no orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     }
@@ -1486,22 +1505,19 @@ export class QuotesService {
       paymentMsg = `Olá, ${String(clienteNome ?? "Cliente").split(" ")[0]}! 👋\\n\\n📋 *Orçamento #${numero}*\\n\\n💰 *Total: R$ ${total.toFixed(2)}*\\n\\nQualquer dúvida, é só chamar! 😊`;
     }
 
-    // Observacao sobre orcamento associado (se identificado)
+    // Observacao sobre orcamento associado ao cliente Athos (quando idcliente identificado)
     let observacao = "";
-    const note = String(quote.notes ?? "");
-    if (note.includes("__associated__")) {
-      // Tentar obter nome mais preciso do cliente a partir do Athos (cliente_juridico / cliente_fisico)
-      let associatedName = clienteNome;
+    if (clienteId) {
+      let associatedName: string | undefined = undefined;
       try {
-        if (clienteId) {
-          const clientInfo = await this.athosService.buscarClientePorId(clienteId);
-          if (clientInfo && clientInfo.name) associatedName = clientInfo.name;
-        }
+        const clientInfo = await this.athosService.buscarClientePorId(clienteId);
+        if (clientInfo?.name) associatedName = clientInfo.name;
       } catch (err) {
         this.logger.debug(`buscarClientePorId falhou para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
-
-      observacao = `*Observação:* identificamos que este orçamento está associado a "${associatedName ?? ""}".\n\n`;
+      if (associatedName) {
+        observacao = `*Observação:* identificamos que este orçamento está associado a "${associatedName}".\n\n`;
+      }
     }
 
     // Compor mensagem final: observacao + paymentMsg + opcional link de aprovacao

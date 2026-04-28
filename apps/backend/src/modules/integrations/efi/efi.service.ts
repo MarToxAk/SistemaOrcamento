@@ -234,16 +234,6 @@ export class EfiService {
       chave: pixKey,
       solicitacaoPagador: (input.payerMessage ?? `Pagamento do orçamento ${input.quoteIdentifier}`).slice(0, 140),
     };
-    // Tenta incluir notification_url/metadata para que a EFI envie webhook específico por cobrança
-    try {
-      const webhookUrl = this.getWebhookUrl();
-      (body as any).metadata = {
-        notification_url: webhookUrl,
-        custom_id: `orc-${String(input.quoteIdentifier).slice(0, 40)}`,
-      };
-    } catch (e) {
-      // Não falhar caso a configuração não exista
-    }
     if (devedorBase) body.devedor = devedorBase;
 
     try {
@@ -302,6 +292,8 @@ export class EfiService {
   async createCardPaymentLink(input: {
     quoteIdentifier: string;
     amount: number;
+    customerName?: string | null;
+    customerEmail?: string | null;
   }): Promise<{ paymentUrl: string; chargeId: number }> {
     const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
     const clientId = this.getRequiredConfig("EFI_CLIENT_ID");
@@ -330,27 +322,41 @@ export class EfiService {
     const valorCentavos = Math.round(Number(input.amount.toFixed(2)) * 100);
     const expireAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+    const webhookUrl = this.getWebhookUrl();
+    const isPublicUrl = !/localhost|127\.0\.0\.1/.test(webhookUrl);
+
+    const body: Record<string, unknown> = {
+      items: [
+        {
+          name: `Orçamento #${input.quoteIdentifier}`.slice(0, 255),
+          value: valorCentavos,
+          amount: 1,
+        },
+      ],
+      settings: {
+        payment_method: "credit_card",
+        expire_at: expireAt,
+        request_delivery_address: false,
+      },
+      metadata: {
+        custom_id: `orc-${String(input.quoteIdentifier).slice(0, 40)}`,
+        ...(isPublicUrl ? { notification_url: webhookUrl } : {}),
+      },
+    };
+
+    // customer.email é obrigatório pela API — incluir quando disponível
+    const email = input.customerEmail?.trim();
+    if (email) {
+      body.customer = {
+        name: (input.customerName ?? "Cliente").slice(0, 80),
+        email,
+      };
+    }
+
     try {
       const resp = await cobrancaClient.post(
         "/v1/charge/one-step/link",
-        {
-          items: [
-            {
-              name: `Orçamento #${input.quoteIdentifier}`.slice(0, 255),
-              value: valorCentavos,
-              amount: 1,
-            },
-          ],
-          settings: {
-            payment_method: "credit_card",
-            expire_at: expireAt,
-            request_delivery_address: false,
-          },
-          metadata: {
-            custom_id: `orc-${String(input.quoteIdentifier).slice(0, 40)}`,
-            notification_url: this.getWebhookUrl(),
-          },
-        },
+        body,
         { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } },
       );
 

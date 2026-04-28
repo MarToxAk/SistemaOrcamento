@@ -359,6 +359,7 @@ export class AthosService {
       const mapped = {
         numero: String(quote.numero ?? quote.idorcamento ?? numero),
         data: pickDateISO(quote, ["dataorcamento", "data", "createdat", "created_at"]),
+        idcliente: pickNumber(quote, ["idcliente", "clienteid", "codcliente", "cliente_id"]) || undefined,
         cliente: pickString(quote, ["cliente", "nomecliente", "razaosocial", "nome"]),
         telefone: pickString(quote, ["telefone", "fone", "celular", "whatsapp"]),
         email: pickString(quote, ["email", "clienteemail"]),
@@ -482,8 +483,39 @@ export class AthosService {
     return { paid: false, idVenda: vendaId ?? null, valor: 0 };
   }
 
-  async buscarClientePorId(clienteId: string) {
-    this.logger.log(`Buscando cliente com ID ${clienteId}`);
-    return { id: clienteId, name: "Cliente Exemplo", email: "cliente@exemplo.com" };
+  async buscarClientePorId(clienteId: string | number): Promise<{ id: string; name: string; type: "juridico" | "fisico" } | null> {
+    const client = new Client(this.getDbConfig());
+    try {
+      await client.connect();
+
+      // Pessoa jurídica: preferir nomefantasia, fallback razaosocial
+      const juridicoResult = await client.query(
+        `SELECT nomefantasia, razaosocial FROM cliente_juridico WHERE idcliente = $1 LIMIT 1`,
+        [clienteId],
+      );
+      if (juridicoResult.rows.length > 0) {
+        const row = juridicoResult.rows[0] as Row;
+        const name = pickString(row, ["nomefantasia", "razaosocial"]);
+        if (name) return { id: String(clienteId), name, type: "juridico" };
+      }
+
+      // Pessoa física: campo nome
+      const fisicoResult = await client.query(
+        `SELECT nome FROM cliente_fisico WHERE idcliente = $1 LIMIT 1`,
+        [clienteId],
+      );
+      if (fisicoResult.rows.length > 0) {
+        const row = fisicoResult.rows[0] as Row;
+        const name = pickString(row, ["nome", "nomecliente"]);
+        if (name) return { id: String(clienteId), name, type: "fisico" };
+      }
+
+      return null;
+    } catch (err) {
+      this.logger.warn(`Falha ao buscar cliente ${clienteId} no Athos: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    } finally {
+      await client.end().catch(() => undefined);
+    }
   }
 }
