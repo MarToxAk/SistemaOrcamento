@@ -118,6 +118,7 @@ model Quote {
   approvedAt          DateTime?
   nfseNumero          String?
   nfseCodigoVerificacao String?
+  nfseLink            String?
   nfseEmitidaEm       DateTime?
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt

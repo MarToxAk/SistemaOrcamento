@@ -483,31 +483,38 @@ export class AthosService {
     return { paid: false, idVenda: vendaId ?? null, valor: 0 };
   }
 
-  async buscarClientePorId(clienteId: string | number): Promise<{ id: string; name: string; type: "juridico" | "fisico" } | null> {
+  async buscarClientePorId(clienteId: string | number): Promise<{
+    id: string;
+    name: string;
+    type: "juridico" | "fisico";
+    documento: string | null;
+  } | null> {
     const client = new Client(this.getDbConfig());
     try {
       await client.connect();
 
-      // Pessoa jurídica: preferir nomefantasia, fallback razaosocial
+      // Pessoa jurídica: nome + CNPJ
       const juridicoResult = await client.query(
-        `SELECT nomefantasia, razaosocial FROM cliente_juridico WHERE idcliente = $1 LIMIT 1`,
+        `SELECT nomefantasia, razaosocial, cnpj FROM cliente_juridico WHERE idcliente = $1 LIMIT 1`,
         [clienteId],
       );
       if (juridicoResult.rows.length > 0) {
         const row = juridicoResult.rows[0] as Row;
         const name = pickString(row, ["nomefantasia", "razaosocial"]);
-        if (name) return { id: String(clienteId), name, type: "juridico" };
+        const documento = pickString(row, ["cnpj"]).replace(/\D/g, "") || null;
+        if (name) return { id: String(clienteId), name, type: "juridico", documento };
       }
 
-      // Pessoa física: campo nome
+      // Pessoa física: nome + CPF
       const fisicoResult = await client.query(
-        `SELECT nome FROM cliente_fisico WHERE idcliente = $1 LIMIT 1`,
+        `SELECT nome, cpf FROM cliente_fisico WHERE idcliente = $1 LIMIT 1`,
         [clienteId],
       );
       if (fisicoResult.rows.length > 0) {
         const row = fisicoResult.rows[0] as Row;
         const name = pickString(row, ["nome", "nomecliente"]);
-        if (name) return { id: String(clienteId), name, type: "fisico" };
+        const documento = pickString(row, ["cpf"]).replace(/\D/g, "") || null;
+        if (name) return { id: String(clienteId), name, type: "fisico", documento };
       }
 
       return null;

@@ -100,6 +100,7 @@ export default function OrcamentoDetailPage() {
   const [nfseState, setNfseState] = useState<"idle" | "emitindo" | "sucesso" | "erro">("idle");
   const [nfseMsg, setNfseMsg] = useState("");
   const [nfseNumero, setNfseNumero] = useState<string | null>(null);
+  const [nfseLink, setNfseLink] = useState<string | null>(null);
 
   useEffect(() => {
     const isDevBypass =
@@ -220,10 +221,11 @@ export default function OrcamentoDetailPage() {
     setNfseMsg("");
     try {
       const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, { method: "POST" });
-      const data = await res.json().catch(() => ({})) as { numero?: string; jaEmitida?: boolean; message?: string; error?: string };
+      const data = await res.json().catch(() => ({})) as { numero?: string; link?: string; jaEmitida?: boolean; message?: string; error?: string };
       if (!res.ok) throw new Error(data?.message || data?.error || "Falha ao emitir NFS-e.");
       const numero = data.numero ?? null;
       setNfseNumero(numero);
+      setNfseLink(data.link ?? null);
       setNfseState("sucesso");
       setNfseMsg(data.jaEmitida ? `NFS-e já emitida: número ${numero}` : `NFS-e emitida com sucesso! Número: ${numero}`);
     } catch (err) {
@@ -458,10 +460,18 @@ export default function OrcamentoDetailPage() {
                       )}
                     </button>
                   ) : nfseNumero ? (
-                    <span className="btn btn-outline-success disabled">
-                      <i className="bi bi-check-circle me-2" />
-                      NFS-e #{nfseNumero}
-                    </span>
+                    <>
+                      <span className="btn btn-outline-success disabled">
+                        <i className="bi bi-check-circle me-2" />
+                        NFS-e #{nfseNumero}
+                      </span>
+                      {nfseLink ? (
+                        <a className="btn btn-outline-primary" href={nfseLink} target="_blank" rel="noreferrer">
+                          <i className="bi bi-box-arrow-up-right me-2" />
+                          Abrir NFS-e
+                        </a>
+                      ) : null}
+                    </>
                   ) : null}
                   {canEnviar ? (
                     <button
