@@ -6,6 +6,7 @@ import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health.controller";
 import { ChatwootModule } from "./integrations/chatwoot/chatwoot.module";
 import { EfiModule } from "./integrations/efi/efi.module";
+import { NfseModule } from "./integrations/nfse/nfse.module";
 import { PdvModule } from "./integrations/pdv/pdv.module";
 import { QuotesModule } from "./quotes/quotes.module";
 
@@ -23,6 +24,7 @@ import { QuotesModule } from "./quotes/quotes.module";
     QuotesModule,
     ChatwootModule,
     EfiModule,
+    NfseModule,
     PdvModule,
   ],
   controllers: [HealthController],

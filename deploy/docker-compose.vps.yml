@@ -79,6 +79,7 @@ services:
       EFI_PIX_KEY: ${EFI_PIX_KEY}
       EFI_CERT_PEM: ${EFI_CERT_PEM}
       EFI_KEY_PEM: ${EFI_KEY_PEM}
+      NFSE_TOKEN: ${NFSE_TOKEN}
 
     # Backend compartilha o namespace de rede do Tailscale para acessar a Tailnet.
 

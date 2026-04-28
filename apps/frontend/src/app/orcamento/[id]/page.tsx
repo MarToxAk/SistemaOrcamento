@@ -97,6 +97,9 @@ export default function OrcamentoDetailPage() {
   const [sendMessage, setSendMessage] = useState("");
   const [statusSavingState, setStatusSavingState] = useState<"idle" | "saving">("idle");
   const [statusError, setStatusError] = useState("");
+  const [nfseState, setNfseState] = useState<"idle" | "emitindo" | "sucesso" | "erro">("idle");
+  const [nfseMsg, setNfseMsg] = useState("");
+  const [nfseNumero, setNfseNumero] = useState<string | null>(null);
 
   useEffect(() => {
     const isDevBypass =
@@ -209,6 +212,23 @@ export default function OrcamentoDetailPage() {
       setStatusError(err instanceof Error ? err.message : "Erro ao atualizar status.");
     } finally {
       setStatusSavingState("idle");
+    }
+  }
+
+  async function handleEmitirNfse() {
+    setNfseState("emitindo");
+    setNfseMsg("");
+    try {
+      const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, { method: "POST" });
+      const data = await res.json().catch(() => ({})) as { numero?: string; jaEmitida?: boolean; message?: string; error?: string };
+      if (!res.ok) throw new Error(data?.message || data?.error || "Falha ao emitir NFS-e.");
+      const numero = data.numero ?? null;
+      setNfseNumero(numero);
+      setNfseState("sucesso");
+      setNfseMsg(data.jaEmitida ? `NFS-e já emitida: número ${numero}` : `NFS-e emitida com sucesso! Número: ${numero}`);
+    } catch (err) {
+      setNfseState("erro");
+      setNfseMsg(err instanceof Error ? err.message : "Erro ao emitir NFS-e.");
     }
   }
 
@@ -410,7 +430,39 @@ export default function OrcamentoDetailPage() {
                   </div>
                 ) : null}
 
+                {nfseMsg ? (
+                  <div className={`alert ${nfseState === "sucesso" ? "alert-success" : "alert-danger"} mb-3`}>
+                    <i className={`bi ${nfseState === "sucesso" ? "bi-check-circle" : "bi-exclamation-triangle"} me-2`} />
+                    {nfseMsg}
+                  </div>
+                ) : null}
+
                 <div className="d-flex gap-2 flex-wrap">
+                  {quote?.statusKey === "APROVADO" && !nfseNumero ? (
+                    <button
+                      type="button"
+                      className="btn btn-warning"
+                      onClick={() => void handleEmitirNfse()}
+                      disabled={nfseState === "emitindo"}
+                    >
+                      {nfseState === "emitindo" ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2" role="status" />
+                          Emitindo NFS-e...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-receipt me-2" />
+                          Emitir Nota Fiscal
+                        </>
+                      )}
+                    </button>
+                  ) : nfseNumero ? (
+                    <span className="btn btn-outline-success disabled">
+                      <i className="bi bi-check-circle me-2" />
+                      NFS-e #{nfseNumero}
+                    </span>
+                  ) : null}
                   {canEnviar ? (
                     <button
                       type="button"
