@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/c/Users/Use/Documents/Projeto/SistemaOrcamento-main/node_modules/.bin/ts-node --transpile-only src/modules/integrations/nfse/test-homologacao.ts)",
+      "Bash(node -e ' *)",
+      "Bash(curl -v -s -X POST https://ilhabela2.iibr.com.br/rps/3520400/1/soap/homologacao/rps -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: http://nfse.abrasf.org.br/GerarNfse' --max-time 30 -d '<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ws=\"http://nfse.abrasf.org.br\" xmlns:iibr=\"http://rps.iibr.com.br/\"><soapenv:Header><iibr:cnpjRemetente>88888888888888</iibr:cnpjRemetente><iibr:token>TLXX4JN38KXTRNSEAJYYEA==</iibr:token></soapenv:Header><soapenv:Body><ws:GerarNfseRequest><nfseCabecMsg><![CDATA[teste]]></nfseCabecMsg><nfseDadosMsg><![CDATA[teste]]></nfseDadosMsg></ws:GerarNfseRequest></soapenv:Body></soapenv:Envelope>')",
+      "Bash(node)",
+      "Bash(curl -s -X POST https://ilhabela2.iibr.com.br/rps/3520400/1/soap/homologacao/rps -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: http://nfse.abrasf.org.br/GerarNfse' --max-time 30 --data-binary @C:/Users/Use/AppData/Local/Temp/nfse_envelope.xml)",
+      "Bash(curl -v -X POST https://ilhabela2.iibr.com.br/rps/3520400/1/soap/homologacao/rps -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: http://nfse.abrasf.org.br/GerarNfse' --max-time 30 --data-binary @C:/Users/Use/AppData/Local/Temp/nfse_envelope.xml)",
+      "Bash(curl -s \"https://ilhabela2.iibr.com.br/rps/3520400/2/AUXILIARRPS?cnpj=88888888888888&token=TLXX4JN38KXTRNSEAJYYEA%3D%3D&numero=1\")"
+    ]
+  }
+}

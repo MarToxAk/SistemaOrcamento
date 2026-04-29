@@ -1,0 +1,66 @@
+name: Deploy to dev
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build and deploy to VPS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate (backend)
+        run: npm --workspace @bomcusto/backend run prisma:generate
+
+      - name: Build frontend
+        run: npm --workspace @bomcusto/frontend run build
+
+      - name: Build backend
+        run: npm --workspace @bomcusto/backend run build
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || '22' }}
+          script: |
+            set -e
+            DEPLOY_DIR="${{ secrets.DEPLOY_DIR }}"
+            if [ -z "$DEPLOY_DIR" ]; then
+              echo "Secret DEPLOY_DIR não configurado"
+              exit 1
+            fi
+            mkdir -p "$DEPLOY_DIR"
+            cd "$DEPLOY_DIR"
+            if [ -d .git ]; then
+              git fetch --all
+              git checkout dev
+              git pull origin dev
+            else
+              git clone --depth 1 https://github.com/${{ github.repository }} . || true
+              git checkout dev || true
+            fi
+            if command -v docker >/dev/null 2>&1; then
+              docker compose -f docker-compose.vps.yml pull || true
+              docker compose -f docker-compose.vps.yml up -d --build
+            else
+              echo "Docker não encontrado no VPS; ajuste os passos de deploy no servidor"
+            fi
+
+      - name: Notify
+        run: echo "Deploy para dev concluído (ou acionado no VPS)."

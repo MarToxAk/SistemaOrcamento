@@ -1,0 +1,27 @@
+{
+  "name": "bomcusto-orcamento",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm --workspace @bomcusto/backend run start:dev",
+    "dev:frontend": "npm --workspace @bomcusto/frontend run dev",
+    "build": "npm --workspace @bomcusto/backend run build && npm --workspace @bomcusto/frontend run build",
+    "test": "npm --workspace @bomcusto/backend run test",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.1.19",
+    "@nestjs/config": "^4.0.4",
+    "@prisma/client": "^5.22.0",
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0"
+  }
+}
