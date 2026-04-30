@@ -254,35 +254,6 @@ export default function OrcamentoDetailPage() {
 
     // Sempre abre o modal — usuário pode escolher o serviço e confirmar os dados
     setNfseModal(true);
-
-    // bloco abaixo foi removido (emissão direta sem modal)
-    if (false && temDocumento && doc) {
-      setNfseState("emitindo");
-      setNfseMsg("");
-      try {
-        const body: Record<string, string> = { servicoCodigo: servico };
-        const docLimpo = doc.replace(/\D/g, "");
-        if (docTipo === "cnpj") body.tomadorCnpj = docLimpo;
-        else body.tomadorCpf = docLimpo;
-        if (nome.trim()) body.tomadorNome = nome.trim();
-
-        const r = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const d = await r.json().catch(() => ({})) as { numero?: string; link?: string; jaEmitida?: boolean; message?: string; error?: string };
-        if (!r.ok) throw new Error(d?.message || d?.error || "Falha ao emitir NFS-e.");
-        setNfseNumero(d.numero ?? null);
-        setNfseLink(d.link ?? null);
-        setNfseState("sucesso");
-        setNfseMsg(d.jaEmitida ? `NFS-e já emitida: número ${d.numero}` : `NFS-e emitida com sucesso! Número: ${d.numero}`);
-      } catch (err) {
-        setNfseState("erro");
-        setNfseMsg(err instanceof Error ? err.message : "Erro ao emitir NFS-e.");
-      }
-      return;
-    }
   }
 
   async function handleEmitirNfse() {
