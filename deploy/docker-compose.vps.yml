@@ -80,6 +80,10 @@ services:
       EFI_CERT_PEM: ${EFI_CERT_PEM}
       EFI_KEY_PEM: ${EFI_KEY_PEM}
       NFSE_TOKEN: ${NFSE_TOKEN}
+      NFSE_CNPJ_PRESTADOR: ${NFSE_CNPJ_PRESTADOR}
+      NFSE_INSCRICAO_MUNICIPAL: ${NFSE_INSCRICAO_MUNICIPAL}
+      NFSE_SOAP_URL: ${NFSE_SOAP_URL}
+      NFSE_AUX_URL: ${NFSE_AUX_URL}
 
     # Backend compartilha o namespace de rede do Tailscale para acessar a Tailnet.
 
