@@ -20,4 +20,14 @@ export class EfiController {
   ) {
     return this.efiService.processWebhook(payload, signature ?? gnSignature);
   }
+
+  @Post("webhook/payment/pix")
+  @HttpCode(200)
+  async handleWebhookPix(
+    @Body() payload: unknown,
+    @Headers("x-signature") signature?: string,
+    @Headers("x-gn-signature") gnSignature?: string,
+  ) {
+    return this.efiService.processWebhook(payload, signature ?? gnSignature);
+  }
 }

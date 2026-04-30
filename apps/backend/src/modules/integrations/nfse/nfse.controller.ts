@@ -1,6 +1,6 @@
-import { Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
 
-import { NfseService } from "./nfse.service";
+import { EmitirNfseInput, NfseService } from "./nfse.service";
 
 @Controller("quotes/:quoteId/nfse")
 export class NfseController {
@@ -13,7 +13,16 @@ export class NfseController {
 
   @Post()
   @HttpCode(200)
-  emitir(@Param("quoteId") quoteId: string) {
-    return this.nfseService.emitir(quoteId);
+  emitir(
+    @Param("quoteId") quoteId: string,
+    @Body() body?: EmitirNfseInput,
+  ) {
+    return this.nfseService.emitir(quoteId, body);
+  }
+
+  @Post("teste")
+  @HttpCode(200)
+  emitirTeste() {
+    return this.nfseService.emitirTeste();
   }
 }

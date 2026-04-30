@@ -488,10 +488,37 @@ export class AthosService {
     name: string;
     type: "juridico" | "fisico";
     documento: string | null;
+    endereco?: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
   } | null> {
     const client = new Client(this.getDbConfig());
     try {
       await client.connect();
+
+      // Busca endereço na tabela cliente_endereco (isolado para não quebrar o restante)
+      // Colunas reais: logradouro, numero, bairro, cep, codigocidade, uf, tipologradouro
+      let enderecoData: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null = null;
+      try {
+        const enderecoResult = await client.query(
+          `SELECT tipologradouro, logradouro, numero, bairro, cep, codigocidade, uf
+           FROM cliente_endereco WHERE idcliente = $1 ORDER BY idenderecocliente LIMIT 1`,
+          [clienteId],
+        );
+        const enderecoRow = enderecoResult.rows[0] as Row | undefined;
+        if (enderecoRow && pickString(enderecoRow, ["logradouro"])) {
+          const tipo      = pickString(enderecoRow, ["tipologradouro"]);
+          const logradouro = pickString(enderecoRow, ["logradouro"]);
+          enderecoData = {
+            logradouro:      tipo ? `${tipo} ${logradouro}` : logradouro,
+            numero:          pickString(enderecoRow, ["numero"]) || "S/N",
+            bairro:          pickString(enderecoRow, ["bairro"]) || "Centro",
+            cep:             pickString(enderecoRow, ["cep"]).replace(/\D/g, ""),
+            codigoMunicipio: pickString(enderecoRow, ["codigocidade"]) || "3520400",
+            uf:              pickString(enderecoRow, ["uf"]) || "SP",
+          };
+        }
+      } catch (err) {
+        this.logger.warn(`cliente_endereco não encontrado para cliente ${clienteId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
 
       // Pessoa jurídica: nome + CNPJ
       const juridicoResult = await client.query(
@@ -502,7 +529,7 @@ export class AthosService {
         const row = juridicoResult.rows[0] as Row;
         const name = pickString(row, ["nomefantasia", "razaosocial"]);
         const documento = pickString(row, ["cnpj"]).replace(/\D/g, "") || null;
-        if (name) return { id: String(clienteId), name, type: "juridico", documento };
+        if (name) return { id: String(clienteId), name, type: "juridico", documento, endereco: enderecoData };
       }
 
       // Pessoa física: nome + CPF
@@ -514,7 +541,7 @@ export class AthosService {
         const row = fisicoResult.rows[0] as Row;
         const name = pickString(row, ["nome", "nomecliente"]);
         const documento = pickString(row, ["cpf"]).replace(/\D/g, "") || null;
-        if (name) return { id: String(clienteId), name, type: "fisico", documento };
+        if (name) return { id: String(clienteId), name, type: "fisico", documento, endereco: enderecoData };
       }
 
       return null;

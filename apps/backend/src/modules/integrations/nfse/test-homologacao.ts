@@ -1,98 +1,118 @@
-/**
- * Script de teste direto contra o ambiente de homologação do iiBrasil.
- * Não depende do banco de dados nem do NestJS.
- *
- * Uso:
- *   npx ts-node src/modules/integrations/nfse/test-homologacao.ts
- */
-
 import axios from "axios";
 import { createHash } from "crypto";
+import * as soap from "soap";
 
-const CNPJ_PRESTADOR = "88888888888888";
-const INSCRICAO_MUNICIPAL = "123456";
-const CODIGO_MUNICIPIO = "3520400";
-const TOKEN = "TLXX4JN38KXTRNSEAJYYEA==";
-const CNPJ_TOMADOR = "55555555555555";
+/**
+ * Script de teste — NFS-e Produção iiBrasil (Ilhabela)
+ *
+ * Modos de teste (altere MODO_TOMADOR):
+ *   "cpf"         → CPF real com endereço (primeiro teste que funcionou)
+ *   "consumidor"  → <TomadorServico><RazaoSocial>CONSUMIDOR FINAL</RazaoSocial></TomadorServico>
+ *   "sem-tomador" → omite TomadorServico completamente (XSD: minOccurs=0)
+ */
+const MODO_TOMADOR: "cpf" | "consumidor" | "sem-tomador" = "cpf";
 
-const SOAP_URL = "https://ilhabela2.iibr.com.br/rps/3520400/1/soap/homologacao/rps";
-const AUX_URL = "https://ilhabela2.iibr.com.br/rps/3520400/2/AUXILIARRPS";
+const WSDL_URL  = "https://ilhabela2.iibr.com.br/rps/3520400/1/soap/producao/rps?wsdl";
+const ENDPOINT  = "https://ilhabela2.iibr.com.br/rps/3520400/1/soap/producao/rps";
+const AUX_URL   = "https://ilhabela2.iibr.com.br/rps/3520400/2/AUXILIARRPS";
+const TOKEN     = "6SQRI36R2WUNKHDW+MWMEW==";
+const CNPJ      = "62391927000157";
+const INSCRICAO = "13788";
+const DATA      = new Date().toISOString().slice(0, 10);
 
-const NUMERO_RPS = Date.now() % 999999; // número único por execução
-const DATA_EMISSAO = new Date().toISOString().slice(0, 10);
-const VALOR_SERVICOS = 100.0;
-const DISCRIMINACAO = `Teste de homologacao NFS-e - RPS ${NUMERO_RPS}`;
-
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+function computeIntegridade(rpsXml: string): string {
+  let cleaned = rpsXml.replace(/[^\x20-\x7E]+/g, "");
+  cleaned = cleaned.replace(/[ ]+/g, "");
+  return createHash("sha512").update(cleaned + TOKEN, "utf8").digest("hex");
 }
 
 function buildCabecalho(): string {
-  return `<?xml version="1.0" encoding="UTF-8"?><cabecalho xmlns="http://www.abrasf.org.br/nfse.xsd" versao="2.04"><versaoDados>2.04</versaoDados></cabecalho>`;
+  return `<cabecalho xmlns="http://www.abrasf.org.br/nfse.xsd" versao="2.04">
+    <versaoDados>2.04</versaoDados>
+</cabecalho>`;
 }
 
-function buildInfRps(): string {
-  const valorCbs = (VALOR_SERVICOS * 0.009).toFixed(2);
-  const valorIbs = (VALOR_SERVICOS * 0.001).toFixed(2);
+function buildTomador(): string {
+  if (MODO_TOMADOR === "sem-tomador") return "";
 
-  return `<InfDeclaracaoPrestacaoServico Id="1">
-    <Rps>
-      <IdentificacaoRps>
-        <Numero>${NUMERO_RPS}</Numero>
-        <Serie>TESTE</Serie>
-        <Tipo>1</Tipo>
-      </IdentificacaoRps>
-      <DataEmissao>${DATA_EMISSAO}</DataEmissao>
-      <Status>1</Status>
-    </Rps>
-    <Competencia>${DATA_EMISSAO}</Competencia>
-    <Servico>
-      <Valores>
-        <ValorServicos>${VALOR_SERVICOS.toFixed(2)}</ValorServicos>
-        <ValorDeducoes>0</ValorDeducoes>
-        <ValorPis>0</ValorPis>
-        <ValorCofins>0</ValorCofins>
-        <ValorInss>0</ValorInss>
-        <ValorIr>0</ValorIr>
-        <ValorCsll>0</ValorCsll>
-        <ValorCbs>${valorCbs}</ValorCbs>
-        <ValorIbs>${valorIbs}</ValorIbs>
-        <OutrasRetencoes>0</OutrasRetencoes>
-        <Aliquota>3.73</Aliquota>
-        <DescontoIncondicionado>0</DescontoIncondicionado>
-        <DescontoCondicionado>0</DescontoCondicionado>
-      </Valores>
-      <IssRetido>2</IssRetido>
-      <ItemListaServico>24.01</ItemListaServico>
-      <CodigoTributacaoMunicipio>240101</CodigoTributacaoMunicipio>
-      <Discriminacao>${escapeXml(DISCRIMINACAO)}</Discriminacao>
-      <CodigoMunicipio>${CODIGO_MUNICIPIO}</CodigoMunicipio>
-    </Servico>
-    <Prestador>
-      <CpfCnpj><Cnpj>${CNPJ_PRESTADOR}</Cnpj></CpfCnpj>
-      <InscricaoMunicipal>${INSCRICAO_MUNICIPAL}</InscricaoMunicipal>
-    </Prestador>
-    <TomadorServico>
-      <IdentificacaoTomador>
-        <CpfCnpj><Cnpj>${CNPJ_TOMADOR}</Cnpj></CpfCnpj>
-      </IdentificacaoTomador>
-      <AtualizaTomador>2</AtualizaTomador>
-      <TomadorExterior>2</TomadorExterior>
-    </TomadorServico>
-    <OptanteSimplesNacional>2</OptanteSimplesNacional>
-    <IncentivoFiscal>2</IncentivoFiscal>
-  </InfDeclaracaoPrestacaoServico>`;
+  if (MODO_TOMADOR === "consumidor") {
+    return `\t\t\t<TomadorServico>
+\t\t\t\t<RazaoSocial>CONSUMIDOR FINAL</RazaoSocial>
+\t\t\t</TomadorServico>`;
+  }
+
+  // cpf — mesmo do teste original que funcionou
+  return `\t\t\t<TomadorServico>
+\t\t\t\t<IdentificacaoTomador>
+\t\t\t\t\t<CpfCnpj>
+\t\t\t\t\t\t<Cpf>46705076801</Cpf>
+\t\t\t\t\t</CpfCnpj>
+\t\t\t\t</IdentificacaoTomador>
+\t\t\t\t<RazaoSocial>jose dos santos junior</RazaoSocial>
+\t\t\t\t<Endereco>
+\t\t\t\t\t<Endereco>Rua Dr. Carvalho</Endereco>
+\t\t\t\t\t<Numero>2</Numero>
+\t\t\t\t\t<Bairro>Centro</Bairro>
+\t\t\t\t\t<CodigoMunicipio>3520400</CodigoMunicipio>
+\t\t\t\t\t<Uf>SP</Uf>
+\t\t\t\t\t<Cep>11630000</Cep>
+\t\t\t\t</Endereco>
+\t\t\t</TomadorServico>`;
 }
 
-function buildDados(): string {
-  const infXml = buildInfRps();
-  const rpsXml = `<Rps>${infXml}</Rps>`;
-  const integridade = createHash("sha512").update(rpsXml, "utf8").digest("hex");
+function buildDados(numero: number, serie: string): string {
+  const tomador = buildTomador();
+  const tomadorLine = tomador ? "\n" + tomador : "";
+
+  const rpsXml = `
+\t<Rps>
+\t\t<InfDeclaracaoPrestacaoServico Id="rps${numero}">
+\t\t\t<Rps>
+\t\t\t\t<IdentificacaoRps>
+\t\t\t\t\t<Numero>${numero}</Numero>
+\t\t\t\t\t<Serie>${serie}</Serie>
+\t\t\t\t\t<Tipo>1</Tipo>
+\t\t\t\t</IdentificacaoRps>
+\t\t\t\t<DataEmissao>${DATA}</DataEmissao>
+\t\t\t\t<Status>1</Status>
+\t\t\t</Rps>
+\t\t\t<Competencia>${DATA}</Competencia>
+\t\t\t<Servico>
+\t\t\t\t<Valores>
+\t\t\t\t\t<ValorServicos>30.00</ValorServicos>
+\t\t\t\t\t<ValorDeducoes>0.00</ValorDeducoes>
+\t\t\t\t\t<ValorPis>0.00</ValorPis>
+\t\t\t\t\t<ValorCofins>0.00</ValorCofins>
+\t\t\t\t\t<ValorInss>0.00</ValorInss>
+\t\t\t\t\t<ValorIr>0.00</ValorIr>
+\t\t\t\t\t<ValorCsll>0.00</ValorCsll>
+\t\t\t\t\t<ValorCbs>0.27</ValorCbs>
+\t\t\t\t\t<AliquotaCbs>0.90</AliquotaCbs>
+\t\t\t\t\t<ValorIbs>0.03</ValorIbs>
+\t\t\t\t\t<AliquotaIbs>0.10</AliquotaIbs>
+\t\t\t\t\t<OutrasRetencoes>0.00</OutrasRetencoes>
+\t\t\t\t\t<Aliquota>3.73</Aliquota>
+\t\t\t\t\t<DescontoIncondicionado>0.00</DescontoIncondicionado>
+\t\t\t\t\t<DescontoCondicionado>0.00</DescontoCondicionado>
+\t\t\t\t</Valores>
+\t\t\t\t<IssRetido>2</IssRetido>
+\t\t\t\t<ResponsavelRetencao>1</ResponsavelRetencao>
+\t\t\t\t<ItemListaServico>24.01</ItemListaServico>
+\t\t\t\t<CodigoTributacaoNacional>240101</CodigoTributacaoNacional>
+\t\t\t\t<Discriminacao>TESTE MODO ${MODO_TOMADOR.toUpperCase()} RPS ${numero}</Discriminacao>
+\t\t\t\t<CodigoMunicipio>3520400</CodigoMunicipio>
+\t\t\t</Servico>
+\t\t\t<Prestador>
+\t\t\t\t<CpfCnpj>
+\t\t\t\t\t<Cnpj>${CNPJ}</Cnpj>
+\t\t\t\t</CpfCnpj>
+\t\t\t\t<InscricaoMunicipal>${INSCRICAO}</InscricaoMunicipal>
+\t\t\t</Prestador>${tomadorLine}
+\t\t</InfDeclaracaoPrestacaoServico>
+\t</Rps>`;
+
+  const integridade = computeIntegridade(rpsXml);
+  console.log(`Hash: ${integridade}`);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <GerarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
@@ -101,101 +121,55 @@ function buildDados(): string {
 </GerarNfseEnvio>`;
 }
 
-function buildEnvelope(cabecalho: string, dados: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope
-  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-  xmlns:ws="http://nfse.abrasf.org.br"
-  xmlns:iibr="http://rps.iibr.com.br/">
-  <soapenv:Header>
-    <iibr:cnpjRemetente>${CNPJ_PRESTADOR}</iibr:cnpjRemetente>
-    <iibr:token>${TOKEN}</iibr:token>
-  </soapenv:Header>
-  <soapenv:Body>
-    <ws:GerarNfseRequest>
-      <nfseCabecMsg><![CDATA[${cabecalho}]]></nfseCabecMsg>
-      <nfseDadosMsg><![CDATA[${dados}]]></nfseDadosMsg>
-    </ws:GerarNfseRequest>
-  </soapenv:Body>
-</soapenv:Envelope>`;
-}
-
-async function testarAuxiliar(numero: string) {
-  console.log(`\n--- API Auxiliar: consultando NFS-e #${numero} ---`);
+async function getProximoRps(): Promise<{ numero: number; serie: string }> {
   try {
-    const params = new URLSearchParams({ cnpj: CNPJ_PRESTADOR, token: TOKEN, numero });
-    const url = `${AUX_URL}?${params.toString()}`;
-    console.log(`GET ${url}`);
-    const resp = await axios.get(url, { timeout: 15_000 });
-    console.log("Resposta:", JSON.stringify(resp.data, null, 2));
-  } catch (err: any) {
-    console.error("Falha API Auxiliar:", err?.response?.data ?? err?.message);
+    const url = `${AUX_URL}?Metodo=info_nfse&Token=${TOKEN}&CpfCnpjPrestador=${CNPJ}`;
+    const resp = await axios.get(url, { timeout: 10_000 });
+    const data = (resp.data?.data ?? resp.data) as Record<string, unknown>;
+    const numero = Number(data.ProximoRPS ?? data.proximoRPS ?? 1);
+    const serie  = String(data.SerieRPS ?? data.serieRPS ?? "RPS");
+    console.log(`ProximoRPS=${numero} SerieRPS=${serie}`);
+    return { numero, serie };
+  } catch (err) {
+    console.warn("Falha API Auxiliar, usando RPS=1/RPS:", err instanceof Error ? err.message : err);
+    return { numero: 1, serie: "RPS" };
   }
 }
 
 async function main() {
-  console.log("=== Teste NFS-e Homologação iiBrasil ===");
-  console.log(`RPS número: ${NUMERO_RPS}`);
-  console.log(`Data emissão: ${DATA_EMISSAO}`);
-  console.log(`Valor: R$ ${VALOR_SERVICOS.toFixed(2)}`);
-  console.log(`SOAP URL: ${SOAP_URL}`);
+  console.log(`=== Teste NFS-e — modo: ${MODO_TOMADOR} ===`);
 
+  const { numero, serie } = await getProximoRps();
   const cabecalho = buildCabecalho();
-  const dados = buildDados();
-  const envelope = buildEnvelope(cabecalho, dados);
+  const dados     = buildDados(numero, serie);
 
-  console.log("\n--- Enviando para SOAP ---");
+  const client = await soap.createClientAsync(WSDL_URL);
+  client.setEndpoint(ENDPOINT);
+  client.addSoapHeader(
+    { "iibr:cnpjRemetente": CNPJ, "iibr:token": TOKEN },
+    "", "iibr", "http://rps.iibr.com.br/",
+  );
 
   try {
-    const resp = await axios.post(SOAP_URL, envelope, {
-      headers: {
-        "Content-Type": "text/xml; charset=utf-8",
-        SOAPAction: "http://nfse.abrasf.org.br/GerarNfse",
-      },
-      timeout: 30_000,
-      validateStatus: () => true,
-      responseType: "text",
+    await new Promise<void>((resolve, reject) => {
+      (client as any).GerarNfse(
+        { nfseCabecMsg: cabecalho, nfseDadosMsg: dados },
+        (err: any, _res: any, rawResponse: string) => {
+          if (err) {
+            console.error("Status HTTP:", err?.response?.status);
+            console.error("Corpo:", err?.response?.data ?? err?.message);
+            reject(err);
+          } else {
+            console.log("\n--- Resposta ---");
+            console.log(rawResponse);
+            resolve();
+          }
+        }
+      );
     });
-
-    console.log(`Status HTTP: ${resp.status}`);
-    if (resp.status >= 400) {
-      const body = typeof resp.data === "string" ? resp.data.slice(0, 2000) : JSON.stringify(resp.data);
-      console.error(`Resposta de erro (${resp.status}):\n${body}`);
-      process.exit(1);
-    }
-
-    const xml: string = typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data);
-    console.log("\nResposta SOAP (primeiros 1500 chars):");
-    console.log(xml.slice(0, 1500));
-
-    const numeroNfse = xml.match(/<NumeroNfse>(\d+)<\/NumeroNfse>/)?.[1];
-    const codigoVerificacao = xml.match(/<CodigoVerificacao>([^<]+)<\/CodigoVerificacao>/)?.[1]?.trim();
-    const linkRaw = xml.match(/<LinkNfse>([^<]+)<\/LinkNfse>/)?.[1]?.trim();
-    const link = linkRaw ? (() => { try { return Buffer.from(linkRaw, "base64").toString("utf8"); } catch { return linkRaw; } })() : null;
-    const erro = xml.match(/<Mensagem>([^<]+)<\/Mensagem>/)?.[1]?.trim();
-
-    if (erro && !numeroNfse) {
-      console.error(`\nErro retornado: ${erro}`);
-      process.exit(1);
-    }
-
-    console.log("\n=== Resultado ===");
-    console.log(`NFS-e número  : ${numeroNfse ?? "não retornado"}`);
-    console.log(`Cod. verificação: ${codigoVerificacao ?? "não retornado"}`);
-    console.log(`Link          : ${link ?? "não retornado"}`);
-
-    if (numeroNfse) {
-      await testarAuxiliar(numeroNfse);
-    }
   } catch (err: any) {
-    console.error("Falha SOAP:");
-    console.error("  message   :", err?.message);
-    console.error("  code      :", err?.code);
-    console.error("  status    :", err?.response?.status);
-    const body = err?.response?.data;
-    console.error("  response  :", typeof body === "string" ? body.slice(0, 2000) : JSON.stringify(body));
-    process.exit(1);
+    console.error("Erro:", err.message);
   }
 }
 
-main();
+main().catch(console.error);

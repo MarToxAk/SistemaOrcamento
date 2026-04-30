@@ -101,6 +101,13 @@ export default function OrcamentoDetailPage() {
   const [nfseMsg, setNfseMsg] = useState("");
   const [nfseNumero, setNfseNumero] = useState<string | null>(null);
   const [nfseLink, setNfseLink] = useState<string | null>(null);
+  const [nfseModal, setNfseModal] = useState(false);
+  const [nfseServico, setNfseServico] = useState("24.01");
+  const [nfseTomadorDoc, setNfseTomadorDoc] = useState("");
+  const [nfseTomadorNome, setNfseTomadorNome] = useState("");
+  const [nfseTomadorTipo, setNfseTomadorTipo] = useState<"cpf" | "cnpj">("cpf");
+  const [nfseServicos, setNfseServicos] = useState<Array<{ codigo: string; descricao: string }>>([]);
+  const [nfseTomadorAutoDoc, setNfseTomadorAutoDoc] = useState<string | null>(null);
 
   useEffect(() => {
     const isDevBypass =
@@ -216,11 +223,86 @@ export default function OrcamentoDetailPage() {
     }
   }
 
+  async function handleAbrirModalNfse() {
+    let temDocumento = false;
+    let servico = "24.01";
+    let doc: string | null = null;
+    let docTipo: "cpf" | "cnpj" = "cpf";
+    let nome = "";
+
+    try {
+      const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`);
+      const data = await res.json().catch(() => ({})) as {
+        servicosDisponiveis?: Array<{ codigo: string; descricao: string }>;
+        servicoSugerido?: string;
+        tomador?: { cpf?: string | null; cnpj?: string | null; nome?: string | null; temDocumento?: boolean };
+      };
+      setNfseServicos(data.servicosDisponiveis ?? [{ codigo: "24.01", descricao: "Confecção de carimbos, banners, placas" }]);
+      servico = data.servicoSugerido ?? "24.01";
+      setNfseServico(servico);
+      doc = data.tomador?.cpf ?? data.tomador?.cnpj ?? null;
+      docTipo = data.tomador?.cnpj ? "cnpj" : "cpf";
+      nome = data.tomador?.nome ?? "";
+      temDocumento = !!data.tomador?.temDocumento;
+      setNfseTomadorAutoDoc(doc);
+      setNfseTomadorDoc(doc ?? "");
+      setNfseTomadorNome(nome);
+      setNfseTomadorTipo(docTipo);
+    } catch {
+      setNfseServicos([{ codigo: "24.01", descricao: "Confecção de carimbos, banners, placas" }]);
+    }
+
+    // Sempre abre o modal — usuário pode escolher o serviço e confirmar os dados
+    setNfseModal(true);
+
+    // bloco abaixo foi removido (emissão direta sem modal)
+    if (false && temDocumento && doc) {
+      setNfseState("emitindo");
+      setNfseMsg("");
+      try {
+        const body: Record<string, string> = { servicoCodigo: servico };
+        const docLimpo = doc.replace(/\D/g, "");
+        if (docTipo === "cnpj") body.tomadorCnpj = docLimpo;
+        else body.tomadorCpf = docLimpo;
+        if (nome.trim()) body.tomadorNome = nome.trim();
+
+        const r = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json().catch(() => ({})) as { numero?: string; link?: string; jaEmitida?: boolean; message?: string; error?: string };
+        if (!r.ok) throw new Error(d?.message || d?.error || "Falha ao emitir NFS-e.");
+        setNfseNumero(d.numero ?? null);
+        setNfseLink(d.link ?? null);
+        setNfseState("sucesso");
+        setNfseMsg(d.jaEmitida ? `NFS-e já emitida: número ${d.numero}` : `NFS-e emitida com sucesso! Número: ${d.numero}`);
+      } catch (err) {
+        setNfseState("erro");
+        setNfseMsg(err instanceof Error ? err.message : "Erro ao emitir NFS-e.");
+      }
+      return;
+    }
+  }
+
   async function handleEmitirNfse() {
+    setNfseModal(false);
     setNfseState("emitindo");
     setNfseMsg("");
     try {
-      const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, { method: "POST" });
+      const body: Record<string, string> = { servicoCodigo: nfseServico };
+      const docLimpo = nfseTomadorDoc.replace(/\D/g, "");
+      if (docLimpo) {
+        if (nfseTomadorTipo === "cnpj") body.tomadorCnpj = docLimpo;
+        else body.tomadorCpf = docLimpo;
+      }
+      if (nfseTomadorNome.trim()) body.tomadorNome = nfseTomadorNome.trim();
+
+      const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       const data = await res.json().catch(() => ({})) as { numero?: string; link?: string; jaEmitida?: boolean; message?: string; error?: string };
       if (!res.ok) throw new Error(data?.message || data?.error || "Falha ao emitir NFS-e.");
       const numero = data.numero ?? null;
@@ -440,11 +522,11 @@ export default function OrcamentoDetailPage() {
                 ) : null}
 
                 <div className="d-flex gap-2 flex-wrap">
-                  {quote?.statusKey === "APROVADO" && !nfseNumero ? (
+                  {quote?.statusKey && quote.statusKey !== "CANCELADO" && !nfseNumero ? (
                     <button
                       type="button"
                       className="btn btn-warning"
-                      onClick={() => void handleEmitirNfse()}
+                      onClick={() => void handleAbrirModalNfse()}
                       disabled={nfseState === "emitindo"}
                     >
                       {nfseState === "emitindo" ? (
@@ -533,6 +615,59 @@ export default function OrcamentoDetailPage() {
                 allowFullScreen
                 src={pdfViewerUrl}
               />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal emissão NFS-e */}
+      {nfseModal ? (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1060 }}>
+          <div style={{ background: "#fff", borderRadius: 8, width: "100%", maxWidth: 480, padding: "1.5rem", boxShadow: "0 4px 24px #0003" }}>
+            <h5 className="mb-3"><i className="bi bi-file-earmark-text me-2" />Emitir Nota Fiscal (NFS-e)</h5>
+
+            <div className="mb-3">
+              <label className="form-label fw-semibold">Serviço</label>
+              <select className="form-select" value={nfseServico} onChange={e => setNfseServico(e.target.value)}>
+                {nfseServicos.map(s => (
+                  <option key={s.codigo} value={s.codigo}>{s.codigo} — {s.descricao}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-3">
+              <label className="form-label fw-semibold">Documento do tomador</label>
+              <div className="d-flex gap-2 mb-2">
+                <div className="form-check">
+                  <input className="form-check-input" type="radio" id="tipoCpf" checked={nfseTomadorTipo === "cpf"} onChange={() => setNfseTomadorTipo("cpf")} />
+                  <label className="form-check-label" htmlFor="tipoCpf">CPF</label>
+                </div>
+                <div className="form-check">
+                  <input className="form-check-input" type="radio" id="tipoCnpj" checked={nfseTomadorTipo === "cnpj"} onChange={() => setNfseTomadorTipo("cnpj")} />
+                  <label className="form-check-label" htmlFor="tipoCnpj">CNPJ</label>
+                </div>
+              </div>
+              <input
+                className="form-control"
+                placeholder={nfseTomadorTipo === "cpf" ? "000.000.000-00" : "00.000.000/0000-00"}
+                value={nfseTomadorDoc}
+                onChange={e => setNfseTomadorDoc(e.target.value)}
+              />
+              {nfseTomadorAutoDoc && (
+                <small className="text-success"><i className="bi bi-check-circle me-1" />Encontrado automaticamente</small>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <label className="form-label fw-semibold">Nome do tomador</label>
+              <input className="form-control" placeholder="Nome completo ou razão social" value={nfseTomadorNome} onChange={e => setNfseTomadorNome(e.target.value)} />
+            </div>
+
+            <div className="d-flex gap-2 justify-content-end">
+              <button className="btn btn-secondary" onClick={() => setNfseModal(false)}>Cancelar</button>
+              <button className="btn btn-warning" onClick={() => void handleEmitirNfse()}>
+                <i className="bi bi-file-earmark-check me-2" />Emitir NFS-e
+              </button>
             </div>
           </div>
         </div>
