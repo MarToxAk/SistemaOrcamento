@@ -12,12 +12,12 @@ import * as soap from "soap";
  */
 const MODO_TOMADOR: "cpf" | "consumidor" | "sem-tomador" = "cpf";
 
-const WSDL_URL  = "https://ilhabela2.iibr.com.br/rps/3520400/1/soap/producao/rps?wsdl";
-const ENDPOINT  = "https://ilhabela2.iibr.com.br/rps/3520400/1/soap/producao/rps";
-const AUX_URL   = "https://ilhabela2.iibr.com.br/rps/3520400/2/AUXILIARRPS";
-const TOKEN     = "6SQRI36R2WUNKHDW+MWMEW==";
-const CNPJ      = "62391927000157";
-const INSCRICAO = "13788";
+const WSDL_URL  = (process.env.NFSE_SOAP_URL ?? "") + "?wsdl";
+const ENDPOINT  = process.env.NFSE_SOAP_URL ?? "";
+const AUX_URL   = process.env.NFSE_AUX_URL ?? "";
+const TOKEN     = process.env.NFSE_TOKEN ?? "";
+const CNPJ      = process.env.NFSE_CNPJ_PRESTADOR ?? "";
+const INSCRICAO = process.env.NFSE_INSCRICAO_MUNICIPAL ?? "";
 const DATA      = new Date().toISOString().slice(0, 10);
 
 function computeIntegridade(rpsXml: string): string {
@@ -45,7 +45,7 @@ function buildTomador(): string {
   return `\t\t\t<TomadorServico>
 \t\t\t\t<IdentificacaoTomador>
 \t\t\t\t\t<CpfCnpj>
-\t\t\t\t\t\t<Cpf>46705076801</Cpf>
+\t\t\t\t\t\t<Cpf>00000000000</Cpf>
 \t\t\t\t\t</CpfCnpj>
 \t\t\t\t</IdentificacaoTomador>
 \t\t\t\t<RazaoSocial>jose dos santos junior</RazaoSocial>

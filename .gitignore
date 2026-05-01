@@ -7,3 +7,4 @@ dist/
 deploy/stack.env
 coverage/
 *.log
+*.tsbuildinfo
