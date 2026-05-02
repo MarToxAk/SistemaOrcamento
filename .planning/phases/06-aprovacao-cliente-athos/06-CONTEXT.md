@@ -30,8 +30,9 @@ recebem melhorias para exibir mais informações do orçamento (itens, total).
 O envio automático da mensagem é disparado quando um orçamento é criado com `externalQuoteId`
 (dados vindos do Athos) e a consulta ao Athos retorna `idcliente`. Implementar no método
 `create` de `quotes.service.ts`: após salvar o orçamento, se `idcliente` estiver disponível
-no `athosMapped`, disparar assincronamente a mensagem via BullMQ (queue `enviar-cliente`
-já existente) em vez de chamar `enviarParaCliente` diretamente.
+no `athosMapped`, disparar assincronamente com `void this.enviarParaCliente(quote.id).catch(...)`.
+**Nota:** O projeto não usa BullMQ/Redis — o padrão correto é fire-and-forget async conforme
+`quotes.controller.ts` linha ~97.
 
 ### D-02 — Canal: Chatwoot Existente [LOCKED]
 A mensagem vai para o Chatwoot usando `chatwootService.sendOutgoingMessage(conversationId, msg)`.
@@ -58,8 +59,8 @@ Reusar o existente. Se já foi enviado mensagem antes (heurística: `approvalReq
 não reenviar automaticamente — evitar spam ao cliente.
 
 ### D-06 — Não Bloquear Criação do Orçamento [LOCKED]
-O envio da mensagem é sempre assíncrono (BullMQ queue). Falha no envio não deve retornar
-erro 500 na criação do orçamento. Logar o erro e continuar.
+O envio da mensagem é sempre assíncrono (fire-and-forget: `void this.enviarParaCliente(...).catch()`).
+Falha no envio não deve retornar erro 500 na criação do orçamento. Logar o erro e continuar.
 
 ### Decisões a cargo do Claude
 - Estratégia exata de detecção do `idcliente` no fluxo de `create` (usar `athosMapped` do
