@@ -1,6 +1,6 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
-**Last updated:** 2026-05-01
+**Last updated:** 2026-05-02
 **Current phase:** 2 - Confiabilidade de Integracoes (implemented, pending UAT)
 
 ---
@@ -12,7 +12,7 @@
 | 1 | Seguranca e Autenticacao | in-review |
 | 2 | Confiabilidade de Integracoes | in-review |
 | 3 | Correcoes de Fluxo e Qualidade de Dados | not-started |
-| 4 | Testes e CI | not-started |
+| 4 | Testes e CI | in-review |
 | 5 | UX do Painel e Area do Cliente | in-review |
 | 6 | Aprovação de Orçamento pelo Cliente com Associação Athos | not-started |
 
@@ -53,5 +53,7 @@
   - .planning/phases/05-ux-do-painel-e-area-do-cliente/05-03-SUMMARY.md
   - .planning/phases/05-ux-do-painel-e-area-do-cliente/05-04-SUMMARY.md
 
+- Summaries da fase 4:
+  - .planning/phases/04-testes-e-ci/04-01-SUMMARY.md
 ---
 *Initialized: 2026-05-01 via /gsd-new-project*
