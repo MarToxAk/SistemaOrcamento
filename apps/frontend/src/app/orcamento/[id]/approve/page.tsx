@@ -14,6 +14,13 @@ export default function ApprovePage() {
   const [quoteNumber, setQuoteNumber] = useState<number | null>(null);
   const [clientName, setClientName] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [quoteTotal, setQuoteTotal] = useState<number | null>(null);
+  const [quoteItems, setQuoteItems] = useState<Array<{
+    descricao: string;
+    quantidade: number;
+    valorUnitario: number;
+    subtotal: number;
+  }>>([]);
 
   useEffect(() => {
     if (!token) {
@@ -28,6 +35,17 @@ export default function ApprovePage() {
         const data = await res.json();
         setQuoteNumber(data?.body?.idorcamento_interno ?? null);
         setClientName(data?.body?.cliente?.nome ?? "");
+        setQuoteTotal(data?.body?.totais?.valor ?? null);
+        setQuoteItems(
+          (data?.body?.itens ?? []).map((item: Record<string, unknown>) => ({
+            descricao:
+              String((item.produto as Record<string, unknown>)?.descricaocurta ?? '') ||
+              String((item.produto as Record<string, unknown>)?.descricaoproduto ?? ''),
+            quantidade: Number(item.quantidadeitem ?? 0),
+            valorUnitario: Number(item.valoritem ?? 0),
+            subtotal: Number(item.orcamentovalorfinalitem ?? 0),
+          }))
+        );
 
         // If already approved, show success state immediately
         if (data?.approved) {
@@ -146,6 +164,40 @@ export default function ApprovePage() {
                   </div>
                 )}
                 {clientName && <div className="text-muted mb-4 small">{clientName}</div>}
+                {quoteItems.length > 0 && (
+                  <div className="mb-4 text-start">
+                    <table className="table table-sm table-borderless mb-1">
+                      <thead>
+                        <tr className="small text-muted border-bottom">
+                          <th>Item</th>
+                          <th className="text-end">Qtd</th>
+                          <th className="text-end">Unit.</th>
+                          <th className="text-end">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {quoteItems.map((item, idx) => (
+                          <tr key={idx} className="small">
+                            <td>{item.descricao}</td>
+                            <td className="text-end">{item.quantidade}</td>
+                            <td className="text-end">
+                              {item.valorUnitario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                            </td>
+                            <td className="text-end">
+                              {item.subtotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {quoteTotal !== null && (
+                      <div className="text-end fw-semibold small border-top pt-1">
+                        Total:{" "}
+                        {quoteTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <p className="mb-4">
                   Ao clicar no botão abaixo, você confirma a aprovação deste orçamento e autoriza o
                   início da produção.

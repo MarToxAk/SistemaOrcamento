@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException, Inject, forwardRef } from "@nestjs/common";
+﻿import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException, Inject, forwardRef } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { AthosService } from "../integrations/athos/athos.service";
@@ -64,7 +64,7 @@ export class QuotesService {
   ) {}
 
   async buscarNoAthosPorNumero(numero: string, format: "raw" | "mapped" = "raw") {
-    // Se já existe um orcamento salvo com esse externalQuoteId, preferir os dados do banco
+    // Se jÃ¡ existe um orcamento salvo com esse externalQuoteId, preferir os dados do banco
     const parsed = Number(numero);
     if (Number.isFinite(parsed)) {
       const externalId = this.toBigInt(parsed);
@@ -293,7 +293,7 @@ export class QuotesService {
   }
 
   async create(payload: CreateQuoteDto) {
-    // Validação Chatwoot: se informado, deve ser válido
+    // ValidaÃ§Ã£o Chatwoot: se informado, deve ser vÃ¡lido
     this.validateChatwootContext(payload);
 
     const customerInput = payload.cliente ?? payload.customer;
@@ -369,7 +369,7 @@ export class QuotesService {
       if (externalId) {
         const existing = await tx.quote.findFirst({ where: { externalQuoteId: externalId } });
         if (existing) {
-          // Atualiza metadados do orçamento existente
+          // Atualiza metadados do orÃ§amento existente
           const updated = await tx.quote.update({
             where: { id: existing.id },
             data: {
@@ -479,7 +479,7 @@ export class QuotesService {
         }
       }
 
-      // Se não existe externalId ou não foi encontrado, cria novo
+      // Se nÃ£o existe externalId ou nÃ£o foi encontrado, cria novo
       const createdQuote = await tx.quote.create({
         data: {
           externalQuoteId: this.toBigInt(payload.idorcamento),
@@ -584,6 +584,17 @@ export class QuotesService {
 
     const mappedQuote = this.mapQuoteBody(quote);
 
+    // [PHASE-06 D-01/D-05/D-06] Disparo automatico ao importar do Athos com idcliente
+    // payload.idorcamento indica origem Athos; approvalRequestedAt garante idempotencia (D-05)
+    // Fire-and-forget: falha nao bloqueia resposta ao chamador (D-06)
+    if (payload.idorcamento && !quote.approvalRequestedAt) {
+      void this.enviarParaCliente(quote.id).catch((err: unknown) => {
+        this.logger.warn(
+          `[create] Falha no disparo automatico enviarParaCliente para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
+
     try {
       const stored = await this.quotesPdfStorageService.generateAndStore(mappedQuote.body);
 
@@ -641,11 +652,11 @@ export class QuotesService {
       );
     }
 
-    // Bloqueia avanço para EM_PRODUCAO se não aprovado e cliente não for associado
+    // Bloqueia avanÃ§o para EM_PRODUCAO se nÃ£o aprovado e cliente nÃ£o for associado
     if (newStatus === "EM_PRODUCAO") {
       const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false);
       if (!quote.approved && !isAssociated) {
-        throw new BadRequestException("Orçamento precisa ser aprovado pelo cliente antes de entrar em produção");
+        throw new BadRequestException("OrÃ§amento precisa ser aprovado pelo cliente antes de entrar em produÃ§Ã£o");
       }
     }
 
@@ -823,20 +834,20 @@ export class QuotesService {
   }
 
   private validateChatwootContext(payload: CreateQuoteDto): void {
-    // Se conversationId ou chatwootContactId forem informados, devem ser válidos (> 0)
+    // Se conversationId ou chatwootContactId forem informados, devem ser vÃ¡lidos (> 0)
     if (payload.conversationId !== undefined && payload.conversationId !== null) {
       if (!Number.isFinite(payload.conversationId) || payload.conversationId <= 0) {
-        throw new BadRequestException("conversationId invalido: deve ser um número positivo");
+        throw new BadRequestException("conversationId invalido: deve ser um nÃºmero positivo");
       }
     }
 
     if (payload.chatwootContactId !== undefined && payload.chatwootContactId !== null) {
       if (!Number.isFinite(payload.chatwootContactId) || payload.chatwootContactId <= 0) {
-        throw new BadRequestException("chatwootContactId invalido: deve ser um número positivo");
+        throw new BadRequestException("chatwootContactId invalido: deve ser um nÃºmero positivo");
       }
     }
 
-    // Validação adicional: se tem um, é bom ter os dois
+    // ValidaÃ§Ã£o adicional: se tem um, Ã© bom ter os dois
     const hasChatContext = payload.conversationId || payload.chatwootContactId;
     if (hasChatContext && !(payload.conversationId && payload.chatwootContactId)) {
       console.warn(
@@ -958,7 +969,7 @@ export class QuotesService {
   // Mescla duplicatas identificadas por externalQuoteId
   async mergeDuplicates(payload: { externalQuoteId: number; keepId?: string; strategy?: "oldest" | "newest" }) {
     if (!payload?.externalQuoteId) {
-      throw new BadRequestException("externalQuoteId é obrigatório");
+      throw new BadRequestException("externalQuoteId Ã© obrigatÃ³rio");
     }
 
     const externalId = BigInt(Math.trunc(payload.externalQuoteId));
@@ -982,7 +993,7 @@ export class QuotesService {
     let keepId: string;
     const ids = quotes.map((q) => q.id);
     if (payload.keepId) {
-      if (!ids.includes(payload.keepId)) throw new BadRequestException("keepId informado não pertence ao grupo de duplicatas");
+      if (!ids.includes(payload.keepId)) throw new BadRequestException("keepId informado nÃ£o pertence ao grupo de duplicatas");
       keepId = payload.keepId;
     } else {
       const strategy = payload.strategy ?? "newest";
@@ -1058,15 +1069,15 @@ export class QuotesService {
       await tx.quoteDocument.updateMany({ where: { quoteId: { in: otherIds } }, data: { quoteId: keepId } });
       await tx.quoteStatusHistory.updateMany({ where: { quoteId: { in: otherIds } }, data: { quoteId: keepId } });
 
-      // Atualizar metadados do orçamento (totais calculados com base nos itens criados)
+      // Atualizar metadados do orÃ§amento (totais calculados com base nos itens criados)
       const recomputed = await tx.$queryRaw<Array<{ subtotal: string; discount: string; surcharge: string; total: string }>>`
         SELECT COALESCE(SUM("finalPrice"::numeric),0) AS subtotal FROM "QuoteItem" WHERE "quoteId" = ${keepId}
       `;
 
-      // Simplesmente atualiza updatedAt e mantém outros metadados do keep quote
+      // Simplesmente atualiza updatedAt e mantÃ©m outros metadados do keep quote
       await tx.quote.update({ where: { id: keepId }, data: { updatedAt: new Date() } });
 
-      // Deletar as entradas duplicadas (exclui as quotes que não são a keep)
+      // Deletar as entradas duplicadas (exclui as quotes que nÃ£o sÃ£o a keep)
       for (const id of otherIds) {
         await tx.quote.delete({ where: { id } });
       }
@@ -1293,11 +1304,11 @@ export class QuotesService {
       v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
     const primeiroNome = clienteNome.split(" ")[0];
-    const sep = "━━━━━━━━━━━━";
+    const sep = "â”â”â”â”â”â”â”â”â”â”â”â”";
 
     const linhasItens = itens
       .slice(0, 10)
-      .map((it) => `• ${it.descricao} (${it.quantidade}x) — ${fmt(it.total)}`)
+      .map((it) => `â€¢ ${it.descricao} (${it.quantidade}x) â€” ${fmt(it.total)}`)
       .join("\n");
     const maisItens = itens.length > 10 ? `\n_...e mais ${itens.length - 10} item(s)_` : "";
 
@@ -1308,61 +1319,61 @@ export class QuotesService {
 
     const linhasPagamento: string[] = [];
 
-    // PIX (sempre disponível)
+    // PIX (sempre disponÃ­vel)
     const pixFinal = pix.finalAmount ?? pixPayment.amount;
     const pixDiscount = pix.discountPercent ?? 0;
     if (pixDiscount > 0) {
-      linhasPagamento.push(`*1️⃣ PIX à vista — ${fmt(pixFinal)}*`);
-      linhasPagamento.push(`_Economize ${pixDiscount}% pagando com PIX agora!_ 🎉`);
+      linhasPagamento.push(`*1ï¸âƒ£ PIX Ã  vista â€” ${fmt(pixFinal)}*`);
+      linhasPagamento.push(`_Economize ${pixDiscount}% pagando com PIX agora!_ ðŸŽ‰`);
     } else {
-      linhasPagamento.push(`*1️⃣ PIX à vista — ${fmt(pixFinal)}*`);
+      linhasPagamento.push(`*1ï¸âƒ£ PIX Ã  vista â€” ${fmt(pixFinal)}*`);
     }
-    linhasPagamento.push(`👉 ${pixPayment.linkVisualizacao}`);
+    linhasPagamento.push(`ðŸ‘‰ ${pixPayment.linkVisualizacao}`);
 
     // 50/50
     if (meia?.enabled) {
       const metade = fmt(extra.pix5050Half ?? Number((total * 0.5).toFixed(2)));
-      linhasPagamento.push(`\n*2️⃣ 50% entrada + 50% na retirada*`);
-      linhasPagamento.push(`• Entrada agora: *${metade}* via PIX`);
+      linhasPagamento.push(`\n*2ï¸âƒ£ 50% entrada + 50% na retirada*`);
+      linhasPagamento.push(`â€¢ Entrada agora: *${metade}* via PIX`);
       if (extra.pix5050Link) {
-        linhasPagamento.push(`👉 ${extra.pix5050Link}`);
+        linhasPagamento.push(`ðŸ‘‰ ${extra.pix5050Link}`);
       }
-      linhasPagamento.push(`• Restante *${metade}* paga na hora de buscar`);
+      linhasPagamento.push(`â€¢ Restante *${metade}* paga na hora de buscar`);
     }
 
-    // Cartão
+    // CartÃ£o
     if (cartao?.enabled) {
-      linhasPagamento.push(`\n*3️⃣ Cartão de crédito em até 2x*`);
+      linhasPagamento.push(`\n*3ï¸âƒ£ CartÃ£o de crÃ©dito em atÃ© 2x*`);
       if (extra.cardLink) {
-        linhasPagamento.push(`👉 ${extra.cardLink}`);
+        linhasPagamento.push(`ðŸ‘‰ ${extra.cardLink}`);
       } else {
-        linhasPagamento.push(`_Processamos na maquininha na retirada (${fmt(cartao.finalAmount ?? total)} em até 2x)._`);
+        linhasPagamento.push(`_Processamos na maquininha na retirada (${fmt(cartao.finalAmount ?? total)} em atÃ© 2x)._`);
       }
     }
 
     const linhas = [
-      `Olá, ${primeiroNome}! 👋`,
+      `OlÃ¡, ${primeiroNome}! ðŸ‘‹`,
       ``,
       `Segue o resumo do seu pedido:`,
       ``,
-      `📋 *Orçamento #${numero}*`,
+      `ðŸ“‹ *OrÃ§amento #${numero}*`,
       ``,
       linhasItens + maisItens,
       ``,
-      `💰 *Total: ${fmt(total)}*`,
+      `ðŸ’° *Total: ${fmt(total)}*`,
       ``,
       sep,
-      `*Como você prefere pagar?*`,
+      `*Como vocÃª prefere pagar?*`,
       ``,
       ...linhasPagamento,
       ``,
       sep,
-      `Qualquer dúvida, é só chamar! 😊`,
+      `Qualquer dÃºvida, Ã© sÃ³ chamar! ðŸ˜Š`,
     ];
 
-    // Pix Copia e Cola ao final (separado para não poluir a mensagem principal)
+    // Pix Copia e Cola ao final (separado para nÃ£o poluir a mensagem principal)
     if (pixPayment.pixCopiaECola) {
-      linhas.push(``, `_Pix Copia e Cola (caso prefira copiar o código):_`);
+      linhas.push(``, `_Pix Copia e Cola (caso prefira copiar o cÃ³digo):_`);
       linhas.push(pixPayment.pixCopiaECola);
     }
 
@@ -1372,7 +1383,7 @@ export class QuotesService {
   async enviarParaCliente(quoteId: string) {
     const quote = await this.findQuoteByIdentifier(quoteId);
     if (!quote) {
-      throw new NotFoundException("Orçamento não encontrado");
+      throw new NotFoundException("OrÃ§amento nÃ£o encontrado");
     }
 
     if (statusTransitions[quote.status]?.includes("ENVIADO" as QuoteStatus)) {
@@ -1407,18 +1418,18 @@ export class QuotesService {
         clienteNome = clienteNome ?? athosMapped?.cliente_juridico ?? athosMapped?.cliente_fisico ?? athosMapped?.cliente;
         clienteEmail = clienteEmail ?? athosMapped?.email ?? undefined;
       } catch (err) {
-        // Não bloquear o envio se a consulta ao Athos falhar; apenas logar
+        // NÃ£o bloquear o envio se a consulta ao Athos falhar; apenas logar
         this.logger.debug(`Athos lookup falhou para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
-    // Prepara dados do orçamento para montar a mensagem
+    // Prepara dados do orÃ§amento para montar a mensagem
     const mappedQuote = this.mapQuoteToAthosMapped(quote);
     const numero = mappedQuote.numero ?? quote.internalNumber;
     const itens = Array.isArray(mappedQuote.itens) ? mappedQuote.itens : [];
     const total = Number(quote.total ?? 0);
 
-    // Preparar opções de pagamento e gerar links via EFI (se possível)
+    // Preparar opÃ§Ãµes de pagamento e gerar links via EFI (se possÃ­vel)
     let paymentOptions: ReturnType<typeof this.efiService.resolvePaymentOptions> | null = null;
     try {
       paymentOptions = this.efiService.resolvePaymentOptions(total);
@@ -1465,7 +1476,7 @@ export class QuotesService {
         }
       }
 
-      // Persiste txid(s) no orçamento para que o webhook EFI consiga localizar o pedido
+      // Persiste txid(s) no orÃ§amento para que o webhook EFI consiga localizar o pedido
       if (pixPayment?.txid || pix5050?.txid) {
         try {
           await this.prisma.quote.update({
@@ -1506,7 +1517,7 @@ export class QuotesService {
 
       if (approvalToken) {
         const base = this.configService.get<string>("APP_BASE_URL") ?? "http://localhost:3000";
-        approvalLink = `${base.replace(/\/$/, "")}/api/quotes/${quote.id}/approve?token=${approvalToken}`;
+        approvalLink = `${base.replace(/\/$/, "")}/orcamento/${quote.id}/approve?token=${approvalToken}`;
       }
     }
 
@@ -1519,10 +1530,10 @@ export class QuotesService {
         cardLink: cardLink ?? undefined,
       });
     } else if (paymentOptions) {
-      // Fallback textual quando não for possível gerar links
-      paymentMsg = `Olá, ${String(clienteNome ?? "Cliente").split(" ")[0]}! 👋\\n\\n📋 *Orçamento #${numero}*\\n\\n💰 *Total: R$ ${total.toFixed(2)}*\\n\\n${paymentOptions.customerMessage}\\n\\nQualquer dúvida, é só chamar! 😊`;
+      // Fallback textual quando nÃ£o for possÃ­vel gerar links
+      paymentMsg = `OlÃ¡, ${String(clienteNome ?? "Cliente").split(" ")[0]}! ðŸ‘‹\\n\\nðŸ“‹ *OrÃ§amento #${numero}*\\n\\nðŸ’° *Total: R$ ${total.toFixed(2)}*\\n\\n${paymentOptions.customerMessage}\\n\\nQualquer dÃºvida, Ã© sÃ³ chamar! ðŸ˜Š`;
     } else {
-      paymentMsg = `Olá, ${String(clienteNome ?? "Cliente").split(" ")[0]}! 👋\\n\\n📋 *Orçamento #${numero}*\\n\\n💰 *Total: R$ ${total.toFixed(2)}*\\n\\nQualquer dúvida, é só chamar! 😊`;
+      paymentMsg = `OlÃ¡, ${String(clienteNome ?? "Cliente").split(" ")[0]}! ðŸ‘‹\\n\\nðŸ“‹ *OrÃ§amento #${numero}*\\n\\nðŸ’° *Total: R$ ${total.toFixed(2)}*\\n\\nQualquer dÃºvida, Ã© sÃ³ chamar! ðŸ˜Š`;
     }
 
     // Observacao sobre orcamento associado ao cliente Athos (quando idcliente identificado)
@@ -1536,23 +1547,23 @@ export class QuotesService {
         this.logger.debug(`buscarClientePorId falhou para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
       if (associatedName) {
-        observacao = `*Observação:* identificamos que este orçamento está associado a "${associatedName}".\n\n`;
+        observacao = `*ObservaÃ§Ã£o:* identificamos que este orÃ§amento estÃ¡ associado a "${associatedName}".\n\n`;
       }
     }
 
     // Compor mensagem final: observacao + paymentMsg + opcional link de aprovacao
     let finalMessage = observacao + paymentMsg;
     if (approvalLink) {
-      finalMessage += `\\n\\nSe estiver de acordo, aprove o orçamento aqui:\\n${approvalLink}`;
+      finalMessage += `\\n\\nSe estiver de acordo, aprove o orÃ§amento aqui:\\n${approvalLink}`;
     }
 
-    // Envia a mensagem ao Chatwoot (não bloquear se falhar)
+    // Envia a mensagem ao Chatwoot (nÃ£o bloquear se falhar)
     try {
       const convId = quote.conversationId ? String(quote.conversationId) : undefined;
       if (convId) {
         await this.chatwootService.sendOutgoingMessage(convId, finalMessage);
 
-        // Tentar anexar o PDF: usar documento salvo ou gerar um novo se necessário
+        // Tentar anexar o PDF: usar documento salvo ou gerar um novo se necessÃ¡rio
         try {
           let latestDocument = await this.prisma.quoteDocument.findFirst({ where: { quoteId: quote.id }, orderBy: { generatedAt: "desc" } });
 
@@ -1636,19 +1647,19 @@ export class QuotesService {
     const updated = await this.changeStatus(quote.id, "APROVADO", "Aprovacao pelo cliente");
     const nextStatus = "APROVADO" as QuoteStatus;
 
-    // Notifica via Chatwoot (inclui nome completo do cliente e número correto do orçamento)
+    // Notifica via Chatwoot (inclui nome completo do cliente e nÃºmero correto do orÃ§amento)
     try {
       const convId = quote.conversationId ? String(quote.conversationId) : undefined;
       if (convId) {
-        // Tentativa de resolver nome do cliente: preferir nome persistido no cliente, senão buscar no Athos
+        // Tentativa de resolver nome do cliente: preferir nome persistido no cliente, senÃ£o buscar no Athos
         let clienteNome = (updated as any)?.customer?.fullName ?? (quote as any).customer?.fullName ?? undefined;
 
-        // Obter mapeamento para número do orçamento e dados auxiliares
+        // Obter mapeamento para nÃºmero do orÃ§amento e dados auxiliares
         const mapped = this.mapQuoteToAthosMapped(quote);
-        // Preferir externalQuoteId (número visível), depois mapped.numero, depois internalNumber
+        // Preferir externalQuoteId (nÃºmero visÃ­vel), depois mapped.numero, depois internalNumber
         const numero = quote.externalQuoteId ?? mapped?.numero ?? quote.internalNumber ?? "";
 
-        // Se ainda não tivermos nome, tentar obter a partir do mapeamento Athos ou buscar por idcliente
+        // Se ainda nÃ£o tivermos nome, tentar obter a partir do mapeamento Athos ou buscar por idcliente
         if (!clienteNome) {
           if (mapped && mapped.cliente) clienteNome = mapped.cliente;
 
@@ -1679,7 +1690,7 @@ export class QuotesService {
 
         const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-        // Obter data prevista de entrega a partir do mapeamento (se disponível)
+        // Obter data prevista de entrega a partir do mapeamento (se disponÃ­vel)
         let entregaTexto = "";
         const prazoRaw = mapped?.prazoEntrega ?? mapped?.validade ?? mapped?.data ?? null;
         if (prazoRaw) {
@@ -1688,10 +1699,10 @@ export class QuotesService {
             const parsed = new Date(prazoRaw);
             if (!isNaN(parsed.getTime())) prazoFmt = parsed.toLocaleDateString("pt-BR");
           } catch (e) {}
-          entregaTexto = `\n\n📅 Previsão de entrega: ${prazoFmt} (conforme consta no orçamento)`;
+          entregaTexto = `\n\nðŸ“… PrevisÃ£o de entrega: ${prazoFmt} (conforme consta no orÃ§amento)`;
         }
 
-        const mensagem = `Olá, ${clienteNome ?? "Cliente"}! 👋\n\nAgradecemos pela parceria. Vamos dar sequência ao seu pedido: agendaremos a execução do serviço ou separaremos o(s) produto(s) e avisaremos assim que estiver pronto.${entregaTexto}\n\n📋 Orçamento #${numero}\n\n💰 Total: ${fmt(Number(quote.total ?? 0))}\n\nSe tiver alguma dúvida, responda por esta conversa — estamos à disposição.`;
+        const mensagem = `OlÃ¡, ${clienteNome ?? "Cliente"}! ðŸ‘‹\n\nAgradecemos pela parceria. Vamos dar sequÃªncia ao seu pedido: agendaremos a execuÃ§Ã£o do serviÃ§o ou separaremos o(s) produto(s) e avisaremos assim que estiver pronto.${entregaTexto}\n\nðŸ“‹ OrÃ§amento #${numero}\n\nðŸ’° Total: ${fmt(Number(quote.total ?? 0))}\n\nSe tiver alguma dÃºvida, responda por esta conversa â€” estamos Ã  disposiÃ§Ã£o.`;
         await this.chatwootService.sendOutgoingMessage(convId, mensagem);
       }
     } catch (err) {
