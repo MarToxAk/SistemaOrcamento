@@ -47,6 +47,7 @@ model Customer {
   email             String?
   source            DataSource @default(MANUAL)
   chatwootContactId BigInt?   @db.BigInt
+  isAssociated Boolean @default(false)
   quotes            Quote[]
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

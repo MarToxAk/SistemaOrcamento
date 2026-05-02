@@ -159,11 +159,16 @@ export class QuotesService {
       },
     };
 
-    if (typeof take === "number") args.take = take;
-    if (typeof skip === "number") args.skip = skip;
+    const safeTake = typeof take === "number" && Number.isFinite(take) ? Math.min(take, 200) : 50;
+    const safeSkip = typeof skip === "number" && Number.isFinite(skip) ? skip : undefined;
+    args.take = safeTake;
+    if (safeSkip !== undefined) args.skip = safeSkip;
 
-    const quotes = await this.prisma.quote.findMany(args);
-    return (quotes as any[]).map((quote: any) => this.mapQuoteBody(quote));
+    const [quotes, total] = await this.prisma.$transaction([
+      this.prisma.quote.findMany(args),
+      this.prisma.quote.count({ where }),
+    ]);
+    return { total, data: (quotes as any[]).map((quote: any) => this.mapQuoteBody(quote)) };
   }
 
   async getById(identifier: string) {
@@ -638,7 +643,7 @@ export class QuotesService {
 
     // Bloqueia avanço para EM_PRODUCAO se não aprovado e cliente não for associado
     if (newStatus === "EM_PRODUCAO") {
-      const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false) || Boolean(quote.notes && String(quote.notes).includes("__associated__"));
+      const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false);
       if (!quote.approved && !isAssociated) {
         throw new BadRequestException("Orçamento precisa ser aprovado pelo cliente antes de entrar em produção");
       }
@@ -778,40 +783,42 @@ export class QuotesService {
     const email = customerInput.email?.trim();
     const filters = [phone ? { phone } : null, email ? { email } : null].filter(Boolean) as Prisma.CustomerWhereInput[];
 
-    if (filters.length === 0) {
-      return this.prisma.customer.create({
+    return this.prisma.$transaction(async (tx) => {
+      if (filters.length === 0) {
+        return tx.customer.create({
+          data: {
+            fullName: customerInput.nome,
+            source: payload.source ?? "MANUAL",
+            chatwootContactId: this.toBigInt(payload.chatwootContactId),
+          },
+        });
+      }
+
+      const existing = await tx.customer.findFirst({
+        where: { OR: filters },
+      });
+
+      if (!existing) {
+        return tx.customer.create({
+          data: {
+            fullName: customerInput.nome,
+            phone,
+            email,
+            source: payload.source ?? "MANUAL",
+            chatwootContactId: this.toBigInt(payload.chatwootContactId),
+          },
+        });
+      }
+
+      return tx.customer.update({
+        where: { id: existing.id },
         data: {
           fullName: customerInput.nome,
-          source: payload.source ?? "MANUAL",
-          chatwootContactId: this.toBigInt(payload.chatwootContactId),
+          phone: phone ?? existing.phone,
+          email: email ?? existing.email,
+          chatwootContactId: this.toBigInt(payload.chatwootContactId) ?? existing.chatwootContactId,
         },
       });
-    }
-
-    const existing = await this.prisma.customer.findFirst({
-      where: { OR: filters },
-    });
-
-    if (!existing) {
-      return this.prisma.customer.create({
-        data: {
-          fullName: customerInput.nome,
-          phone,
-          email,
-          source: payload.source ?? "MANUAL",
-          chatwootContactId: this.toBigInt(payload.chatwootContactId),
-        },
-      });
-    }
-
-    return this.prisma.customer.update({
-      where: { id: existing.id },
-      data: {
-        fullName: customerInput.nome,
-        phone: phone ?? existing.phone,
-        email: email ?? existing.email,
-        chatwootContactId: this.toBigInt(payload.chatwootContactId) ?? existing.chatwootContactId,
-      },
     });
   }
 
@@ -1606,22 +1613,15 @@ export class QuotesService {
     if (quote.approvalToken !== token) throw new BadRequestException("Token de aprovacao invalido");
     if (quote.approvalExpiresAt && new Date(quote.approvalExpiresAt) < new Date()) throw new BadRequestException("Token expirado");
 
-    // Atualiza status para EM_PRODUCAO e marca aprovado
-    const nextStatus = "EM_PRODUCAO" as QuoteStatus;
-
-    const updated = await this.prisma.quote.update({
+    // Invalida token imediatamente para evitar dupla aprovacao
+    await this.prisma.quote.update({
       where: { id: quote.id },
-      data: {
-        status: nextStatus,
-        approved: true,
-        approvedAt: new Date(),
-        approvalToken: null,
-        updatedAt: new Date(),
-        // registra historico
-        statusHistory: { create: { oldStatus: quote.status, newStatus: nextStatus, changedByName: "Aprovacao pelo cliente" } },
-      },
-      include: { customer: true },
+      data: { approvalToken: null, approved: true, approvedAt: new Date() },
     });
+
+    // Passa pela maquina de estados via changeStatus() para garantir historico e validacoes
+    const updated = await this.changeStatus(quote.id, "APROVADO", "Aprovacao pelo cliente");
+    const nextStatus = "APROVADO" as QuoteStatus;
 
     // Notifica via Chatwoot (inclui nome completo do cliente e número correto do orçamento)
     try {
@@ -1685,7 +1685,7 @@ export class QuotesService {
       this.logger.warn(`Falha ao notificar via Chatwoot apos aprovacao: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    return { approved: true, quoteId: quote.id, status: updated.status };
+    return { approved: true, quoteId: quote.id, status: updated.statusKey };
   }
 
   async approveByConversation(conversationId: string, token: string) {

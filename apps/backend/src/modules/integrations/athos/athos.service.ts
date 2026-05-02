@@ -122,14 +122,14 @@ async function loadItems(client: Pick<Client, "query">, idOrcamento: string) {
 
     const orderColumns = ["sequenciaitem", "sequencia", "ordem", "idorcamentoitem", "iditem", "id"]
       .filter((name) => columns.has(name))
-      .map((name) => `COALESCE(${name}, 0)`);
+      .map((name) => `COALESCE("${name}", 0)`);
     const orderBy = orderColumns.length > 0 ? ` ORDER BY ${orderColumns.join(", ")}` : "";
 
     const itemsResult = await client.query(
       `
       SELECT *
-      FROM ${tableName}
-      WHERE CAST(${quoteIdColumn} AS TEXT) = $1${orderBy}
+      FROM "${tableName}"
+      WHERE CAST("${quoteIdColumn}" AS TEXT) = $1${orderBy}
       `,
       [idOrcamento],
     );
@@ -154,8 +154,8 @@ async function loadItems(client: Pick<Client, "query">, idOrcamento: string) {
         const productsResult = await client.query(
           `
           SELECT *
-          FROM ${productTable.tableName}
-          WHERE CAST(${productIdOnProduct} AS TEXT) = ANY($1::text[])
+          FROM "${productTable.tableName}"
+          WHERE CAST("${productIdOnProduct}" AS TEXT) = ANY($1::text[])
           `,
           [Array.from(new Set(productIds))],
         );
@@ -220,8 +220,8 @@ async function loadFuncionario(client: Pick<Client, "query">, quote: Row) {
   const result = await client.query(
     `
     SELECT *
-    FROM ${funcionarioTable.tableName}
-    WHERE CAST(${funcionarioIdColumn} AS TEXT) = $1
+    FROM "${funcionarioTable.tableName}"
+    WHERE CAST("${funcionarioIdColumn}" AS TEXT) = $1
     LIMIT 1
     `,
     [String(funcionarioId)],
@@ -259,8 +259,8 @@ async function loadCarimbos(client: Pick<Client, "query">, idOrcamento: string) 
   const result = await client.query(
     `
     SELECT *
-    FROM ${carimboTable.tableName}
-    WHERE CAST(${quoteIdColumn} AS TEXT) = $1${orderBy}
+    FROM "${carimboTable.tableName}"
+    WHERE CAST("${quoteIdColumn}" AS TEXT) = $1${orderBy}
     `,
     [idOrcamento],
   );
@@ -348,9 +348,9 @@ export class AthosService {
 
       const query = `
         SELECT *
-        FROM orcamento
-        WHERE CAST(${identifierColumn} AS TEXT) = $1
-        ORDER BY ${identifierColumn} DESC
+        FROM "orcamento"
+        WHERE CAST("${identifierColumn}" AS TEXT) = $1
+        ORDER BY "${identifierColumn}" DESC
         LIMIT 1
       `;
 
