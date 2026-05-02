@@ -1117,7 +1117,7 @@ export class QuotesService {
     discount: Prisma.Decimal;
     surcharge: Prisma.Decimal;
     total: Prisma.Decimal;
-    customer: { fullName: string; phone: string | null; email: string | null };
+    customer: { fullName: string; phone: string | null; email: string | null; isAssociated?: boolean };
     documents?: Array<{ fileName: string; publicUrl: string | null; generatedAt: Date }>;
     items: Array<{
       externalItemId: bigint | null;
@@ -1197,6 +1197,7 @@ export class QuotesService {
       paymentConfirmedAt: quote.paymentConfirmedAt ? quote.paymentConfirmedAt.toISOString() : null,
       approved: Boolean(quote.approved ?? false),
       approvedAt: quote.approvedAt ? quote.approvedAt.toISOString() : null,
+      isAssociated: Boolean((quote.customer as any).isAssociated ?? false),
       chatwootConversationUrl: this.buildChatwootConversationUrl(quote.conversationId),
       chatwootContactUrl: this.buildChatwootContactUrl(quote.chatwootContactId),
       availableNextStatuses: statusTransitions[quote.status].map((status) => ({
@@ -1219,7 +1220,7 @@ export class QuotesService {
           telefone: quote.customer.phone,
           email: quote.customer.email,
         },
-        observacoes: quote.notes,
+        observacoes: quote.notes === "__associated__" ? null : quote.notes,
         validade: quote.validity,
         prazoEntrega: quote.deliveryDate?.toISOString().slice(0, 10),
         condicaoPagamento: quote.paymentTerms,
