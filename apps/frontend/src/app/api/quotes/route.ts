@@ -1,21 +1,15 @@
-export async function POST(req: Request) {
-  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:4000/api";
+﻿import { backendFetch } from "@/lib/backend-client";
 
+export async function POST(req: Request) {
   try {
     const payload = await req.json();
-    const res = await fetch(`${backendUrl}/quotes`, {
+    const res = await backendFetch("/quotes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      cache: "no-store",
     });
-
     const data = await res.json().catch(() => ({ error: "Resposta invalida do backend." }));
-
-    if (!res.ok) {
-      return Response.json(data, { status: res.status });
-    }
-
+    if (!res.ok) return Response.json(data, { status: res.status });
     return Response.json(data, { status: 200 });
   } catch {
     return Response.json({ error: "Falha ao conectar no backend." }, { status: 500 });
@@ -23,19 +17,11 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:4000/api";
   try {
     const url = new URL(req.url);
-    const qs = url.search;
-    const res = await fetch(`${backendUrl}/quotes${qs}`, {
-      method: "GET",
-      cache: "no-store",
-    });
-
+    const res = await backendFetch(`/quotes${url.search}`, { method: "GET" });
     const data = await res.json().catch(() => ({ error: "Resposta invalida do backend." }));
-    if (!res.ok) {
-      return Response.json(data, { status: res.status });
-    }
+    if (!res.ok) return Response.json(data, { status: res.status });
     return Response.json(data, { status: 200 });
   } catch {
     return Response.json({ error: "Falha ao conectar no backend." }, { status: 500 });

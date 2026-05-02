@@ -1,8 +1,8 @@
-export async function GET() {
-  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:4000/api";
+﻿import { backendFetch } from "@/lib/backend-client";
 
+export async function GET() {
   try {
-    const res = await fetch(`${backendUrl}/integrations/efi/status`, { cache: "no-store" });
+    const res = await backendFetch("/integrations/efi/status");
     const data = await res.json().catch(() => ({ error: "Resposta invalida do backend." }));
     return Response.json(data, { status: res.ok ? 200 : res.status });
   } catch {
