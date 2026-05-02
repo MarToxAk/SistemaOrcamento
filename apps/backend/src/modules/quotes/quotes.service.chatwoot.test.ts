@@ -1,9 +1,12 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { QuotesService } from "./quotes.service";
 import { PrismaService } from "../database/prisma.service";
 import { AthosService } from "../integrations/athos/athos.service";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
+import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
+import { EfiService } from "../integrations/efi/efi.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 
 describe("QuotesService - Chatwoot Validation", () => {
@@ -47,6 +50,9 @@ describe("QuotesService - Chatwoot Validation", () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: AthosService, useValue: mockAthosService },
         { provide: QuotesPdfStorageService, useValue: mockQuotesPdfStorageService },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(undefined) } },
+        { provide: ChatwootService, useValue: { sendOutgoingMessage: jest.fn(), sendAttachment: jest.fn() } },
+        { provide: EfiService, useValue: { createCharge: jest.fn(), getChargeStatus: jest.fn() } },
       ],
     }).compile();
 
@@ -73,10 +79,12 @@ describe("QuotesService - Chatwoot Validation", () => {
 
       // Mock transaction
       mockPrismaService.$transaction.mockImplementation(async (callback) => {
+        const mockQuoteCreated = { id: "1", internalNumber: 1, externalQuoteId: null, status: "PENDENTE", approved: false, approvedAt: null, approvalToken: null, approvalExpiresAt: null, notes: null, total: BigInt(10000), discount: BigInt(0), surcharge: BigInt(0), sellerName: null, conversationId: null, chatwootContactId: null, validity: null, deliveryDate: null, paymentTerms: null, createdAt: new Date(), updatedAt: new Date(), editedAt: null, customer: { id: "cus1", fullName: "João", isAssociated: false, phone: null, email: null }, items: [], stamps: [], documents: [] };
         const mockTx = {
-          quote: { create: jest.fn().mockResolvedValue({ id: "1" }) },
-          quoteItem: { create: jest.fn() },
-          customer: { findUnique: jest.fn(), create: jest.fn().mockResolvedValue({ id: "cus1" }) },
+          quote: { create: jest.fn().mockResolvedValue(mockQuoteCreated), findFirst: jest.fn().mockResolvedValue(null), findUnique: jest.fn().mockResolvedValue(mockQuoteCreated), update: jest.fn().mockResolvedValue(mockQuoteCreated) },
+          quoteItem: { create: jest.fn().mockResolvedValue({ id: "item1" }), deleteMany: jest.fn(), createMany: jest.fn() },
+          quoteStampItem: { deleteMany: jest.fn() },
+          customer: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: "cus1", fullName: "João", isAssociated: false, phone: null, email: null }), update: jest.fn() },
         };
         return callback(mockTx);
       });
@@ -99,10 +107,12 @@ describe("QuotesService - Chatwoot Validation", () => {
       };
 
       mockPrismaService.$transaction.mockImplementation(async (callback) => {
+        const mockQuoteCreated = { id: "1", internalNumber: 1, externalQuoteId: null, status: "PENDENTE", approved: false, approvedAt: null, approvalToken: null, approvalExpiresAt: null, notes: null, total: BigInt(10000), discount: BigInt(0), surcharge: BigInt(0), sellerName: null, conversationId: null, chatwootContactId: null, validity: null, deliveryDate: null, paymentTerms: null, createdAt: new Date(), updatedAt: new Date(), editedAt: null, customer: { id: "cus1", fullName: "João", isAssociated: false, phone: null, email: null }, items: [], stamps: [], documents: [] };
         const mockTx = {
-          quote: { create: jest.fn().mockResolvedValue({ id: "1" }) },
-          quoteItem: { create: jest.fn() },
-          customer: { findUnique: jest.fn(), create: jest.fn().mockResolvedValue({ id: "cus1" }) },
+          quote: { create: jest.fn().mockResolvedValue(mockQuoteCreated), findFirst: jest.fn().mockResolvedValue(null), findUnique: jest.fn().mockResolvedValue(mockQuoteCreated), update: jest.fn().mockResolvedValue(mockQuoteCreated) },
+          quoteItem: { create: jest.fn().mockResolvedValue({ id: "item1" }), deleteMany: jest.fn(), createMany: jest.fn() },
+          quoteStampItem: { deleteMany: jest.fn() },
+          customer: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: "cus1", fullName: "João", isAssociated: false, phone: null, email: null }), update: jest.fn() },
         };
         return callback(mockTx);
       });
@@ -193,10 +203,12 @@ describe("QuotesService - Chatwoot Validation", () => {
       };
 
       mockPrismaService.$transaction.mockImplementation(async (callback) => {
+        const mockQuoteCreated = { id: "1", internalNumber: 1, externalQuoteId: null, status: "PENDENTE", approved: false, approvedAt: null, approvalToken: null, approvalExpiresAt: null, notes: null, total: BigInt(10000), discount: BigInt(0), surcharge: BigInt(0), sellerName: null, conversationId: null, chatwootContactId: null, validity: null, deliveryDate: null, paymentTerms: null, createdAt: new Date(), updatedAt: new Date(), editedAt: null, customer: { id: "cus1", fullName: "João", isAssociated: false, phone: null, email: null }, items: [], stamps: [], documents: [] };
         const mockTx = {
-          quote: { create: jest.fn().mockResolvedValue({ id: "1" }) },
-          quoteItem: { create: jest.fn() },
-          customer: { findUnique: jest.fn(), create: jest.fn().mockResolvedValue({ id: "cus1" }) },
+          quote: { create: jest.fn().mockResolvedValue(mockQuoteCreated), findFirst: jest.fn().mockResolvedValue(null), findUnique: jest.fn().mockResolvedValue(mockQuoteCreated), update: jest.fn().mockResolvedValue(mockQuoteCreated) },
+          quoteItem: { create: jest.fn().mockResolvedValue({ id: "item1" }), deleteMany: jest.fn(), createMany: jest.fn() },
+          quoteStampItem: { deleteMany: jest.fn() },
+          customer: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: "cus1", fullName: "João", isAssociated: false, phone: null, email: null }), update: jest.fn() },
         };
         return callback(mockTx);
       });

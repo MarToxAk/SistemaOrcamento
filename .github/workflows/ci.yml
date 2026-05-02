@@ -2,15 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, dev]
   pull_request:
-    branches: [ main ]
+    branches: [main, dev]
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,13 +19,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       - name: Generate Prisma Client (backend)
         run: npm --workspace @bomcusto/backend run prisma:generate
 
       - name: Build (monorepo)
         run: npm run build
+
+      - name: Run tests
+        run: npm --workspace @bomcusto/backend run test
+        env:
+          NODE_ENV: test
