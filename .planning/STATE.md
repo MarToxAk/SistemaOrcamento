@@ -1,7 +1,7 @@
-﻿# STATE.md - Sistema de Orcamento BomCusto
+# STATE.md - Sistema de Orcamento BomCusto
 
 **Last updated:** 2026-05-01
-**Current phase:** 1 - Seguranca e Autenticacao (implemented, pending UAT)
+**Current phase:** 2 - Confiabilidade de Integracoes (implemented, pending UAT)
 
 ---
 
@@ -10,7 +10,7 @@
 | Phase | Title | Status |
 |-------|-------|--------|
 | 1 | Seguranca e Autenticacao | in-review |
-| 2 | Confiabilidade de Integracoes | not-started |
+| 2 | Confiabilidade de Integracoes | in-review |
 | 3 | Correcoes de Fluxo e Qualidade de Dados | not-started |
 | 4 | Testes e CI | not-started |
 | 5 | UX do Painel e Area do Cliente | not-started |
@@ -18,7 +18,7 @@
 ## Active Context
 
 - **Branch atual:** main
-- **Ultimo commit de codigo:** 2026-05-01 - execucao da fase 1 (seguranca)
+- **Ultimo commit de codigo:** 2026-05-01 - execucao da fase 2 (confiabilidade)
 - **Codebase map:** .planning/codebase/ (7 documentos - gerados em 2026-05-01)
 - **Risco principal remanescente:** ausencia de testes automatizados de seguranca e UAT runtime dos novos guards
 
