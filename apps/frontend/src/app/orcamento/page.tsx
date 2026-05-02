@@ -103,6 +103,53 @@ function getQuoteIdentifier(quote: QuoteRow): string {
   return quote.id;
 }
 
+
+const STATUS_CLASS: Record<string, string> = {
+  aprovado: "status-aprovado",
+  em_producao: "status-em_producao",
+  pronto_para_entrega: "status-pronto_para_entrega",
+  entregue: "status-entregue",
+  cancelado: "status-cancelado",
+  pendente: "status-pendente",
+  enviado: "status-enviado",
+  recusado: "status-recusado",
+};
+
+function showToast(message: string, type: "success" | "danger") {
+  if (typeof window === "undefined") return;
+  const bs = (window as any).bootstrap;
+  if (!bs?.Toast) return;
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = `toast align-items-center text-bg-${type} border-0`;
+  wrapper.setAttribute("role", "alert");
+  wrapper.setAttribute("aria-live", "assertive");
+  wrapper.setAttribute("aria-atomic", "true");
+  wrapper.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+    </div>
+  `;
+  container.appendChild(wrapper);
+  const toast = new bs.Toast(wrapper, { delay: 3500 });
+  toast.show();
+  wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
+}
+
+const FILTER_OPTIONS = [
+  { value: "", label: "Todos" },
+  { value: "PENDENTE", label: "Pendente" },
+  { value: "ENVIADO", label: "Enviado" },
+  { value: "APROVADO", label: "Aprovado" },
+  { value: "EM_PRODUCAO", label: "Em Produção" },
+  { value: "PRONTO_PARA_ENTREGA", label: "Pronto p/ Entrega" },
+  { value: "ENTREGUE", label: "Entregue" },
+  { value: "CANCELADO", label: "Cancelado" },
+] as const;
+
 export default function OrcamentoListaPage() {
   const [validationState, setValidationState] = useState<"checking" | "valid" | "invalid">("checking");
   const [validationMessage, setValidationMessage] = useState("");
@@ -112,6 +159,7 @@ export default function OrcamentoListaPage() {
   const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<number | undefined>(undefined);
   const [chatwootContactId, setChatwootContactId] = useState<number | undefined>(undefined);
+  const [activeFilter, setActiveFilter] = useState<string>("");
   const createQuoteHref = getCreateQuoteHref();
 
   useEffect(() => {
@@ -213,6 +261,10 @@ export default function OrcamentoListaPage() {
           query.set("conversationId", String(conversationId));
         }
 
+        if (activeFilter) {
+          query.set("status", activeFilter);
+        }
+
         const response = await fetch(`/api/quotes?${query.toString()}`, { cache: "no-store" });
         if (!response.ok) {
           const data = await response.json().catch(() => ({}));
@@ -220,7 +272,12 @@ export default function OrcamentoListaPage() {
         }
 
         const data = (await response.json()) as unknown;
-        setQuotes(Array.isArray(data) ? (data as QuoteRow[]) : []);
+        const parsed = Array.isArray(data)
+          ? (data as QuoteRow[])
+          : Array.isArray((data as any)?.data)
+            ? ((data as any).data as QuoteRow[])
+            : [];
+        setQuotes(parsed);
       } catch (error) {
         setQuotesError(error instanceof Error ? error.message : "Falha ao carregar orçamentos.");
       } finally {
@@ -229,7 +286,7 @@ export default function OrcamentoListaPage() {
     };
 
     void fetchQuotes();
-  }, [validationState, chatwootContactId, conversationId]);
+  }, [validationState, chatwootContactId, conversationId, activeFilter]);
 
   async function handleStatusChange(quote: QuoteRow, nextStatus: string) {
     setStatusSavingId(quote.id);
@@ -244,8 +301,12 @@ export default function OrcamentoListaPage() {
       const data = (await response.json().catch(() => ({}))) as QuoteRow & { message?: string; error?: string };
       if (!response.ok) throw new Error(data?.message || data?.error || "Falha ao atualizar status.");
       setQuotes((current) => current.map((q) => (q.id === quote.id ? { ...q, ...data } : q)));
+      const newLabel = (data as any).statusLabel ?? nextStatus;
+      showToast(`Status atualizado para ${newLabel}.`, "success");
     } catch (error) {
-      setQuotesError(error instanceof Error ? error.message : "Falha ao atualizar status.");
+      const msg = error instanceof Error ? error.message : "Falha ao atualizar status.";
+      setQuotesError(msg);
+      showToast(msg, "danger");
     } finally {
       setStatusSavingId(null);
     }
@@ -310,6 +371,19 @@ export default function OrcamentoListaPage() {
         <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
           {quotesError ? <div className="alert alert-danger">{quotesError}</div> : null}
 
+          <nav className="d-flex flex-wrap gap-1 mb-3" aria-label="Filtrar por status">
+            {FILTER_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                className={`btn btn-sm ${activeFilter === value ? "btn-primary" : "btn-outline-secondary"}`}
+                onClick={() => setActiveFilter(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+
           <div className="table-responsive mb-4">
             <table className="table orcamento-list-table align-middle">
               <thead>
@@ -326,25 +400,25 @@ export default function OrcamentoListaPage() {
               <tbody>
                 {loadingQuotes ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">Carregando orçamentos do contato...</td>
+                    <td colSpan={7} className="text-center text-muted py-4">
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+                      Carregando orçamentos do contato...
+                    </td>
                   </tr>
                 ) : quotes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">Nenhum orçamento encontrado para este contato.</td>
+                    <td colSpan={7} className="text-center text-muted py-4">
+                      {activeFilter
+                        ? `Nenhum orçamento com status "${activeFilter}" para este contato.`
+                        : "Nenhum orçamento encontrado para este contato."}
+                    </td>
                   </tr>
                 ) : (
                   quotes.map((quote) => {
                     const status = quote.statusLabel || quote.statusKey || "-";
                     const quoteNumber = quote.body?.idorcamento ?? quote.internalNumber;
                     const quoteIdentifier = getQuoteIdentifier(quote);
-                    const statusClass =
-                      status.toLowerCase().includes("pend")
-                        ? "status-pendente"
-                        : status.toLowerCase().includes("apro")
-                          ? "status-aprovado"
-                          : status.toLowerCase().includes("recu") || status.toLowerCase().includes("cancel")
-                            ? "status-recusado"
-                            : "";
+                    const statusClass = STATUS_CLASS[(quote.statusKey ?? "").toLowerCase()] ?? "";
 
                     return (
                       <tr key={quote.id}>
@@ -392,11 +466,20 @@ export default function OrcamentoListaPage() {
         </div>
       </div>
       )}
+      <div
+        id="toast-container"
+        className="toast-container position-fixed bottom-0 end-0 p-3"
+        style={{ zIndex: 1100 }}
+      />
       <style>{`
         body { background: #f9f7ed; font-size: 1.18rem; }
         .status-pendente { color: #f39c12; font-weight: 600; }
         .status-aprovado { color: #27ae60; font-weight: 600; }
-        .status-recusado { color: #ee3637; font-weight: 600; }
+        .status-recusado, .status-cancelado { color: #ee3637; font-weight: 600; }
+        .status-em_producao { color: #2457a6; font-weight: 600; }
+        .status-pronto_para_entrega { color: #a65b12; font-weight: 600; }
+        .status-entregue { color: #444; font-weight: 600; }
+        .status-enviado { color: #1565c0; font-weight: 600; }
         .acoes-lista { display: flex; gap: 0.5rem; }
         .orcamento-header { border-radius: 8px 8px 0 0; }
         .orcamento-section { border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }

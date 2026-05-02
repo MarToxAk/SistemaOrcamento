@@ -138,6 +138,7 @@ export default function PreencherOrcamentoPage() {
   const [conversationId, setConversationId] = useState<number | undefined>(undefined);
   const [chatwootContactId, setChatwootContactId] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [sendingState, setSendingState] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
@@ -425,6 +426,10 @@ export default function PreencherOrcamentoPage() {
 
   async function gerarOrcamento(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSubmitted(true);
+    if (event.currentTarget && !event.currentTarget.checkValidity()) {
+      return;
+    }
     setErro("");
     setSucesso("");
 
@@ -597,7 +602,7 @@ export default function PreencherOrcamentoPage() {
             </div>
           </div>
           <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
-          <form className="needs-validation" noValidate onSubmit={gerarOrcamento}>
+          <form className={`needs-validation${submitted ? " was-validated" : ""}`} noValidate onSubmit={gerarOrcamento}>
             <div className="row mb-4 justify-content-center">
               <div className="col-md-6 text-center">
                 <div className="d-flex gap-2 justify-content-center align-items-end">
@@ -632,12 +637,14 @@ export default function PreencherOrcamentoPage() {
             )}
             <div className="row mb-4">
               <div className="col-md-6">
-                <label htmlFor="clienteNome" className="form-label">Nome do Cliente</label>
+                <label htmlFor="clienteNome" className="form-label">Nome do Cliente <span className="text-danger" aria-hidden="true">*</span></label>
                 <input type="text" className="form-control" id="clienteNome" value={form.cliente} onChange={e => setForm(f => ({...f, cliente: e.target.value}))} required />
+                <div className="invalid-feedback">Nome do cliente é obrigatório.</div>
               </div>
               <div className="col-md-3">
-                <label htmlFor="clienteTelefone" className="form-label">Telefone</label>
+                <label htmlFor="clienteTelefone" className="form-label">Telefone <span className="text-danger" aria-hidden="true">*</span></label>
                 <input type="text" className="form-control" id="clienteTelefone" value={form.telefone} onChange={e => setForm(f => ({...f, telefone: e.target.value}))} required />
+                <div className="invalid-feedback">Telefone é obrigatório.</div>
               </div>
               <div className="col-md-3">
                 <label htmlFor="clienteEmail" className="form-label">E-mail</label>
@@ -652,16 +659,19 @@ export default function PreencherOrcamentoPage() {
               <div className="col-md-6">
                 <div className="row">
                   <div className="col-md-12 mb-3">
-                    <label htmlFor="vendedor" className="form-label">Vendedor</label>
+                    <label htmlFor="vendedor" className="form-label">Vendedor <span className="text-danger" aria-hidden="true">*</span></label>
                     <input type="text" className="form-control" id="vendedor" value={form.vendedor} onChange={e => setForm(f => ({...f, vendedor: e.target.value}))} required />
+                    <div className="invalid-feedback">Informe o nome do vendedor.</div>
                   </div>
                   <div className="col-md-12 mb-3">
-                    <label htmlFor="validade" className="form-label">Validade da Proposta</label>
+                    <label htmlFor="validade" className="form-label">Validade da Proposta <span className="text-danger" aria-hidden="true">*</span></label>
                     <input type="text" className="form-control" id="validade" value={form.validade} onChange={e => setForm(f => ({...f, validade: e.target.value}))} required />
+                    <div className="invalid-feedback">Informe a validade da proposta.</div>
                   </div>
                   <div className="col-md-12 mb-3">
-                    <label htmlFor="prazoEntrega" className="form-label">Prazo de Entrega</label>
+                    <label htmlFor="prazoEntrega" className="form-label">Prazo de Entrega <span className="text-danger" aria-hidden="true">*</span></label>
                     <input type="date" className="form-control" id="prazoEntrega" value={form.prazoEntrega} onChange={e => setForm(f => ({...f, prazoEntrega: e.target.value}))} required />
+                    <div className="invalid-feedback">Informe o prazo de entrega.</div>
                   </div>
                   <div className="col-md-12">
                     <label htmlFor="condPagamento" className="form-label">Condição de Pagamento</label>
@@ -850,6 +860,12 @@ export default function PreencherOrcamentoPage() {
 
         @keyframes pop { 0% { transform: scale(.6); opacity: 0 } 60% { transform: scale(1.08); opacity: 1 } 100% { transform: scale(1); } }
         @keyframes shake { 0%{ transform: translateX(0) } 20%{ transform: translateX(-3px) } 40%{ transform: translateX(3px) } 60%{ transform: translateX(-2px) } 80%{ transform: translateX(2px) } 100%{ transform: translateX(0) } }
+
+        .needs-validation.was-validated .form-control:valid,
+        .needs-validation.was-validated .form-select:valid {
+          border-color: #ced4da;
+          background-image: none;
+        }
       `}</style>
     </>
   );

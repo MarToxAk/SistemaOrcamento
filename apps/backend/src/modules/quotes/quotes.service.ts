@@ -1144,6 +1144,12 @@ export class QuotesService {
       }>;
     }>;
     stamps: Array<{ number: number; stampType: string; dimensions: string | null; description: string | null }>;
+    nfseNumero?: string | null;
+    nfseLink?: string | null;
+    nfseEmitidaEm?: Date | null;
+    paymentConfirmedAt?: Date | null;
+    approved?: boolean;
+    approvedAt?: Date | null;
   }) {
     const latestDocument = quote.documents?.[0];
 
@@ -1185,6 +1191,12 @@ export class QuotesService {
       statusLabel: statusLabels[quote.status],
       latestPdfUrl: latestDocument?.publicUrl ?? null,
       latestPdfFileName: latestDocument?.fileName ?? null,
+      nfseNumero: quote.nfseNumero ?? null,
+      nfseLink: quote.nfseLink ?? null,
+      nfseEmitidaEm: quote.nfseEmitidaEm ? quote.nfseEmitidaEm.toISOString() : null,
+      paymentConfirmedAt: quote.paymentConfirmedAt ? quote.paymentConfirmedAt.toISOString() : null,
+      approved: Boolean(quote.approved ?? false),
+      approvedAt: quote.approvedAt ? quote.approvedAt.toISOString() : null,
       chatwootConversationUrl: this.buildChatwootConversationUrl(quote.conversationId),
       chatwootContactUrl: this.buildChatwootContactUrl(quote.chatwootContactId),
       availableNextStatuses: statusTransitions[quote.status].map((status) => ({

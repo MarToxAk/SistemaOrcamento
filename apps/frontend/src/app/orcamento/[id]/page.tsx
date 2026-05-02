@@ -17,6 +17,15 @@ type QuoteDetail = {
   id?: string;
   statusKey?: string;
   availableNextStatuses?: Array<{ value: string; label: string }>;
+  // integration status fields (added in 05-03)
+  nfseNumero?: string | null;
+  nfseLink?: string | null;
+  nfseEmitidaEm?: string | null;
+  paymentConfirmedAt?: string | null;
+  approved?: boolean;
+  approvedAt?: string | null;
+  latestPdfUrl?: string | null;
+  // ---
   body?: {
     idorcamento_interno?: number;
     idorcamento?: number;
@@ -382,6 +391,36 @@ export default function OrcamentoDetailPage() {
               <div>{body?.dataorcamento ? new Date(body.dataorcamento).toLocaleDateString("pt-BR") : "-"}</div>
             </div>
           </div>
+          {/* Integration status badges */}
+          {(quote?.latestPdfUrl || quote?.nfseNumero || quote?.paymentConfirmedAt || quote?.approved) && (
+            <div className="d-flex flex-wrap gap-2 px-3 py-2" style={{background: "rgba(255,255,255,0.7)"}}>
+              {quote?.latestPdfUrl && (
+                <span className="badge bg-secondary">
+                  <i className="bi bi-file-pdf me-1" />PDF Gerado
+                </span>
+              )}
+              {quote?.nfseNumero && (
+                <a
+                  href={quote.nfseLink ?? "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="badge bg-success text-decoration-none"
+                >
+                  <i className="bi bi-file-check me-1" />NFS-e #{quote.nfseNumero}
+                </a>
+              )}
+              {quote?.paymentConfirmedAt && (
+                <span className="badge bg-primary">
+                  <i className="bi bi-check-circle me-1" />PIX Confirmado
+                </span>
+              )}
+              {quote?.approved && (
+                <span className="badge bg-info text-dark">
+                  <i className="bi bi-person-check me-1" />Aprovado pelo Cliente
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
             {loading ? <div className="text-muted">Carregando orçamento...</div> : null}
