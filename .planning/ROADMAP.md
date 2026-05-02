@@ -50,7 +50,7 @@
 ---
 
 ## Phase 3 â€” CorreÃ§Ãµes de Fluxo e Qualidade de Dados
-**Status:** not-started
+**Status:** in-review
 **Goal:** MÃ¡quina de estados Ã­ntegra, paginaÃ§Ã£o segura, token de aprovaÃ§Ã£o invalidado apÃ³s uso, `isAssociated` como campo real.
 
 **Requirements covered:** FR-03.1, FR-03.2, FR-03.3, FR-03.4, NFR-04
@@ -63,10 +63,10 @@
 - **3.5** Identificadores SQL dinÃ¢micos no Athos (`loadItems`) â€” cotar colunas com double-quotes
 
 **UAT:**
-- [ ] `GET /api/quotes` sem `take` retorna mÃ¡ximo 50 registros + campo `total`
-- [ ] Aprovar orÃ§amento com token expirado â†’ 400 com mensagem clara
-- [ ] Usar token de aprovaÃ§Ã£o duas vezes â†’ segunda tentativa retorna 400
-- [ ] `isAssociated` aparece como campo booleano no response (nÃ£o mais em `notes`)
+- [x] `GET /api/quotes` sem `take` retorna mÃ¡ximo 50 registros + campo `total`
+- [x] Aprovar orÃ§amento com token expirado â†’ 400 com mensagem clara
+- [x] Usar token de aprovaÃ§Ã£o duas vezes â†’ segunda tentativa retorna 400
+- [x] `isAssociated` aparece como campo booleano no response (nÃ£o mais em `notes`)
 
 ---
 
