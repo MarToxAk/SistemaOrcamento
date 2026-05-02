@@ -97,16 +97,32 @@
 **Requirements covered:** FR-04.1, FR-04.2, FR-04.3, FR-07.1, FR-07.2, FR-07.3
 
 ### Plans
-- **5.1** Painel interno â€” filtros de status funcionais, loading states, feedback de aÃ§Ãµes (toast/alert)
-- **5.2** FormulÃ¡rio de criaÃ§Ã£o â€” validaÃ§Ã£o client-side antes de submeter, campos obrigatÃ³rios destacados
-- **5.3** Badge/indicador de status de integraÃ§Ãµes por orÃ§amento (NFS-e emitida âœ“, PIX pago âœ“, PDF gerado âœ“)
-- **5.4** PÃ¡gina do cliente â€” `/status/:id` e `/orcamento/:id/approve` com UX adequada para uso mobile
-
+- [ ] 05-01-PLAN.md â€” Painel interno: filtros de status, toast de feedback e fix de resposta paginada
+- [ ] 05-02-PLAN.md â€” FormulÃ¡rio de criaÃ§Ã£o: validaÃ§Ã£o Bootstrap was-validated + invalid-feedback
+- [ ] 05-03-PLAN.md â€” Badges de integraÃ§Ã£o: expor campos nfse/payment/approval + renderizar no detalhe
+- [ ] 05-04-PLAN.md â€” PÃ¡ginas do cliente: proxy route + approve page + status page
 **UAT:**
 - [ ] Filtrar orÃ§amentos por status `APROVADO` â†’ lista atualiza sem recarregar pÃ¡gina
 - [ ] Submeter formulÃ¡rio sem campos obrigatÃ³rios â†’ erro inline visÃ­vel
 - [ ] Cliente acessa link de aprovaÃ§Ã£o no mobile â†’ tela legÃ­vel e botÃ£o de aprovar funcional
 - [ ] OrÃ§amento com NFS-e emitida exibe indicador visual no detalhe
+
+---
+
+## Phase 6 — Aprovação de Orçamento pelo Cliente com Associação Athos
+**Status:** not-started
+**Goal:** Página pública onde o cliente associado ao orçamento (via `idcliente` na tabela `orcamento` do Athos) pode visualizar e aprovar o pedido; envio automático de mensagem ao cliente no momento da associação ao orçamento.
+
+**Requirements covered:** FR-07.1, FR-07.2, FR-07.3
+
+### Plans
+- TBD — use `/gsd-plan-phase 6` to create plans
+
+**UAT:**
+- [ ] Ao associar `idcliente` a um orçamento no Athos → mensagem automática enviada ao cliente
+- [ ] Cliente acessa página pública de aprovação → visualiza detalhes do orçamento
+- [ ] Cliente aprova orçamento → status atualiza para `APROVADO` no sistema
+- [ ] Link de aprovação expira ou invalida após uso
 
 ---
 
@@ -120,3 +136,4 @@
 
 ---
 *Roadmap v1.0 â€” 2026-05-01*
+
