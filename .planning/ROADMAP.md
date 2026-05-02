@@ -32,8 +32,12 @@ Full details: .planning/milestones/v1.0-ROADMAP.md
 
 **Requirements covered:** FR-07.1, FR-07.2, FR-07.3 (integracao Athos)
 
-### Plans
-- TBD
+**Plans:** 3 planos
+
+Plans:
+- [ ] 06-01-PLAN.md — Hook fire-and-forget no create() + correcao do link de aprovacao (backend)
+- [ ] 06-02-PLAN.md — Enriquecer pagina de aprovacao com itens e total (frontend)
+- [ ] 06-03-PLAN.md — Verificacoes automatizadas + checkpoint smoke test do fluxo completo
 
 **UAT:**
 - [ ] Ao associar idcliente a um orcamento no Athos -> mensagem automatica enviada ao cliente
