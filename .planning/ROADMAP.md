@@ -1,4 +1,4 @@
-﻿# Roadmap â€” Sistema de OrÃ§amento BomCusto
+- [x] 04-01-PLAN.md -- Jest config + testes unitarios + CI GitHub Actions﻿# Roadmap â€” Sistema de OrÃ§amento BomCusto
 
 **Version:** 1.0
 **Date:** 2026-05-01
@@ -71,16 +71,13 @@
 ---
 
 ## Phase 4 â€” Testes e CI
-**Status:** not-started
+**Status:** in-review
 **Goal:** Cobertura de testes para fluxos crÃ­ticos. CI executa testes em todo PR. Nenhuma regressÃ£o passa despercebida.
 
 **Requirements covered:** FR-06.1, FR-06.2, FR-06.3
 
 ### Plans
-- **4.1** Setup de testes com Jest + `@nestjs/testing` â€” substituir Node built-in test runner
-- **4.2** Testes unitÃ¡rios: `changeStatus` (todas as transiÃ§Ãµes vÃ¡lidas/invÃ¡lidas), `approveByToken`, normalizaÃ§Ã£o de status
-- **4.3** Testes de integraÃ§Ã£o com mocks (nock/msw): webhook EFI, emissÃ£o NFS-e, envio Chatwoot
-- **4.4** GitHub Actions CI â€” executar testes em PRs para `main` e `dev`
+- [x] 04-01-PLAN.md -- Jest config + testes unitarios + CI GitHub Actions
 
 **UAT:**
 - [ ] `npm test` executa sem erros
