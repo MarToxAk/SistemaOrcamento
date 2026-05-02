@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
-import { Client } from "pg";
+import { Client, Pool, PoolClient } from "pg";
 
 type Row = Record<string, unknown>;
 
@@ -7,7 +7,7 @@ function isSafeIdentifier(value: string) {
   return /^[a-z_][a-z0-9_]*$/i.test(value);
 }
 
-async function getTableColumns(client: Client, tableName: string) {
+async function getTableColumns(client: Pick<Client, "query">, tableName: string) {
   const result = await client.query(
     `
     SELECT column_name
@@ -20,7 +20,7 @@ async function getTableColumns(client: Client, tableName: string) {
   return result.rows.map((row: any) => String(row.column_name).toLowerCase());
 }
 
-async function findExistingTable(client: Client, tableCandidates: string[]) {
+async function findExistingTable(client: Pick<Client, "query">, tableCandidates: string[]) {
   for (const tableName of tableCandidates) {
     const columns = await getTableColumns(client, tableName);
     if (columns.length > 0) {
@@ -97,7 +97,7 @@ function pickDateTimeISO(row: Row, keys: string[]) {
   return null;
 }
 
-async function loadItems(client: Client, idOrcamento: string) {
+async function loadItems(client: Pick<Client, "query">, idOrcamento: string) {
   const candidates = ["orcamento_item", "orcamentoitem"];
 
   for (const tableName of candidates) {
@@ -188,7 +188,7 @@ async function loadItems(client: Client, idOrcamento: string) {
   return [];
 }
 
-async function loadFuncionario(client: Client, quote: Row) {
+async function loadFuncionario(client: Pick<Client, "query">, quote: Row) {
   const funcionarioId = [quote.idvendedor, quote.idfuncionariousuario, quote.idusuario].find(
     (value) => value !== null && value !== undefined,
   );
@@ -234,7 +234,7 @@ async function loadFuncionario(client: Client, quote: Row) {
   return result.rows[0] as Row;
 }
 
-async function loadCarimbos(client: Client, idOrcamento: string) {
+async function loadCarimbos(client: Pick<Client, "query">, idOrcamento: string) {
   const carimboTable = await findExistingTable(client, [
     "orcamento_carimbo",
     "orcamentocarimbo",
@@ -278,6 +278,17 @@ async function loadCarimbos(client: Client, idOrcamento: string) {
 export class AthosService {
   private readonly logger = new Logger(AthosService.name);
 
+  private _pool: Pool | null = null;
+
+  private getPool(): Pool {
+    if (!this._pool) {
+      const cfg = this.getDbConfig();
+      this._pool = new Pool({ ...cfg, max: 5, idleTimeoutMillis: 30000, connectionTimeoutMillis: 5000 });
+      this._pool.on("error", (err: Error) => this.logger.error(`Athos pool error: ${err.message}`));
+    }
+    return this._pool;
+  }
+
   private getDbConfig() {
     const host = process.env.ATHOS_PG_HOST;
     const database = process.env.ATHOS_PG_DB;
@@ -299,7 +310,6 @@ export class AthosService {
     const client = new Client({ host, database, user, password, port, connectionTimeoutMillis: 5000 });
 
     try {
-      await client.connect();
       await client.query("SELECT 1");
       return { ok: true, host, port, database, user, message: "Conexao com Athos estabelecida com sucesso." };
     } catch (error) {
@@ -312,10 +322,10 @@ export class AthosService {
   }
 
   async buscarOrcamentoPorNumero(numero: string) {
-    const client = new Client(this.getDbConfig());
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
 
     try {
-      await client.connect();
 
       const columnsResult = await client.query(
         `
@@ -395,15 +405,15 @@ export class AthosService {
       }
       throw new InternalServerErrorException("Erro ao buscar orcamento no Athos");
     } finally {
-      await client.end();
+      client.release();
     }
   }
 
   async listarContasPagar() {
-    const client = new Client(this.getDbConfig());
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
 
     try {
-      await client.connect();
 
       const candidates = [
         "conta_pagar",
@@ -474,7 +484,7 @@ export class AthosService {
       }
       throw new InternalServerErrorException("Erro ao listar contas a pagar no Athos");
     } finally {
-      await client.end();
+      client.release();
     }
   }
 
@@ -490,9 +500,9 @@ export class AthosService {
     documento: string | null;
     endereco?: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
   } | null> {
-    const client = new Client(this.getDbConfig());
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
     try {
-      await client.connect();
 
       // Busca endereço na tabela cliente_endereco (isolado para não quebrar o restante)
       // Colunas reais: logradouro, numero, bairro, cep, codigocidade, uf, tipologradouro
@@ -549,7 +559,7 @@ export class AthosService {
       this.logger.warn(`Falha ao buscar cliente ${clienteId} no Athos: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     } finally {
-      await client.end().catch(() => undefined);
+      client.release();
     }
   }
 }

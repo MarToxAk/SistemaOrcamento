@@ -93,7 +93,12 @@ export class QuotesController {
 
   @Post(":id/enviar")
   enviarParaCliente(@Param("id") id: string) {
-    return this.quotesService.enviarParaCliente(id);
+    // Fire-and-forget: retorna imediatamente, processa em background
+    void this.quotesService.enviarParaCliente(id).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[enviarParaCliente] erro background quoteId=${id}: ${msg}`);
+    });
+    return { queued: true, quoteId: id };
   }
 
   @Public()

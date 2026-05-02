@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import path from "node:path";
@@ -11,6 +11,7 @@ import { EfiModule } from "./integrations/efi/efi.module";
 import { NfseModule } from "./integrations/nfse/nfse.module";
 import { PdvModule } from "./integrations/pdv/pdv.module";
 import { QuotesModule } from "./quotes/quotes.module";
+import { LoggingInterceptor } from "./common/logging.interceptor";
 import { InternalAuthGuard } from "./security/internal-auth.guard";
 import { SecurityModule } from "./security/security.module";
 import { THROTTLE_DEFAULT } from "./security/throttle.config";
@@ -64,7 +65,10 @@ function validateEnv(config: Record<string, unknown>) {
     PdvModule,
   ],
   controllers: [HealthController],
-  providers: [
+  providers: [    {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
+    },
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

@@ -1,9 +1,10 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 
 @Injectable()
 export class ChatwootService {
+  private readonly logger = new Logger(ChatwootService.name);
   constructor(private readonly config: ConfigService) {}
 
   async searchContact(query: string) {
@@ -19,17 +20,14 @@ export class ChatwootService {
     }
 
     const url = `${baseUrl}/api/v1/accounts/${accountId}/contacts/search?q=${encodeURIComponent(query)}`;
-    const response = await axios.get(url, {
-      headers: {
-        api_access_token: token,
-      },
-    });
-
-    return {
-      enabled: true,
-      query,
-      contacts: response.data?.payload ?? [],
-    };
+    try {
+      const response = await axios.get(url, { headers: { api_access_token: token } });
+      return { enabled: true, query, contacts: response.data?.payload ?? [] };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`searchContact falhou query="${query}": ${msg}`);
+      throw err;
+    }
   }
 
   async postConversationNote(conversationId: string, note: string) {
@@ -69,21 +67,15 @@ export class ChatwootService {
     }
 
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
-    const response = await axios.post(
-      url,
-      {
-        content: message,
-        message_type: "outgoing",
-        private: false,
-      },
-      {
-        headers: {
-          api_access_token: token,
-        },
-      },
-    );
-
-    return { enabled: true, response: response.data };
+    try {
+      const response = await axios.post(url, { content: message, message_type: "outgoing", private: false }, { headers: { api_access_token: token } });
+      this.logger.debug(`Mensagem enviada conversationId=${conversationId}`);
+      return { enabled: true, response: response.data };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`sendOutgoingMessage falhou conversationId=${conversationId}: ${msg}`);
+      throw err;
+    }
   }
 
   async sendAttachment(conversationId: string, buffer: Buffer, fileName: string, contentType: string) {
