@@ -1,9 +1,12 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { UpdateStatusDto } from "./dto/update-status.dto";
 import { QuotesService } from "./quotes.service";
 import { MergeDuplicatesDto } from "./dto/merge-duplicates.dto";
+import { Public } from "../security/public.decorator";
+import { THROTTLE_SENSITIVE } from "../security/throttle.config";
 
 @Controller("quotes")
 export class QuotesController {
@@ -77,6 +80,7 @@ export class QuotesController {
     return this.quotesService.changeStatus(id, payload.newStatus, payload.changedBy);
   }
 
+  @Throttle({ default: THROTTLE_SENSITIVE })
   @Post(":id/pdf")
   generatePdf(@Param("id") id: string) {
     return this.quotesService.generatePdf(id);
@@ -92,6 +96,7 @@ export class QuotesController {
     return this.quotesService.enviarParaCliente(id);
   }
 
+  @Public()
   @Post(":id/approve")
   approve(@Param("id") id: string, @Query("token") token?: string, @Body() body?: { token?: string }) {
     const t = token ?? (body && body.token) ?? undefined;

@@ -1,6 +1,10 @@
-import { Body, Controller, Get, Headers, HttpCode, Post } from "@nestjs/common";
+import { Body, Controller, Get, Headers, HttpCode, Post, UseGuards } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 
 import { EfiService } from "./efi.service";
+import { EfiWebhookGuard } from "../../security/efi-webhook.guard";
+import { Public } from "../../security/public.decorator";
+import { THROTTLE_WEBHOOK } from "../../security/throttle.config";
 
 @Controller("integrations/efi")
 export class EfiController {
@@ -11,6 +15,9 @@ export class EfiController {
     return this.efiService.getIntegrationStatus();
   }
 
+  @Public()
+  @UseGuards(EfiWebhookGuard)
+  @Throttle({ default: THROTTLE_WEBHOOK })
   @Post("webhook/payment")
   @HttpCode(200)
   async handleWebhook(
@@ -21,6 +28,9 @@ export class EfiController {
     return this.efiService.processWebhook(payload, signature ?? gnSignature);
   }
 
+  @Public()
+  @UseGuards(EfiWebhookGuard)
+  @Throttle({ default: THROTTLE_WEBHOOK })
   @Post("webhook/payment/pix")
   @HttpCode(200)
   async handleWebhookPix(
