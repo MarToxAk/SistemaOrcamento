@@ -12,27 +12,36 @@ Orçamentos criados, aprovados e cobrados sem intervenção manual — integraç
 
 ### Validated
 
-<!-- Funcionalidades já em produção e validadas -->
-
-- ✓ Criação de orçamentos com itens e carimbos — fase 0
-- ✓ Geração de PDF e upload MinIO — fase 0
-- ✓ Envio via Chatwoot + link de aprovação por token — fase 0
-- ✓ Emissão de NFS-e via SOAP iiBrasil — fase 0
-- ✓ Cobrança PIX via EFI Pay com webhooks — fase 0
-- ✓ Integração read-only Athos ERP e PDV — fase 0
-- ✓ Deploy CI/CD via GitHub Actions + VPS Tailscale — fase 0
+- checkmark Criacao de orcamentos com itens e carimbos -- fase 0
+- checkmark Geracao de PDF e upload MinIO -- fase 0
+- checkmark Envio via Chatwoot + link de aprovacao por token -- fase 0
+- checkmark Emissao de NFS-e via SOAP iiBrasil -- fase 0
+- checkmark Cobranca PIX via EFI Pay com webhooks -- fase 0
+- checkmark Integracao read-only Athos ERP e PDV -- fase 0
+- checkmark Deploy CI/CD via GitHub Actions + VPS Tailscale -- fase 0
+- checkmark Autenticacao global via x-internal-api-key + guard NestJS -- v1.0
+- checkmark Webhooks EFI validados com HMAC-SHA256 -- v1.0
+- checkmark Fail-fast de variaveis de ambiente criticas -- v1.0
+- checkmark Rate limiting global -- v1.0
+- checkmark Logger estruturado em todas as integracoes -- v1.0
+- checkmark enviarParaCliente assicrono (fire-and-forget) -- v1.0
+- checkmark pg.Pool para Athos (max 5 conexoes) -- v1.0
+- checkmark Health check com status das integracoes -- v1.0
+- checkmark Maquina de estados integra (approveByToken via changeStatus) -- v1.0
+- checkmark Paginacao take=50, max 200, retorna total -- v1.0
+- checkmark isAssociated como campo booleano real no response -- v1.0
+- checkmark 32 testes automatizados (Jest) + CI GitHub Actions -- v1.0
+- checkmark Filter pills, toast feedback, validacao de form -- v1.0
+- checkmark Badges de integracao (NFS-e, PIX, aprovacao) no painel -- v1.0
+- checkmark Paginas do cliente para aprovacao e status -- v1.0
 
 ### Active
 
-<!-- Escopo atual sendo construído -->
+<!-- v1.1 scope -->
 
-- [ ] Autenticação e autorização por role (acesso restrito ao Chatwoot)
-- [ ] Validação de webhook EFI com assinatura HMAC
-- [ ] Observabilidade de integrações — erros visíveis, não silenciosos
-- [ ] Validação de variáveis de ambiente na inicialização
-- [ ] Área do cliente — status e aprovação com autenticação leve
-- [ ] Testes automatizados para fluxos críticos (status machine, aprovação, pagamento)
-- [ ] UX e usabilidade do painel interno
+- [ ] Envio automatico de link de aprovacao ao associar idcliente no Athos
+- [ ] Pagina publica de aprovacao com validacao via Athos
+- [ ] RBAC por role (ADMIN / VENDEDOR / ATENDENTE)
 
 ### Out of Scope
 
@@ -69,4 +78,4 @@ Orçamentos criados, aprovados e cobrados sem intervenção manual — integraç
 | Extrair sub-services de `quotes.service.ts` | God class com ~1800 linhas — refactor gradual | — Pending |
 
 ---
-*Last updated: 2026-05-01 — inicialização do projeto GSD*
+*Last updated: 2026-05-02 — v1.0 milestone shipped (Phases 1–5)*
