@@ -1320,7 +1320,7 @@ export class QuotesService {
       v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
     const primeiroNome = clienteNome.split(" ")[0];
-    const sep = "â”â”â”â”â”â”â”â”â”â”â”â”";
+    const sep = "────────────";
 
     const linhasItens = itens
       .slice(0, 10)
@@ -1570,7 +1570,7 @@ export class QuotesService {
     // Compor mensagem final: observacao + paymentMsg + opcional link de aprovacao
     let finalMessage = observacao + paymentMsg;
     if (approvalLink) {
-      finalMessage += `\\n\\nSe estiver de acordo, aprove o orçamento aqui:\\n${approvalLink}`;
+      finalMessage += `\n\nSe estiver de acordo, aprove o orçamento aqui:\n${approvalLink}`;
     }
 
     // Envia a mensagem ao Chatwoot (não bloquear se falhar)
