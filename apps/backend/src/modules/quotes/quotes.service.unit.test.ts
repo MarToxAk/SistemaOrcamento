@@ -258,3 +258,97 @@ describe("QuotesService - approveByToken", () => {
     expect(tokenNullCall).toBeDefined();
   });
 });
+
+describe("QuotesService - changeStatus — Chatwoot notifications", () => {
+  let service: QuotesService;
+  let mockPrisma: ReturnType<typeof buildProviders>["mockPrismaService"];
+  let chatwootMock: { sendOutgoingMessage: jest.Mock; sendAttachment: jest.Mock };
+
+  beforeEach(async () => {
+    const { mockPrismaService, providers } = buildProviders();
+    mockPrisma = mockPrismaService;
+    const module: TestingModule = await Test.createTestingModule({ providers }).compile();
+    service = module.get<QuotesService>(QuotesService);
+    chatwootMock = module.get(ChatwootService) as any;
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve chamar sendOutgoingMessage quando newStatus === EM_PRODUCAO e conversationId existe", async () => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({ status: "APROVADO", approved: true, conversationId: BigInt(42) }),
+    );
+    mockPrisma.quote.update.mockResolvedValue(
+      makeQuote({ status: "EM_PRODUCAO", conversationId: BigInt(42), customer: { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null } }),
+    );
+    await service.changeStatus("quote-001", "EM_PRODUCAO", "test");
+    expect(chatwootMock.sendOutgoingMessage).toHaveBeenCalledWith("42", expect.stringContaining("entrou em produção"));
+  });
+
+  it("deve chamar sendOutgoingMessage quando newStatus === PRONTO_PARA_ENTREGA", async () => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({ status: "EM_PRODUCAO", conversationId: BigInt(42) }),
+    );
+    mockPrisma.quote.update.mockResolvedValue(
+      makeQuote({ status: "PRONTO_PARA_ENTREGA", conversationId: BigInt(42), customer: { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null } }),
+    );
+    await service.changeStatus("quote-001", "PRONTO_PARA_ENTREGA", "test");
+    expect(chatwootMock.sendOutgoingMessage).toHaveBeenCalledWith("42", expect.stringContaining("pronto para retirada"));
+  });
+
+  it("deve chamar sendOutgoingMessage quando newStatus === ENTREGUE", async () => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({ status: "PRONTO_PARA_ENTREGA", conversationId: BigInt(42) }),
+    );
+    mockPrisma.quote.update.mockResolvedValue(
+      makeQuote({ status: "ENTREGUE", conversationId: BigInt(42), customer: { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null } }),
+    );
+    await service.changeStatus("quote-001", "ENTREGUE", "test");
+    expect(chatwootMock.sendOutgoingMessage).toHaveBeenCalledWith("42", expect.stringContaining("foi entregue"));
+  });
+
+  it("deve chamar sendOutgoingMessage quando newStatus === CANCELADO", async () => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({ status: "ENVIADO", conversationId: BigInt(42) }),
+    );
+    mockPrisma.quote.update.mockResolvedValue(
+      makeQuote({ status: "CANCELADO", conversationId: BigInt(42), customer: { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null } }),
+    );
+    await service.changeStatus("quote-001", "CANCELADO", "test");
+    expect(chatwootMock.sendOutgoingMessage).toHaveBeenCalledWith("42", expect.stringContaining("foi cancelado"));
+  });
+
+  it("nao deve chamar sendOutgoingMessage quando newStatus === APROVADO", async () => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({ status: "ENVIADO", conversationId: BigInt(42) }),
+    );
+    mockPrisma.quote.update.mockResolvedValue(
+      makeQuote({ status: "APROVADO", conversationId: BigInt(42) }),
+    );
+    await service.changeStatus("quote-001", "APROVADO", "test");
+    expect(chatwootMock.sendOutgoingMessage).not.toHaveBeenCalled();
+  });
+
+  it("deve logar warn e NAO lancar quando conversationId e null", async () => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({ status: "APROVADO", approved: true, conversationId: null }),
+    );
+    mockPrisma.quote.update.mockResolvedValue(
+      makeQuote({ status: "EM_PRODUCAO", conversationId: null }),
+    );
+    await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).resolves.toBeDefined();
+    expect(chatwootMock.sendOutgoingMessage).not.toHaveBeenCalled();
+  });
+
+  it("deve logar warn e NAO lancar quando sendOutgoingMessage lanca excecao", async () => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({ status: "APROVADO", approved: true, conversationId: BigInt(42) }),
+    );
+    mockPrisma.quote.update.mockResolvedValue(
+      makeQuote({ status: "EM_PRODUCAO", conversationId: BigInt(42), customer: { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null } }),
+    );
+    (chatwootMock.sendOutgoingMessage as jest.Mock).mockRejectedValue(new Error("timeout"));
+    await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).resolves.toBeDefined();
+  });
+});

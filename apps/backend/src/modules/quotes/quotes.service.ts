@@ -645,7 +645,7 @@ export class QuotesService {
     if (newStatus === "EM_PRODUCAO") {
       const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false);
       if (!quote.approved && !isAssociated) {
-        throw new BadRequestException("OrÃ§amento precisa ser aprovado pelo cliente antes de entrar em produÃ§Ã£o");
+        throw new BadRequestException("Orçamento precisa ser aprovado pelo cliente antes de entrar em produção");
       }
     }
 
@@ -676,6 +676,33 @@ export class QuotesService {
         },
       },
     });
+
+    // Notificação Chatwoot para mudanças de status visíveis ao cliente (D-03, D-06)
+    const statusesToNotify: QuoteStatus[] = ["EM_PRODUCAO", "PRONTO_PARA_ENTREGA", "ENTREGUE", "CANCELADO"];
+    if (statusesToNotify.includes(newStatus)) {
+      try {
+        const convId = updated.conversationId ? String(updated.conversationId) : undefined;
+        if (convId) {
+          const clienteNome = (updated as any).customer?.fullName ?? "Cliente";
+          const numero = updated.externalQuoteId ? Number(updated.externalQuoteId) : updated.internalNumber;
+          let mensagem = "";
+          if (newStatus === "EM_PRODUCAO") {
+            mensagem = `🎨 Olá, ${clienteNome}. Seu pedido #${numero} entrou em produção. Avisaremos assim que estiver pronto.`;
+          } else if (newStatus === "PRONTO_PARA_ENTREGA") {
+            mensagem = `✅ Olá, ${clienteNome}. Seu pedido #${numero} está pronto para retirada. Pode passar na loja quando quiser.`;
+          } else if (newStatus === "ENTREGUE") {
+            mensagem = `🎉 Olá, ${clienteNome}. Seu pedido #${numero} foi entregue. Obrigado pela preferência! Qualquer dúvida, estamos à disposição.`;
+          } else if (newStatus === "CANCELADO") {
+            mensagem = `ℹ️ Olá, ${clienteNome}. O orçamento #${numero} foi cancelado. Se tiver dúvidas ou quiser refazer o pedido, é só falar com a gente.`;
+          }
+          if (mensagem) {
+            await this.chatwootService.sendOutgoingMessage(convId, mensagem);
+          }
+        }
+      } catch (err) {
+        this.logger.warn(`Falha ao notificar via Chatwoot após mudança de status: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
 
     return this.mapQuoteBody(updated);
   }
@@ -1352,17 +1379,17 @@ export class QuotesService {
       `ðŸ’° *Total: ${fmt(total)}*`,
       ``,
       sep,
-      `*Como vocÃª prefere pagar?*`,
+      `*Como você prefere pagar?*`,
       ``,
       ...linhasPagamento,
       ``,
       sep,
-      `Qualquer dÃºvida, Ã© sÃ³ chamar! ðŸ˜Š`,
+      `Qualquer dúvida, é só chamar! ðŸ˜Š`,
     ];
 
-    // Pix Copia e Cola ao final (separado para nÃ£o poluir a mensagem principal)
+    // Pix Copia e Cola ao final (separado para não poluir a mensagem principal)
     if (pixPayment.pixCopiaECola) {
-      linhas.push(``, `_Pix Copia e Cola (caso prefira copiar o cÃ³digo):_`);
+      linhas.push(``, `_Pix Copia e Cola (caso prefira copiar o código):_`);
       linhas.push(pixPayment.pixCopiaECola);
     }
 
@@ -1688,10 +1715,10 @@ export class QuotesService {
             const parsed = new Date(prazoRaw);
             if (!isNaN(parsed.getTime())) prazoFmt = parsed.toLocaleDateString("pt-BR");
           } catch (e) {}
-          entregaTexto = `\n\nðŸ“… PrevisÃ£o de entrega: ${prazoFmt} (conforme consta no orÃ§amento)`;
+          entregaTexto = `\n\nðŸ“… Previsão de entrega: ${prazoFmt} (conforme consta no orçamento)`;
         }
 
-        const mensagem = `OlÃ¡, ${clienteNome ?? "Cliente"}! ðŸ‘‹\n\nAgradecemos pela parceria. Vamos dar sequÃªncia ao seu pedido: agendaremos a execuÃ§Ã£o do serviÃ§o ou separaremos o(s) produto(s) e avisaremos assim que estiver pronto.${entregaTexto}\n\nðŸ“‹ OrÃ§amento #${numero}\n\nðŸ’° Total: ${fmt(Number(quote.total ?? 0))}\n\nSe tiver alguma dÃºvida, responda por esta conversa â€” estamos Ã  disposiÃ§Ã£o.`;
+        const mensagem = `Olá, ${clienteNome ?? "Cliente"}! ðŸ‘‹\n\nAgradecemos pela parceria. Vamos dar sequência ao seu pedido: agendaremos a execução do serviço ou separaremos o(s) produto(s) e avisaremos assim que estiver pronto.${entregaTexto}\n\nðŸ“‹ Orçamento #${numero}\n\nðŸ’° Total: ${fmt(Number(quote.total ?? 0))}\n\nSe tiver alguma dúvida, responda por esta conversa â€” estamos Ã  disposição.`;
         await this.chatwootService.sendOutgoingMessage(convId, mensagem);
       }
     } catch (err) {
