@@ -34,7 +34,8 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 
 ## Active Context
 
-- **Branch atual:** main
+- **Branch atual:** ship/phase-07
+- **Shipping:** branch pushed (ship/phase-07) — PR pending
 - **Última versão shipped:** v1.1 (tag: v1.1)
 - **Codebase map:** .planning/codebase/ (7 documentos - gerados em 2026-05-01)
 - **Milestones archived:** v1.0, v1.1
