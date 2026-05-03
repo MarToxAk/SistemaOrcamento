@@ -1,22 +1,22 @@
-# Roadmap — Sistema de Orcamento BomCusto
+# Roadmap - Sistema de Orcamento BomCusto
 
-**Version:** 1.2
+**Version:** 1.3
 **Date:** 2026-05-03
 
 ---
 
 ## Milestones
 
-- ✅ **v1.0 MVP** — Phases 1–5 (shipped 2026-05-02)
-- ✅ **v1.1 Aprovação Athos** — Phase 6 (shipped 2026-05-03)
-- 🚧 **v1.2 Mensagens e UX do Cliente** — Phases 7–8 (in progress)
+- [x] **v1.0 MVP** - Phases 1-5 (shipped 2026-05-02)
+- [x] **v1.1 Aprovacao Athos** - Phase 6 (shipped 2026-05-03)
+- [x] **v1.2 Mensagens e UX do Cliente** - Phases 7-8 (shipped 2026-05-03)
 
 ---
 
 ## Phases
 
 <details>
-<summary>✅ v1.0 MVP (Phases 1–5) — SHIPPED 2026-05-02</summary>
+<summary>v1.0 MVP (Phases 1-5) - SHIPPED 2026-05-02</summary>
 
 Full details: .planning/milestones/v1.0-ROADMAP.md
 
@@ -29,7 +29,7 @@ Full details: .planning/milestones/v1.0-ROADMAP.md
 </details>
 
 <details>
-<summary>✅ v1.1 Aprovação Athos (Phase 6) — SHIPPED 2026-05-03</summary>
+<summary>v1.1 Aprovacao Athos (Phase 6) - SHIPPED 2026-05-03</summary>
 
 Full details: .planning/milestones/v1.1-ROADMAP.md
 
@@ -37,46 +37,21 @@ Full details: .planning/milestones/v1.1-ROADMAP.md
 
 </details>
 
-### 🚧 v1.2 Mensagens e UX do Cliente
+<details>
+<summary>v1.2 Mensagens e UX do Cliente (Phases 7-8) - SHIPPED 2026-05-03</summary>
 
-## Phase 7 - Mensagens Automáticas ao Cliente via Chatwoot
-**Status:** not started
-**Goal:** Enviar mensagem automática ao cliente no Chatwoot em cada evento relevante do serviço — aprovação, pagamento PIX (parcial/total/parcelado) e mudanças de status — com texto amigável e emojis.
+Full details: .planning/milestones/v1.2-ROADMAP.md
 
-**Requirements covered:** MSG-01, MSG-02, MSG-03, MSG-04, MSG-05
+- [x] Phase 7: Mensagens Automaticas ao Cliente via Chatwoot (2 planos)
+- [x] Phase 8: UX das Paginas Publicas do Cliente (2 planos)
 
-**Depends on:** Phase 6 (Chatwoot integration, enviarParaCliente pattern, changeStatus)
-
-**Plans:** 2 plans
-
-Plans:
-- [ ] 07-01-PLAN.md — Fix encoding em quotes.service.ts + notificações changeStatus() (MSG-01, MSG-05)
-- [ ] 07-02-PLAN.md — Padronizar tom das mensagens PIX em efi.service.ts (MSG-02, MSG-03, MSG-04)
-
-**Success criteria:**
-1. Aprovar orçamento via link → cliente recebe mensagem Chatwoot com emoji de confirmação e próximo passo
-2. PIX parcial recebido (webhook EFI) → cliente recebe mensagem com valor pago e saldo restante
-3. PIX total recebido (webhook EFI) → cliente recebe mensagem de pagamento completo/celebração
-4. Pagamento parcelado confirmado → cliente recebe mensagem confirmando parcela
-5. Operador muda status para EM_PRODUCAO/PRONTO/ENTREGUE/CANCELADO → cliente recebe mensagem descrevendo o status em linguagem amigável
+</details>
 
 ---
 
-## Phase 8 - UX das Páginas Públicas do Cliente
-**Status:** not started
-**Goal:** Reformular as páginas públicas de aprovação e status do orçamento para ter layout consistente com a identidade visual da Bom Custo, mais amigável e informativo para o cliente.
+### v1.3 - Next Milestone
 
-**Requirements covered:** UX-01, UX-02, UX-03
-
-**Depends on:** Phase 5 (páginas existentes), Phase 6 (campos de itens/total na approve page)
-
-**Plans:** a definir
-
-**Success criteria:**
-1. Página `/orcamento/:id/approve` usa logo Bom Custo, gradiente de fundo, card branco centralizado — visualmente consistente com identidade da marca
-2. Página `/orcamento/:id/status` exibe status atual com ícone/emoji específico por status e descrição em português claro
-3. Ambas as páginas são responsivas e funcionam bem em mobile
-4. Layout das páginas públicas é coeso e distinguível de páginas do painel interno
+*(A definir - ver Backlog abaixo)*
 
 ---
 
@@ -92,4 +67,4 @@ Plans:
 - Histórico de mensagens enviadas ao cliente
 
 ---
-*Roadmap v1.2 - 2026-05-03*
+*Roadmap v1.3 - 2026-05-03*

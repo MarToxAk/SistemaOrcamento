@@ -21,7 +21,7 @@ Orçamentos criados, aprovados e cobrados sem intervenção manual — integraç
 
 ## Current State
 
-**Versão atual:** v1.1 (shipped 2026-05-03)
+**Versão atual:** v1.2 (shipped 2026-05-03)
 
 Sistema completo e funcional em produção. Fluxo completo:
 - Criação/importação de orçamentos (manual ou via Athos ERP)
@@ -37,38 +37,36 @@ Stack: NestJS + Prisma + PostgreSQL (backend), Next.js App Router (frontend), Do
 
 ### Validated
 
-- ✓ Criação de orçamentos com itens e carimbos — fase 0
-- ✓ Geração de PDF e upload MinIO — fase 0
-- ✓ Envio via Chatwoot + link de aprovação por token — fase 0
-- ✓ Emissão de NFS-e via SOAP iiBrasil — fase 0
-- ✓ Cobrança PIX via EFI Pay com webhooks — fase 0
-- ✓ Integração read-only Athos ERP e PDV — fase 0
-- ✓ Deploy CI/CD via GitHub Actions + VPS Tailscale — fase 0
-- ✓ Autenticação global via x-internal-api-key + guard NestJS — v1.0
-- ✓ Webhooks EFI validados com HMAC-SHA256 — v1.0
-- ✓ Fail-fast de variáveis de ambiente críticas — v1.0
-- ✓ Rate limiting global — v1.0
-- ✓ Logger estruturado em todas as integrações — v1.0
-- ✓ enviarParaCliente assíncrono (fire-and-forget) — v1.0
-- ✓ pg.Pool para Athos (max 5 conexões) — v1.0
-- ✓ Health check com status das integrações — v1.0
-- ✓ Máquina de estados íntegra (approveByToken via changeStatus) — v1.0
-- ✓ Paginação take=50, max 200, retorna total — v1.0
-- ✓ isAssociated como campo booleano real no response — v1.0
-- ✓ 33 testes automatizados (Jest) + CI GitHub Actions — v1.1
-- ✓ Filter pills, toast feedback, validação de form — v1.0
-- ✓ Badges de integração (NFS-e, PIX, aprovação) no painel — v1.0
-- ✓ Páginas do cliente para aprovação e status — v1.0
-- ✓ Página de aprovação com itens e total em BRL — v1.1
-- ✓ Link de aprovação correto (/orcamento/ não /api/quotes/) — v1.1
-- ✓ Endereço manual do tomador na emissão NFS-e — v1.1
-- ✓ Envio manual de link ao cliente (botão "Enviar", não auto-dispatch) — v1.1
+- checkmark Criacao de orcamentos com itens e carimbos -- fase 0
+- checkmark Geracao de PDF e upload MinIO -- fase 0
+- checkmark Envio via Chatwoot + link de aprovacao por token -- fase 0
+- checkmark Emissao de NFS-e via SOAP iiBrasil -- fase 0
+- checkmark Cobranca PIX via EFI Pay com webhooks -- fase 0
+- checkmark Integracao read-only Athos ERP e PDV -- fase 0
+- checkmark Deploy CI/CD via GitHub Actions + VPS Tailscale -- fase 0
+- checkmark Autenticacao global via x-internal-api-key + guard NestJS -- v1.0
+- checkmark Webhooks EFI validados com HMAC-SHA256 -- v1.0
+- checkmark Fail-fast de variaveis de ambiente criticas -- v1.0
+- checkmark Rate limiting global -- v1.0
+- checkmark Logger estruturado em todas as integracoes -- v1.0
+- checkmark enviarParaCliente assicrono (fire-and-forget) -- v1.0
+- checkmark pg.Pool para Athos (max 5 conexoes) -- v1.0
+- checkmark Health check com status das integracoes -- v1.0
+- checkmark Maquina de estados integra (approveByToken via changeStatus) -- v1.0
+- checkmark Paginacao take=50, max 200, retorna total -- v1.0
+- checkmark isAssociated como campo booleano real no response -- v1.0
+- checkmark 32 testes automatizados (Jest) + CI GitHub Actions -- v1.0
+- checkmark Filter pills, toast feedback, validacao de form -- v1.0
+- checkmark Badges de integracao (NFS-e, PIX, aprovacao) no painel -- v1.0
+- checkmark Paginas do cliente para aprovacao e status -- v1.0
 
-### Active (Next Milestone)
+### Active
 
+<!-- v1.1 scope -->
+
+- [ ] Envio automatico de link de aprovacao ao associar idcliente no Athos
+- [ ] Pagina publica de aprovacao com validacao via Athos
 - [ ] RBAC por role (ADMIN / VENDEDOR / ATENDENTE)
-- [ ] Relatórios e exportação CSV de orçamentos
-- [ ] Notificações em tempo real (WebSocket) para mudança de status
 
 ### Out of Scope
 
