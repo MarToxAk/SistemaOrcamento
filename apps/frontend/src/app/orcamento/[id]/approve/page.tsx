@@ -1,5 +1,6 @@
 "use client";
 
+import Script from "next/script";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -90,8 +91,12 @@ export default function ApprovePage() {
 
   return (
     <>
+      <Script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" strategy="beforeInteractive" />
+      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+
       <style>{`
-        body { background-color: #f9f7ed; }
+        body { margin: 0; background-color: #f9f7ed; }
         .approve-card {
           border-radius: 16px;
           overflow: hidden;
@@ -121,12 +126,18 @@ export default function ApprovePage() {
         .btn-approve:disabled {
           opacity: 0.65;
         }
+        .page-wrapper {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px 16px;
+          background-color: #f9f7ed;
+          box-sizing: border-box;
+        }
       `}</style>
 
-      <div
-        className="min-vh-100 d-flex align-items-center justify-content-center px-3"
-        style={{ backgroundColor: "#f9f7ed" }}
-      >
+      <div className="page-wrapper">
         <div className="approve-card bg-white">
           <div className="approve-header text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
