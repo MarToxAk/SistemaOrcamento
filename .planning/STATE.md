@@ -23,7 +23,7 @@
 Phase: 8 — UX das Páginas Públicas do Cliente
 Plan: — (not yet planned)
 Status: Awaiting planning
-Last activity: 2026-05-03 — Phase 7 UAT PASSED (10/10 tests) — ready for Phase 8
+Last activity: 2026-05-03 — Phase 7 shipped — PR #1
 
 ## Project Reference
 
@@ -35,7 +35,7 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Active Context
 
 - **Branch atual:** ship/phase-07
-- **Shipping:** branch pushed (ship/phase-07) — PR pending
+- **Shipping:** PR #1 criado — https://github.com/MarToxAk/SistemaOrcamento/pull/1
 - **Última versão shipped:** v1.1 (tag: v1.1)
 - **Codebase map:** .planning/codebase/ (7 documentos - gerados em 2026-05-01)
 - **Milestones archived:** v1.0, v1.1
