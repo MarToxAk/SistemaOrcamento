@@ -5,15 +5,15 @@ import { useEffect, useState } from "react";
 
 type StatusState = "loading" | "loaded" | "error";
 
-const STATUS_CLASS: Record<string, string> = {
-  aprovado: "badge bg-success",
-  em_producao: "badge bg-warning text-dark",
-  pronto_para_entrega: "badge bg-info text-dark",
-  entregue: "badge bg-secondary",
-  cancelado: "badge bg-danger",
-  pendente: "badge bg-light text-dark border",
-  enviado: "badge bg-primary",
-  recusado: "badge bg-danger",
+const STATUS_INFO: Record<string, { emoji: string; label: string; description: string; color: string }> = {
+  pendente:            { emoji: "🕐", label: "Pendente",             description: "Seu orçamento foi recebido e está aguardando confirmação.",                      color: "#6c757d" },
+  enviado:             { emoji: "📤", label: "Enviado",              description: "O orçamento foi enviado para análise. Aguardando sua aprovação.",                color: "#0d6efd" },
+  aprovado:            { emoji: "✅", label: "Aprovado",             description: "Orçamento aprovado! Em breve seu pedido entra em produção.",                    color: "#198754" },
+  pagamento_parcial:   { emoji: "💰", label: "Pagamento Parcial",    description: "Recebemos parte do pagamento. Aguardando quitação para iniciar a produção.",    color: "#fd7e14" },
+  em_producao:         { emoji: "🎨", label: "Em Produção",          description: "Seu pedido está sendo produzido pela nossa equipe.",                            color: "#e6a817" },
+  pronto_para_entrega: { emoji: "📦", label: "Pronto para Retirada", description: "Seu pedido está pronto! Pode passar na loja quando quiser.",                   color: "#0aa2c0" },
+  entregue:            { emoji: "🎉", label: "Entregue",             description: "Pedido entregue. Obrigado pela preferência!",                                  color: "#6f42c1" },
+  cancelado:           { emoji: "❌", label: "Cancelado",            description: "Este orçamento foi cancelado. Dúvidas? Fale conosco.",                          color: "#dc3545" },
 };
 
 export default function StatusPage() {
@@ -49,7 +49,11 @@ export default function StatusPage() {
     void load();
   }, [id]);
 
-  const badgeClass = STATUS_CLASS[statusKey] ?? "badge bg-light text-dark border";
+  const info = STATUS_INFO[statusKey];
+  const badgeEmoji = info?.emoji ?? "";
+  const badgeLabel = info?.label ?? statusLabel;
+  const badgeDescription = info?.description ?? "";
+  const badgeColor = info?.color ?? "#6c757d";
 
   return (
     <>
@@ -71,6 +75,7 @@ export default function StatusPage() {
           padding: 10px 24px;
           border-radius: 50px;
           display: inline-block;
+          color: #fff;
         }
       `}</style>
 
@@ -83,7 +88,7 @@ export default function StatusPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/media/logo_new.svg"
-              alt="Bom Custo Papelaria & Gráfica Rápida"
+              alt="Bom Custo Papelaria &amp; Gráfica Rápida"
               style={{ maxWidth: 140, maxHeight: 80, background: "#fff", borderRadius: 8, padding: 6 }}
             />
             <div className="mt-2 small text-muted">Bom Custo Papelaria &amp; Gráfica Rápida</div>
@@ -123,7 +128,15 @@ export default function StatusPage() {
                 )}
 
                 <div className="my-4">
-                  <span className={`${badgeClass} status-pill`}>{statusLabel}</span>
+                  <span
+                    className="status-pill"
+                    style={{ backgroundColor: badgeColor }}
+                  >
+                    {badgeEmoji} {badgeLabel}
+                  </span>
+                  {badgeDescription && (
+                    <p className="text-muted mt-3 mb-0 small px-2">{badgeDescription}</p>
+                  )}
                 </div>
 
                 {updatedAt && (
