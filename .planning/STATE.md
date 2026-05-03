@@ -1,7 +1,7 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
-**Last updated:** 2026-05-03 (v1.2 started)
-**Current phase:** Phase 7 — Mensagens Automáticas ao Cliente via Chatwoot
+**Last updated:** 2026-05-03 (v1.2 — phase 7 complete)
+**Current phase:** Phase 8 — UX das Páginas Públicas do Cliente
 
 ---
 
@@ -15,15 +15,15 @@
 | 4 | Testes e CI | complete (v1.0) |
 | 5 | UX do Painel e Area do Cliente | complete (v1.0) |
 | 6 | Aprovação de Orçamento pelo Cliente com Associação Athos | complete (v1.1) |
-| 7 | Mensagens Automáticas ao Cliente via Chatwoot | not started |
+| 7 | Mensagens Automáticas ao Cliente via Chatwoot | complete (v1.2) |
 | 8 | UX das Páginas Públicas do Cliente | not started |
 
 ## Current Position
 
-Phase: 7 — Mensagens Automáticas ao Cliente via Chatwoot
+Phase: 8 — UX das Páginas Públicas do Cliente
 Plan: — (not yet planned)
-Status: Defining plans
-Last activity: 2026-05-03 — Milestone v1.2 started
+Status: Awaiting planning
+Last activity: 2026-05-03 — Phase 7 complete (MSG-01, MSG-02, MSG-03, MSG-04, MSG-05)
 
 ## Project Reference
 
