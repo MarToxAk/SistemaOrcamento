@@ -63,9 +63,10 @@ blocked: 0
 ## Gaps
 
 - truth: "O envio da mensagem de aprovação ao cliente deve ser disparado manualmente pelo operador (botão 'Enviar'), não automaticamente ao criar/editar o orçamento."
-  status: failed
+  status: resolved
   reason: "User reported: Não deve manda sozinho eu tenho que aperta enviar."
   severity: major
   test: 1
-  artifacts: []
-  missing: []
+  fix_plan: ".planning/phases/06-aprovacao-cliente-athos/06-04-PLAN.md"
+  fix_summary: ".planning/phases/06-aprovacao-cliente-athos/06-04-SUMMARY.md"
+  resolved_by: "plano 06-04 — hook fire-and-forget removido do create() em quotes.service.ts"
