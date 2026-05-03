@@ -64,7 +64,7 @@ export class QuotesService {
   ) {}
 
   async buscarNoAthosPorNumero(numero: string, format: "raw" | "mapped" = "raw") {
-    // Se jÃ¡ existe um orcamento salvo com esse externalQuoteId, preferir os dados do banco
+    // Se já existe um orcamento salvo com esse externalQuoteId, preferir os dados do banco
     const parsed = Number(numero);
     if (Number.isFinite(parsed)) {
       const externalId = this.toBigInt(parsed);
@@ -293,7 +293,7 @@ export class QuotesService {
   }
 
   async create(payload: CreateQuoteDto) {
-    // ValidaÃ§Ã£o Chatwoot: se informado, deve ser vÃ¡lido
+    // Validação Chatwoot: se informado, deve ser válido
     this.validateChatwootContext(payload);
 
     const customerInput = payload.cliente ?? payload.customer;
@@ -369,7 +369,7 @@ export class QuotesService {
       if (externalId) {
         const existing = await tx.quote.findFirst({ where: { externalQuoteId: externalId } });
         if (existing) {
-          // Atualiza metadados do orÃ§amento existente
+          // Atualiza metadados do orçamento existente
           const updated = await tx.quote.update({
             where: { id: existing.id },
             data: {
@@ -479,7 +479,7 @@ export class QuotesService {
         }
       }
 
-      // Se nÃ£o existe externalId ou nÃ£o foi encontrado, cria novo
+      // Se não existe externalId ou não foi encontrado, cria novo
       const createdQuote = await tx.quote.create({
         data: {
           externalQuoteId: this.toBigInt(payload.idorcamento),
@@ -641,7 +641,7 @@ export class QuotesService {
       );
     }
 
-    // Bloqueia avanÃ§o para EM_PRODUCAO se nÃ£o aprovado e cliente nÃ£o for associado
+    // Bloqueia avanço para EM_PRODUCAO se não aprovado e cliente não for associado
     if (newStatus === "EM_PRODUCAO") {
       const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false);
       if (!quote.approved && !isAssociated) {
@@ -850,20 +850,20 @@ export class QuotesService {
   }
 
   private validateChatwootContext(payload: CreateQuoteDto): void {
-    // Se conversationId ou chatwootContactId forem informados, devem ser vÃ¡lidos (> 0)
+    // Se conversationId ou chatwootContactId forem informados, devem ser válidos (> 0)
     if (payload.conversationId !== undefined && payload.conversationId !== null) {
       if (!Number.isFinite(payload.conversationId) || payload.conversationId <= 0) {
-        throw new BadRequestException("conversationId invalido: deve ser um nÃºmero positivo");
+        throw new BadRequestException("conversationId invalido: deve ser um número positivo");
       }
     }
 
     if (payload.chatwootContactId !== undefined && payload.chatwootContactId !== null) {
       if (!Number.isFinite(payload.chatwootContactId) || payload.chatwootContactId <= 0) {
-        throw new BadRequestException("chatwootContactId invalido: deve ser um nÃºmero positivo");
+        throw new BadRequestException("chatwootContactId invalido: deve ser um número positivo");
       }
     }
 
-    // ValidaÃ§Ã£o adicional: se tem um, Ã© bom ter os dois
+    // Validação adicional: se tem um, é bom ter os dois
     const hasChatContext = payload.conversationId || payload.chatwootContactId;
     if (hasChatContext && !(payload.conversationId && payload.chatwootContactId)) {
       console.warn(
@@ -985,7 +985,7 @@ export class QuotesService {
   // Mescla duplicatas identificadas por externalQuoteId
   async mergeDuplicates(payload: { externalQuoteId: number; keepId?: string; strategy?: "oldest" | "newest" }) {
     if (!payload?.externalQuoteId) {
-      throw new BadRequestException("externalQuoteId Ã© obrigatÃ³rio");
+      throw new BadRequestException("externalQuoteId é obrigatório");
     }
 
     const externalId = BigInt(Math.trunc(payload.externalQuoteId));
@@ -1009,7 +1009,7 @@ export class QuotesService {
     let keepId: string;
     const ids = quotes.map((q) => q.id);
     if (payload.keepId) {
-      if (!ids.includes(payload.keepId)) throw new BadRequestException("keepId informado nÃ£o pertence ao grupo de duplicatas");
+      if (!ids.includes(payload.keepId)) throw new BadRequestException("keepId informado não pertence ao grupo de duplicatas");
       keepId = payload.keepId;
     } else {
       const strategy = payload.strategy ?? "newest";
@@ -1085,15 +1085,15 @@ export class QuotesService {
       await tx.quoteDocument.updateMany({ where: { quoteId: { in: otherIds } }, data: { quoteId: keepId } });
       await tx.quoteStatusHistory.updateMany({ where: { quoteId: { in: otherIds } }, data: { quoteId: keepId } });
 
-      // Atualizar metadados do orÃ§amento (totais calculados com base nos itens criados)
+      // Atualizar metadados do orçamento (totais calculados com base nos itens criados)
       const recomputed = await tx.$queryRaw<Array<{ subtotal: string; discount: string; surcharge: string; total: string }>>`
         SELECT COALESCE(SUM("finalPrice"::numeric),0) AS subtotal FROM "QuoteItem" WHERE "quoteId" = ${keepId}
       `;
 
-      // Simplesmente atualiza updatedAt e mantÃ©m outros metadados do keep quote
+      // Simplesmente atualiza updatedAt e mantém outros metadados do keep quote
       await tx.quote.update({ where: { id: keepId }, data: { updatedAt: new Date() } });
 
-      // Deletar as entradas duplicadas (exclui as quotes que nÃ£o sÃ£o a keep)
+      // Deletar as entradas duplicadas (exclui as quotes que não são a keep)
       for (const id of otherIds) {
         await tx.quote.delete({ where: { id } });
       }
@@ -1324,7 +1324,7 @@ export class QuotesService {
 
     const linhasItens = itens
       .slice(0, 10)
-      .map((it) => `â€¢ ${it.descricao} (${it.quantidade}x) â€” ${fmt(it.total)}`)
+      .map((it) => `• ${it.descricao} (${it.quantidade}x) — ${fmt(it.total)}`)
       .join("\n");
     const maisItens = itens.length > 10 ? `\n_...e mais ${itens.length - 10} item(s)_` : "";
 
@@ -1335,48 +1335,48 @@ export class QuotesService {
 
     const linhasPagamento: string[] = [];
 
-    // PIX (sempre disponÃ­vel)
+    // PIX (sempre disponível)
     const pixFinal = pix.finalAmount ?? pixPayment.amount;
     const pixDiscount = pix.discountPercent ?? 0;
     if (pixDiscount > 0) {
-      linhasPagamento.push(`*1ï¸âƒ£ PIX Ã  vista â€” ${fmt(pixFinal)}*`);
-      linhasPagamento.push(`_Economize ${pixDiscount}% pagando com PIX agora!_ ðŸŽ‰`);
+      linhasPagamento.push(`*1️⃣ PIX à vista — ${fmt(pixFinal)}*`);
+      linhasPagamento.push(`_Economize ${pixDiscount}% pagando com PIX agora!_ 🎉`);
     } else {
-      linhasPagamento.push(`*1ï¸âƒ£ PIX Ã  vista â€” ${fmt(pixFinal)}*`);
+      linhasPagamento.push(`*1️⃣ PIX à vista — ${fmt(pixFinal)}*`);
     }
-    linhasPagamento.push(`ðŸ‘‰ ${pixPayment.linkVisualizacao}`);
+    linhasPagamento.push(`👉 ${pixPayment.linkVisualizacao}`);
 
     // 50/50
     if (meia?.enabled) {
       const metade = fmt(extra.pix5050Half ?? Number((total * 0.5).toFixed(2)));
-      linhasPagamento.push(`\n*2ï¸âƒ£ 50% entrada + 50% na retirada*`);
-      linhasPagamento.push(`â€¢ Entrada agora: *${metade}* via PIX`);
+      linhasPagamento.push(`\n*2️⃣ 50% entrada + 50% na retirada*`);
+      linhasPagamento.push(`• Entrada agora: *${metade}* via PIX`);
       if (extra.pix5050Link) {
-        linhasPagamento.push(`ðŸ‘‰ ${extra.pix5050Link}`);
+        linhasPagamento.push(`👉 ${extra.pix5050Link}`);
       }
-      linhasPagamento.push(`â€¢ Restante *${metade}* paga na hora de buscar`);
+      linhasPagamento.push(`• Restante *${metade}* paga na hora de buscar`);
     }
 
-    // CartÃ£o
+    // Cartão
     if (cartao?.enabled) {
-      linhasPagamento.push(`\n*3ï¸âƒ£ CartÃ£o de crÃ©dito em atÃ© 2x*`);
+      linhasPagamento.push(`\n*3️⃣ Cartão de crédito em até 2x*`);
       if (extra.cardLink) {
-        linhasPagamento.push(`ðŸ‘‰ ${extra.cardLink}`);
+        linhasPagamento.push(`👉 ${extra.cardLink}`);
       } else {
-        linhasPagamento.push(`_Processamos na maquininha na retirada (${fmt(cartao.finalAmount ?? total)} em atÃ© 2x)._`);
+        linhasPagamento.push(`_Processamos na maquininha na retirada (${fmt(cartao.finalAmount ?? total)} em até 2x)._`);
       }
     }
 
     const linhas = [
-      `OlÃ¡, ${primeiroNome}! ðŸ‘‹`,
+      `Olá, ${primeiroNome}! 👋`,
       ``,
       `Segue o resumo do seu pedido:`,
       ``,
-      `ðŸ“‹ *OrÃ§amento #${numero}*`,
+      `📋 *Orçamento #${numero}*`,
       ``,
       linhasItens + maisItens,
       ``,
-      `ðŸ’° *Total: ${fmt(total)}*`,
+      `💰 *Total: ${fmt(total)}*`,
       ``,
       sep,
       `*Como você prefere pagar?*`,
@@ -1384,7 +1384,7 @@ export class QuotesService {
       ...linhasPagamento,
       ``,
       sep,
-      `Qualquer dúvida, é só chamar! ðŸ˜Š`,
+      `Qualquer dúvida, é só chamar! 😊`,
     ];
 
     // Pix Copia e Cola ao final (separado para não poluir a mensagem principal)
@@ -1399,7 +1399,7 @@ export class QuotesService {
   async enviarParaCliente(quoteId: string) {
     const quote = await this.findQuoteByIdentifier(quoteId);
     if (!quote) {
-      throw new NotFoundException("OrÃ§amento nÃ£o encontrado");
+      throw new NotFoundException("Orçamento não encontrado");
     }
 
     if (statusTransitions[quote.status]?.includes("ENVIADO" as QuoteStatus)) {
@@ -1434,18 +1434,18 @@ export class QuotesService {
         clienteNome = clienteNome ?? athosMapped?.cliente_juridico ?? athosMapped?.cliente_fisico ?? athosMapped?.cliente;
         clienteEmail = clienteEmail ?? athosMapped?.email ?? undefined;
       } catch (err) {
-        // NÃ£o bloquear o envio se a consulta ao Athos falhar; apenas logar
+        // Não bloquear o envio se a consulta ao Athos falhar; apenas logar
         this.logger.debug(`Athos lookup falhou para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
-    // Prepara dados do orÃ§amento para montar a mensagem
+    // Prepara dados do orçamento para montar a mensagem
     const mappedQuote = this.mapQuoteToAthosMapped(quote);
     const numero = mappedQuote.numero ?? quote.internalNumber;
     const itens = Array.isArray(mappedQuote.itens) ? mappedQuote.itens : [];
     const total = Number(quote.total ?? 0);
 
-    // Preparar opÃ§Ãµes de pagamento e gerar links via EFI (se possÃ­vel)
+    // Preparar opções de pagamento e gerar links via EFI (se possível)
     let paymentOptions: ReturnType<typeof this.efiService.resolvePaymentOptions> | null = null;
     try {
       paymentOptions = this.efiService.resolvePaymentOptions(total);
@@ -1492,7 +1492,7 @@ export class QuotesService {
         }
       }
 
-      // Persiste txid(s) no orÃ§amento para que o webhook EFI consiga localizar o pedido
+      // Persiste txid(s) no orçamento para que o webhook EFI consiga localizar o pedido
       if (pixPayment?.txid || pix5050?.txid) {
         try {
           await this.prisma.quote.update({
@@ -1546,10 +1546,10 @@ export class QuotesService {
         cardLink: cardLink ?? undefined,
       });
     } else if (paymentOptions) {
-      // Fallback textual quando nÃ£o for possÃ­vel gerar links
-      paymentMsg = `OlÃ¡, ${String(clienteNome ?? "Cliente").split(" ")[0]}! ðŸ‘‹\\n\\nðŸ“‹ *OrÃ§amento #${numero}*\\n\\nðŸ’° *Total: R$ ${total.toFixed(2)}*\\n\\n${paymentOptions.customerMessage}\\n\\nQualquer dÃºvida, Ã© sÃ³ chamar! ðŸ˜Š`;
+      // Fallback textual quando não for possível gerar links
+      paymentMsg = `Olá, ${String(clienteNome ?? "Cliente").split(" ")[0]}! 👋\\n\\n📋 *Orçamento #${numero}*\\n\\n💰 *Total: R$ ${total.toFixed(2)}*\\n\\n${paymentOptions.customerMessage}\\n\\nQualquer dúvida, é só chamar! 😊`;
     } else {
-      paymentMsg = `OlÃ¡, ${String(clienteNome ?? "Cliente").split(" ")[0]}! ðŸ‘‹\\n\\nðŸ“‹ *OrÃ§amento #${numero}*\\n\\nðŸ’° *Total: R$ ${total.toFixed(2)}*\\n\\nQualquer dÃºvida, Ã© sÃ³ chamar! ðŸ˜Š`;
+      paymentMsg = `Olá, ${String(clienteNome ?? "Cliente").split(" ")[0]}! 👋\\n\\n📋 *Orçamento #${numero}*\\n\\n💰 *Total: R$ ${total.toFixed(2)}*\\n\\nQualquer dúvida, é só chamar! 😊`;
     }
 
     // Observacao sobre orcamento associado ao cliente Athos (quando idcliente identificado)
@@ -1563,23 +1563,23 @@ export class QuotesService {
         this.logger.debug(`buscarClientePorId falhou para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
       if (associatedName) {
-        observacao = `*ObservaÃ§Ã£o:* identificamos que este orÃ§amento estÃ¡ associado a "${associatedName}".\n\n`;
+        observacao = `*Observação:* identificamos que este orçamento está associado a "${associatedName}".\n\n`;
       }
     }
 
     // Compor mensagem final: observacao + paymentMsg + opcional link de aprovacao
     let finalMessage = observacao + paymentMsg;
     if (approvalLink) {
-      finalMessage += `\\n\\nSe estiver de acordo, aprove o orÃ§amento aqui:\\n${approvalLink}`;
+      finalMessage += `\\n\\nSe estiver de acordo, aprove o orçamento aqui:\\n${approvalLink}`;
     }
 
-    // Envia a mensagem ao Chatwoot (nÃ£o bloquear se falhar)
+    // Envia a mensagem ao Chatwoot (não bloquear se falhar)
     try {
       const convId = quote.conversationId ? String(quote.conversationId) : undefined;
       if (convId) {
         await this.chatwootService.sendOutgoingMessage(convId, finalMessage);
 
-        // Tentar anexar o PDF: usar documento salvo ou gerar um novo se necessÃ¡rio
+        // Tentar anexar o PDF: usar documento salvo ou gerar um novo se necessário
         try {
           let latestDocument = await this.prisma.quoteDocument.findFirst({ where: { quoteId: quote.id }, orderBy: { generatedAt: "desc" } });
 
@@ -1663,19 +1663,19 @@ export class QuotesService {
     const updated = await this.changeStatus(quote.id, "APROVADO", "Aprovacao pelo cliente");
     const nextStatus = "APROVADO" as QuoteStatus;
 
-    // Notifica via Chatwoot (inclui nome completo do cliente e nÃºmero correto do orÃ§amento)
+    // Notifica via Chatwoot (inclui nome completo do cliente e número correto do orçamento)
     try {
       const convId = quote.conversationId ? String(quote.conversationId) : undefined;
       if (convId) {
-        // Tentativa de resolver nome do cliente: preferir nome persistido no cliente, senÃ£o buscar no Athos
+        // Tentativa de resolver nome do cliente: preferir nome persistido no cliente, senão buscar no Athos
         let clienteNome = (updated as any)?.customer?.fullName ?? (quote as any).customer?.fullName ?? undefined;
 
-        // Obter mapeamento para nÃºmero do orÃ§amento e dados auxiliares
+        // Obter mapeamento para número do orçamento e dados auxiliares
         const mapped = this.mapQuoteToAthosMapped(quote);
-        // Preferir externalQuoteId (nÃºmero visÃ­vel), depois mapped.numero, depois internalNumber
+        // Preferir externalQuoteId (número visível), depois mapped.numero, depois internalNumber
         const numero = quote.externalQuoteId ?? mapped?.numero ?? quote.internalNumber ?? "";
 
-        // Se ainda nÃ£o tivermos nome, tentar obter a partir do mapeamento Athos ou buscar por idcliente
+        // Se ainda não tivermos nome, tentar obter a partir do mapeamento Athos ou buscar por idcliente
         if (!clienteNome) {
           if (mapped && mapped.cliente) clienteNome = mapped.cliente;
 
@@ -1706,7 +1706,7 @@ export class QuotesService {
 
         const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-        // Obter data prevista de entrega a partir do mapeamento (se disponÃ­vel)
+        // Obter data prevista de entrega a partir do mapeamento (se disponível)
         let entregaTexto = "";
         const prazoRaw = mapped?.prazoEntrega ?? mapped?.validade ?? mapped?.data ?? null;
         if (prazoRaw) {
@@ -1715,10 +1715,10 @@ export class QuotesService {
             const parsed = new Date(prazoRaw);
             if (!isNaN(parsed.getTime())) prazoFmt = parsed.toLocaleDateString("pt-BR");
           } catch (e) {}
-          entregaTexto = `\n\nðŸ“… Previsão de entrega: ${prazoFmt} (conforme consta no orçamento)`;
+          entregaTexto = `\n\n📅 Previsão de entrega: ${prazoFmt} (conforme consta no orçamento)`;
         }
 
-        const mensagem = `Olá, ${clienteNome ?? "Cliente"}! ðŸ‘‹\n\nAgradecemos pela parceria. Vamos dar sequência ao seu pedido: agendaremos a execução do serviço ou separaremos o(s) produto(s) e avisaremos assim que estiver pronto.${entregaTexto}\n\nðŸ“‹ Orçamento #${numero}\n\nðŸ’° Total: ${fmt(Number(quote.total ?? 0))}\n\nSe tiver alguma dúvida, responda por esta conversa â€” estamos Ã  disposição.`;
+        const mensagem = `Olá, ${clienteNome ?? "Cliente"}! 👋\n\nAgradecemos pela parceria. Vamos dar sequência ao seu pedido: agendaremos a execução do serviço ou separaremos o(s) produto(s) e avisaremos assim que estiver pronto.${entregaTexto}\n\n📋 Orçamento #${numero}\n\n💰 Total: ${fmt(Number(quote.total ?? 0))}\n\nSe tiver alguma dúvida, responda por esta conversa — estamos à disposição.`;
         await this.chatwootService.sendOutgoingMessage(convId, mensagem);
       }
     } catch (err) {
