@@ -616,7 +616,7 @@ export class EfiService {
           const safePdfUrl = pdfUrl ? encodeURI(String(pdfUrl)) : null;
 
           const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-          let mensagem = `Olá, ${String(clienteNome).split(" ")[0]}! 👋\n\n`;
+          let mensagem = `Olá, ${clienteNome}. `;
           // Detecta se o pagamento recebido corresponde à metade do total (entrada 50%)
           const halfAmount = Number((Number(total) / 2).toFixed(2));
           const isHalf = Math.abs(payment.amount - halfAmount) < 0.01 || Number((quote as any).firstInstallmentAmount ?? 0) === payment.amount;

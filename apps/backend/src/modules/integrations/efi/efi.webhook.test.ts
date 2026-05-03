@@ -133,4 +133,92 @@ describe("EfiService - processWebhook", () => {
       expect((result as any).results).toHaveLength(1);
     });
   });
+
+  describe("processWebhook — Chatwoot message tone", () => {
+    const buildQuoteMock = (overrides: Record<string, unknown> = {}) => ({
+      id: "quote-tone-1",
+      status: "APROVADO",
+      paymentExternalId: "TXPIX_TONE",
+      secondInstallmentExternalId: null,
+      total: "200.00",
+      paidTotal: "0.00",
+      conversationId: 99,
+      firstInstallmentAmount: null,
+      ...overrides,
+    });
+
+    const buildMappedQuote = (clienteNome = "Ana Paula Souza") => ({
+      body: {
+        cliente: { nome: clienteNome },
+        conversationId: 99,
+        idorcamento: "ORÇ-TONE",
+        totais: { valor: "200.00" },
+        itens: [],
+        carimbos: { quantidade_total: 0 },
+      },
+      chatwootConversationUrl: null,
+      latestPdfUrl: null,
+    });
+
+    beforeEach(() => {
+      (mockQuotesService as any).getById = jest.fn().mockResolvedValue(buildMappedQuote());
+      mockPrisma.$transaction.mockResolvedValue({
+        transaction: { id: "tx-tone-1" },
+        quoteUpdate: { status: "PAGO" },
+      });
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
+      mockPrisma.quote.findFirst.mockResolvedValue(buildQuoteMock());
+    });
+
+    it("MSG-03 — fullyPaid: mensagem usa nome completo do cliente, nao apenas primeiro nome", async () => {
+      // amount = total → fullyPaid = true
+      const payload = {
+        pix: [{ txid: "TXPIX_TONE", endToEndId: "E_TONE_001", valor: "200.00" }],
+      };
+
+      await service.processWebhook(payload);
+
+      expect(mockChatwootService.sendOutgoingMessage).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining("Ana Paula Souza"),
+      );
+      const msg: string = mockChatwootService.sendOutgoingMessage.mock.calls[0][1];
+      // Verificar que usa nome completo, nao apenas "Ana" como primeiroNome
+      expect(msg).toContain("Ana Paula Souza");
+    });
+
+    it("MSG-04 — entrada 50%: mensagem usa nome completo e contem 'entrada'", async () => {
+      // amount = 100 = total/2 → isHalf = true, fullyPaid = false
+      mockPrisma.quote.findFirst.mockResolvedValue(buildQuoteMock({ total: "200.00", paidTotal: "0.00" }));
+      const payload = {
+        pix: [{ txid: "TXPIX_TONE", endToEndId: "E_TONE_002", valor: "100.00" }],
+      };
+
+      await service.processWebhook(payload);
+
+      expect(mockChatwootService.sendOutgoingMessage).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining("Ana Paula Souza"),
+      );
+      const msg: string = mockChatwootService.sendOutgoingMessage.mock.calls[0][1];
+      expect(msg).toContain("entrada");
+    });
+
+    it("MSG-02 — parcial nao isHalf: mensagem usa nome completo e contem 'parcial'", async () => {
+      // amount = 60 (30% de 200) → isHalf = false, fullyPaid = false
+      mockPrisma.quote.findFirst.mockResolvedValue(buildQuoteMock({ total: "200.00", paidTotal: "0.00" }));
+      const payload = {
+        pix: [{ txid: "TXPIX_TONE", endToEndId: "E_TONE_003", valor: "60.00" }],
+      };
+
+      await service.processWebhook(payload);
+
+      expect(mockChatwootService.sendOutgoingMessage).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining("Ana Paula Souza"),
+      );
+      const msg: string = mockChatwootService.sendOutgoingMessage.mock.calls[0][1];
+      expect(msg).toContain("parcial");
+    });
+  });
 });
