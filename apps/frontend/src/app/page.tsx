@@ -25,6 +25,20 @@ function getQuoteIdentifier(quote: Quote): string {
   return quote.id;
 }
 
+function parseQuotesResponse(data: unknown): Quote[] {
+  if (Array.isArray(data)) {
+    return data as Quote[];
+  }
+
+  if (data && typeof data === "object") {
+    const maybeData = (data as { data?: unknown }).data;
+    if (Array.isArray(maybeData)) {
+      return maybeData as Quote[];
+    }
+  }
+
+  return [];
+}
 function getParamFromUrl(param: string): string {
   if (typeof window === "undefined") return "";
   const params = new URLSearchParams(window.location.search);
@@ -43,8 +57,8 @@ export default function OrcamentosListPage() {
       try {
         const res = await fetch("/api/quotes");
         if (!res.ok) throw new Error("Erro ao buscar orçamentos");
-        const data = await res.json();
-        setQuotes(data);
+        const data: unknown = await res.json();
+        setQuotes(parseQuotesResponse(data));
       } catch (e) {
         setErro("Não foi possível carregar os orçamentos.");
       } finally {
@@ -122,3 +136,4 @@ export default function OrcamentosListPage() {
     </div>
   );
 }
+

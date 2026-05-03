@@ -12,9 +12,24 @@ export interface EmitirNfseInput {
   tomadorCnpj?: string;
   tomadorCpf?: string;
   tomadorNome?: string;
+  tomadorEnderecoLogradouro?: string;
+  tomadorEnderecoNumero?: string;
+  tomadorEnderecoBairro?: string;
+  tomadorEnderecoCep?: string;
+  tomadorEnderecoCodigoMunicipio?: string;
+  tomadorEnderecoUf?: string;
   servicoCodigo?: string; // ex: "24.01", "13.05", "14.08"
   codigoTributacaoNacional?: string; // override manual
 }
+
+type TomadorEndereco = {
+  logradouro: string;
+  numero: string;
+  bairro: string;
+  cep: string;
+  codigoMunicipio: string;
+  uf: string;
+};
 
 // Serviços disponíveis para emissão de NFS-e
 const SERVICOS: Record<string, { itemLista: string; codigoNacional: string; aliquotaIss: string; descricao: string }> = {
@@ -320,12 +335,12 @@ export class NfseService {
     cnpj: string | null;
     cpf: string | null;
     nome: string | null;
-    endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+    endereco: TomadorEndereco | null;
   }> {
     let cnpj:     string | null = null;
     let cpf:      string | null = null;
     let nome:     string | null = null; // Athos tem prioridade; chat é fallback
-    let endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null = null;
+    let endereco: TomadorEndereco | null = null;
 
     try {
       const lookupId  = String(quote.externalQuoteId ?? quote.internalNumber ?? "");
@@ -348,6 +363,53 @@ export class NfseService {
     if (!nome) nome = quote.customer?.fullName ?? null;
 
     return { cnpj, cpf, nome, endereco };
+  }
+
+  private sanitizeTomadorEndereco(endereco: TomadorEndereco): TomadorEndereco {
+    return {
+      logradouro: endereco.logradouro.trim(),
+      numero: endereco.numero.trim(),
+      bairro: endereco.bairro.trim(),
+      cep: endereco.cep.replace(/\D/g, ""),
+      codigoMunicipio: endereco.codigoMunicipio.replace(/\D/g, ""),
+      uf: endereco.uf.trim().toUpperCase(),
+    };
+  }
+
+  private buildTomadorEnderecoFromInput(input?: EmitirNfseInput): TomadorEndereco | null {
+    if (!input) return null;
+
+    const raw = {
+      logradouro: input.tomadorEnderecoLogradouro?.trim() ?? "",
+      numero: input.tomadorEnderecoNumero?.trim() ?? "",
+      bairro: input.tomadorEnderecoBairro?.trim() ?? "",
+      cep: input.tomadorEnderecoCep?.trim() ?? "",
+      codigoMunicipio: input.tomadorEnderecoCodigoMunicipio?.trim() ?? "",
+      uf: input.tomadorEnderecoUf?.trim() ?? "",
+    };
+
+    const hasAnyField = Object.values(raw).some((value) => value.length > 0);
+    if (!hasAnyField) return null;
+
+    const hasAllFields = Object.values(raw).every((value) => value.length > 0);
+    if (!hasAllFields) {
+      throw new BadRequestException(
+        "Endereço do tomador incompleto. Informe logradouro, número, bairro, CEP, código do município (IBGE) e UF.",
+      );
+    }
+
+    const sanitized = this.sanitizeTomadorEndereco(raw);
+    if (sanitized.cep.length !== 8) {
+      throw new BadRequestException("CEP do tomador inválido. Informe 8 dígitos.");
+    }
+    if (sanitized.codigoMunicipio.length !== 7) {
+      throw new BadRequestException("Código do município do tomador inválido. Informe 7 dígitos do IBGE.");
+    }
+    if (sanitized.uf.length !== 2) {
+      throw new BadRequestException("UF do tomador inválida. Informe 2 letras.");
+    }
+
+    return sanitized;
   }
 
   getServicosDisponiveis() {
@@ -408,16 +470,27 @@ export class NfseService {
     let tomadorCpf  = input?.tomadorCpf  ? input.tomadorCpf.replace(/\D/g, "")  : null;
     let tomadorNome = input?.tomadorNome?.trim() || null;
 
-    let tomadorEndereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null = null;
+    let tomadorEndereco: TomadorEndereco | null = this.buildTomadorEnderecoFromInput(input);
+    const documentoManualInformado = Boolean(tomadorCnpj || tomadorCpf);
 
     if (!tomadorCnpj && !tomadorCpf) {
       const tomador = await this.buscarTomador(quote);
       tomadorCnpj    = tomador.cnpj;
       tomadorCpf     = tomador.cpf;
       tomadorNome    = tomadorNome ?? tomador.nome;
-      tomadorEndereco = tomador.endereco;
+      tomadorEndereco = tomadorEndereco ?? tomador.endereco;
     } else {
       tomadorNome = tomadorNome ?? quote.customer?.fullName ?? null;
+      if (!tomadorEndereco) {
+        const tomador = await this.buscarTomador(quote);
+        tomadorEndereco = tomador.endereco;
+      }
+    }
+
+    if (documentoManualInformado && !tomadorEndereco) {
+      throw new BadRequestException(
+        "Endereço do tomador é obrigatório quando o documento é informado manualmente. Preencha logradouro, número, bairro, CEP, código do município (IBGE) e UF.",
+      );
     }
 
     const rpsXml = this.buildRpsXml({
@@ -520,8 +593,8 @@ export class NfseService {
     if (!quote) throw new BadRequestException("Orçamento não encontrado");
 
     // Busca dados do tomador para o frontend pré-preencher o formulário
-    let tomador: { cnpj: string | null; cpf: string | null; nome: string | null } = {
-      cnpj: null, cpf: null, nome: quote.customer?.fullName ?? null,
+    let tomador: { cnpj: string | null; cpf: string | null; nome: string | null; endereco: TomadorEndereco | null } = {
+      cnpj: null, cpf: null, nome: quote.customer?.fullName ?? null, endereco: null,
     };
     if (quote.status !== "CANCELADO" && !quote.nfseNumero) {
       tomador = await this.buscarTomador(quote);
@@ -539,6 +612,8 @@ export class NfseService {
         cpf:                tomador.cpf,
         cnpj:               tomador.cnpj,
         temDocumento:       !!(tomador.cpf || tomador.cnpj),
+        endereco:           tomador.endereco,
+        temEndereco:        !!tomador.endereco,
       },
       servicoSugerido:     DEFAULT_SERVICO,
       servicosDisponiveis: this.getServicosDisponiveis(),

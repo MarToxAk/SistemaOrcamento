@@ -115,6 +115,12 @@ export default function OrcamentoDetailPage() {
   const [nfseTomadorDoc, setNfseTomadorDoc] = useState("");
   const [nfseTomadorNome, setNfseTomadorNome] = useState("");
   const [nfseTomadorTipo, setNfseTomadorTipo] = useState<"cpf" | "cnpj">("cpf");
+  const [nfseTomadorEnderecoLogradouro, setNfseTomadorEnderecoLogradouro] = useState("");
+  const [nfseTomadorEnderecoNumero, setNfseTomadorEnderecoNumero] = useState("");
+  const [nfseTomadorEnderecoBairro, setNfseTomadorEnderecoBairro] = useState("");
+  const [nfseTomadorEnderecoCep, setNfseTomadorEnderecoCep] = useState("");
+  const [nfseTomadorEnderecoCodigoMunicipio, setNfseTomadorEnderecoCodigoMunicipio] = useState("");
+  const [nfseTomadorEnderecoUf, setNfseTomadorEnderecoUf] = useState("");
   const [nfseServicos, setNfseServicos] = useState<Array<{ codigo: string; descricao: string }>>([]);
   const [nfseTomadorAutoDoc, setNfseTomadorAutoDoc] = useState<string | null>(null);
 
@@ -244,7 +250,20 @@ export default function OrcamentoDetailPage() {
       const data = await res.json().catch(() => ({})) as {
         servicosDisponiveis?: Array<{ codigo: string; descricao: string }>;
         servicoSugerido?: string;
-        tomador?: { cpf?: string | null; cnpj?: string | null; nome?: string | null; temDocumento?: boolean };
+        tomador?: {
+          cpf?: string | null;
+          cnpj?: string | null;
+          nome?: string | null;
+          temDocumento?: boolean;
+          endereco?: {
+            logradouro?: string;
+            numero?: string;
+            bairro?: string;
+            cep?: string;
+            codigoMunicipio?: string;
+            uf?: string;
+          } | null;
+        };
       };
       setNfseServicos(data.servicosDisponiveis ?? [{ codigo: "24.01", descricao: "Confecção de carimbos, banners, placas" }]);
       servico = data.servicoSugerido ?? "24.01";
@@ -257,8 +276,20 @@ export default function OrcamentoDetailPage() {
       setNfseTomadorDoc(doc ?? "");
       setNfseTomadorNome(nome);
       setNfseTomadorTipo(docTipo);
+      setNfseTomadorEnderecoLogradouro(data.tomador?.endereco?.logradouro ?? "");
+      setNfseTomadorEnderecoNumero(data.tomador?.endereco?.numero ?? "");
+      setNfseTomadorEnderecoBairro(data.tomador?.endereco?.bairro ?? "");
+      setNfseTomadorEnderecoCep(data.tomador?.endereco?.cep ?? "");
+      setNfseTomadorEnderecoCodigoMunicipio(data.tomador?.endereco?.codigoMunicipio ?? "");
+      setNfseTomadorEnderecoUf(data.tomador?.endereco?.uf ?? "");
     } catch {
       setNfseServicos([{ codigo: "24.01", descricao: "Confecção de carimbos, banners, placas" }]);
+      setNfseTomadorEnderecoLogradouro("");
+      setNfseTomadorEnderecoNumero("");
+      setNfseTomadorEnderecoBairro("");
+      setNfseTomadorEnderecoCep("");
+      setNfseTomadorEnderecoCodigoMunicipio("");
+      setNfseTomadorEnderecoUf("");
     }
 
     // Sempre abre o modal — usuário pode escolher o serviço e confirmar os dados
@@ -277,6 +308,12 @@ export default function OrcamentoDetailPage() {
         else body.tomadorCpf = docLimpo;
       }
       if (nfseTomadorNome.trim()) body.tomadorNome = nfseTomadorNome.trim();
+      if (nfseTomadorEnderecoLogradouro.trim()) body.tomadorEnderecoLogradouro = nfseTomadorEnderecoLogradouro.trim();
+      if (nfseTomadorEnderecoNumero.trim()) body.tomadorEnderecoNumero = nfseTomadorEnderecoNumero.trim();
+      if (nfseTomadorEnderecoBairro.trim()) body.tomadorEnderecoBairro = nfseTomadorEnderecoBairro.trim();
+      if (nfseTomadorEnderecoCep.trim()) body.tomadorEnderecoCep = nfseTomadorEnderecoCep.trim();
+      if (nfseTomadorEnderecoCodigoMunicipio.trim()) body.tomadorEnderecoCodigoMunicipio = nfseTomadorEnderecoCodigoMunicipio.trim();
+      if (nfseTomadorEnderecoUf.trim()) body.tomadorEnderecoUf = nfseTomadorEnderecoUf.trim().toUpperCase();
 
       const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, {
         method: "POST",
@@ -671,6 +708,63 @@ export default function OrcamentoDetailPage() {
             <div className="mb-4">
               <label className="form-label fw-semibold">Nome do tomador</label>
               <input className="form-control" placeholder="Nome completo ou razão social" value={nfseTomadorNome} onChange={e => setNfseTomadorNome(e.target.value)} />
+            </div>
+
+            <div className="mb-2">
+              <label className="form-label fw-semibold">Endereço do tomador</label>
+              <input
+                className="form-control mb-2"
+                placeholder="Logradouro"
+                value={nfseTomadorEnderecoLogradouro}
+                onChange={e => setNfseTomadorEnderecoLogradouro(e.target.value)}
+              />
+              <input
+                className="form-control"
+                placeholder="Número"
+                value={nfseTomadorEnderecoNumero}
+                onChange={e => setNfseTomadorEnderecoNumero(e.target.value)}
+              />
+            </div>
+
+            <div className="mb-2">
+              <input
+                className="form-control"
+                placeholder="Bairro"
+                value={nfseTomadorEnderecoBairro}
+                onChange={e => setNfseTomadorEnderecoBairro(e.target.value)}
+              />
+            </div>
+
+            <div className="row g-2 mb-3">
+              <div className="col-5">
+                <input
+                  className="form-control"
+                  placeholder="CEP"
+                  value={nfseTomadorEnderecoCep}
+                  onChange={e => setNfseTomadorEnderecoCep(e.target.value)}
+                />
+              </div>
+              <div className="col-5">
+                <input
+                  className="form-control"
+                  placeholder="Município (IBGE)"
+                  value={nfseTomadorEnderecoCodigoMunicipio}
+                  onChange={e => setNfseTomadorEnderecoCodigoMunicipio(e.target.value)}
+                />
+              </div>
+              <div className="col-2">
+                <input
+                  className="form-control text-uppercase"
+                  placeholder="UF"
+                  maxLength={2}
+                  value={nfseTomadorEnderecoUf}
+                  onChange={e => setNfseTomadorEnderecoUf(e.target.value.toUpperCase())}
+                />
+              </div>
+            </div>
+
+            <div className="alert alert-light small mb-4">
+              Se o tomador não estiver associado no Athos, preencha documento e endereço manualmente para emitir a NFS-e.
             </div>
 
             <div className="d-flex gap-2 justify-content-end">

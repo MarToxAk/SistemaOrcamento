@@ -12,7 +12,8 @@
     "build": "npm --workspace @bomcusto/backend run build && npm --workspace @bomcusto/frontend run build",
     "test": "npm --workspace @bomcusto/backend run test",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "dev": "kill-port 3000 4000 && concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\""
   },
   "dependencies": {
     "pg": "^8.20.0"
@@ -22,6 +23,8 @@
     "@nestjs/config": "^4.0.4",
     "@prisma/client": "^5.22.0",
     "@types/node": "^25.6.0",
-    "@types/pg": "^8.20.0"
+    "@types/pg": "^8.20.0",
+    "concurrently": "^9.2.1",
+    "kill-port": "^2.0.1"
   }
 }
