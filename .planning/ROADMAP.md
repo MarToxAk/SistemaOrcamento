@@ -24,10 +24,10 @@
 
 Full details: .planning/milestones/v1.0-ROADMAP.md
 
-### v1.1 (Planned)
+### v1.1 (COMPLETE — 2026-05-03)
 
 ## Phase 6 - Aprovacao de Orcamento pelo Cliente com Associacao Athos
-**Status:** not-started
+**Status:** complete
 **Goal:** Pagina publica para o cliente associado ao orcamento visualizar e aprovar; envio automatico de mensagem ao associar idcliente.
 
 **Requirements covered:** FR-07.1, FR-07.2, FR-07.3 (integracao Athos)
@@ -35,15 +35,15 @@ Full details: .planning/milestones/v1.0-ROADMAP.md
 **Plans:** 3 planos
 
 Plans:
-- [ ] 06-01-PLAN.md — Hook fire-and-forget no create() + correcao do link de aprovacao (backend)
-- [ ] 06-02-PLAN.md — Enriquecer pagina de aprovacao com itens e total (frontend)
-- [ ] 06-03-PLAN.md — Verificacoes automatizadas + checkpoint smoke test do fluxo completo
+- [x] 06-01-PLAN.md — Hook fire-and-forget no create() + correcao do link de aprovacao (backend)
+- [x] 06-02-PLAN.md — Enriquecer pagina de aprovacao com itens e total (frontend)
+- [x] 06-03-PLAN.md — Verificacoes automatizadas + checkpoint smoke test do fluxo completo
 
 **UAT:**
-- [ ] Ao associar idcliente a um orcamento no Athos -> mensagem automatica enviada ao cliente
-- [ ] Cliente acessa pagina publica de aprovacao -> visualiza detalhes do orcamento
-- [ ] Cliente aprova orcamento -> status atualiza para APROVADO no sistema
-- [ ] Link de aprovacao expira ou invalida apos uso
+- [x] Ao associar idcliente a um orcamento no Athos -> mensagem automatica enviada ao cliente
+- [x] Cliente acessa pagina publica de aprovacao -> visualiza detalhes do orcamento
+- [x] Cliente aprova orcamento -> status atualiza para APROVADO no sistema
+- [ ] Link de aprovacao expira ou invalida apos uso (backlog)
 
 ---
 
