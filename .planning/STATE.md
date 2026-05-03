@@ -1,7 +1,7 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
-**Last updated:** 2026-05-03 (phase 6 complete)
-**Current phase:** v1.1 complete — next: backlog planning
+**Last updated:** 2026-05-03 (v1.1 archived)
+**Current phase:** Post-v1.1 — next: /gsd-new-milestone for v1.2
 
 ---
 
@@ -16,12 +16,19 @@
 | 5 | UX do Painel e Area do Cliente | complete (v1.0) |
 | 6 | Aprovação de Orçamento pelo Cliente com Associação Athos | complete (v1.1) |
 
+## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-05-03)
+
+**Core value:** Orçamentos criados, aprovados e cobrados sem intervenção manual
+**Current focus:** Planning next milestone (v1.2)
+
 ## Active Context
 
 - **Branch atual:** main
-- **Ultimo commit de codigo:** 2026-05 - feat(05): filter pills+toast+paginated fix; form validation; integration badges; customer approve+status pages
+- **Última versão shipped:** v1.1 (tag: v1.1)
 - **Codebase map:** .planning/codebase/ (7 documentos - gerados em 2026-05-01)
-- **Risco principal remanescente:** ausencia de testes automatizados de seguranca e UAT runtime dos novos guards
+- **Milestones archived:** v1.0, v1.1
 
 ## Decisions Log
 
@@ -31,12 +38,7 @@
 | 2026-05-01 | Granularity: Coarse | 5 fases amplas para time pequeno |
 | 2026-05-01 | Auth via Chatwoot apenas | Equipe ja usa Chatwoot; evitar segundo sistema de login |
 | 2026-05-01 | Phase 1 = Seguranca (prioridade maxima) | Sistema em producao sem qualquer autenticacao |
-| 2026-05-01 | Execucao inline da fase 1 | Runtime local sem gsd-sdk, aplicado fallback manual do workflow |
-
-## Accumulated Context
-
-### Roadmap Evolution
-- Phase 6 adicionada: Aprovação de Orçamento pelo Cliente com Associação Athos
+| 2026-05-03 | Envio manual (botao Enviar) | Operador confirmou em UAT: nao quer auto-dispatch |
 
 ## Notes
 
@@ -44,22 +46,8 @@
 - NFS-e: regras criticas documentadas em memory/nfse-iibrasil-integracao.md - NAO alterar hash/aliquotas
 - EFI: certificados mTLS em base64 nas env vars EFI_CERT_PEM / EFI_KEY_PEM
 - Deploy: VPS via Tailscale, imagens no ghcr.io/martoxak/
-- Summaries da fase 1:
-  - .planning/phases/01-seguranca-e-autenticacao/01-01-SUMMARY.md
-  - .planning/phases/01-seguranca-e-autenticacao/01-02-SUMMARY.md
-- Summaries da fase 5:
-  - .planning/phases/05-ux-do-painel-e-area-do-cliente/05-01-SUMMARY.md
-  - .planning/phases/05-ux-do-painel-e-area-do-cliente/05-02-SUMMARY.md
-  - .planning/phases/05-ux-do-painel-e-area-do-cliente/05-03-SUMMARY.md
-  - .planning/phases/05-ux-do-painel-e-area-do-cliente/05-04-SUMMARY.md
+- Fases 1-5 arquivadas em milestones/v1.0-ROADMAP.md
+- Fase 6 arquivada em milestones/v1.1-ROADMAP.md
 
-- Summaries da fase 4:
-  - .planning/phases/04-testes-e-ci/04-01-SUMMARY.md
-
-- **Phase 6 complete (2026-05-03):**
-  - .planning/phases/06-aprovacao-cliente-athos/06-01-SUMMARY.md
-  - .planning/phases/06-aprovacao-cliente-athos/06-02-SUMMARY.md
-  - .planning/phases/06-aprovacao-cliente-athos/06-03-SUMMARY.md
-  - Fluxo completo de aprovação verificado: criação → disparo automático → Chatwoot → página de cliente → aprovação
 ---
 *Initialized: 2026-05-01 via /gsd-new-project*

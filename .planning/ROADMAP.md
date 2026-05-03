@@ -1,20 +1,23 @@
 # Roadmap — Sistema de Orcamento BomCusto
 
-**Version:** 1.1
-**Date:** 2026-05-02
+**Version:** Post-v1.1
+**Date:** 2026-05-03
 
 ---
 
 ## Milestones
 
-- Checkmark **v1.0 MVP** — Phases 1-5 (shipped 2026-05-02)
-- WIP **v1.1** — Phase 6+ (planned)
+- ✅ **v1.0 MVP** — Phases 1–5 (shipped 2026-05-02)
+- ✅ **v1.1 Aprovação Athos** — Phase 6 (shipped 2026-05-03)
 
 ---
 
 ## Phases
 
-### v1.0 MVP (Phases 1-5) — SHIPPED 2026-05-02
+<details>
+<summary>✅ v1.0 MVP (Phases 1–5) — SHIPPED 2026-05-02</summary>
+
+Full details: .planning/milestones/v1.0-ROADMAP.md
 
 - [x] Phase 1: Seguranca e Autenticacao
 - [x] Phase 2: Confiabilidade de Integracoes
@@ -22,28 +25,16 @@
 - [x] Phase 4: Testes e CI
 - [x] Phase 5: UX do Painel e Area do Cliente
 
-Full details: .planning/milestones/v1.0-ROADMAP.md
+</details>
 
-### v1.1 (COMPLETE — 2026-05-03)
+<details>
+<summary>✅ v1.1 Aprovação Athos (Phase 6) — SHIPPED 2026-05-03</summary>
 
-## Phase 6 - Aprovacao de Orcamento pelo Cliente com Associacao Athos
-**Status:** complete
-**Goal:** Pagina publica para o cliente associado ao orcamento visualizar e aprovar; envio automatico de mensagem ao associar idcliente.
+Full details: .planning/milestones/v1.1-ROADMAP.md
 
-**Requirements covered:** FR-07.1, FR-07.2, FR-07.3 (integracao Athos)
+- [x] Phase 6: Aprovacao de Orcamento pelo Cliente com Associacao Athos (4 planos)
 
-**Plans:** 3 planos
-
-Plans:
-- [x] 06-01-PLAN.md — Hook fire-and-forget no create() + correcao do link de aprovacao (backend)
-- [x] 06-02-PLAN.md — Enriquecer pagina de aprovacao com itens e total (frontend)
-- [x] 06-03-PLAN.md — Verificacoes automatizadas + checkpoint smoke test do fluxo completo
-
-**UAT:**
-- [x] Ao associar idcliente a um orcamento no Athos -> mensagem automatica enviada ao cliente
-- [x] Cliente acessa pagina publica de aprovacao -> visualiza detalhes do orcamento
-- [x] Cliente aprova orcamento -> status atualiza para APROVADO no sistema
-- [ ] Link de aprovacao expira ou invalida apos uso (backlog)
+</details>
 
 ---
 
@@ -57,4 +48,4 @@ Plans:
 - RBAC por role (ADMIN / VENDEDOR / ATENDENTE)
 
 ---
-*Roadmap v1.1 - 2026-05-02*
+*Roadmap post-v1.1 - 2026-05-03*
