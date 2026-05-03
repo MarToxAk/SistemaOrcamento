@@ -23,7 +23,7 @@
 Phase: 8 — UX das Páginas Públicas do Cliente
 Plan: — (not yet planned)
 Status: Awaiting planning
-Last activity: 2026-05-03 — Phase 7 complete (MSG-01, MSG-02, MSG-03, MSG-04, MSG-05)
+Last activity: 2026-05-03 — Phase 7 UAT PASSED (10/10 tests) — ready for Phase 8
 
 ## Project Reference
 
