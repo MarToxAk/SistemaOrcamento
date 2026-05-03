@@ -47,7 +47,11 @@ Full details: .planning/milestones/v1.1-ROADMAP.md
 
 **Depends on:** Phase 6 (Chatwoot integration, enviarParaCliente pattern, changeStatus)
 
-**Plans:** a definir
+**Plans:** 2 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Fix encoding em quotes.service.ts + notificações changeStatus() (MSG-01, MSG-05)
+- [ ] 07-02-PLAN.md — Padronizar tom das mensagens PIX em efi.service.ts (MSG-02, MSG-03, MSG-04)
 
 **Success criteria:**
 1. Aprovar orçamento via link → cliente recebe mensagem Chatwoot com emoji de confirmação e próximo passo
