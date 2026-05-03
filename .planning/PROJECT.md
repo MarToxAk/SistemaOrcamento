@@ -8,6 +8,17 @@ Sistema interno de gestão de orçamentos para a empresa Bom Custo (Ilhabela-SP)
 
 Orçamentos criados, aprovados e cobrados sem intervenção manual — integrações (NFS-e, EFI PIX, Chatwoot) devem funcionar de forma confiável e visível, nunca silenciosamente.
 
+## Current Milestone: v1.2 Mensagens e UX do Cliente
+
+**Goal:** Padronizar comunicação com o cliente via Chatwoot em cada etapa do serviço, com mensagens amigáveis e emojis, e reformular as páginas públicas para experiência mais acolhedora.
+
+**Target features:**
+- Mensagens automáticas com emojis: aprovação, PIX parcial/total/parcelado, mudanças de status
+- Redesign das páginas `/approve` e `/status` com identidade visual Bom Custo
+- Status do serviço visível e descritivo para o cliente
+
+---
+
 ## Current State
 
 **Versão atual:** v1.1 (shipped 2026-05-03)
