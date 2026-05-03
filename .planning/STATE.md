@@ -1,6 +1,6 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
-**Last updated:** 2026-05-03 (v1.2 — phase 7 complete)
+**Last updated:** 2026-05-03 (v1.2 — phases 7+8 shipped)
 **Current phase:** Phase 8 — UX das Páginas Públicas do Cliente
 
 ---
@@ -16,14 +16,14 @@
 | 5 | UX do Painel e Area do Cliente | complete (v1.0) |
 | 6 | Aprovação de Orçamento pelo Cliente com Associação Athos | complete (v1.1) |
 | 7 | Mensagens Automáticas ao Cliente via Chatwoot | complete (v1.2) |
-| 8 | UX das Páginas Públicas do Cliente | not started |
+| 8 | UX das Páginas Públicas do Cliente | shipped (v1.2) |
 
 ## Current Position
 
 Phase: 8 — UX das Páginas Públicas do Cliente
-Plan: — (not yet planned)
-Status: Awaiting planning
-Last activity: 2026-05-03 — Phase 7 shipped — PR #1
+Plan: complete
+Status: Shipped
+Last activity: 2026-05-03 — Phase 8 shipped — PR #1
 
 ## Project Reference
 
