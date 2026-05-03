@@ -584,17 +584,6 @@ export class QuotesService {
 
     const mappedQuote = this.mapQuoteBody(quote);
 
-    // [PHASE-06 D-01/D-05/D-06] Disparo automatico ao importar do Athos com idcliente
-    // payload.idorcamento indica origem Athos; approvalRequestedAt garante idempotencia (D-05)
-    // Fire-and-forget: falha nao bloqueia resposta ao chamador (D-06)
-    if (payload.idorcamento && !quote.approvalRequestedAt) {
-      void this.enviarParaCliente(quote.id).catch((err: unknown) => {
-        this.logger.warn(
-          `[create] Falha no disparo automatico enviarParaCliente para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
-    }
-
     try {
       const stored = await this.quotesPdfStorageService.generateAndStore(mappedQuote.body);
 
