@@ -8,24 +8,20 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Last Shipped Milestone: v1.5 — Correcao NFS-e (Encoding + UI de Desconto)
+## Last Shipped Milestone: v1.6 — Correcao NFS-e: Calculo de Desconto e Valor Final
 
 Shipped em 2026-05-04.
 
 Entregas principais:
-- Strings de serviço NFS-e restauradas para UTF-8 (sem mojibake em nfse.service.ts)
-- Proxy Next.js `/api/quotes/[id]/nfse` repassa body do POST ao backend
-- Modal de emissão NFS-e com switch + 3 campos bidirecionais de desconto (%, R$, Valor total)
-- Valor total pré-preenchido com valor base; campo bloqueado contra valor acima do base
+- Corrigidas 6 ocorrencias do path errado `quote?.totais?.valor` → `quote?.body?.totais?.valor` no modal NFS-e
+- Campo "valor total" pre-preenchido com o total real do orcamento ao ativar desconto
+- Calculos de desconto (%, R$, valor total) funcionando com base correta
+- POST body tipado como `Record<string, string | number | boolean>` — `descontoAtivo` boolean, campos numericos como `Number()`
+- Valor pos-desconto enviado corretamente ao backend e ao SOAP iiBrasil
 
-## Current Milestone: v1.6 — Correcao NFS-e: Calculo de Desconto e Valor Final
+## Current Milestone
 
-**Goal:** Corrigir o modal de emissao NFS-e para que o valor total do orcamento seja lido corretamente, o desconto seja calculado sobre esse valor, e o valor final (pos-desconto) seja enviado corretamente ao SOAP da NFS-e.
-
-**Target features:**
-- Campo "valor total" pre-preenchido com o total real do orcamento
-- Desconto calculado corretamente sobre a base do orcamento (%, R$, valor total)
-- Valor liquido pos-desconto enviado corretamente na emissao da NFS-e
+Nao definido — executar `/gsd-new-milestone` para iniciar proximo ciclo.
 
 ---
 
@@ -109,9 +105,11 @@ Entregas principais:
 | wait-for-db.js antes de migration | Elimina race condition postgres/backend | checkmark Validado -- v1.3 |
 | Runbook manual para VPS | Sem infra CI capaz de executar docker compose | checkmark Validado -- v1.3 |
 | Monorepo npm workspaces | Compartilhamento de tipos sem publicacao | checkmark Validado -- historico |
-| Remover obrigatoriedade de assinatura no webhook EFI | Necessidade operacional de receber notificacao sem bloqueio por segredo | -- Pendente (v1.4) |
-| Conciliar pagamento pelo Athos ao abrir/enviar orcamento | Reduz divergencia entre estado do caixa e estado do orcamento | -- Pendente (v1.4) |
-| Desconto NFS-e controlado por flag e tipo | Dar flexibilidade fiscal sem alterar emissao padrao | -- Pendente (v1.4) |
+| Remover obrigatoriedade de assinatura no webhook EFI | Necessidade operacional de receber notificacao sem bloqueio por segredo | checkmark Validado — v1.4 |
+| Conciliar pagamento pelo Athos ao abrir/enviar orcamento | Reduz divergencia entre estado do caixa e estado do orcamento | checkmark Validado — v1.4 |
+| Desconto NFS-e controlado por flag e tipo | Dar flexibilidade fiscal sem alterar emissao padrao | checkmark Validado — v1.4 |
+| Corrigir path quote?.totais?.valor para quote?.body?.totais?.valor | totais existe somente dentro de body no tipo QuoteDetail | checkmark Validado — v1.6 |
+| Usar Record<string, string \| number \| boolean> no POST NFS-e | descontoAtivo precisa ser boolean true para igualdade estrita no backend | checkmark Validado — v1.6 |
 
 ## Evolution
 
@@ -131,4 +129,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 — Phase 17 complete, v1.6 shipped*
+*Last updated: 2026-05-04 after v1.6 milestone*

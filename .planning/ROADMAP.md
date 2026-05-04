@@ -13,7 +13,7 @@ Date: 2026-05-04
 - [x] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (shipped 2026-05-03)
 - [x] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14 (shipped 2026-05-04)
 - [x] v1.5 Correcao NFS-e — Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
-- [x] v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04)
+- [x] v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) — [details](.planning/milestones/v1.6-ROADMAP.md)
 
 ---
 
@@ -119,25 +119,9 @@ Full details: .planning/milestones/v1.5-ROADMAP.md
 
 ## v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final (Phase 17) - SHIPPED 2026-05-04
 
-**Plans:** 1 plan
+Full details: .planning/milestones/v1.6-ROADMAP.md
 
-- [x] Phase 17: Corrigir calculo de desconto e envio do valor final na NFS-e (NFSC-01..05)
-
-Plans:
-- [x] 17-01-PLAN.md — Corrigir 6 ocorrencias do path errado (quote?.totais?.valor → quote?.body?.totais?.valor) e coercao de tipos no POST body de handleEmitirNfse [COMPLETO — verificacao manual aprovada]
-
-### Phase Details
-
-**Phase 17: Correcao do calculo de desconto no modal NFS-e**
-Goal: Corrigir o path incorreto de leitura do total do orcamento no frontend, garantindo que o valor base, os calculos de desconto e o valor final enviado ao SOAP sejam corretos.
-Requirements: NFSC-01, NFSC-02, NFSC-03, NFSC-04, NFSC-05
-Root cause: syncDesconto() e UI usam quote?.totais?.valor (undefined) em vez de quote?.body?.totais?.valor.
-Success criteria:
-1. Ao ativar desconto no modal, o campo "valor total" exibe o total real do orcamento (nao zero).
-2. Digitar % atualiza R$ desconto e valor total de forma coerente com o total do orcamento.
-3. Digitar R$ desconto atualiza % e valor total de forma coerente.
-4. Digitar valor total atualiza % e R$ desconto; valor nao pode exceder o total do orcamento.
-5. Emitir NFS-e com desconto ativo envia o valor correto (pos-desconto) ao backend e ao SOAP.
+- [x] Phase 17: Correcao do calculo de desconto no modal NFS-e (NFSC-01..05)
 
 ## Backlog (Future)
 

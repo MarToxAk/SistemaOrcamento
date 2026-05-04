@@ -1,8 +1,8 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: 17-correcao-desconto-nfse
-Milestone: v1.6 (shipped)
+Current phase: —
+Milestone: v1.6 (archived)
 
 ---
 
@@ -10,8 +10,8 @@ Milestone: v1.6 (shipped)
 
 Phase: 17-correcao-desconto-nfse — COMPLETE
 Plan: —
-Status: Phase 17 shipped — PR #5 aberto para merge
-Last activity: 2026-05-04 — Phase 17 enviada; PR #5 criado (base: main)
+Status: v1.6 archived — milestone completo, aguardando /gsd-new-milestone
+Last activity: 2026-05-04 — v1.6 fechado; tag v1.6 criada; PR #5 aberto
 
 ## Project Status
 
@@ -43,6 +43,7 @@ Last activity: 2026-05-04 — Phase 17 enviada; PR #5 criado (base: main)
 - v1.3 — phases 9-10 (.planning/milestones/v1.3-ROADMAP.md)
 - v1.4 — phases 11-14 (.planning/milestones/v1.4-ROADMAP.md)
 - v1.5 — phases 15-16 (.planning/milestones/v1.5-ROADMAP.md)
+- v1.6 — phase 17 (.planning/milestones/v1.6-ROADMAP.md)
 
 ## Project Reference
 
