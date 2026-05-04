@@ -1,4 +1,4 @@
-Ôªøimport { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 import { createHash } from "crypto";
@@ -39,12 +39,12 @@ type TomadorEndereco = {
   uf: string;
 };
 
-// Servi√ßos dispon√≠veis para emiss√£o de NFS-e
+// ServiÁos disponÌveis para emiss„o de NFS-e
 const SERVICOS: Record<string, { itemLista: string; codigoNacional: string; aliquotaIss: string; descricao: string }> = {
-  "24.01":    { itemLista: "24.01", codigoNacional: "240101", aliquotaIss: "3.73", descricao: "Confec√ß√£o de carimbos, banners, placas e sinaliza√ß√£o" },
-  "24.01-02": { itemLista: "24.01", codigoNacional: "240102", aliquotaIss: "3.73", descricao: "Grava√ß√£o de objetos e joias" },
-  "13.05":    { itemLista: "13.05", codigoNacional: "130501", aliquotaIss: "3.73", descricao: "Composi√ß√£o gr√°fica e confec√ß√£o de matrizes" },
-  "14.08":    { itemLista: "14.08", codigoNacional: "140801", aliquotaIss: "3.73", descricao: "Encaderna√ß√£o e acabamento" },
+  "24.01":    { itemLista: "24.01", codigoNacional: "240101", aliquotaIss: "3.73", descricao: "ConfecÁ„o de carimbos, banners, placas e sinalizaÁ„o" },
+  "24.01-02": { itemLista: "24.01", codigoNacional: "240102", aliquotaIss: "3.73", descricao: "GravaÁ„o de objetos e joias" },
+  "13.05":    { itemLista: "13.05", codigoNacional: "130501", aliquotaIss: "3.73", descricao: "ComposiÁ„o gr·fica e confecÁ„o de matrizes" },
+  "14.08":    { itemLista: "14.08", codigoNacional: "140801", aliquotaIss: "3.73", descricao: "EncadernaÁ„o e acabamento" },
 };
 
 const DEFAULT_SERVICO = "24.01";
@@ -154,7 +154,7 @@ export class NfseService {
     // Sem documento (consumidor final / sem-tomador) -> servidor retorna HTTP 500 sem mensagem.
     if (!docTomador) {
       throw new BadRequestException(
-        "CPF ou CNPJ do cliente √© obrigat√≥rio para emitir NFS-e em Ilhabela. " +
+        "CPF ou CNPJ do cliente È obrigatÛrio para emitir NFS-e em Ilhabela. " +
         "Informe o documento no campo correspondente.",
       );
     }
@@ -352,23 +352,56 @@ export class NfseService {
     let endereco: TomadorEndereco | null = null;
 
     try {
-      const lookupId  = String(quote.externalQuoteId ?? quote.internalNumber ?? "");
-      const athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
-      const clienteId = (athosData as any)?.mapped?.idcliente;
-      if (clienteId) {
-        const info = await this.athosService.buscarClientePorId(clienteId);
-        if (info) {
-          nome    = info.name || quote.customer?.fullName || null; // Athos primeiro
-          endereco = (info as any).endereco ?? null;
-          if (info.type === "juridico" && info.documento?.length === 14) cnpj = info.documento;
-          else if (info.type === "fisico" && info.documento?.length === 11) cpf = info.documento;
+      const lookupId = String(quote.externalQuoteId ?? quote.internalNumber ?? "");
+      this.logger.log(
+        `[Tomador] buscando: lookupId="${lookupId}" externalQuoteId=${quote.externalQuoteId} internalNumber=${quote.internalNumber}`,
+      );
+
+      let athosData: Awaited<ReturnType<typeof this.athosService.buscarOrcamentoPorNumero>> | null = null;
+      try {
+        athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
+      } catch (err) {
+        if (err instanceof NotFoundException) {
+          this.logger.warn(
+            `[Tomador] orcamento "${lookupId}" nao encontrado no Athos (NotFoundException) - sem dados do tomador`,
+          );
+        } else {
+          this.logger.warn(
+            `[Tomador] erro ao buscar orcamento "${lookupId}" no Athos: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      if (athosData) {
+        const clienteId = (athosData as any)?.mapped?.idcliente;
+        this.logger.log(`[Tomador] orcamento encontrado - idcliente=${clienteId}`);
+
+        if (clienteId != null && clienteId > 0) {
+          const info = await this.athosService.buscarClientePorId(clienteId);
+          if (info) {
+            nome     = info.name || quote.customer?.fullName || null;
+            endereco = (info as any).endereco ?? null;
+            if (info.type === "juridico" && info.documento?.length === 14) cnpj = info.documento;
+            else if (info.type === "fisico"   && info.documento?.length === 11) cpf  = info.documento;
+            this.logger.log(
+              `[Tomador] cliente encontrado - tipo=${info.type} nome="${nome}" documento=${info.documento ?? "null"}`,
+            );
+          } else {
+            this.logger.warn(`[Tomador] buscarClientePorId(${clienteId}) retornou null`);
+          }
+        } else {
+          this.logger.warn(
+            `[Tomador] idcliente=${clienteId} invalido ou ausente no mapeamento do orcamento "${lookupId}"`,
+          );
         }
       }
     } catch (err) {
-      this.logger.warn(`Falha ao buscar tomador no Athos: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.warn(
+        `[Tomador] falha inesperada ao buscar tomador no Athos: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
-    // Fallback para nome do chat se Athos n√£o encontrou
+    // Fallback para nome do chat se Athos n„o encontrou
     if (!nome) nome = quote.customer?.fullName ?? null;
 
     return { cnpj, cpf, nome, endereco };
@@ -403,19 +436,19 @@ export class NfseService {
     const hasAllFields = Object.values(raw).every((value) => value.length > 0);
     if (!hasAllFields) {
       throw new BadRequestException(
-        "Endere√ßo do tomador incompleto. Informe logradouro, n√∫mero, bairro, CEP, c√≥digo do munic√≠pio (IBGE) e UF.",
+        "EndereÁo do tomador incompleto. Informe logradouro, n˙mero, bairro, CEP, cÛdigo do municÌpio (IBGE) e UF.",
       );
     }
 
     const sanitized = this.sanitizeTomadorEndereco(raw);
     if (sanitized.cep.length !== 8) {
-      throw new BadRequestException("CEP do tomador inv√°lido. Informe 8 d√≠gitos.");
+      throw new BadRequestException("CEP do tomador inv·lido. Informe 8 dÌgitos.");
     }
     if (sanitized.codigoMunicipio.length !== 7) {
-      throw new BadRequestException("C√≥digo do munic√≠pio do tomador inv√°lido. Informe 7 d√≠gitos do IBGE.");
+      throw new BadRequestException("CÛdigo do municÌpio do tomador inv·lido. Informe 7 dÌgitos do IBGE.");
     }
     if (sanitized.uf.length !== 2) {
-      throw new BadRequestException("UF do tomador inv√°lida. Informe 2 letras.");
+      throw new BadRequestException("UF do tomador inv·lida. Informe 2 letras.");
     }
 
     return sanitized;
@@ -432,10 +465,10 @@ export class NfseService {
 
   async emitir(quoteId: string, input?: EmitirNfseInput) {
     const quote = await this.findQuote(quoteId);
-    if (!quote) throw new BadRequestException("Or√ßamento n√£o encontrado");
+    if (!quote) throw new BadRequestException("OrÁamento n„o encontrado");
 
     if (quote.status === "CANCELADO") {
-      throw new BadRequestException("N√£o √© poss√≠vel emitir NFS-e para or√ßamentos cancelados.");
+      throw new BadRequestException("N„o È possÌvel emitir NFS-e para orÁamentos cancelados.");
     }
 
     if (quote.nfseNumero) {
@@ -448,20 +481,20 @@ export class NfseService {
       };
     }
 
-    // Resolve servi√ßo
+    // Resolve serviÁo
     const servicoKey = input?.servicoCodigo ?? DEFAULT_SERVICO;
     const servico = SERVICOS[servicoKey] ?? SERVICOS[DEFAULT_SERVICO];
 
-    // Resolve RPS n√∫mero e s√©rie
+    // Resolve RPS n˙mero e sÈrie
     let rpsNumero = Number(quote.internalNumber);
     let rpsSerie  = this.SERIE_RPS;
     const infoNfse = await this.getInfoNfse();
     if (infoNfse) {
-      rpsNumero = infoNfse.proximoRps;
+      rpsNumero = infoNfse.proximoRps + 1;
       rpsSerie  = infoNfse.serieRps || this.SERIE_RPS;
-      this.logger.log(`ProximoRPS=${rpsNumero} SerieRPS=${rpsSerie}`);
+      this.logger.log(`[RPS] API retornou ultimoRPS=${infoNfse.proximoRps - 1} -> emitindo rpsNumero=${rpsNumero} serie=${rpsSerie}`);
     } else {
-      this.logger.warn(`API Auxiliar indispon√≠vel, usando internalNumber=${rpsNumero} como RPS`);
+      this.logger.warn(`API Auxiliar indisponÌvel, usando internalNumber=${rpsNumero} como RPS`);
     }
 
     const dataEmissao    = new Date().toISOString().slice(0, 10);
@@ -500,7 +533,7 @@ export class NfseService {
       ? `Orcamento ${quote.internalNumber} - ${itensDesc}`
       : `Orcamento ${quote.internalNumber}`;
 
-    // Dados do tomador: body tem prioridade; Athos como fallback autom√°tico
+    // Dados do tomador: body tem prioridade; Athos como fallback autom·tico
     let tomadorCnpj = input?.tomadorCnpj ? input.tomadorCnpj.replace(/\D/g, "") : null;
     let tomadorCpf  = input?.tomadorCpf  ? input.tomadorCpf.replace(/\D/g, "")  : null;
     let tomadorNome = input?.tomadorNome?.trim() || null;
@@ -524,7 +557,7 @@ export class NfseService {
 
     if (documentoManualInformado && !tomadorEndereco) {
       throw new BadRequestException(
-        "Endere√ßo do tomador √© obrigat√≥rio quando o documento √© informado manualmente. Preencha logradouro, n√∫mero, bairro, CEP, c√≥digo do munic√≠pio (IBGE) e UF.",
+        "EndereÁo do tomador È obrigatÛrio quando o documento È informado manualmente. Preencha logradouro, n˙mero, bairro, CEP, cÛdigo do municÌpio (IBGE) e UF.",
       );
     }
 
@@ -551,7 +584,7 @@ export class NfseService {
   <Integridade>${integridade}</Integridade>
 </GerarNfseEnvio>`;
 
-    this.logger.log(`Emitindo NFS-e or√ßamento #${quote.internalNumber} - RPS #${rpsNumero}/${rpsSerie} - servi√ßo ${servico.itemLista}/${servico.codigoNacional}`);
+    this.logger.log(`Emitindo NFS-e orÁamento #${quote.internalNumber} - RPS #${rpsNumero}/${rpsSerie} - serviÁo ${servico.itemLista}/${servico.codigoNacional}`);
     this.logger.debug(`XML:\n${dados}`);
 
     const responseXml = await this.enviarSoap(this.buildCabecalho(), dados);
@@ -561,12 +594,12 @@ export class NfseService {
     const numeroNfse = this.parseNumeroNfse(responseXml);
 
     if (erros.length > 0 && !numeroNfse) {
-      throw new BadRequestException(`Erro na emiss√£o da NFS-e: ${erros.join(" | ")}`);
+      throw new BadRequestException(`Erro na emiss„o da NFS-e: ${erros.join(" | ")}`);
     }
 
     if (!numeroNfse) {
-      this.logger.error(`NFS-e sem n√∫mero. Response: ${responseXml}`);
-      throw new BadRequestException("NFS-e processada mas n√∫mero n√£o retornado. Verifique no painel da prefeitura.");
+      this.logger.error(`NFS-e sem n˙mero. Response: ${responseXml}`);
+      throw new BadRequestException("NFS-e processada mas n˙mero n„o retornado. Verifique no painel da prefeitura.");
     }
 
     const codigoVerificacao = this.parseCodigoVerificacao(responseXml);
@@ -582,7 +615,7 @@ export class NfseService {
       },
     });
 
-    this.logger.log(`NFS-e #${numeroNfse} emitida para or√ßamento #${quote.internalNumber}`);
+    this.logger.log(`NFS-e #${numeroNfse} emitida para orÁamento #${quote.internalNumber}`);
 
     // Notifica cliente via Chatwoot (mensagem + PDF como anexo)
     if (quote.conversationId) {
@@ -612,7 +645,7 @@ export class NfseService {
           const fileName   = `NotaFiscal_NFSe_${numeroNfse}.pdf`;
           const contentType = String(pdfResp.headers["content-type"] ?? "application/pdf").split(";")[0].trim();
 
-          this.logger.log(`PDF baixado (${pdfBuffer.length} bytes) √¢‚Ç¨‚Äù enviando ao Chatwoot`);
+          this.logger.log(`PDF baixado (${pdfBuffer.length} bytes) ‚Äî enviando ao Chatwoot`);
           await this.chatwootService.sendAttachment(convId, pdfBuffer, fileName, contentType || "application/pdf");
           this.logger.log(`PDF da NFS-e #${numeroNfse} enviado ao cliente via Chatwoot`);
         } catch (err) {
@@ -626,7 +659,7 @@ export class NfseService {
 
   async consultar(quoteId: string) {
     const quote = await this.findQuote(quoteId);
-    if (!quote) throw new BadRequestException("Or√ßamento n√£o encontrado");
+    if (!quote) throw new BadRequestException("OrÁamento n„o encontrado");
 
     // Busca dados do tomador para o frontend pre-preencher o formulario
     let tomador: { cnpj: string | null; cpf: string | null; nome: string | null; endereco: TomadorEndereco | null } = {

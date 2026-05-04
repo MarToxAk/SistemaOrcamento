@@ -345,6 +345,7 @@ export class AthosService {
           "Tabela orcamento sem coluna identificadora conhecida (numero/idorcamento/codorcamento).",
         );
       }
+      this.logger.log(`[Athos] buscarOrcamentoPorNumero: numero="${numero}" identifierColumn="${identifierColumn}"`);
 
       const query = `
         SELECT *
