@@ -8,10 +8,10 @@ Milestone: v1.8 (in progress)
 
 ## Current Position
 
-Phase: 19-api-de-busca-de-cliente-athos
-Plan: 19-01-PLAN.md
-Status: complete
-Last activity: 2026-05-04 - Phase 19 executed: buscarClientes service + endpoint + testes (10 testes passando)
+Phase: 20-resolucao-de-tomador-por-cliente-selecionado
+Plan: 20-01-PLAN.md
+Status: planning complete - ready to execute
+Last activity: 2026-05-04 - Phase 20 plan created
 
 ## Project Status
 
@@ -36,7 +36,7 @@ Last activity: 2026-05-04 - Phase 19 executed: buscarClientes service + endpoint
 | 17 | Correcao do calculo de desconto no modal NFS-e | complete (v1.6) |
 | 18 | Correcoes NFS-e - RPS e Tomador | complete (v1.7) |
 | 19 | API de busca de cliente Athos | complete (v1.8) |
-| 20 | Resolucao de tomador por cliente selecionado | planned (v1.8) |
+| 20 | Resolucao de tomador por cliente selecionado | planned (v1.8) - plan ready |
 | 21 | UI NFS-e, observabilidade e testes | planned (v1.8) |
 
 ## Milestones Archived

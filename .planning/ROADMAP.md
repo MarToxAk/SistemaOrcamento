@@ -150,6 +150,8 @@ Success criteria:
 3. Consultas invalidas ou muito amplas retornam erro de validacao claro.
 
 Phase 20: Resolucao de tomador por cliente selecionado
+**Plans:** 1 plano
+- [ ] 20-01-PLAN.md — clienteAthosId em EmitirNfseInput + resolucao prioritaria + validacoes TOMAD-04
 Goal: usar cliente Athos explicitamente selecionado para montar tomador completo no XML NFS-e.
 Requirements: TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04
 Success criteria:
