@@ -1,16 +1,16 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: 14 (complete)
+Current phase: -
+Milestone: v1.4 SHIPPED
 
 ---
 
 ## Current Position
 
-Phase: 14 - Desconto controlado na emissao de NFS-e
-Plan: 14-01
-Status: Complete
-Last activity: 2026-05-04 - Phase 14 executed
+Phase: - (milestone v1.4 completo; aguardando planejamento de v1.5)
+Status: Idle — execute `/gsd-new-milestone` para iniciar v1.5
+Last activity: 2026-05-04 - Milestone v1.4 archived (tag v1.4)
 
 ## Project Status
 

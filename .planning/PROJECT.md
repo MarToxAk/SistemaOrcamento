@@ -8,27 +8,21 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Current Milestone: v1.4 Pagamento EFI/Athos + desconto controlado na NFS-e
+## Current Milestone: v1.5 (a definir)
 
-**Goal:** Garantir confirmacao de pagamento confiavel no proprio backend, sem dependencia de n8n, e habilitar desconto controlado na emissao de NFS-e com base no total pago.
+Execute `/gsd-new-milestone` para iniciar o planejamento de v1.5.
 
-**Target features:**
-- Remover autenticacao HMAC obrigatoria do webhook EFI mantendo hardening minimo
-- Processar notificacao de pagamento diretamente no backend NestJS (sem bridge externa)
-- Implementar verificacao real de pagamento no Athos em vez de retorno stub
-- Disparar checagem de pagamento ao abrir e ao enviar orcamento, com atualizacao de status
-- Permitir desconto na NFS-e por percentual ou valor fixo, com flag de ativacao e informacao de total pago
+## Last Shipped Milestone: v1.4 Pagamento EFI/Athos + Desconto NFS-e
 
-## Last Shipped Milestone: v1.3 Estabilidade de Migrations no Docker Compose
-
-Shipped em 2026-05-03.
+Shipped em 2026-05-04.
 
 Entregas principais:
-- wait-for-db.js garante prontidao do banco antes de migration e start
-- bootstrap-runtime.sh padroniza sequencia de startup do backend
-- Healthcheck pg_isready no compose VPS com gate service_healthy
-- UPDATE_RUNBOOK.md para update/rollback reproduzivel na VPS
-- verify-deploy-health.ps1 para validacao pos-deploy
+- Webhook EFI aceita payload sem x-signature/x-gn-signature; throttle + idempotencia mantidos
+- AthosService.verificarPagamentoPorOrcamento consulta tabelas reais (dynamic column discovery)
+- Fire-and-forget de checagem de pagamento em getById e enviarParaCliente
+- Log estruturado conciliacao_athos com paid/statusUpdated
+- EmitirNfseInput com descontoAtivo/descontoPorcentagem/descontoValor/totalPago
+- DescontoIncondicionado populado dinamicamente no XML RPS (ABRASF v2.04)
 
 ---
 
@@ -58,6 +52,10 @@ Entregas principais:
 - checkmark Paginas publicas de aprovacao e status aprimoradas -- v1.2
 - checkmark Mensagens automaticas Chatwoot por eventos -- v1.2
 - checkmark Fluxo de migration confiavel no Docker Compose -- v1.3
+- checkmark Webhook EFI sem HMAC obrigatorio + idempotencia -- v1.4
+- checkmark Conciliacao Athos real (verificarPagamentoPorOrcamento) -- v1.4
+- checkmark Fire-and-forget checagem Athos em getById/enviarParaCliente -- v1.4
+- checkmark Desconto controlado (percentual/valor) na emissao NFS-e -- v1.4
 - checkmark Sequenciamento de startup com banco pronto antes do backend -- v1.3
 - checkmark Observabilidade de falhas de migration nos logs -- v1.3
 - checkmark Runbook de update reproduzivel para VPS -- v1.3
