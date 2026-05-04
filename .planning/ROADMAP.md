@@ -12,6 +12,8 @@ Date: 2026-05-04
 - [x] v1.2 Mensagens e UX do Cliente - Phases 7-8 (shipped 2026-05-03)
 - [x] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (shipped 2026-05-03)
 - [x] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14 (shipped 2026-05-04)
+- [x] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14 (shipped 2026-05-04)
+- [ ] v1.5 Correcao NFS-e — Encoding + UI de desconto - Phases 15-16
 
 ---
 
@@ -60,6 +62,30 @@ Full details: .planning/milestones/v1.3-ROADMAP.md
 </details>
 
 ## v1.4 Pagamento EFI/Athos + Desconto NFS-e (Phases 11-14) - SHIPPED 2026-05-04
+## v1.5 Correcao NFS-e — Encoding + UI de Desconto (Phases 15-16) - IN PROGRESS
+
+- [ ] Phase 15: Corrigir encoding NFS-e e proxy API (NFSFIX-01, NFSFIX-02)
+- [ ] Phase 16: UI de desconto no modal de emissão NFS-e (NFSFIX-03)
+
+### Phase Details
+
+**Phase 15: Corrigir encoding NFS-e e proxy API**
+Goal: Corrigir os dois bugs técnicos que silenciosamente corrompem dados na emissão de NFS-e — mojibake nas descrições de serviço e perda de body no proxy Next.js.
+Requirements: NFSFIX-01, NFSFIX-02
+Success criteria:
+1. Descrições de serviço em `nfse.service.ts` exibem caracteres corretos (ç, ã, á, etc.)
+2. POST `/api/quotes/[id]/nfse` repassa o body completo ao backend
+3. Arquivo `nfse.service.ts` salvo como UTF-8
+
+**Phase 16: UI de desconto no modal NFS-e**
+Goal: Adicionar switch e três campos bidirecionais de desconto ao modal de emissão NFS-e, conectando ao backend que já suporta os campos.
+Requirements: NFSFIX-03
+Success criteria:
+1. Modal tem switch "Aplicar desconto" que habilita seção de desconto
+2. Três campos (% desconto, R$ desconto, Valor total) atualizam-se mutuamente ao digitar
+3. `handleEmitirNfse` envia `descontoAtivo`, `descontoPorcentagem`, `descontoValor` ao backend
+4. Desconto aparece corretamente no XML enviado à prefeitura (via backend existente)
+
 
 Full details: .planning/milestones/v1.4-ROADMAP.md
 

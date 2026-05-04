@@ -10,7 +10,13 @@ Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes
 
 ## Current Milestone: v1.5 (a definir)
 
-Execute `/gsd-new-milestone` para iniciar o planejamento de v1.5.
+## Current Milestone: v1.5 — Correcao NFS-e (Encoding + UI de Desconto)
+
+**Objetivo:** Corrigir bugs que impedem emissão correta de NFS-e com desconto.
+
+Entregas planejadas:
+- **Phase 15:** Corrigir mojibake nas descrições de serviço (`nfse.service.ts`) e corrigir proxy Next.js para repassar body do POST ao backend
+- **Phase 16:** Adicionar switch + três campos bidirecionais de desconto (%, R$, total) ao modal de emissão NFS-e
 
 ## Last Shipped Milestone: v1.4 Pagamento EFI/Athos + Desconto NFS-e
 

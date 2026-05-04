@@ -1,16 +1,17 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: -
-Milestone: v1.4 SHIPPED
+Last updated: 2026-05-05
+Current phase: 15
+Milestone: v1.5 IN PROGRESS
 
 ---
 
 ## Current Position
 
-Phase: - (milestone v1.4 completo; aguardando planejamento de v1.5)
-Status: Idle — execute `/gsd-new-milestone` para iniciar v1.5
-Last activity: 2026-05-04 - Milestone v1.4 archived (tag v1.4)
+Phase: 15 — Corrigir encoding NFS-e e proxy API
+Status: Planning complete — execute `/gsd-execute-phase` para iniciar
+Last activity: 2026-05-05 - Milestone v1.5 planejado (2 fases: 15-16)
 
 ## Project Status
 
@@ -30,12 +31,15 @@ Last activity: 2026-05-04 - Milestone v1.4 archived (tag v1.4)
 | 12 | Conciliacao Athos no backend | complete (v1.4) |
 | 13 | Gatilhos de checagem e sincronizacao de status | complete (v1.4) |
 | 14 | Desconto controlado na emissao de NFS-e | complete (v1.4) |
+| 15 | Corrigir encoding NFS-e e proxy API | not started (v1.5) |
+| 16 | UI de desconto no modal NFS-e | not started (v1.5) |
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-04)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
 Current focus: v1.4 pagamentos EFI/Athos no backend + desconto NFS-e
+Current focus: v1.5 correcao de encoding NFS-e e UI de desconto no modal
 
 ## Active Context
 
@@ -54,6 +58,7 @@ Current focus: v1.4 pagamentos EFI/Athos no backend + desconto NFS-e
 | 2026-05-04 | Nao usar n8n para notificacao de pagamento | Fluxo deve ficar na aplicacao backend principal |
 | 2026-05-04 | Checar pagamento no Athos ao abrir e ao enviar orcamento | Sincronizar status com estado real do caixa |
 | 2026-05-04 | Incluir desconto opcional na emissao de NFS-e | Necessidade fiscal de deducao por percentual/valor sobre total pago |
+| 2026-05-05 | v1.5 foca em dois bugs de NFS-e: mojibake no backend + UI de desconto ausente no frontend | Emissao de NFS-e com valor correto nao era possivel sem esses fixes |
 
 ## Notes
 
