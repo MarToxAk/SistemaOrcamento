@@ -346,7 +346,7 @@ export default function OrcamentoDetailPage() {
     setNfseState("emitindo");
     setNfseMsg("");
     try {
-      const body: Record<string, string> = { servicoCodigo: nfseServico };
+      const body: Record<string, string | number | boolean> = { servicoCodigo: nfseServico };
       const docLimpo = nfseTomadorDoc.replace(/\D/g, "");
       if (docLimpo) {
         if (nfseTomadorTipo === "cnpj") body.tomadorCnpj = docLimpo;
@@ -360,9 +360,9 @@ export default function OrcamentoDetailPage() {
       if (nfseTomadorEnderecoCodigoMunicipio.trim()) body.tomadorEnderecoCodigoMunicipio = nfseTomadorEnderecoCodigoMunicipio.trim();
       if (nfseTomadorEnderecoUf.trim()) body.tomadorEnderecoUf = nfseTomadorEnderecoUf.trim().toUpperCase();
       if (nfseDescontoAtivo && nfseDescontoValor) {
-        body.descontoAtivo = "true";
-        body.descontoPorcentagem = nfseDescontoPercent;
-        body.descontoValor = nfseDescontoValor;
+        body.descontoAtivo = true;
+        body.descontoPorcentagem = Number(nfseDescontoPercent);
+        body.descontoValor = Number(nfseDescontoValor);
       }
 
       const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, {
