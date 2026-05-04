@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS base
+﻿FROM node:20-bookworm-slim AS base
 WORKDIR /app
 
 # Dependencias do Chromium para gerar PDF com Puppeteer sem baixar navegador adicional.
@@ -32,7 +32,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 COPY --from=build /app/apps/backend/package.json ./apps/backend/package.json
 COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
+COPY --from=build /app/apps/backend/scripts ./apps/backend/scripts
 COPY --from=build /app/package.json ./package.json
 
+RUN chmod +x ./apps/backend/scripts/bootstrap-runtime.sh
+
 EXPOSE 4000
-CMD ["sh", "-c", "npm --workspace @bomcusto/backend run prisma:generate -- --schema prisma/schema.prisma && npm --workspace @bomcusto/backend run prisma:deploy -- --schema prisma/schema.prisma && npm --workspace @bomcusto/backend run start"]
+CMD ["sh", "./apps/backend/scripts/bootstrap-runtime.sh"]
