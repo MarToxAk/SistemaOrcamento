@@ -51,7 +51,7 @@ Full details: .planning/milestones/v1.2-ROADMAP.md
 ### v1.3 Estabilidade de Migrations no Docker Compose
 
 ## Phase 9 - Fluxo de Migration Idempotente
-Status: not started
+Status: complete (v1.3)
 Goal: Eliminar falhas de migration em atualizacoes de container garantindo execucao idempotente e sincronizada com prontidao do banco.
 
 Requirements covered: MIG-01, MIG-02, MIG-03
@@ -59,8 +59,8 @@ Depends on: Phase 8
 Plans: 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md - Diagnosticar causa raiz e ajustar comando/entrypoint de migration
-- [ ] 09-02-PLAN.md - Implementar readiness gate e logs acionaveis para falhas de migration
+- [x] 09-01-PLAN.md - Diagnosticar causa raiz e ajustar comando/entrypoint de migration
+- [x] 09-02-PLAN.md - Implementar readiness gate e logs acionaveis para falhas de migration
 
 Success criteria:
 1. Atualizacao via docker compose nao falha com erro de migration previamente aplicada

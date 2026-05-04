@@ -10,9 +10,9 @@ Status: Active
 
 ### Migrations (MIG)
 
-- [ ] MIG-01: Operador pode atualizar os containers com Docker Compose sem erro de migration ja aplicada
-- [ ] MIG-02: Backend executa migrations apenas quando o PostgreSQL estiver pronto para conexoes
-- [ ] MIG-03: Em falha de migration, logs exibem causa tecnica e comando de acao recomendado
+- [x] MIG-01: Operador pode atualizar os containers com Docker Compose sem erro de migration ja aplicada
+- [x] MIG-02: Backend executa migrations apenas quando o PostgreSQL estiver pronto para conexoes
+- [x] MIG-03: Em falha de migration, logs exibem causa tecnica e comando de acao recomendado
 - [ ] MIG-04: Fluxo de startup nao entra em loop de restart por falha transitiva de banco nao pronto
 
 ### Operacao de Deploy (OPS)
@@ -43,9 +43,9 @@ Status: Active
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| MIG-01 | 9 | Pending |
-| MIG-02 | 9 | Pending |
-| MIG-03 | 9 | Pending |
+| MIG-01 | 9 | Complete |
+| MIG-02 | 9 | Complete |
+| MIG-03 | 9 | Complete |
 | MIG-04 | 10 | Pending |
 | OPS-01 | 10 | Pending |
 | OPS-02 | 10 | Pending |
