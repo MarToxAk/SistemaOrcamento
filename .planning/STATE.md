@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-04
 Current phase: 17-correcao-desconto-nfse
-Milestone: v1.6 (in progress)
+Milestone: v1.6 (shipped)
 
 ---
 
@@ -10,8 +10,8 @@ Milestone: v1.6 (in progress)
 
 Phase: 17-correcao-desconto-nfse — COMPLETE
 Plan: —
-Status: Phase 17 verified and complete — v1.6 pronto para ship
-Last activity: 2026-05-04 — Phase 17 completa; verificacao passed (5/5 must-haves)
+Status: Phase 17 shipped — PR #5 aberto para merge
+Last activity: 2026-05-04 — Phase 17 enviada; PR #5 criado (base: main)
 
 ## Project Status
 
@@ -52,8 +52,8 @@ Current focus: v1.6 Correcao do calculo de desconto no modal NFS-e
 
 ## Active Context
 
-- Branch atual: ship/phase-07
-- PR ativo: #1
+- Branch atual: fix/frontend-proxy-auth-header
+- PR ativo: #5
 - Ultima versao tagged: v1.2
 - Milestones archived: v1.0, v1.1, v1.2, v1.3
 - Escopo v1.4: webhook EFI sem auth HMAC obrigatoria + conciliacao Athos sem n8n + desconto NFS-e opcional
@@ -75,7 +75,7 @@ Current focus: v1.6 Correcao do calculo de desconto no modal NFS-e
 ## Notes
 
 - SDK gsd nao encontrado no ambiente atual; ajustes de milestone feitos manualmente
-- Proximo passo: /gsd-next para planejar a Phase 16
+- Proximo passo: revisar/aprovar PR #5 e fazer merge quando CI estabilizar
 - Implementacao anterior baseada em listener externo nao sera reutilizada (sem n8n)
 
 
