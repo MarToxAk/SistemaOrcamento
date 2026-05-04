@@ -1,9 +1,10 @@
 "use client";
 
+import Script from "next/script";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type ApproveState = "loading-quote" | "idle" | "submitting" | "success" | "error" | "no-token";
+type ApproveState = "loading-quote" | "idle" | "submitting" | "success" | "already-approved" | "error" | "no-token";
 
 export default function ApprovePage() {
   const { id } = useParams<{ id: string }>();
@@ -47,9 +48,9 @@ export default function ApprovePage() {
           }))
         );
 
-        // If already approved, show success state immediately
+        // If already approved, show dedicated already-approved state
         if (data?.approved) {
-          setState("success");
+          setState("already-approved");
         } else {
           setState("idle");
         }
@@ -90,8 +91,12 @@ export default function ApprovePage() {
 
   return (
     <>
+      <Script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" strategy="beforeInteractive" />
+      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+
       <style>{`
-        body { background-color: #f9f7ed; }
+        body { margin: 0; background-color: #f9f7ed; }
         .approve-card {
           border-radius: 16px;
           overflow: hidden;
@@ -121,12 +126,18 @@ export default function ApprovePage() {
         .btn-approve:disabled {
           opacity: 0.65;
         }
+        .page-wrapper {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px 16px;
+          background-color: #f9f7ed;
+          box-sizing: border-box;
+        }
       `}</style>
 
-      <div
-        className="min-vh-100 d-flex align-items-center justify-content-center px-3"
-        style={{ backgroundColor: "#f9f7ed" }}
-      >
+      <div className="page-wrapper">
         <div className="approve-card bg-white">
           <div className="approve-header text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -230,7 +241,32 @@ export default function ApprovePage() {
                 </div>
                 <h5 className="mb-2">Orçamento Aprovado!</h5>
                 <p className="text-muted">
-                  Recebemos sua aprovação. Em breve nossa equipe entrará em contato.
+                  Nossa equipe já foi notificada e em breve seu pedido entra em produção. Avisaremos assim que estiver pronto.
+                </p>
+                <div className="mt-3 border-top pt-3 small text-muted">
+                  Dúvidas? Fale conosco:{" "}
+                  <a href="https://wa.me/5512996484918" className="text-decoration-none fw-semibold">
+                    (12) 99648-4918
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* Already approved */}
+            {state === "already-approved" && (
+              <div className="py-2">
+                <div
+                  className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                  style={{ width: 64, height: 64, background: "#c5f2e8" }}
+                >
+                  <i className="bi bi-check-lg" style={{ fontSize: 32, color: "#2e7d62" }} />
+                </div>
+                <h5 className="mb-2">Orçamento já aprovado</h5>
+                {quoteNumber && (
+                  <div className="text-muted mb-2 small">Orçamento <strong>#{quoteNumber}</strong></div>
+                )}
+                <p className="text-muted">
+                  Você já aprovou este orçamento anteriormente. Nossa equipe está cuidando do seu pedido.
                 </p>
                 <div className="mt-3 border-top pt-3 small text-muted">
                   Dúvidas? Fale conosco:{" "}
