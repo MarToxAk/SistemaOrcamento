@@ -28,6 +28,8 @@ export interface EmitirNfseInput {
   descontoValor?: number;
   /** Base de calculo para desconto percentual; se ausente usa valorServicos (NFSD-02) */
   totalPago?: number;
+  /** ID do cliente Athos selecionado explicitamente; quando informado substitui o lookup via orcamento (TOMAD-01) */
+  clienteAthosId?: number;
 }
 
 type TomadorEndereco = {
@@ -533,7 +535,7 @@ export class NfseService {
       ? `Orcamento ${quote.internalNumber} - ${itensDesc}`
       : `Orcamento ${quote.internalNumber}`;
 
-    // Dados do tomador: body tem prioridade; Athos como fallback automático
+    // Dados do tomador: clienteAthosId tem prioridade máxima; depois manual; depois lookup por orçamento
     let tomadorCnpj = input?.tomadorCnpj ? input.tomadorCnpj.replace(/\D/g, "") : null;
     let tomadorCpf  = input?.tomadorCpf  ? input.tomadorCpf.replace(/\D/g, "")  : null;
     let tomadorNome = input?.tomadorNome?.trim() || null;
@@ -541,13 +543,34 @@ export class NfseService {
     let tomadorEndereco: TomadorEndereco | null = this.buildTomadorEnderecoFromInput(input);
     const documentoManualInformado = Boolean(tomadorCnpj || tomadorCpf);
 
-    if (!tomadorCnpj && !tomadorCpf) {
+    // Caminho A — clienteAthosId explícito (TOMAD-01, TOMAD-02)
+    if (input?.clienteAthosId != null && Number.isFinite(input.clienteAthosId) && input.clienteAthosId > 0) {
+      const info = await this.athosService.buscarClientePorId(input.clienteAthosId);
+      if (!info) {
+        throw new BadRequestException(
+          `Cliente Athos não encontrado. Verifique o clienteAthosId informado (${input.clienteAthosId}).`,
+        );
+      }
+      tomadorNome = tomadorNome ?? info.name ?? null;
+      // Preservar endereço do input se informado explicitamente; senão usar o do Athos
+      tomadorEndereco = tomadorEndereco ?? (info.endereco ?? null);
+      if (info.type === "juridico" && info.documento?.replace(/\D/g, "").length === 14) {
+        tomadorCnpj = info.documento.replace(/\D/g, "");
+      } else if (info.type === "fisico" && info.documento?.replace(/\D/g, "").length === 11) {
+        tomadorCpf = info.documento.replace(/\D/g, "");
+      }
+      this.logger.log(
+        `[Tomador] resolvido via clienteAthosId=${input.clienteAthosId} tipo=${info.type} doc=${info.documento ?? "null"}`,
+      );
+    } else if (!tomadorCnpj && !tomadorCpf) {
+      // Caminho C — nenhum clienteAthosId nem documento manual: lookup via orçamento
       const tomador = await this.buscarTomador(quote);
       tomadorCnpj    = tomador.cnpj;
       tomadorCpf     = tomador.cpf;
       tomadorNome    = tomadorNome ?? tomador.nome;
       tomadorEndereco = tomadorEndereco ?? tomador.endereco;
     } else {
+      // Caminho B — documento manual informado: buscar apenas endereço se ausente
       tomadorNome = tomadorNome ?? quote.customer?.fullName ?? null;
       if (!tomadorEndereco) {
         const tomador = await this.buscarTomador(quote);
@@ -555,9 +578,28 @@ export class NfseService {
       }
     }
 
-    if (documentoManualInformado && !tomadorEndereco) {
+    if (documentoManualInformado && !input?.clienteAthosId && !tomadorEndereco) {
       throw new BadRequestException(
         "Endereço do tomador é obrigatório quando o documento é informado manualmente. Preencha logradouro, número, bairro, CEP, código do município (IBGE) e UF.",
+      );
+    }
+
+    // TOMAD-04: validar documento e endereço mínimo obrigatórios pós-resolução
+    if (!tomadorCnpj && !tomadorCpf) {
+      const fonte = input?.clienteAthosId
+        ? `cliente Athos ${input.clienteAthosId}`
+        : "orçamento/fallback";
+      throw new BadRequestException(
+        `CPF ou CNPJ do tomador ausente. Não foi possível obter documento a partir de: ${fonte}. Informe manualmente ou selecione um cliente com documento cadastrado.`,
+      );
+    }
+
+    if (!tomadorEndereco) {
+      const fonte = input?.clienteAthosId
+        ? `cliente Athos ${input.clienteAthosId}`
+        : "orçamento/fallback";
+      throw new BadRequestException(
+        `Endereço do tomador ausente. Não foi possível obter endereço a partir de: ${fonte}. Informe manualmente ou selecione um cliente com endereço cadastrado.`,
       );
     }
 

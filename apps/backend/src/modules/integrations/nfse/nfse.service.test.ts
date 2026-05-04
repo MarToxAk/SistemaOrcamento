@@ -1,0 +1,159 @@
+import { BadRequestException } from "@nestjs/common";
+import { Test, TestingModule } from "@nestjs/testing";
+import { NfseService } from "./nfse.service";
+import { PrismaService } from "../../database/prisma.service";
+import { AthosService } from "../athos/athos.service";
+import { ChatwootService } from "../chatwoot/chatwoot.service";
+import { ConfigService } from "@nestjs/config";
+
+const BASE_QUOTE = {
+  id: "q1",
+  internalNumber: "42",
+  status: "PENDENTE",
+  nfseNumero: null,
+  nfseCodigoVerificacao: null,
+  nfseLink: null,
+  nfseEmitidaEm: null,
+  total: 100,
+  items: [],
+  conversationId: null,
+  customer: null,
+  externalQuoteId: null,
+};
+
+const CLIENTE_PJ = {
+  id: "100",
+  name: "Empresa Teste Ltda",
+  type: "juridico" as const,
+  documento: "12345678000190",
+  endereco: {
+    logradouro: "Av Paulista",
+    numero: "1000",
+    bairro: "Bela Vista",
+    cep: "01310100",
+    codigoMunicipio: "3550308",
+    uf: "SP",
+  },
+};
+
+const CLIENTE_PF = {
+  id: "200",
+  name: "João da Silva",
+  type: "fisico" as const,
+  documento: "12345678901",
+  endereco: {
+    logradouro: "Rua das Flores",
+    numero: "10",
+    bairro: "Centro",
+    cep: "11630000",
+    codigoMunicipio: "3520400",
+    uf: "SP",
+  },
+};
+
+function buildMocks(overrides: { buscarClientePorId?: any } = {}) {
+  const mockPrisma = {
+    quote: {
+      findFirst: jest.fn().mockResolvedValue(BASE_QUOTE),
+      update: jest.fn().mockResolvedValue({}),
+    },
+  };
+  const mockAthos = {
+    buscarClientePorId: jest.fn().mockResolvedValue(CLIENTE_PJ),
+    buscarOrcamentoPorNumero: jest.fn().mockResolvedValue(null),
+    ...overrides,
+  };
+  const mockChatwoot = {
+    sendOutgoingMessage: jest.fn().mockResolvedValue(undefined),
+    sendAttachment: jest.fn().mockResolvedValue(undefined),
+  };
+  const mockConfig = {
+    get: jest.fn((key: string) => {
+      const vals: Record<string, string> = {
+        NFSE_TOKEN: "tok",
+        NFSE_CNPJ_PRESTADOR: "12345678000190",
+        NFSE_INSCRICAO_MUNICIPAL: "12345",
+        NFSE_SOAP_URL: "http://localhost/soap",
+        NFSE_AUX_URL: "http://localhost/aux",
+      };
+      return vals[key] ?? "";
+    }),
+  };
+  return { mockPrisma, mockAthos, mockChatwoot, mockConfig };
+}
+
+async function buildService(mocks: ReturnType<typeof buildMocks>) {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      NfseService,
+      { provide: PrismaService, useValue: mocks.mockPrisma },
+      { provide: AthosService, useValue: mocks.mockAthos },
+      { provide: ChatwootService, useValue: mocks.mockChatwoot },
+      { provide: ConfigService, useValue: mocks.mockConfig },
+    ],
+  }).compile();
+  return module.get<NfseService>(NfseService);
+}
+
+describe("NfseService - resolucao de tomador por clienteAthosId", () => {
+  it("deve chamar buscarClientePorId e chegar ate envio SOAP quando clienteAthosId valido com PJ", async () => {
+    const mocks = buildMocks();
+    const service = await buildService(mocks);
+
+    // Mockar enviarSoap para evitar chamada de rede real
+    jest.spyOn(service as any, "enviarSoap").mockResolvedValue(`
+      <GerarNfseResposta>
+        <Nfse><InfNfse><NumeroNfse>1001</NumeroNfse><CodigoVerificacao>ABCD</CodigoVerificacao></InfNfse></Nfse>
+      </GerarNfseResposta>
+    `);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    const result = await service.emitir("q1", { clienteAthosId: 100 });
+
+    expect(mocks.mockAthos.buscarClientePorId).toHaveBeenCalledWith(100);
+    expect(result).toHaveProperty("numero");
+  });
+
+  it("deve lancar BadRequestException quando clienteAthosId nao encontrado", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(null) });
+    const service = await buildService(mocks);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    await expect(service.emitir("q1", { clienteAthosId: 999 })).rejects.toThrow(BadRequestException);
+    await expect(service.emitir("q1", { clienteAthosId: 999 })).rejects.toThrow(/clienteAthosId/);
+  });
+
+  it("deve lancar BadRequestException quando cliente sem documento", async () => {
+    const semDoc = { ...CLIENTE_PF, documento: null };
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(semDoc) });
+    const service = await buildService(mocks);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    await expect(service.emitir("q1", { clienteAthosId: 5 })).rejects.toThrow(BadRequestException);
+    await expect(service.emitir("q1", { clienteAthosId: 5 })).rejects.toThrow(/CPF ou CNPJ/);
+  });
+
+  it("deve lancar BadRequestException quando cliente sem endereco", async () => {
+    const semEnd = { ...CLIENTE_PF, endereco: null };
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(semEnd) });
+    const service = await buildService(mocks);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    await expect(service.emitir("q1", { clienteAthosId: 6 })).rejects.toThrow(BadRequestException);
+    await expect(service.emitir("q1", { clienteAthosId: 6 })).rejects.toThrow(/Endere/);
+  });
+
+  it("deve NÃO chamar buscarClientePorId quando clienteAthosId ausente (fluxo legado)", async () => {
+    const mocks = buildMocks();
+    // buscarOrcamentoPorNumero retorna null → buscarTomador sem dados → lança BadRequestException TOMAD-04 (documento ausente)
+    // O importante: buscarClientePorId NÃO deve ter sido chamado
+    mocks.mockAthos.buscarClientePorId = jest.fn();
+    const service = await buildService(mocks);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    // Sem clienteAthosId, o fluxo cai em buscarTomador() que retorna null para orcamento
+    // Isso vai lançar BadRequestException de documento ausente (TOMAD-04) — o que é esperado
+    await expect(service.emitir("q1", {})).rejects.toThrow(BadRequestException);
+    expect(mocks.mockAthos.buscarClientePorId).not.toHaveBeenCalled();
+  });
+});
