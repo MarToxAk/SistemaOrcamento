@@ -124,7 +124,7 @@ Full details: .planning/milestones/v1.5-ROADMAP.md
 - [ ] Phase 17: Corrigir calculo de desconto e envio do valor final na NFS-e (NFSC-01..05)
 
 Plans:
-- [ ] 17-01-PLAN.md — Corrigir 6 ocorrencias do path errado (quote?.totais?.valor → quote?.body?.totais?.valor) e coercao de tipos no POST body de handleEmitirNfse
+- [x] 17-01-PLAN.md — Corrigir 6 ocorrencias do path errado (quote?.totais?.valor → quote?.body?.totais?.valor) e coercao de tipos no POST body de handleEmitirNfse [checkpoint:human-verify pendente]
 
 ### Phase Details
 

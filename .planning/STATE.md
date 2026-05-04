@@ -1,17 +1,17 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: —
-Milestone: v1.6 (planning)
+Current phase: 17-correcao-desconto-nfse
+Milestone: v1.6 (in progress)
 
 ---
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-04 — Milestone v1.6 iniciado (correcao calculo desconto NFS-e)
+Phase: 17-correcao-desconto-nfse
+Plan: 01
+Status: At checkpoint:human-verify (Task 3) — aguardando verificacao manual no browser
+Last activity: 2026-05-04 — Tasks 1 e 2 de 17-01 concluidas; checkpoint:human-verify ativo
 
 ## Project Status
 
@@ -69,6 +69,8 @@ Current focus: v1.6 Correcao do calculo de desconto no modal NFS-e
 | 2026-05-04 | Incluir desconto opcional na emissao de NFS-e | Necessidade fiscal de deducao por percentual/valor sobre total pago |
 | 2026-05-04 | v1.5 foca em dois bugs de NFS-e: mojibake no backend + UI de desconto ausente no frontend | Emissao de NFS-e com valor correto nao era possivel sem esses fixes |
 | 2026-05-04 | v1.6 foca no path errado de quote?.totais?.valor no frontend | Base de calculo era sempre 0, quebrando todos os calculos de desconto no modal NFS-e |
+| 2026-05-04 | Corrigir quote?.totais?.valor para quote?.body?.totais?.valor em 6 pontos do modal NFS-e | totais existe somente dentro de body no tipo QuoteDetail; acesso direto retornava undefined |
+| 2026-05-04 | Usar Record<string, string | number | boolean> no body do POST NFS-e | descontoAtivo precisava ser boolean true para satisfazer igualdade estrita do backend |
 
 ## Notes
 
