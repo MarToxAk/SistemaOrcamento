@@ -113,7 +113,7 @@ Success criteria:
 ## v1.5 Correcao NFS-e - Encoding + UI de Desconto (Phases 15-16) - IN PROGRESS
 
 - [x] Phase 15: Corrigir encoding NFS-e e proxy API (NFSFIX-01, NFSFIX-02)
-- [ ] Phase 16: UI de desconto no modal de emissao NFS-e (NFSFIX-03)
+- [x] Phase 16: UI de desconto no modal de emissao NFS-e (NFSFIX-03)
 
 ### Phase Details
 

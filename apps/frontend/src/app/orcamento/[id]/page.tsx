@@ -123,6 +123,10 @@ export default function OrcamentoDetailPage() {
   const [nfseTomadorEnderecoUf, setNfseTomadorEnderecoUf] = useState("");
   const [nfseServicos, setNfseServicos] = useState<Array<{ codigo: string; descricao: string }>>([]);
   const [nfseTomadorAutoDoc, setNfseTomadorAutoDoc] = useState<string | null>(null);
+  const [nfseDescontoAtivo, setNfseDescontoAtivo] = useState(false);
+  const [nfseDescontoPercent, setNfseDescontoPercent] = useState("");
+  const [nfseDescontoValor, setNfseDescontoValor] = useState("");
+  const [nfseValorTotal, setNfseValorTotal] = useState("");
 
   useEffect(() => {
     const isDevBypass =
@@ -296,6 +300,44 @@ export default function OrcamentoDetailPage() {
     setNfseModal(true);
   }
 
+  function syncDesconto(field: "percent" | "valor" | "total", raw: string) {
+    const base = Number(quote?.totais?.valor ?? 0);
+    const n = parseFloat(raw.replace(",", "."));
+    const valid = !isNaN(n) && n >= 0 && base > 0;
+
+    if (field === "percent") {
+      setNfseDescontoPercent(raw);
+      if (valid) {
+        const vDesc = (base * n) / 100;
+        setNfseDescontoValor(vDesc.toFixed(2));
+        setNfseValorTotal((base - vDesc).toFixed(2));
+      } else {
+        setNfseDescontoValor("");
+        setNfseValorTotal("");
+      }
+    } else if (field === "valor") {
+      setNfseDescontoValor(raw);
+      if (valid) {
+        const pct = (n / base) * 100;
+        setNfseDescontoPercent(pct.toFixed(2));
+        setNfseValorTotal((base - n).toFixed(2));
+      } else {
+        setNfseDescontoPercent("");
+        setNfseValorTotal("");
+      }
+    } else {
+      setNfseValorTotal(raw);
+      if (valid) {
+        const vDesc = base - n;
+        setNfseDescontoValor(vDesc.toFixed(2));
+        setNfseDescontoPercent(vDesc >= 0 ? ((vDesc / base) * 100).toFixed(2) : "");
+      } else {
+        setNfseDescontoValor("");
+        setNfseDescontoPercent("");
+      }
+    }
+  }
+
   async function handleEmitirNfse() {
     setNfseModal(false);
     setNfseState("emitindo");
@@ -314,6 +356,11 @@ export default function OrcamentoDetailPage() {
       if (nfseTomadorEnderecoCep.trim()) body.tomadorEnderecoCep = nfseTomadorEnderecoCep.trim();
       if (nfseTomadorEnderecoCodigoMunicipio.trim()) body.tomadorEnderecoCodigoMunicipio = nfseTomadorEnderecoCodigoMunicipio.trim();
       if (nfseTomadorEnderecoUf.trim()) body.tomadorEnderecoUf = nfseTomadorEnderecoUf.trim().toUpperCase();
+      if (nfseDescontoAtivo && nfseDescontoValor) {
+        body.descontoAtivo = "true";
+        body.descontoPorcentagem = nfseDescontoPercent;
+        body.descontoValor = nfseDescontoValor;
+      }
 
       const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, {
         method: "POST",
@@ -765,6 +812,84 @@ export default function OrcamentoDetailPage() {
 
             <div className="alert alert-light small mb-4">
               Se o tomador não estiver associado no Athos, preencha documento e endereço manualmente para emitir a NFS-e.
+            </div>
+
+            {/* Seção de desconto */}
+            <div className="mb-3">
+              <div className="form-check form-switch mb-2">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="nfseDescontoSwitch"
+                  checked={nfseDescontoAtivo}
+                  onChange={e => {
+                    setNfseDescontoAtivo(e.target.checked);
+                    if (!e.target.checked) {
+                      setNfseDescontoPercent("");
+                      setNfseDescontoValor("");
+                      setNfseValorTotal("");
+                    }
+                  }}
+                />
+                <label className="form-check-label fw-semibold" htmlFor="nfseDescontoSwitch">Aplicar desconto</label>
+              </div>
+              {nfseDescontoAtivo && (
+                <div className="border rounded p-3 bg-light">
+                  <div className="row g-2">
+                    <div className="col-4">
+                      <label className="form-label small mb-1">% desconto</label>
+                      <div className="input-group input-group-sm">
+                        <input
+                          className="form-control"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={nfseDescontoPercent}
+                          onChange={e => syncDesconto("percent", e.target.value)}
+                        />
+                        <span className="input-group-text">%</span>
+                      </div>
+                    </div>
+                    <div className="col-4">
+                      <label className="form-label small mb-1">R$ desconto</label>
+                      <div className="input-group input-group-sm">
+                        <span className="input-group-text">R$</span>
+                        <input
+                          className="form-control"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={nfseDescontoValor}
+                          onChange={e => syncDesconto("valor", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-4">
+                      <label className="form-label small mb-1">Valor total</label>
+                      <div className="input-group input-group-sm">
+                        <span className="input-group-text">R$</span>
+                        <input
+                          className="form-control"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder={(quote?.totais?.valor ?? 0).toFixed(2)}
+                          value={nfseValorTotal}
+                          onChange={e => syncDesconto("total", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  {quote?.totais?.valor != null && (
+                    <small className="text-muted mt-1 d-block">
+                      Valor base: {Number(quote.totais.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </small>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="d-flex gap-2 justify-content-end">

@@ -9,8 +9,8 @@ Milestone: v1.5 IN PROGRESS
 ## Current Position
 
 Phase: 16 - UI de desconto no modal NFS-e
-Status: Phase 15 complete - next step is planning Phase 16
-Last activity: 2026-05-04 - Phase 15 concluida (encoding NFS-e + proxy body)
+Status: Complete - all v1.5 phases done, execute /gsd-complete-milestone or /gsd-next
+Last activity: 2026-05-04 - Phase 16 concluida (UI de desconto bidirecional)
 
 ## Project Status
 
@@ -31,7 +31,7 @@ Last activity: 2026-05-04 - Phase 15 concluida (encoding NFS-e + proxy body)
 | 13 | Gatilhos de checagem e sincronizacao de status | complete (v1.4) |
 | 14 | Desconto controlado na emissao de NFS-e | complete (v1.4) |
 | 15 | Corrigir encoding NFS-e e proxy API | complete (v1.5) |
-| 16 | UI de desconto no modal NFS-e | not started (v1.5) |
+| 16 | UI de desconto no modal NFS-e | complete (v1.5) |
 
 ## Project Reference
 
