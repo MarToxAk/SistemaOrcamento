@@ -8,27 +8,17 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Current Milestone: v1.5 (a definir)
-
-## Current Milestone: v1.5 — Correcao NFS-e (Encoding + UI de Desconto)
-
-**Objetivo:** Corrigir bugs que impedem emissão correta de NFS-e com desconto.
-
-Entregas planejadas:
-- **Phase 15:** Corrigir mojibake nas descrições de serviço (`nfse.service.ts`) e corrigir proxy Next.js para repassar body do POST ao backend
-- **Phase 16:** Adicionar switch + três campos bidirecionais de desconto (%, R$, total) ao modal de emissão NFS-e
-
-## Last Shipped Milestone: v1.4 Pagamento EFI/Athos + Desconto NFS-e
+## Last Shipped Milestone: v1.5 — Correcao NFS-e (Encoding + UI de Desconto)
 
 Shipped em 2026-05-04.
 
 Entregas principais:
-- Webhook EFI aceita payload sem x-signature/x-gn-signature; throttle + idempotencia mantidos
-- AthosService.verificarPagamentoPorOrcamento consulta tabelas reais (dynamic column discovery)
-- Fire-and-forget de checagem de pagamento em getById e enviarParaCliente
-- Log estruturado conciliacao_athos com paid/statusUpdated
-- EmitirNfseInput com descontoAtivo/descontoPorcentagem/descontoValor/totalPago
-- DescontoIncondicionado populado dinamicamente no XML RPS (ABRASF v2.04)
+- Strings de serviço NFS-e restauradas para UTF-8 (sem mojibake em nfse.service.ts)
+- Proxy Next.js `/api/quotes/[id]/nfse` repassa body do POST ao backend
+- Modal de emissão NFS-e com switch + 3 campos bidirecionais de desconto (%, R$, Valor total)
+- Valor total pré-preenchido com valor base; campo bloqueado contra valor acima do base
+
+## Current Milestone: (a definir — execute /gsd-new-milestone)
 
 ---
 
@@ -62,17 +52,16 @@ Entregas principais:
 - checkmark Conciliacao Athos real (verificarPagamentoPorOrcamento) -- v1.4
 - checkmark Fire-and-forget checagem Athos em getById/enviarParaCliente -- v1.4
 - checkmark Desconto controlado (percentual/valor) na emissao NFS-e -- v1.4
+- checkmark Encoding UTF-8 correto nas strings de servico NFS-e -- v1.5
+- checkmark Proxy Next.js NFS-e repassa body do POST ao backend -- v1.5
+- checkmark UI de desconto bidirecional no modal de emissao NFS-e -- v1.5
 - checkmark Sequenciamento de startup com banco pronto antes do backend -- v1.3
 - checkmark Observabilidade de falhas de migration nos logs -- v1.3
 - checkmark Runbook de update reproduzivel para VPS -- v1.3
 
 ### Active (Next Milestone)
 
-- [ ] Webhook EFI sem assinatura obrigatoria, com idempotencia e trilha de auditoria
-- [ ] Conciliacao de pagamento com Athos implementada em codigo (sem stub)
-- [ ] Checagem de pagamento executada ao abrir e ao enviar orcamento
-- [ ] Atualizacao automatica de status quando pagamento confirmado no Athos
-- [ ] Desconto na emissao de NFS-e por percentual/valor com flag de ativacao
+(Próximo milestone a definir via /gsd-new-milestone)
 
 ### Out of Scope
 
@@ -133,4 +122,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 after milestone v1.4 kickoff*
+*Last updated: 2026-05-04 after v1.5 milestone*

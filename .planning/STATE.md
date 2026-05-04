@@ -1,16 +1,16 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: 16
-Milestone: v1.5 IN PROGRESS
+Current phase: —
+Milestone: v1.5 SHIPPED
 
 ---
 
 ## Current Position
 
-Phase: 16 - UI de desconto no modal NFS-e
-Status: Complete - all v1.5 phases done, execute /gsd-complete-milestone or /gsd-next
-Last activity: 2026-05-04 - Phase 16 concluida (UI de desconto bidirecional)
+Phase: — (milestone v1.5 fechado)
+Status: Idle — execute /gsd-new-milestone para iniciar v1.6
+Last activity: 2026-05-04 - Milestone v1.5 arquivado (encoding NFS-e + UI desconto)
 
 ## Project Status
 
@@ -32,6 +32,15 @@ Last activity: 2026-05-04 - Phase 16 concluida (UI de desconto bidirecional)
 | 14 | Desconto controlado na emissao de NFS-e | complete (v1.4) |
 | 15 | Corrigir encoding NFS-e e proxy API | complete (v1.5) |
 | 16 | UI de desconto no modal NFS-e | complete (v1.5) |
+
+## Milestones Archived
+
+- v1.0 — phases 1-5 (.planning/milestones/v1.0-ROADMAP.md)
+- v1.1 — phase 6 (.planning/milestones/v1.1-ROADMAP.md)
+- v1.2 — phases 7-8 (.planning/milestones/v1.2-ROADMAP.md)
+- v1.3 — phases 9-10 (.planning/milestones/v1.3-ROADMAP.md)
+- v1.4 — phases 11-14 (.planning/milestones/v1.4-ROADMAP.md)
+- v1.5 — phases 15-16 (.planning/milestones/v1.5-ROADMAP.md)
 
 ## Project Reference
 

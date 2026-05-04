@@ -110,29 +110,12 @@ Success criteria:
 4. Validacoes impedem valores invalidos e retornam erro explicito para o usuario.
 5. XML final preenche desconto coerente e mantem 0.00 quando flag de desconto estiver desligada.
 
-## v1.5 Correcao NFS-e - Encoding + UI de Desconto (Phases 15-16) - IN PROGRESS
+## v1.5 Correcao NFS-e — Encoding + UI de Desconto (Phases 15-16) - SHIPPED 2026-05-04
+
+Full details: .planning/milestones/v1.5-ROADMAP.md
 
 - [x] Phase 15: Corrigir encoding NFS-e e proxy API (NFSFIX-01, NFSFIX-02)
 - [x] Phase 16: UI de desconto no modal de emissao NFS-e (NFSFIX-03)
-
-### Phase Details
-
-**Phase 15: Corrigir encoding NFS-e e proxy API**
-Goal: Corrigir os dois bugs tecnicos que silenciosamente corrompem dados na emissao de NFS-e: mojibake nas descricoes de servico e perda de body no proxy Next.js.
-Requirements: NFSFIX-01, NFSFIX-02
-Success criteria:
-1. Descricoes de servico em `nfse.service.ts` exibem caracteres corretos.
-2. POST `/api/quotes/[id]/nfse` repassa o body completo ao backend.
-3. Arquivo `nfse.service.ts` salvo como UTF-8.
-
-**Phase 16: UI de desconto no modal NFS-e**
-Goal: Adicionar switch e tres campos bidirecionais de desconto ao modal de emissao NFS-e, conectando ao backend que ja suporta os campos.
-Requirements: NFSFIX-03
-Success criteria:
-1. Modal tem switch "Aplicar desconto" que habilita a secao de desconto.
-2. Tres campos (% desconto, R$ desconto, valor total) atualizam-se mutuamente ao digitar.
-3. `handleEmitirNfse` envia `descontoAtivo`, `descontoPorcentagem`, `descontoValor` ao backend.
-4. Desconto aparece corretamente no XML enviado a prefeitura.
 
 ## Backlog (Future)
 
@@ -146,4 +129,4 @@ Success criteria:
 - Historico de mensagens enviados ao cliente
 
 ---
-Roadmap v1.4 - 2026-05-04
+Roadmap v1.5 - 2026-05-04
