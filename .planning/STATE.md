@@ -8,9 +8,9 @@ Milestone: v1.7 (planning)
 
 ## Current Position
 
-Phase: Nao iniciada (definindo requisitos)
+Phase: 18-correcoes-nfse-rps-tomador
 Plan: —
-Status: Definindo requisitos
+Status: Phase 18 shipped (partial) - PR #5 atualizada
 Last activity: 2026-05-04 — Milestone v1.7 iniciado
 
 ## Project Status
@@ -49,13 +49,13 @@ Last activity: 2026-05-04 — Milestone v1.7 iniciado
 
 See: .planning/PROJECT.md (updated 2026-05-04)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.6 Correcao do calculo de desconto no modal NFS-e
+Current focus: v1.7 Phase 18 - correcao NFS-e (RPS e tomador)
 
 ## Active Context
 
 - Branch atual: fix/frontend-proxy-auth-header
 - PR ativo: #5
-- Ultima versao tagged: v1.2
+- Ultima versao tagged: v1.6
 - Milestones archived: v1.0, v1.1, v1.2, v1.3
 - Escopo v1.4: webhook EFI sem auth HMAC obrigatoria + conciliacao Athos sem n8n + desconto NFS-e opcional
 
