@@ -161,6 +161,9 @@ Success criteria:
 4. Falta de dados obrigatorios bloqueia emissao com mensagem acionavel.
 
 Phase 21: UI NFS-e, observabilidade e testes
+**Plans:** 2 planos
+- [ ] 21-01-PLAN.md — Frontend: rota proxy Athos + busca/selecao de cliente no modal NFS-e (NFUI-01, NFUI-02, NFUI-03, QUAL-03)
+- [ ] 21-02-PLAN.md — Backend: logs estruturados + teste unitario PF (QUAL-01, QUAL-02)
 Goal: permitir selecao de cliente na interface e garantir confiabilidade operacional da feature.
 Requirements: NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03
 Success criteria:
