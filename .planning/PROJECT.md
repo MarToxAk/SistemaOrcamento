@@ -66,11 +66,11 @@ Entregas principais:
 - checkmark Observabilidade de falhas de migration nos logs -- v1.3
 - checkmark Runbook de update reproduzivel para VPS -- v1.3
 
-### Active (v1.6)
+### Validated
 
-- [ ] Campo "valor total" no modal NFS-e pre-preenchido com total real do orcamento -- v1.6
-- [ ] Calculo de desconto bidirecional (%, R$, valor total) funcionando com base correta -- v1.6
-- [ ] Valor pos-desconto enviado corretamente ao backend e ao SOAP da NFS-e -- v1.6
+- checkmark Campo "valor total" no modal NFS-e pre-preenchido com total real do orcamento -- v1.6
+- checkmark Calculo de desconto bidirecional (%, R$, valor total) funcionando com base correta -- v1.6
+- checkmark Valor pos-desconto enviado corretamente ao backend e ao SOAP da NFS-e -- v1.6
 
 ### Out of Scope
 
@@ -131,4 +131,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 — milestone v1.6 iniciado*
+*Last updated: 2026-05-04 — Phase 17 complete, v1.6 shipped*

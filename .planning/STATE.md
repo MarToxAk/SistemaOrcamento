@@ -8,10 +8,10 @@ Milestone: v1.6 (in progress)
 
 ## Current Position
 
-Phase: 17-correcao-desconto-nfse
-Plan: 01
-Status: complete
-Last activity: 2026-05-04 — Plano 17-01 completo; checkpoint:human-verify aprovado pelo usuario
+Phase: 17-correcao-desconto-nfse — COMPLETE
+Plan: —
+Status: Phase 17 verified and complete — v1.6 pronto para ship
+Last activity: 2026-05-04 — Phase 17 completa; verificacao passed (5/5 must-haves)
 
 ## Project Status
 
