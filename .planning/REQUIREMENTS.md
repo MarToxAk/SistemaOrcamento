@@ -13,12 +13,12 @@ Status: Active
 - [x] MIG-01: Operador pode atualizar os containers com Docker Compose sem erro de migration ja aplicada
 - [x] MIG-02: Backend executa migrations apenas quando o PostgreSQL estiver pronto para conexoes
 - [x] MIG-03: Em falha de migration, logs exibem causa tecnica e comando de acao recomendado
-- [ ] MIG-04: Fluxo de startup nao entra em loop de restart por falha transitiva de banco nao pronto
+- [x] MIG-04: Fluxo de startup nao entra em loop de restart por falha transitiva de banco nao pronto
 
 ### Operacao de Deploy (OPS)
 
-- [ ] OPS-01: Existe runbook de update com passos deterministicos para VPS (pull, up, verify)
-- [ ] OPS-02: Existe procedimento de verificacao pos-deploy para confirmar schema e saude da API
+- [x] OPS-01: Existe runbook de update com passos deterministicos para VPS (pull, up, verify)
+- [x] OPS-02: Existe procedimento de verificacao pos-deploy para confirmar schema e saude da API
 
 ---
 
@@ -46,6 +46,6 @@ Status: Active
 | MIG-01 | 9 | Complete |
 | MIG-02 | 9 | Complete |
 | MIG-03 | 9 | Complete |
-| MIG-04 | 10 | Pending |
-| OPS-01 | 10 | Pending |
-| OPS-02 | 10 | Pending |
+| MIG-04 | 10 | Complete |
+| OPS-01 | 10 | Complete |
+| OPS-02 | 10 | Complete |

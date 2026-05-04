@@ -70,7 +70,7 @@ Success criteria:
 ---
 
 ## Phase 10 - Operacao Segura de Update
-Status: not started
+Status: complete (v1.3)
 Goal: Padronizar rotina de deploy/update para reduzir risco operacional e validar o estado do banco apos cada release.
 
 Requirements covered: MIG-04, OPS-01, OPS-02
@@ -78,8 +78,8 @@ Depends on: Phase 9
 Plans: 2 plans
 
 Plans:
-- [ ] 10-01-PLAN.md - Definir fluxo de update e restart sem loop
-- [ ] 10-02-PLAN.md - Criar checklist de verificacao pos-deploy (schema + health)
+- [x] 10-01-PLAN.md - Definir fluxo de update e restart sem loop
+- [x] 10-02-PLAN.md - Criar checklist de verificacao pos-deploy (schema + health)
 
 Success criteria:
 1. Stack sobe sem loop de restart em cenario de banco com startup lento
