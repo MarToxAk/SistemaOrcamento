@@ -1,16 +1,16 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-04 (milestone v1.4 started)
-Current phase: not started (defining requirements)
+Last updated: 2026-05-04
+Current phase: 12 (not started — discuss/plan pending)
 
 ---
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 12 - Conciliacao Athos no backend
 Plan: -
-Status: Defining requirements
-Last activity: 2026-05-04 - Milestone v1.4 started
+Status: Not started
+Last activity: 2026-05-04 - Phase 11 verified and closed
 
 ## Project Status
 
@@ -26,7 +26,7 @@ Last activity: 2026-05-04 - Milestone v1.4 started
 | 8 | UX das Paginas Publicas do Cliente | complete (v1.2) |
 | 9 | Fluxo de Migration Idempotente | complete (v1.3) |
 | 10 | Operacao Segura de Update | complete (v1.3) |
-| 11 | Webhook EFI sem assinatura obrigatoria | pending (v1.4) |
+| 11 | Webhook EFI sem assinatura obrigatoria | complete (v1.4) |
 | 12 | Conciliacao Athos no backend | pending (v1.4) |
 | 13 | Gatilhos de checagem e sincronizacao de status | pending (v1.4) |
 | 14 | Desconto controlado na emissao de NFS-e | pending (v1.4) |
