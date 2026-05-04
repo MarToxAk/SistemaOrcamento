@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+﻿import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 import { createHash } from "crypto";
@@ -20,6 +20,14 @@ export interface EmitirNfseInput {
   tomadorEnderecoUf?: string;
   servicoCodigo?: string; // ex: "24.01", "13.05", "14.08"
   codigoTributacaoNacional?: string; // override manual
+  /** Ativa aplicacao de desconto na emissao da NFS-e (NFSD-01) */
+  descontoAtivo?: boolean;
+  /** Percentual de desconto (0-100) sobre totalPago ou valorServicos (NFSD-02) */
+  descontoPorcentagem?: number;
+  /** Valor fixo de desconto em reais (NFSD-03) */
+  descontoValor?: number;
+  /** Base de calculo para desconto percentual; se ausente usa valorServicos (NFSD-02) */
+  totalPago?: number;
 }
 
 type TomadorEndereco = {
@@ -31,12 +39,12 @@ type TomadorEndereco = {
   uf: string;
 };
 
-// Serviços disponíveis para emissão de NFS-e
+// ServiÃ§os disponÃ­veis para emissÃ£o de NFS-e
 const SERVICOS: Record<string, { itemLista: string; codigoNacional: string; aliquotaIss: string; descricao: string }> = {
-  "24.01":    { itemLista: "24.01", codigoNacional: "240101", aliquotaIss: "3.73", descricao: "Confecção de carimbos, banners, placas e sinalização" },
-  "24.01-02": { itemLista: "24.01", codigoNacional: "240102", aliquotaIss: "3.73", descricao: "Gravação de objetos e joias" },
-  "13.05":    { itemLista: "13.05", codigoNacional: "130501", aliquotaIss: "3.73", descricao: "Composição gráfica e confecção de matrizes" },
-  "14.08":    { itemLista: "14.08", codigoNacional: "140801", aliquotaIss: "3.73", descricao: "Encadernação e acabamento" },
+  "24.01":    { itemLista: "24.01", codigoNacional: "240101", aliquotaIss: "3.73", descricao: "ConfecÃ§Ã£o de carimbos, banners, placas e sinalizaÃ§Ã£o" },
+  "24.01-02": { itemLista: "24.01", codigoNacional: "240102", aliquotaIss: "3.73", descricao: "GravaÃ§Ã£o de objetos e joias" },
+  "13.05":    { itemLista: "13.05", codigoNacional: "130501", aliquotaIss: "3.73", descricao: "ComposiÃ§Ã£o grÃ¡fica e confecÃ§Ã£o de matrizes" },
+  "14.08":    { itemLista: "14.08", codigoNacional: "140801", aliquotaIss: "3.73", descricao: "EncadernaÃ§Ã£o e acabamento" },
 };
 
 const DEFAULT_SERVICO = "24.01";
@@ -121,6 +129,7 @@ export class NfseService {
     serie: string;
     dataEmissao: string;
     valorServicos: number;
+    descontoIncondicionado: number;
     discriminacao: string;
     itemLista: string;
     codigoNacional: string;
@@ -142,10 +151,10 @@ export class NfseService {
         : null;
 
     // Testado: Ilhabela EXIGE IdentificacaoTomador com CPF ou CNPJ.
-    // Sem documento (consumidor final / sem-tomador) → servidor retorna HTTP 500 sem mensagem.
+    // Sem documento (consumidor final / sem-tomador) â†’ servidor retorna HTTP 500 sem mensagem.
     if (!docTomador) {
       throw new BadRequestException(
-        "CPF ou CNPJ do cliente é obrigatório para emitir NFS-e em Ilhabela. " +
+        "CPF ou CNPJ do cliente Ã© obrigatÃ³rio para emitir NFS-e em Ilhabela. " +
         "Informe o documento no campo correspondente.",
       );
     }
@@ -204,7 +213,7 @@ export class NfseService {
 \t\t\t\t\t<AliquotaIbs>${aliquotaIbs}</AliquotaIbs>
 \t\t\t\t\t<OutrasRetencoes>0.00</OutrasRetencoes>
 \t\t\t\t\t<Aliquota>${input.aliquotaIss}</Aliquota>
-\t\t\t\t\t<DescontoIncondicionado>0.00</DescontoIncondicionado>
+\t\t\t\t\t<DescontoIncondicionado>${input.descontoIncondicionado.toFixed(2)}</DescontoIncondicionado>
 \t\t\t\t\t<DescontoCondicionado>0.00</DescontoCondicionado>
 \t\t\t\t</Valores>
 \t\t\t\t<IssRetido>2</IssRetido>
@@ -279,12 +288,12 @@ export class NfseService {
   }
 
   /**
-   * Extrai e decodifica o conteúdo de <outputXML> da resposta SOAP.
+   * Extrai e decodifica o conteÃºdo de <outputXML> da resposta SOAP.
    * O servidor iiBrasil retorna o XML real como HTML entities dentro dessa tag.
-   * Ex: &lt;NumeroNfse&gt;136&lt;/NumeroNfse&gt; → <NumeroNfse>136</NumeroNfse>
+   * Ex: &lt;NumeroNfse&gt;136&lt;/NumeroNfse&gt; â†’ <NumeroNfse>136</NumeroNfse>
    */
   private decodeOutputXml(soapResponse: string): string {
-    // Tenta extrair o conteúdo do outputXML
+    // Tenta extrair o conteÃºdo do outputXML
     const match = soapResponse.match(/<outputXML[^>]*>([\s\S]*?)<\/outputXML>/i);
     const raw = match?.[1] ?? soapResponse;
 
@@ -339,7 +348,7 @@ export class NfseService {
   }> {
     let cnpj:     string | null = null;
     let cpf:      string | null = null;
-    let nome:     string | null = null; // Athos tem prioridade; chat é fallback
+    let nome:     string | null = null; // Athos tem prioridade; chat Ã© fallback
     let endereco: TomadorEndereco | null = null;
 
     try {
@@ -359,7 +368,7 @@ export class NfseService {
       this.logger.warn(`Falha ao buscar tomador no Athos: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    // Fallback para nome do chat se Athos não encontrou
+    // Fallback para nome do chat se Athos nÃ£o encontrou
     if (!nome) nome = quote.customer?.fullName ?? null;
 
     return { cnpj, cpf, nome, endereco };
@@ -394,19 +403,19 @@ export class NfseService {
     const hasAllFields = Object.values(raw).every((value) => value.length > 0);
     if (!hasAllFields) {
       throw new BadRequestException(
-        "Endereço do tomador incompleto. Informe logradouro, número, bairro, CEP, código do município (IBGE) e UF.",
+        "EndereÃ§o do tomador incompleto. Informe logradouro, nÃºmero, bairro, CEP, cÃ³digo do municÃ­pio (IBGE) e UF.",
       );
     }
 
     const sanitized = this.sanitizeTomadorEndereco(raw);
     if (sanitized.cep.length !== 8) {
-      throw new BadRequestException("CEP do tomador inválido. Informe 8 dígitos.");
+      throw new BadRequestException("CEP do tomador invÃ¡lido. Informe 8 dÃ­gitos.");
     }
     if (sanitized.codigoMunicipio.length !== 7) {
-      throw new BadRequestException("Código do município do tomador inválido. Informe 7 dígitos do IBGE.");
+      throw new BadRequestException("CÃ³digo do municÃ­pio do tomador invÃ¡lido. Informe 7 dÃ­gitos do IBGE.");
     }
     if (sanitized.uf.length !== 2) {
-      throw new BadRequestException("UF do tomador inválida. Informe 2 letras.");
+      throw new BadRequestException("UF do tomador invÃ¡lida. Informe 2 letras.");
     }
 
     return sanitized;
@@ -423,10 +432,10 @@ export class NfseService {
 
   async emitir(quoteId: string, input?: EmitirNfseInput) {
     const quote = await this.findQuote(quoteId);
-    if (!quote) throw new BadRequestException("Orçamento não encontrado");
+    if (!quote) throw new BadRequestException("OrÃ§amento nÃ£o encontrado");
 
     if (quote.status === "CANCELADO") {
-      throw new BadRequestException("Não é possível emitir NFS-e para orçamentos cancelados.");
+      throw new BadRequestException("NÃ£o Ã© possÃ­vel emitir NFS-e para orÃ§amentos cancelados.");
     }
 
     if (quote.nfseNumero) {
@@ -439,11 +448,11 @@ export class NfseService {
       };
     }
 
-    // Resolve serviço
+    // Resolve serviÃ§o
     const servicoKey = input?.servicoCodigo ?? DEFAULT_SERVICO;
     const servico = SERVICOS[servicoKey] ?? SERVICOS[DEFAULT_SERVICO];
 
-    // Resolve RPS número e série
+    // Resolve RPS nÃºmero e sÃ©rie
     let rpsNumero = Number(quote.internalNumber);
     let rpsSerie  = this.SERIE_RPS;
     const infoNfse = await this.getInfoNfse();
@@ -452,11 +461,37 @@ export class NfseService {
       rpsSerie  = infoNfse.serieRps || this.SERIE_RPS;
       this.logger.log(`ProximoRPS=${rpsNumero} SerieRPS=${rpsSerie}`);
     } else {
-      this.logger.warn(`API Auxiliar indisponível, usando internalNumber=${rpsNumero} como RPS`);
+      this.logger.warn(`API Auxiliar indisponÃ­vel, usando internalNumber=${rpsNumero} como RPS`);
     }
 
     const dataEmissao    = new Date().toISOString().slice(0, 10);
     const valorServicos  = Number(quote.total);
+
+    // Calcular desconto (NFSD-01..04)
+    let descontoIncondicionado = 0;
+    if (input?.descontoAtivo === true) {
+      const base = (input.totalPago != null && Number.isFinite(input.totalPago) && input.totalPago > 0)
+        ? input.totalPago
+        : valorServicos;
+
+      if (input.descontoPorcentagem != null) {
+        if (input.descontoPorcentagem < 0 || input.descontoPorcentagem > 100) {
+          throw new BadRequestException("descontoPorcentagem deve estar entre 0 e 100.");
+        }
+        descontoIncondicionado = Number((base * input.descontoPorcentagem / 100).toFixed(2));
+      } else if (input.descontoValor != null) {
+        if (input.descontoValor < 0) {
+          throw new BadRequestException("descontoValor nao pode ser negativo.");
+        }
+        descontoIncondicionado = Number(input.descontoValor.toFixed(2));
+      }
+
+      if (descontoIncondicionado > valorServicos) {
+        throw new BadRequestException(
+          `descontoIncondicionado (${descontoIncondicionado.toFixed(2)}) nao pode ser maior que valorServicos (${valorServicos.toFixed(2)}).`,
+        );
+      }
+    }
 
     const itensDesc = (quote.items ?? [])
       .map((item: any, i: number) => `${i + 1}. ${item.shortDescription || item.description} (${Number(item.quantity)}x) - R$ ${Number(item.finalPrice).toFixed(2)}`)
@@ -465,7 +500,7 @@ export class NfseService {
       ? `Orcamento ${quote.internalNumber} - ${itensDesc}`
       : `Orcamento ${quote.internalNumber}`;
 
-    // Dados do tomador: body tem prioridade; Athos como fallback automático
+    // Dados do tomador: body tem prioridade; Athos como fallback automÃ¡tico
     let tomadorCnpj = input?.tomadorCnpj ? input.tomadorCnpj.replace(/\D/g, "") : null;
     let tomadorCpf  = input?.tomadorCpf  ? input.tomadorCpf.replace(/\D/g, "")  : null;
     let tomadorNome = input?.tomadorNome?.trim() || null;
@@ -489,7 +524,7 @@ export class NfseService {
 
     if (documentoManualInformado && !tomadorEndereco) {
       throw new BadRequestException(
-        "Endereço do tomador é obrigatório quando o documento é informado manualmente. Preencha logradouro, número, bairro, CEP, código do município (IBGE) e UF.",
+        "EndereÃ§o do tomador Ã© obrigatÃ³rio quando o documento Ã© informado manualmente. Preencha logradouro, nÃºmero, bairro, CEP, cÃ³digo do municÃ­pio (IBGE) e UF.",
       );
     }
 
@@ -498,6 +533,7 @@ export class NfseService {
       serie:           rpsSerie,
       dataEmissao,
       valorServicos,
+      descontoIncondicionado,
       discriminacao,
       itemLista:       servico.itemLista,
       codigoNacional:  input?.codigoTributacaoNacional ?? servico.codigoNacional,
@@ -515,7 +551,7 @@ export class NfseService {
   <Integridade>${integridade}</Integridade>
 </GerarNfseEnvio>`;
 
-    this.logger.log(`Emitindo NFS-e orçamento #${quote.internalNumber} — RPS #${rpsNumero}/${rpsSerie} — serviço ${servico.itemLista}/${servico.codigoNacional}`);
+    this.logger.log(`Emitindo NFS-e orÃ§amento #${quote.internalNumber} â€” RPS #${rpsNumero}/${rpsSerie} â€” serviÃ§o ${servico.itemLista}/${servico.codigoNacional}`);
     this.logger.debug(`XML:\n${dados}`);
 
     const responseXml = await this.enviarSoap(this.buildCabecalho(), dados);
@@ -525,12 +561,12 @@ export class NfseService {
     const numeroNfse = this.parseNumeroNfse(responseXml);
 
     if (erros.length > 0 && !numeroNfse) {
-      throw new BadRequestException(`Erro na emissão da NFS-e: ${erros.join(" | ")}`);
+      throw new BadRequestException(`Erro na emissÃ£o da NFS-e: ${erros.join(" | ")}`);
     }
 
     if (!numeroNfse) {
-      this.logger.error(`NFS-e sem número. Response: ${responseXml}`);
-      throw new BadRequestException("NFS-e processada mas número não retornado. Verifique no painel da prefeitura.");
+      this.logger.error(`NFS-e sem nÃºmero. Response: ${responseXml}`);
+      throw new BadRequestException("NFS-e processada mas nÃºmero nÃ£o retornado. Verifique no painel da prefeitura.");
     }
 
     const codigoVerificacao = this.parseCodigoVerificacao(responseXml);
@@ -546,7 +582,7 @@ export class NfseService {
       },
     });
 
-    this.logger.log(`NFS-e #${numeroNfse} emitida para orçamento #${quote.internalNumber}`);
+    this.logger.log(`NFS-e #${numeroNfse} emitida para orÃ§amento #${quote.internalNumber}`);
 
     // Notifica cliente via Chatwoot (mensagem + PDF como anexo)
     if (quote.conversationId) {
@@ -555,9 +591,9 @@ export class NfseService {
 
       // 1. Envia mensagem de texto
       try {
-        let mensagem = `Olá, ${nomeCliente}! 👋\n\nSua nota fiscal (NFS-e #${numeroNfse}) foi emitida com sucesso.`;
-        if (codigoVerificacao) mensagem += `\nCódigo de verificação: ${codigoVerificacao}`;
-        if (linkNfse) mensagem += `\n\n📄 Link: ${linkNfse}`;
+        let mensagem = `OlÃ¡, ${nomeCliente}! ðŸ‘‹\n\nSua nota fiscal (NFS-e #${numeroNfse}) foi emitida com sucesso.`;
+        if (codigoVerificacao) mensagem += `\nCÃ³digo de verificaÃ§Ã£o: ${codigoVerificacao}`;
+        if (linkNfse) mensagem += `\n\nðŸ“„ Link: ${linkNfse}`;
         await this.chatwootService.sendOutgoingMessage(convId, mensagem);
       } catch (err) {
         this.logger.warn(`Falha ao enviar mensagem Chatwoot: ${err instanceof Error ? err.message : err}`);
@@ -576,7 +612,7 @@ export class NfseService {
           const fileName   = `NotaFiscal_NFSe_${numeroNfse}.pdf`;
           const contentType = String(pdfResp.headers["content-type"] ?? "application/pdf").split(";")[0].trim();
 
-          this.logger.log(`PDF baixado (${pdfBuffer.length} bytes) — enviando ao Chatwoot`);
+          this.logger.log(`PDF baixado (${pdfBuffer.length} bytes) â€” enviando ao Chatwoot`);
           await this.chatwootService.sendAttachment(convId, pdfBuffer, fileName, contentType || "application/pdf");
           this.logger.log(`PDF da NFS-e #${numeroNfse} enviado ao cliente via Chatwoot`);
         } catch (err) {
@@ -590,9 +626,9 @@ export class NfseService {
 
   async consultar(quoteId: string) {
     const quote = await this.findQuote(quoteId);
-    if (!quote) throw new BadRequestException("Orçamento não encontrado");
+    if (!quote) throw new BadRequestException("OrÃ§amento nÃ£o encontrado");
 
-    // Busca dados do tomador para o frontend pré-preencher o formulário
+    // Busca dados do tomador para o frontend prÃ©-preencher o formulÃ¡rio
     let tomador: { cnpj: string | null; cpf: string | null; nome: string | null; endereco: TomadorEndereco | null } = {
       cnpj: null, cpf: null, nome: quote.customer?.fullName ?? null, endereco: null,
     };
@@ -621,7 +657,7 @@ export class NfseService {
   }
 
   async emitirTeste() {
-    // Teste com dados reais da documentação — não altera banco
+    // Teste com dados reais da documentaÃ§Ã£o â€” nÃ£o altera banco
     const rpsXml = `<Rps>
     <InfDeclaracaoPrestacaoServico Id="rps1">
         <Rps>
