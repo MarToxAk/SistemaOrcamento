@@ -490,7 +490,7 @@ export class NfseService {
     let rpsSerie  = this.SERIE_RPS;
     const infoNfse = await this.getInfoNfse();
     if (infoNfse) {
-      rpsNumero = infoNfse.proximoRps + 1;
+      rpsNumero = infoNfse.proximoRps;
       rpsSerie  = infoNfse.serieRps || this.SERIE_RPS;
       this.logger.log(`[RPS] API retornou ultimoRPS=${infoNfse.proximoRps - 1} -> emitindo rpsNumero=${rpsNumero} serie=${rpsSerie}`);
     } else {
