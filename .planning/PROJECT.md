@@ -17,6 +17,17 @@ Entregas principais:
 - buscarTomador() reescrito com NotFoundException catch, clienteId > 0, logs diagnosticos
 - Log [Athos] identifierColumn em athos.service.ts
 
+## Current Milestone: v1.8 - Busca de Cliente Athos para NFS-e
+
+Goal: Implementar busca e selecao de cliente Athos na emissao de NFS-e, com preenchimento consistente de tomador (PF/PJ/endereco) e rastreabilidade no backend.
+
+Target features:
+- Busca de cliente Athos por nome, CPF/CNPJ e idcliente para uso no fluxo de NFS-e
+- Resolucao de tomador com joins em cliente, cliente_fisico, cliente_juridico e cliente_endereco
+- Endpoint interno para pesquisa de clientes do Athos com protecao existente (x-internal-api-key)
+- Selecao manual no frontend de NFS-e e envio de referencia do cliente Athos na emissao
+- Logs e testes para casos de cliente nao encontrado, ambiguo e sem endereco valido
+
 ## Requirements
 
 ### Validated
@@ -53,16 +64,20 @@ Entregas principais:
 - checkmark Sequenciamento de startup com banco pronto antes do backend -- v1.3
 - checkmark Observabilidade de falhas de migration nos logs -- v1.3
 - checkmark Runbook de update reproduzivel para VPS -- v1.3
-
-### Validated
-
 - checkmark Campo "valor total" no modal NFS-e pre-preenchido com total real do orcamento -- v1.6
 - checkmark Calculo de desconto bidirecional (%, R$, valor total) funcionando com base correta -- v1.6
 - checkmark Valor pos-desconto enviado corretamente ao backend e ao SOAP da NFS-e -- v1.6
-
 - checkmark ProximoRPS sem +1 -- API iiBrasil retorna proximo numero diretamente -- v1.7
 - checkmark buscarTomador() com NotFoundException catch e clienteId > 0 check -- v1.7
 - checkmark Logs [Tomador] diagnosticos e [Athos] identifierColumn -- v1.7
+
+### Active (v1.8)
+
+- [ ] Busca de cliente Athos para NFS-e por nome, CPF/CNPJ e idcliente
+- [ ] Selecao explicita de cliente Athos no fluxo de emissao NFS-e
+- [ ] Resolucao deterministica do tomador com dados PF/PJ/endereco
+- [ ] Validacoes e mensagens de erro claras para cliente inexistente ou dados incompletos
+- [ ] Testes automatizados cobrindo mapeamento de cliente e emissao com cliente selecionado
 
 ### Out of Scope
 
@@ -83,6 +98,8 @@ Entregas principais:
 - Webhook EFI ja existe em /api/integrations/efi/webhook/payment e /pix, hoje com guard HMAC
 - Endpoint /api/quotes/:id/payment-status existe, mas AthosService.verificarPagamentoPorOrcamento ainda retorna stub (paid=false)
 - Emissao NFS-e hoje envia DescontoIncondicionado/DescontoCondicionado fixos em 0.00 no XML
+- Base Athos para cliente/tomador inclui tabelas cliente, cliente_fisico, cliente_juridico e cliente_endereco
+- A base Athos permanece read-only, com usuario de leitura (sem escrita de sincronizacao)
 
 ## Constraints
 
@@ -106,6 +123,7 @@ Entregas principais:
 | Desconto NFS-e controlado por flag e tipo | Dar flexibilidade fiscal sem alterar emissao padrao | checkmark Validado â€” v1.4 |
 | Corrigir path quote?.totais?.valor para quote?.body?.totais?.valor | totais existe somente dentro de body no tipo QuoteDetail | checkmark Validado â€” v1.6 |
 | Usar Record<string, string \| number \| boolean> no POST NFS-e | descontoAtivo precisa ser boolean true para igualdade estrita no backend | checkmark Validado â€” v1.6 |
+| Buscar cliente de NFS-e direto no Athos (sem replicacao local) | Evita drift de cadastro e aproveita fonte oficial ja integrada em modo leitura | — Em execucao (v1.8) |
 
 ## Evolution
 
@@ -125,4 +143,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 after v1.6 milestone â€” v1.7 started*
+*Last updated: 2026-05-04 after v1.7 milestone - v1.8 started*

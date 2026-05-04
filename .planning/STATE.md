@@ -1,17 +1,17 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: —
-Milestone: v1.7 (shipped 2026-05-04)
+Current phase: not started
+Milestone: v1.8 (planning)
 
 ---
 
 ## Current Position
 
-Phase: 18-correcoes-nfse-rps-tomador
+Phase: not started (defining requirements)
 Plan: —
-Status: v1.7 complete — arquivado
-Last activity: 2026-05-04 — Milestone v1.7 arquivado
+Status: Defining requirements
+Last activity: 2026-05-04 - Milestone v1.8 started
 
 ## Project Status
 
@@ -35,6 +35,9 @@ Last activity: 2026-05-04 — Milestone v1.7 arquivado
 | 16 | UI de desconto no modal NFS-e | complete (v1.5) |
 | 17 | Correcao do calculo de desconto no modal NFS-e | complete (v1.6) |
 | 18 | Correcoes NFS-e - RPS e Tomador | complete (v1.7) |
+| 19 | API de busca de cliente Athos | planned (v1.8) |
+| 20 | Resolucao de tomador por cliente selecionado | planned (v1.8) |
+| 21 | UI NFS-e, observabilidade e testes | planned (v1.8) |
 
 ## Milestones Archived
 
@@ -51,15 +54,15 @@ Last activity: 2026-05-04 — Milestone v1.7 arquivado
 
 See: .planning/PROJECT.md (updated 2026-05-04)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.7 Phase 18 - correcao NFS-e (RPS e tomador)
+Current focus: v1.8 - planejamento da busca de cliente Athos para NFS-e
 
 ## Active Context
 
-- Branch atual: fix/frontend-proxy-auth-header
-- PR ativo: #5
-- Ultima versao tagged: v1.6
-- Milestones archived: v1.0, v1.1, v1.2, v1.3
-- Escopo v1.4: webhook EFI sem auth HMAC obrigatoria + conciliacao Athos sem n8n + desconto NFS-e opcional
+- Branch atual: planning/v1.8-athos-nfse-cliente-busca
+- PR ativo: none
+- Ultima versao tagged: v1.7
+- Milestones archived: v1.0 a v1.7
+- Escopo v1.8: busca de cliente Athos para emissao de NFS-e com resolucao de tomador e selecao manual no frontend
 
 ## Decisions Log
 
@@ -74,11 +77,12 @@ Current focus: v1.7 Phase 18 - correcao NFS-e (RPS e tomador)
 | 2026-05-04 | v1.6 foca no path errado de quote?.totais?.valor no frontend | Base de calculo era sempre 0, quebrando todos os calculos de desconto no modal NFS-e |
 | 2026-05-04 | Corrigir quote?.totais?.valor para quote?.body?.totais?.valor em 6 pontos do modal NFS-e | totais existe somente dentro de body no tipo QuoteDetail; acesso direto retornava undefined |
 | 2026-05-04 | Usar Record<string, string | number | boolean> no body do POST NFS-e | descontoAtivo precisava ser boolean true para satisfazer igualdade estrita do backend |
+| 2026-05-04 | Iniciar v1.8 focado em busca de cliente Athos no fluxo NFS-e | Reduz erro de tomador e evita preenchimento manual inconsistente |
 
 ## Notes
 
 - SDK gsd nao encontrado no ambiente atual; ajustes de milestone feitos manualmente
-- Dois bugs NFS-e alvo do v1.7: RPS numero (+ 1) e tomador Athos quando associado
-- Implementacao anterior baseada em listener externo nao sera reutilizada (sem n8n)
+- Milestone v1.8 iniciou em modo planejamento para detalhar fases 19-21
+- Tabelas-alvo informadas para busca de cliente: cliente, cliente_fisico, cliente_juridico, cliente_endereco
 
 
