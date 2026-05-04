@@ -1,4 +1,4 @@
-# Sistema de Orcamento BomCusto
+﻿# Sistema de Orcamento BomCusto
 
 ## What This Is
 
@@ -8,27 +8,14 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Last Shipped Milestone: v1.6 — Correcao NFS-e: Calculo de Desconto e Valor Final
+## Last Shipped Milestone: v1.7 - Correcoes NFS-e: Tomador e Numeracao RPS
 
 Shipped em 2026-05-04.
 
 Entregas principais:
-- Corrigidas 6 ocorrencias do path errado `quote?.totais?.valor` → `quote?.body?.totais?.valor` no modal NFS-e
-- Campo "valor total" pre-preenchido com o total real do orcamento ao ativar desconto
-- Calculos de desconto (%, R$, valor total) funcionando com base correta
-- POST body tipado como `Record<string, string | number | boolean>` — `descontoAtivo` boolean, campos numericos como `Number()`
-- Valor pos-desconto enviado corretamente ao backend e ao SOAP iiBrasil
-
-## Current Milestone: v1.7 — Correcoes NFS-e: Tomador e Numeracao RPS
-
-**Goal:** Corrigir dois bugs na emissao de NFS-e que causam XML com dados do tomador ausentes (quando o orcamento esta associado ao Athos) e numeracao RPS incorreta (usando o ultimo numero emitido em vez do proximo).
-
-**Target features:**
-- Campo `rpsNumero` usa `proximoRps + 1` para gerar o numero correto do proximo RPS
-- Dados do cliente (nome, CPF/CNPJ, endereco) preenchidos corretamente no XML quando o orcamento tem `externalQuoteId` valido
-- Logs diagnosticos claros para depuracao do caminho de busca do tomador no Athos
-
----
+- ProximoRPS sem +1 (API iiBrasil ja retorna o proximo numero)
+- buscarTomador() reescrito com NotFoundException catch, clienteId > 0, logs diagnosticos
+- Log [Athos] identifierColumn em athos.service.ts
 
 ## Requirements
 
@@ -73,6 +60,10 @@ Entregas principais:
 - checkmark Calculo de desconto bidirecional (%, R$, valor total) funcionando com base correta -- v1.6
 - checkmark Valor pos-desconto enviado corretamente ao backend e ao SOAP da NFS-e -- v1.6
 
+- checkmark ProximoRPS sem +1 -- API iiBrasil retorna proximo numero diretamente -- v1.7
+- checkmark buscarTomador() com NotFoundException catch e clienteId > 0 check -- v1.7
+- checkmark Logs [Tomador] diagnosticos e [Athos] identifierColumn -- v1.7
+
 ### Out of Scope
 
 - Reintroduzir n8n para roteamento de pagamentos
@@ -110,11 +101,11 @@ Entregas principais:
 | wait-for-db.js antes de migration | Elimina race condition postgres/backend | checkmark Validado -- v1.3 |
 | Runbook manual para VPS | Sem infra CI capaz de executar docker compose | checkmark Validado -- v1.3 |
 | Monorepo npm workspaces | Compartilhamento de tipos sem publicacao | checkmark Validado -- historico |
-| Remover obrigatoriedade de assinatura no webhook EFI | Necessidade operacional de receber notificacao sem bloqueio por segredo | checkmark Validado — v1.4 |
-| Conciliar pagamento pelo Athos ao abrir/enviar orcamento | Reduz divergencia entre estado do caixa e estado do orcamento | checkmark Validado — v1.4 |
-| Desconto NFS-e controlado por flag e tipo | Dar flexibilidade fiscal sem alterar emissao padrao | checkmark Validado — v1.4 |
-| Corrigir path quote?.totais?.valor para quote?.body?.totais?.valor | totais existe somente dentro de body no tipo QuoteDetail | checkmark Validado — v1.6 |
-| Usar Record<string, string \| number \| boolean> no POST NFS-e | descontoAtivo precisa ser boolean true para igualdade estrita no backend | checkmark Validado — v1.6 |
+| Remover obrigatoriedade de assinatura no webhook EFI | Necessidade operacional de receber notificacao sem bloqueio por segredo | checkmark Validado â€” v1.4 |
+| Conciliar pagamento pelo Athos ao abrir/enviar orcamento | Reduz divergencia entre estado do caixa e estado do orcamento | checkmark Validado â€” v1.4 |
+| Desconto NFS-e controlado por flag e tipo | Dar flexibilidade fiscal sem alterar emissao padrao | checkmark Validado â€” v1.4 |
+| Corrigir path quote?.totais?.valor para quote?.body?.totais?.valor | totais existe somente dentro de body no tipo QuoteDetail | checkmark Validado â€” v1.6 |
+| Usar Record<string, string \| number \| boolean> no POST NFS-e | descontoAtivo precisa ser boolean true para igualdade estrita no backend | checkmark Validado â€” v1.6 |
 
 ## Evolution
 
@@ -134,4 +125,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 after v1.6 milestone — v1.7 started*
+*Last updated: 2026-05-04 after v1.6 milestone â€” v1.7 started*

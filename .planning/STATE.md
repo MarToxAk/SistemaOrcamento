@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-04
 Current phase: —
-Milestone: v1.7 (planning)
+Milestone: v1.7 (shipped 2026-05-04)
 
 ---
 
@@ -10,8 +10,8 @@ Milestone: v1.7 (planning)
 
 Phase: 18-correcoes-nfse-rps-tomador
 Plan: —
-Status: Phase 18 shipped (partial) - PR #5 atualizada
-Last activity: 2026-05-04 — Milestone v1.7 iniciado
+Status: v1.7 complete — arquivado
+Last activity: 2026-05-04 — Milestone v1.7 arquivado
 
 ## Project Status
 
@@ -34,6 +34,7 @@ Last activity: 2026-05-04 — Milestone v1.7 iniciado
 | 15 | Corrigir encoding NFS-e e proxy API | complete (v1.5) |
 | 16 | UI de desconto no modal NFS-e | complete (v1.5) |
 | 17 | Correcao do calculo de desconto no modal NFS-e | complete (v1.6) |
+| 18 | Correcoes NFS-e - RPS e Tomador | complete (v1.7) |
 
 ## Milestones Archived
 
@@ -44,6 +45,7 @@ Last activity: 2026-05-04 — Milestone v1.7 iniciado
 - v1.4 — phases 11-14 (.planning/milestones/v1.4-ROADMAP.md)
 - v1.5 — phases 15-16 (.planning/milestones/v1.5-ROADMAP.md)
 - v1.6 — phase 17 (.planning/milestones/v1.6-ROADMAP.md)
+- v1.7 — phase 18 (.planning/milestones/v1.7-ROADMAP.md)
 
 ## Project Reference
 
