@@ -1,6 +1,6 @@
-ï»¿# STATE.md - Sistema de Orcamento BomCusto
+# STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-03 (phase 10 verified)
+Last updated: 2026-05-03 (phases 9-10 shipped — PR #1)
 Current phase: none (all phases complete for v1.3)
 
 ---
@@ -9,8 +9,8 @@ Current phase: none (all phases complete for v1.3)
 
 Phase: none
 Plan: complete
-Status: Phase 10 complete
-Last activity: 2026-05-03 - Phase 10 complete and verification recorded
+Status: Phases 9-10 shipped — PR #1 open
+Last activity: 2026-05-03 - Phases 9-10 shipped to PR #1 (https://github.com/MarToxAk/SistemaOrcamento/pull/1)
 
 ## Project Status
 
