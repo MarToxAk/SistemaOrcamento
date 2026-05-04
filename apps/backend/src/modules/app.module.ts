@@ -19,7 +19,6 @@ import { THROTTLE_DEFAULT } from "./security/throttle.config";
 const REQUIRED_ENV_VARS = [
   "DATABASE_URL",
   "INTERNAL_API_KEY",
-  "EFI_WEBHOOK_SECRET",
   "CHATWOOT_BASE_URL",
   "CHATWOOT_API_TOKEN",
   "CHATWOOT_ACCOUNT_ID",

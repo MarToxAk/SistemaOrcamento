@@ -69,6 +69,72 @@ describe("EfiService - processWebhook", () => {
     });
   });
 
+  describe("assinatura opcional e auditoria", () => {
+    it("deve processar webhook sem assinatura quando payload for valido", async () => {
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
+      mockPrisma.quote.findFirst.mockResolvedValue(null);
+
+      const payload = {
+        txid: "TX_NO_SIG",
+        endToEndId: "E_NO_SIG",
+        valor: "25.00",
+      };
+
+      const result = await service.processWebhook(payload, undefined);
+      expect(result.received).toBe(true);
+      expect(result.processed).toBe(0);
+      expect(result.notFound).toBe(1);
+    });
+
+    it("deve persistir metadata.signature como null quando assinatura estiver ausente", async () => {
+      const quoteMock = {
+        id: "quote-audit-1",
+        status: "PENDENTE",
+        paymentExternalId: "TX_AUDIT_1",
+        secondInstallmentExternalId: null,
+        total: "100.00",
+        paidTotal: "0.00",
+        paymentConfirmedAt: null,
+        conversationId: null,
+      };
+
+      const txCreateSpy = jest.fn().mockResolvedValue({ id: "ptx-audit-1" });
+      const txQuoteUpdateSpy = jest.fn().mockResolvedValue({ status: "PAGAMENTO_PARCIAL" });
+      const txStatusHistorySpy = jest.fn().mockResolvedValue({ id: "hist-audit-1" });
+
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
+      mockPrisma.quote.findFirst.mockResolvedValue(quoteMock);
+      mockPrisma.$transaction.mockImplementation(async (callback: (tx: any) => Promise<any>) =>
+        callback({
+          paymentTransaction: { create: txCreateSpy },
+          quote: { update: txQuoteUpdateSpy },
+          quoteStatusHistory: { create: txStatusHistorySpy },
+        }),
+      );
+
+      (mockQuotesService as any).getById = jest.fn().mockResolvedValue({
+        body: {
+          cliente: { nome: "Cliente Teste" },
+          idorcamento: "ORC-AUDIT",
+          totais: { valor: "100.00" },
+          itens: [],
+          carimbos: { quantidade_total: 0 },
+        },
+      });
+
+      const payload = {
+        pix: [{ txid: "TX_AUDIT_1", endToEndId: "E_AUDIT_1", valor: "30.00" }],
+      };
+
+      const result = await service.processWebhook(payload, undefined);
+
+      expect(result.processed).toBe(1);
+      expect(txCreateSpy).toHaveBeenCalled();
+      const createArg = txCreateSpy.mock.calls[0][0];
+      expect(createArg.data.metadata.signature).toBeNull();
+    });
+  });
+
   describe("payload com pagamento pix válido mas sem quote vinculada", () => {
     it("deve registrar 'quote_not_found' quando txid não tem quote", async () => {
       mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
@@ -98,6 +164,19 @@ describe("EfiService - processWebhook", () => {
       const r = (result as any).results[0];
       expect(r.status).toBe("ignored_duplicate");
       // Não deve criar nova transação
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("deve ignorar duplicado mesmo sem assinatura", async () => {
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({ id: "existing-tx-no-sign" });
+
+      const payload = {
+        pix: [{ txid: "TXID_DUP_NO_SIGN", endToEndId: "E_DUP_NO_SIGN", valor: "200.00" }],
+      };
+
+      const result = await service.processWebhook(payload, undefined);
+      const r = (result as any).results[0];
+      expect(r.status).toBe("ignored_duplicate");
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
   });
