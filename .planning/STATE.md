@@ -1,16 +1,16 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: 12 (not started — discuss/plan pending)
+Current phase: 13 (planning)
 
 ---
 
 ## Current Position
 
-Phase: 12 - Conciliacao Athos no backend
+Phase: 13 - Gatilhos de checagem e sincronizacao de status
 Plan: -
-Status: Not started
-Last activity: 2026-05-04 - Phase 11 verified and closed
+Status: Planning
+Last activity: 2026-05-04 - Phase 12 executed and verified (f3a345a)
 
 ## Project Status
 
@@ -27,7 +27,7 @@ Last activity: 2026-05-04 - Phase 11 verified and closed
 | 9 | Fluxo de Migration Idempotente | complete (v1.3) |
 | 10 | Operacao Segura de Update | complete (v1.3) |
 | 11 | Webhook EFI sem assinatura obrigatoria | complete (v1.4) |
-| 12 | Conciliacao Athos no backend | pending (v1.4) |
+| 12 | Conciliacao Athos no backend | complete (v1.4) |
 | 13 | Gatilhos de checagem e sincronizacao de status | pending (v1.4) |
 | 14 | Desconto controlado na emissao de NFS-e | pending (v1.4) |
 

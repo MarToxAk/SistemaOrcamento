@@ -204,6 +204,14 @@ export class QuotesService {
       }
     }
 
+    if (["PENDENTE", "ENVIADO"].includes(resolvedQuote.status)) {
+      void this.checkPaymentStatus(resolvedQuote.id).catch((err: unknown) => {
+        this.logger.warn(
+          `Disparo de checagem de pagamento falhou para orcamento ${resolvedQuote.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
+
     const mapped = this.mapQuoteBody(resolvedQuote);
 
     // Busca documentos salvos (including publicUrl do banco)
@@ -275,6 +283,10 @@ export class QuotesService {
         );
       }
     }
+
+    this.logger.log(
+      `conciliacao_athos quoteId=${quote.id} paid=${payment.paid} idVenda=${resolvedIdVenda ?? "n/a"} valor=${(payment as any).valor ?? 0} statusUpdated=${statusUpdated} currentStatus=${currentStatus}`,
+    );
 
     return {
       quoteId: quote.id,
@@ -1400,6 +1412,14 @@ export class QuotesService {
     const quote = await this.findQuoteByIdentifier(quoteId);
     if (!quote) {
       throw new NotFoundException("Orçamento não encontrado");
+    }
+
+    if (["PENDENTE", "ENVIADO"].includes(quote.status)) {
+      void this.checkPaymentStatus(quote.id).catch((err: unknown) => {
+        this.logger.warn(
+          `Disparo de checagem de pagamento falhou ao enviar orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     }
 
     if (statusTransitions[quote.status]?.includes("ENVIADO" as QuoteStatus)) {
