@@ -301,7 +301,7 @@ export default function OrcamentoDetailPage() {
   }
 
   function syncDesconto(field: "percent" | "valor" | "total", raw: string) {
-    const base = Number(quote?.totais?.valor ?? 0);
+    const base = Number(quote?.body?.totais?.valor ?? 0);
     const n = parseFloat(raw.replace(",", "."));
     const valid = !isNaN(n) && n >= 0 && base > 0;
 
@@ -326,14 +326,17 @@ export default function OrcamentoDetailPage() {
         setNfseValorTotal("");
       }
     } else {
-      setNfseValorTotal(raw);
-      if (valid) {
-        const vDesc = base - n;
+      // Valor total não pode ser maior que o valor base
+      const clamped = valid && n > base ? base : n;
+      const rawClamped = (valid && n > base) ? base.toFixed(2) : raw;
+      setNfseValorTotal(rawClamped);
+      if (!isNaN(clamped) && clamped >= 0 && base > 0) {
+        const vDesc = base - clamped;
         setNfseDescontoValor(vDesc.toFixed(2));
-        setNfseDescontoPercent(vDesc >= 0 ? ((vDesc / base) * 100).toFixed(2) : "");
+        setNfseDescontoPercent(vDesc >= 0 ? ((vDesc / base) * 100).toFixed(2) : "0");
       } else {
-        setNfseDescontoValor("");
-        setNfseDescontoPercent("");
+        setNfseDescontoValor("0");
+        setNfseDescontoPercent("0");
       }
     }
   }
@@ -824,7 +827,11 @@ export default function OrcamentoDetailPage() {
                   checked={nfseDescontoAtivo}
                   onChange={e => {
                     setNfseDescontoAtivo(e.target.checked);
-                    if (!e.target.checked) {
+                    if (e.target.checked) {
+                      setNfseDescontoPercent("0");
+                      setNfseDescontoValor("0");
+                      setNfseValorTotal((quote?.body?.totais?.valor ?? 0).toFixed(2));
+                    } else {
                       setNfseDescontoPercent("");
                       setNfseDescontoValor("");
                       setNfseValorTotal("");
@@ -875,17 +882,18 @@ export default function OrcamentoDetailPage() {
                           className="form-control"
                           type="number"
                           min="0"
+                          max={(quote?.body?.totais?.valor ?? 0).toFixed(2)}
                           step="0.01"
-                          placeholder={(quote?.totais?.valor ?? 0).toFixed(2)}
+                          placeholder={(quote?.body?.totais?.valor ?? 0).toFixed(2)}
                           value={nfseValorTotal}
                           onChange={e => syncDesconto("total", e.target.value)}
                         />
                       </div>
                     </div>
                   </div>
-                  {quote?.totais?.valor != null && (
+                  {quote?.body?.totais?.valor != null && (
                     <small className="text-muted mt-1 d-block">
-                      Valor base: {Number(quote.totais.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      Valor base: {Number(quote.body?.totais?.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                     </small>
                   )}
                 </div>
