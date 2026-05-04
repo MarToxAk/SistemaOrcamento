@@ -1,17 +1,16 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Last updated: 2026-05-05
-Current phase: 15
+Current phase: 16
 Milestone: v1.5 IN PROGRESS
 
 ---
 
 ## Current Position
 
-Phase: 15 — Corrigir encoding NFS-e e proxy API
-Status: Planning complete — execute `/gsd-execute-phase` para iniciar
-Last activity: 2026-05-05 - Milestone v1.5 planejado (2 fases: 15-16)
+Phase: 16 - UI de desconto no modal NFS-e
+Status: Phase 15 complete - next step is planning Phase 16
+Last activity: 2026-05-04 - Phase 15 concluida (encoding NFS-e + proxy body)
 
 ## Project Status
 
@@ -31,15 +30,14 @@ Last activity: 2026-05-05 - Milestone v1.5 planejado (2 fases: 15-16)
 | 12 | Conciliacao Athos no backend | complete (v1.4) |
 | 13 | Gatilhos de checagem e sincronizacao de status | complete (v1.4) |
 | 14 | Desconto controlado na emissao de NFS-e | complete (v1.4) |
-| 15 | Corrigir encoding NFS-e e proxy API | not started (v1.5) |
+| 15 | Corrigir encoding NFS-e e proxy API | complete (v1.5) |
 | 16 | UI de desconto no modal NFS-e | not started (v1.5) |
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-04)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.4 pagamentos EFI/Athos no backend + desconto NFS-e
-Current focus: v1.5 correcao de encoding NFS-e e UI de desconto no modal
+Current focus: v1.5 UI de desconto no modal de emissao NFS-e
 
 ## Active Context
 
@@ -58,12 +56,12 @@ Current focus: v1.5 correcao de encoding NFS-e e UI de desconto no modal
 | 2026-05-04 | Nao usar n8n para notificacao de pagamento | Fluxo deve ficar na aplicacao backend principal |
 | 2026-05-04 | Checar pagamento no Athos ao abrir e ao enviar orcamento | Sincronizar status com estado real do caixa |
 | 2026-05-04 | Incluir desconto opcional na emissao de NFS-e | Necessidade fiscal de deducao por percentual/valor sobre total pago |
-| 2026-05-05 | v1.5 foca em dois bugs de NFS-e: mojibake no backend + UI de desconto ausente no frontend | Emissao de NFS-e com valor correto nao era possivel sem esses fixes |
+| 2026-05-04 | v1.5 foca em dois bugs de NFS-e: mojibake no backend + UI de desconto ausente no frontend | Emissao de NFS-e com valor correto nao era possivel sem esses fixes |
 
 ## Notes
 
 - SDK gsd nao encontrado no ambiente atual; ajustes de milestone feitos manualmente
-- Proximo passo: /gsd-plan-phase 11
+- Proximo passo: /gsd-next para planejar a Phase 16
 - Implementacao anterior baseada em listener externo nao sera reutilizada (sem n8n)
 
 

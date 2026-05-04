@@ -19,7 +19,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   if (!id) return Response.json({ error: "Id do orcamento nao informado." }, { status: 400 });
 
   try {
-    const res = await backendFetch(`/quotes/${encodeURIComponent(id)}/nfse`, { method: "POST" });
+    const body = await _req.text();
+    const res = await backendFetch(`/quotes/${encodeURIComponent(id)}/nfse`, {
+      method: "POST",
+      body,
+      headers: { "Content-Type": "application/json" },
+    });
     const data = await res.json().catch(() => ({ error: "Resposta invalida do backend." }));
     if (!res.ok) return Response.json(data, { status: res.status });
     return Response.json(data);
