@@ -1,4 +1,4 @@
-# BomCusto Orcamento
+﻿# BomCusto Orcamento
 
 Plataforma full-stack para gestao de orcamentos com integracao ao Chatwoot e ingestao de dados do PDV legado.
 
@@ -86,4 +86,6 @@ npm run test
 2. Configure as variaveis de ambiente no Portainer (`DATABASE_URL`, `MINIO_*`, `CHATWOOT_*`, etc).
 3. Publique as imagens no GHCR com o workflow `.github/workflows/deploy-portainer.yml`.
 4. Adicione no GitHub Secrets o `PORTAINER_WEBHOOK_URL`.
-5. A cada push na branch `main`, o workflow publica imagens novas e dispara o webhook do Portainer para atualizar a stack no VPS.
+5. A cada push na branch main, o workflow publica imagens novas e dispara o webhook do Portainer para atualizar a stack no VPS.
+6. Procedimento oficial de update, rollback e validacao: deploy/UPDATE_RUNBOOK.md.
+
