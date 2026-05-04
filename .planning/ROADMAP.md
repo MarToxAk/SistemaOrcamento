@@ -1,7 +1,7 @@
 # Roadmap - Sistema de Orcamento BomCusto
 
-Version: 1.3
-Date: 2026-05-03
+Version: 1.4
+Date: 2026-05-04
 
 ---
 
@@ -11,6 +11,7 @@ Date: 2026-05-03
 - [x] v1.1 Aprovacao Athos - Phase 6 (shipped 2026-05-03)
 - [x] v1.2 Mensagens e UX do Cliente - Phases 7-8 (shipped 2026-05-03)
 - [x] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (shipped 2026-05-03)
+- [ ] v1.4 Pagamento EFI sem autenticacao + conciliacao Athos no backend - Phases 11-13
 
 ---
 
@@ -58,6 +59,44 @@ Full details: .planning/milestones/v1.3-ROADMAP.md
 
 </details>
 
+## v1.4 Planned (Phases 11-13)
+
+| # | Phase | Goal | Requirements | Success Criteria |
+|---|-------|------|--------------|------------------|
+| 11 | Webhook EFI sem assinatura obrigatoria | Receber notificacoes EFI sem bloqueio por HMAC mantendo resiliencia e auditoria | EFIW-01, EFIW-02, EFIW-03 | 4 |
+| 12 | Conciliacao Athos no backend | Implementar consulta real de pagamento no Athos e sincronizar status no dominio | ATHP-01, ATHP-02, ATHP-03 | 4 |
+| 13 | Gatilhos de checagem e observabilidade | Executar checagem no abrir/enviar orcamento e expor diagnostico confiavel | PCHK-01, PCHK-02, PCHK-03, OBSV-01, OBSV-02 | 5 |
+
+### Phase Details
+
+**Phase 11: Webhook EFI sem assinatura obrigatoria**
+Goal: Permitir recebimento de webhook EFI mesmo sem assinatura, sem reintroduzir fragilidade operacional.
+Requirements: EFIW-01, EFIW-02, EFIW-03
+Success criteria:
+1. Endpoints de webhook EFI aceitam payload sem `x-signature`/`x-gn-signature`.
+2. Fluxo de idempotencia evita duplicidade de processamento por `eventId`/`txid`.
+3. Persistencia em `PaymentTransaction` mantem rastreabilidade de cada evento recebido.
+4. Testes de webhook cobrem cenarios com e sem assinatura.
+
+**Phase 12: Conciliacao Athos no backend**
+Goal: Trocar stub de pagamento por consulta real ao Athos e refletir confirmacao no estado do orcamento.
+Requirements: ATHP-01, ATHP-02, ATHP-03
+Success criteria:
+1. `AthosService.verificarPagamentoPorOrcamento` consulta tabelas reais e retorna `paid`, `valor` e `idVenda`.
+2. Resultado usa `vendaId` quando informado e fallback por `orcamentoId` quando necessario.
+3. Fluxo de sincronizacao atualiza status para APROVADO quando pagamento confirmado e transicao permitida.
+4. Falhas de conexao/consulta Athos retornam diagnostico controlado sem quebrar endpoint.
+
+**Phase 13: Gatilhos de checagem e observabilidade**
+Goal: Garantir que consulta de pagamento rode nos pontos de uso do orcamento e com visibilidade operacional.
+Requirements: PCHK-01, PCHK-02, PCHK-03, OBSV-01, OBSV-02
+Success criteria:
+1. `GET /quotes/:id` dispara checagem de pagamento com protecao contra chamadas excessivas.
+2. `POST /quotes/:id/enviar` dispara checagem antes/apos envio sem bloquear operacao em caso de erro Athos.
+3. `GET /quotes/:id/payment-status` retorna conciliacao completa com `statusSync` coerente.
+4. Logs estruturados registram tentativa, resultado e motivo de falha da conciliacao.
+5. Testes cobrem cenarios pago, nao pago e erro de consulta Athos.
+
 ## Backlog (Future)
 
 - Relatorios e exportacao CSV de orcamentos
@@ -70,4 +109,4 @@ Full details: .planning/milestones/v1.3-ROADMAP.md
 - Historico de mensagens enviados ao cliente
 
 ---
-Roadmap v1.3 - 2026-05-03
+Roadmap v1.4 - 2026-05-04

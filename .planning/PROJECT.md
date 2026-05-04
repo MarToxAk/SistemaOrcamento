@@ -8,6 +8,16 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
+## Current Milestone: v1.4 Pagamento EFI sem autenticacao + conciliacao Athos no backend
+
+**Goal:** Garantir confirmacao de pagamento confiavel no proprio backend, sem dependencia de n8n, incluindo conciliacao com Athos no fluxo de orcamento.
+
+**Target features:**
+- Remover autenticacao HMAC obrigatoria do webhook EFI mantendo hardening minimo
+- Processar notificacao de pagamento diretamente no backend NestJS (sem bridge externa)
+- Implementar verificacao real de pagamento no Athos em vez de retorno stub
+- Disparar checagem de pagamento ao abrir e ao enviar orcamento, com atualizacao de status
+
 ## Last Shipped Milestone: v1.3 Estabilidade de Migrations no Docker Compose
 
 Shipped em 2026-05-03.
@@ -53,13 +63,15 @@ Entregas principais:
 
 ### Active (Next Milestone)
 
-- [ ] RBAC por role (ADMIN / VENDEDOR / ATENDENTE)
-- [ ] Relatorios e exportacao CSV de orcamentos
-- [ ] Notificacoes em tempo real (WebSocket)
-- [ ] Templates de mensagem configuraveis pelo painel
+- [ ] Webhook EFI sem assinatura obrigatoria, com idempotencia e trilha de auditoria
+- [ ] Conciliacao de pagamento com Athos implementada em codigo (sem stub)
+- [ ] Checagem de pagamento executada ao abrir e ao enviar orcamento
+- [ ] Atualizacao automatica de status quando pagamento confirmado no Athos
 
 ### Out of Scope
 
+- Reintroduzir n8n para roteamento de pagamentos
+- Listener PG LISTEN/NOTIFY externo ao backend principal
 - Refactor completo de dominio de orcamentos
 - Troca de ORM (Prisma permanece)
 - Mudanca de provedor de banco
@@ -71,6 +83,8 @@ Entregas principais:
 - Deploy em VPS via Docker Compose com Portainer webhook
 - Banco principal remoto; ambiente local com compose opcional
 - Historico: v1.0 MVP, v1.1 Aprovacao Athos, v1.2 Mensagens/UX, v1.3 Migration Stability -- todos arquivados
+- Webhook EFI ja existe em /api/integrations/efi/webhook/payment e /pix, hoje com guard HMAC
+- Endpoint /api/quotes/:id/payment-status existe, mas AthosService.verificarPagamentoPorOrcamento ainda retorna stub (paid=false)
 
 ## Constraints
 
@@ -78,6 +92,7 @@ Entregas principais:
 - Compatibilidade: Preservar schema e payload legado onde ja integrado
 - Operacao: Solucao deve funcionar com docker compose pull/up sem passos manuais ocultos
 - Seguranca: Sem segredos em codigo
+- Integracao: Fluxo deve ficar 100% no backend desta aplicacao (sem n8n)
 
 ## Key Decisions
 
@@ -88,10 +103,25 @@ Entregas principais:
 | wait-for-db.js antes de migration | Elimina race condition postgres/backend | checkmark Validado -- v1.3 |
 | Runbook manual para VPS | Sem infra CI capaz de executar docker compose | checkmark Validado -- v1.3 |
 | Monorepo npm workspaces | Compartilhamento de tipos sem publicacao | checkmark Validado -- historico |
+| Remover obrigatoriedade de assinatura no webhook EFI | Necessidade operacional de receber notificacao sem bloqueio por segredo | -- Pendente (v1.4) |
+| Conciliar pagamento pelo Athos ao abrir/enviar orcamento | Reduz divergencia entre estado do caixa e estado do orcamento | -- Pendente (v1.4) |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
+**After each phase transition** (via /gsd-transition):
+1. Requirements invalidated? -> Move to Out of Scope with reason
+2. Requirements validated? -> Move to Validated with phase reference
+3. New requirements emerged? -> Add to Active
+4. Decisions to log? -> Add to Key Decisions
+5. "What This Is" still accurate? -> Update if drifted
+
+**After each milestone** (via /gsd-complete-milestone):
+1. Full review of all sections
+2. Core Value check - still the right priority?
+3. Audit Out of Scope - reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-05-03 after v1.3 milestone*
+*Last updated: 2026-05-04 after milestone v1.4 kickoff*
