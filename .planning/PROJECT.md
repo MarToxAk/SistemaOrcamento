@@ -18,7 +18,14 @@ Entregas principais:
 - Modal de emissão NFS-e com switch + 3 campos bidirecionais de desconto (%, R$, Valor total)
 - Valor total pré-preenchido com valor base; campo bloqueado contra valor acima do base
 
-## Current Milestone: (a definir — execute /gsd-new-milestone)
+## Current Milestone: v1.6 — Correcao NFS-e: Calculo de Desconto e Valor Final
+
+**Goal:** Corrigir o modal de emissao NFS-e para que o valor total do orcamento seja lido corretamente, o desconto seja calculado sobre esse valor, e o valor final (pos-desconto) seja enviado corretamente ao SOAP da NFS-e.
+
+**Target features:**
+- Campo "valor total" pre-preenchido com o total real do orcamento
+- Desconto calculado corretamente sobre a base do orcamento (%, R$, valor total)
+- Valor liquido pos-desconto enviado corretamente na emissao da NFS-e
 
 ---
 
@@ -59,9 +66,11 @@ Entregas principais:
 - checkmark Observabilidade de falhas de migration nos logs -- v1.3
 - checkmark Runbook de update reproduzivel para VPS -- v1.3
 
-### Active (Next Milestone)
+### Active (v1.6)
 
-(Próximo milestone a definir via /gsd-new-milestone)
+- [ ] Campo "valor total" no modal NFS-e pre-preenchido com total real do orcamento -- v1.6
+- [ ] Calculo de desconto bidirecional (%, R$, valor total) funcionando com base correta -- v1.6
+- [ ] Valor pos-desconto enviado corretamente ao backend e ao SOAP da NFS-e -- v1.6
 
 ### Out of Scope
 
@@ -122,4 +131,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 after v1.5 milestone*
+*Last updated: 2026-05-04 — milestone v1.6 iniciado*

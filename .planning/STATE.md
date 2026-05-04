@@ -2,15 +2,16 @@
 
 Last updated: 2026-05-04
 Current phase: —
-Milestone: v1.5 SHIPPED
+Milestone: v1.6 (planning)
 
 ---
 
 ## Current Position
 
-Phase: — (milestone v1.5 fechado)
-Status: Idle — execute /gsd-new-milestone para iniciar v1.6
-Last activity: 2026-05-04 - Milestone v1.5 arquivado (encoding NFS-e + UI desconto)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-04 — Milestone v1.6 iniciado (correcao calculo desconto NFS-e)
 
 ## Project Status
 
@@ -32,6 +33,7 @@ Last activity: 2026-05-04 - Milestone v1.5 arquivado (encoding NFS-e + UI descon
 | 14 | Desconto controlado na emissao de NFS-e | complete (v1.4) |
 | 15 | Corrigir encoding NFS-e e proxy API | complete (v1.5) |
 | 16 | UI de desconto no modal NFS-e | complete (v1.5) |
+| 17 | Correcao do calculo de desconto no modal NFS-e | pending (v1.6) |
 
 ## Milestones Archived
 
@@ -46,7 +48,7 @@ Last activity: 2026-05-04 - Milestone v1.5 arquivado (encoding NFS-e + UI descon
 
 See: .planning/PROJECT.md (updated 2026-05-04)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.5 UI de desconto no modal de emissao NFS-e
+Current focus: v1.6 Correcao do calculo de desconto no modal NFS-e
 
 ## Active Context
 
@@ -66,6 +68,7 @@ Current focus: v1.5 UI de desconto no modal de emissao NFS-e
 | 2026-05-04 | Checar pagamento no Athos ao abrir e ao enviar orcamento | Sincronizar status com estado real do caixa |
 | 2026-05-04 | Incluir desconto opcional na emissao de NFS-e | Necessidade fiscal de deducao por percentual/valor sobre total pago |
 | 2026-05-04 | v1.5 foca em dois bugs de NFS-e: mojibake no backend + UI de desconto ausente no frontend | Emissao de NFS-e com valor correto nao era possivel sem esses fixes |
+| 2026-05-04 | v1.6 foca no path errado de quote?.totais?.valor no frontend | Base de calculo era sempre 0, quebrando todos os calculos de desconto no modal NFS-e |
 
 ## Notes
 
