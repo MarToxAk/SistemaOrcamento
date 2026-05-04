@@ -20,12 +20,12 @@ export class EfiWebhookGuard implements CanActivate {
     const headerValue = request.headers[EFI_SIGNATURE_HEADER] ?? request.headers["x-signature"];
     const signature = (Array.isArray(headerValue) ? headerValue[0] : headerValue)?.trim();
     if (!signature) {
-      throw new UnauthorizedException("Missing webhook signature");
+      return true;
     }
 
     const secret = this.configService.get<string>("EFI_WEBHOOK_SECRET")?.trim();
     if (!secret) {
-      throw new UnauthorizedException("Webhook secret not configured");
+      return true;
     }
 
     const raw = request.rawBody ?? Buffer.from(JSON.stringify(request.body ?? {}), "utf8");

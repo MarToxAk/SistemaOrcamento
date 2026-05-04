@@ -345,6 +345,7 @@ export class AthosService {
           "Tabela orcamento sem coluna identificadora conhecida (numero/idorcamento/codorcamento).",
         );
       }
+      this.logger.log(`[Athos] buscarOrcamentoPorNumero: numero="${numero}" identifierColumn="${identifierColumn}"`);
 
       const query = `
         SELECT *
@@ -488,9 +489,124 @@ export class AthosService {
     }
   }
 
-  async verificarPagamentoPorOrcamento(orcamentoId: string, vendaId?: number | string | null) {
-    this.logger.log(`Verificando pagamento para orçamento ${orcamentoId} e venda ${vendaId}`);
-    return { paid: false, idVenda: vendaId ?? null, valor: 0 };
+  async verificarPagamentoPorOrcamento(
+    orcamentoId: string,
+    vendaId?: number | string | null,
+  ): Promise<{ paid: boolean; idVenda: number | string | null; valor: number }> {
+    this.logger.log(`Verificando pagamento para orcamento ${orcamentoId} vendaId=${vendaId ?? "n/a"}`);
+
+    const pool = this.getPool();
+    let client: PoolClient | null = null;
+
+    try {
+      client = await pool.connect();
+
+      const VENDA_TABLES = ["venda", "vendas", "orcamento_venda", "movimento_venda"];
+      const FIN_TABLES = ["financeiro", "conta_receber", "contasreceber", "parcela_receber", "receber"];
+      const SITUACAO_COLS = ["situacaovenda", "situacao", "statuspagamento", "status", "statussituacao"];
+      const PAGO_KEYWORDS = ["PAGO", "QUITADO", "RECEBIDO", "LIQUIDADO", "FINALIZADO"];
+      const VENDA_ID_COLS = ["idvenda", "vendaid", "id_venda", "id"];
+      const ORC_ID_COLS = ["idorcamento", "orcamentoid", "id_orcamento", "codorcamento"];
+
+      const vendaTable = await findExistingTable(client, VENDA_TABLES);
+      if (!vendaTable || !isSafeIdentifier(vendaTable.tableName)) {
+        this.logger.warn(`Tabela de venda nao encontrada no Athos para orcamento ${orcamentoId}`);
+        return { paid: false, idVenda: vendaId ?? null, valor: 0 };
+      }
+
+      let vendaRow: Row | null = null;
+
+      // Busca direta por vendaId quando fornecido
+      if (vendaId != null && Number.isFinite(Number(vendaId))) {
+        const vendaIdCol = VENDA_ID_COLS.find((c) => vendaTable.columns.has(c) && isSafeIdentifier(c));
+        if (vendaIdCol) {
+          const res = await client.query(
+            `SELECT * FROM "${vendaTable.tableName}" WHERE CAST("${vendaIdCol}" AS TEXT) = $1 LIMIT 1`,
+            [String(vendaId)],
+          );
+          if (res.rows.length > 0) {
+            vendaRow = res.rows[0] as Row;
+          }
+        }
+      }
+
+      // Fallback: busca por orcamentoId
+      if (!vendaRow) {
+        const orcCol = ORC_ID_COLS.find((c) => vendaTable.columns.has(c) && isSafeIdentifier(c));
+        if (!orcCol) {
+          this.logger.warn(`Tabela ${vendaTable.tableName} sem coluna de ligacao ao orcamento`);
+          return { paid: false, idVenda: vendaId ?? null, valor: 0 };
+        }
+        const res = await client.query(
+          `SELECT * FROM "${vendaTable.tableName}" WHERE CAST("${orcCol}" AS TEXT) = $1 ORDER BY CTID DESC LIMIT 1`,
+          [orcamentoId],
+        );
+        if (res.rows.length > 0) {
+          vendaRow = res.rows[0] as Row;
+        }
+      }
+
+      if (!vendaRow) {
+        this.logger.log(`Nenhuma venda encontrada para orcamento ${orcamentoId}`);
+        return { paid: false, idVenda: vendaId ?? null, valor: 0 };
+      }
+
+      // Extrair idVenda da row
+      const resolvedIdVenda =
+        (() => {
+          for (const col of VENDA_ID_COLS) {
+            const v = vendaRow![col];
+            if (v != null) return typeof v === "number" ? v : Number.isFinite(Number(v)) ? Number(v) : String(v);
+          }
+          return null;
+        })() ?? vendaId ?? null;
+
+      // Verificar situacao
+      const situacaoCol = SITUACAO_COLS.find((c) => vendaRow![c] != null);
+      const situacaoRaw = situacaoCol ? String(vendaRow![situacaoCol] ?? "").toUpperCase() : "";
+      const paid = PAGO_KEYWORDS.some((kw) => situacaoRaw.includes(kw));
+
+      this.logger.log(
+        `Venda ${resolvedIdVenda} — situacao="${situacaoRaw}" paid=${paid} orcamento=${orcamentoId}`,
+      );
+
+      // Tentar buscar valor pago na tabela financeira
+      let valor = 0;
+      if (resolvedIdVenda != null) {
+        try {
+          const finTable = await findExistingTable(client, FIN_TABLES);
+          if (finTable && isSafeIdentifier(finTable.tableName)) {
+            const finVendaCol = VENDA_ID_COLS.find((c) => finTable.columns.has(c) && isSafeIdentifier(c));
+            if (finVendaCol) {
+              const finRes = await client.query(
+                `SELECT * FROM "${finTable.tableName}" WHERE CAST("${finVendaCol}" AS TEXT) = $1`,
+                [String(resolvedIdVenda)],
+              );
+              valor = (finRes.rows as Row[]).reduce(
+                (acc, r) => acc + pickNumber(r, ["valorpago", "valor_pago", "valorquitado", "totalrecebido"], 0),
+                0,
+              );
+            }
+          }
+        } catch (finErr) {
+          this.logger.warn(`Falha ao buscar valor financeiro para venda ${resolvedIdVenda}: ${finErr}`);
+        }
+      }
+
+      // Fallback: valor da venda
+      if (valor === 0) {
+        valor = pickNumber(vendaRow, ["valortotal", "valor", "totalvenda", "valorvenda"], 0);
+      }
+
+      return { paid, idVenda: resolvedIdVenda, valor };
+    } catch (err) {
+      this.logger.warn(
+        `Falha ao verificar pagamento Athos para orcamento ${orcamentoId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return { paid: false, idVenda: vendaId ?? null, valor: 0 };
+    } finally {
+      client?.release();
+    }
   }
 
   async buscarClientePorId(clienteId: string | number): Promise<{

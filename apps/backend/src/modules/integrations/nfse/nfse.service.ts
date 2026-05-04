@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 import { createHash } from "crypto";
@@ -20,6 +20,14 @@ export interface EmitirNfseInput {
   tomadorEnderecoUf?: string;
   servicoCodigo?: string; // ex: "24.01", "13.05", "14.08"
   codigoTributacaoNacional?: string; // override manual
+  /** Ativa aplicacao de desconto na emissao da NFS-e (NFSD-01) */
+  descontoAtivo?: boolean;
+  /** Percentual de desconto (0-100) sobre totalPago ou valorServicos (NFSD-02) */
+  descontoPorcentagem?: number;
+  /** Valor fixo de desconto em reais (NFSD-03) */
+  descontoValor?: number;
+  /** Base de calculo para desconto percentual; se ausente usa valorServicos (NFSD-02) */
+  totalPago?: number;
 }
 
 type TomadorEndereco = {
@@ -121,6 +129,7 @@ export class NfseService {
     serie: string;
     dataEmissao: string;
     valorServicos: number;
+    descontoIncondicionado: number;
     discriminacao: string;
     itemLista: string;
     codigoNacional: string;
@@ -142,7 +151,7 @@ export class NfseService {
         : null;
 
     // Testado: Ilhabela EXIGE IdentificacaoTomador com CPF ou CNPJ.
-    // Sem documento (consumidor final / sem-tomador) → servidor retorna HTTP 500 sem mensagem.
+    // Sem documento (consumidor final / sem-tomador) -> servidor retorna HTTP 500 sem mensagem.
     if (!docTomador) {
       throw new BadRequestException(
         "CPF ou CNPJ do cliente é obrigatório para emitir NFS-e em Ilhabela. " +
@@ -204,7 +213,7 @@ export class NfseService {
 \t\t\t\t\t<AliquotaIbs>${aliquotaIbs}</AliquotaIbs>
 \t\t\t\t\t<OutrasRetencoes>0.00</OutrasRetencoes>
 \t\t\t\t\t<Aliquota>${input.aliquotaIss}</Aliquota>
-\t\t\t\t\t<DescontoIncondicionado>0.00</DescontoIncondicionado>
+\t\t\t\t\t<DescontoIncondicionado>${input.descontoIncondicionado.toFixed(2)}</DescontoIncondicionado>
 \t\t\t\t\t<DescontoCondicionado>0.00</DescontoCondicionado>
 \t\t\t\t</Valores>
 \t\t\t\t<IssRetido>2</IssRetido>
@@ -279,12 +288,12 @@ export class NfseService {
   }
 
   /**
-   * Extrai e decodifica o conteúdo de <outputXML> da resposta SOAP.
+   * Extrai e decodifica o conteudo de <outputXML> da resposta SOAP.
    * O servidor iiBrasil retorna o XML real como HTML entities dentro dessa tag.
-   * Ex: &lt;NumeroNfse&gt;136&lt;/NumeroNfse&gt; → <NumeroNfse>136</NumeroNfse>
+   * Ex: &lt;NumeroNfse&gt;136&lt;/NumeroNfse&gt; -> <NumeroNfse>136</NumeroNfse>
    */
   private decodeOutputXml(soapResponse: string): string {
-    // Tenta extrair o conteúdo do outputXML
+    // Tenta extrair o conteudo do outputXML
     const match = soapResponse.match(/<outputXML[^>]*>([\s\S]*?)<\/outputXML>/i);
     const raw = match?.[1] ?? soapResponse;
 
@@ -339,24 +348,57 @@ export class NfseService {
   }> {
     let cnpj:     string | null = null;
     let cpf:      string | null = null;
-    let nome:     string | null = null; // Athos tem prioridade; chat é fallback
+    let nome:     string | null = null; // Athos tem prioridade; chat e fallback
     let endereco: TomadorEndereco | null = null;
 
     try {
-      const lookupId  = String(quote.externalQuoteId ?? quote.internalNumber ?? "");
-      const athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
-      const clienteId = (athosData as any)?.mapped?.idcliente;
-      if (clienteId) {
-        const info = await this.athosService.buscarClientePorId(clienteId);
-        if (info) {
-          nome    = info.name || quote.customer?.fullName || null; // Athos primeiro
-          endereco = (info as any).endereco ?? null;
-          if (info.type === "juridico" && info.documento?.length === 14) cnpj = info.documento;
-          else if (info.type === "fisico" && info.documento?.length === 11) cpf = info.documento;
+      const lookupId = String(quote.externalQuoteId ?? quote.internalNumber ?? "");
+      this.logger.log(
+        `[Tomador] buscando: lookupId="${lookupId}" externalQuoteId=${quote.externalQuoteId} internalNumber=${quote.internalNumber}`,
+      );
+
+      let athosData: Awaited<ReturnType<typeof this.athosService.buscarOrcamentoPorNumero>> | null = null;
+      try {
+        athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
+      } catch (err) {
+        if (err instanceof NotFoundException) {
+          this.logger.warn(
+            `[Tomador] orcamento "${lookupId}" nao encontrado no Athos (NotFoundException) - sem dados do tomador`,
+          );
+        } else {
+          this.logger.warn(
+            `[Tomador] erro ao buscar orcamento "${lookupId}" no Athos: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      if (athosData) {
+        const clienteId = (athosData as any)?.mapped?.idcliente;
+        this.logger.log(`[Tomador] orcamento encontrado - idcliente=${clienteId}`);
+
+        if (clienteId != null && clienteId > 0) {
+          const info = await this.athosService.buscarClientePorId(clienteId);
+          if (info) {
+            nome     = info.name || quote.customer?.fullName || null;
+            endereco = (info as any).endereco ?? null;
+            if (info.type === "juridico" && info.documento?.length === 14) cnpj = info.documento;
+            else if (info.type === "fisico"   && info.documento?.length === 11) cpf  = info.documento;
+            this.logger.log(
+              `[Tomador] cliente encontrado - tipo=${info.type} nome="${nome}" documento=${info.documento ?? "null"}`,
+            );
+          } else {
+            this.logger.warn(`[Tomador] buscarClientePorId(${clienteId}) retornou null`);
+          }
+        } else {
+          this.logger.warn(
+            `[Tomador] idcliente=${clienteId} invalido ou ausente no mapeamento do orcamento "${lookupId}"`,
+          );
         }
       }
     } catch (err) {
-      this.logger.warn(`Falha ao buscar tomador no Athos: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.warn(
+        `[Tomador] falha inesperada ao buscar tomador no Athos: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     // Fallback para nome do chat se Athos não encontrou
@@ -450,13 +492,39 @@ export class NfseService {
     if (infoNfse) {
       rpsNumero = infoNfse.proximoRps;
       rpsSerie  = infoNfse.serieRps || this.SERIE_RPS;
-      this.logger.log(`ProximoRPS=${rpsNumero} SerieRPS=${rpsSerie}`);
+      this.logger.log(`[RPS] ProximoRPS=${rpsNumero} SerieRPS=${rpsSerie}`);
     } else {
       this.logger.warn(`API Auxiliar indisponível, usando internalNumber=${rpsNumero} como RPS`);
     }
 
     const dataEmissao    = new Date().toISOString().slice(0, 10);
     const valorServicos  = Number(quote.total);
+
+    // Calcular desconto (NFSD-01..04)
+    let descontoIncondicionado = 0;
+    if (input?.descontoAtivo === true) {
+      const base = (input.totalPago != null && Number.isFinite(input.totalPago) && input.totalPago > 0)
+        ? input.totalPago
+        : valorServicos;
+
+      if (input.descontoPorcentagem != null) {
+        if (input.descontoPorcentagem < 0 || input.descontoPorcentagem > 100) {
+          throw new BadRequestException("descontoPorcentagem deve estar entre 0 e 100.");
+        }
+        descontoIncondicionado = Number((base * input.descontoPorcentagem / 100).toFixed(2));
+      } else if (input.descontoValor != null) {
+        if (input.descontoValor < 0) {
+          throw new BadRequestException("descontoValor nao pode ser negativo.");
+        }
+        descontoIncondicionado = Number(input.descontoValor.toFixed(2));
+      }
+
+      if (descontoIncondicionado > valorServicos) {
+        throw new BadRequestException(
+          `descontoIncondicionado (${descontoIncondicionado.toFixed(2)}) nao pode ser maior que valorServicos (${valorServicos.toFixed(2)}).`,
+        );
+      }
+    }
 
     const itensDesc = (quote.items ?? [])
       .map((item: any, i: number) => `${i + 1}. ${item.shortDescription || item.description} (${Number(item.quantity)}x) - R$ ${Number(item.finalPrice).toFixed(2)}`)
@@ -498,6 +566,7 @@ export class NfseService {
       serie:           rpsSerie,
       dataEmissao,
       valorServicos,
+      descontoIncondicionado,
       discriminacao,
       itemLista:       servico.itemLista,
       codigoNacional:  input?.codigoTributacaoNacional ?? servico.codigoNacional,
@@ -515,7 +584,7 @@ export class NfseService {
   <Integridade>${integridade}</Integridade>
 </GerarNfseEnvio>`;
 
-    this.logger.log(`Emitindo NFS-e orçamento #${quote.internalNumber} — RPS #${rpsNumero}/${rpsSerie} — serviço ${servico.itemLista}/${servico.codigoNacional}`);
+    this.logger.log(`Emitindo NFS-e orçamento #${quote.internalNumber} - RPS #${rpsNumero}/${rpsSerie} - serviço ${servico.itemLista}/${servico.codigoNacional}`);
     this.logger.debug(`XML:\n${dados}`);
 
     const responseXml = await this.enviarSoap(this.buildCabecalho(), dados);
@@ -555,9 +624,9 @@ export class NfseService {
 
       // 1. Envia mensagem de texto
       try {
-        let mensagem = `Olá, ${nomeCliente}! 👋\n\nSua nota fiscal (NFS-e #${numeroNfse}) foi emitida com sucesso.`;
-        if (codigoVerificacao) mensagem += `\nCódigo de verificação: ${codigoVerificacao}`;
-        if (linkNfse) mensagem += `\n\n📄 Link: ${linkNfse}`;
+        let mensagem = `Ola, ${nomeCliente}!\n\nSua nota fiscal (NFS-e #${numeroNfse}) foi emitida com sucesso.`;
+        if (codigoVerificacao) mensagem += `\nCodigo de verificacao: ${codigoVerificacao}`;
+        if (linkNfse) mensagem += `\n\nLink: ${linkNfse}`;
         await this.chatwootService.sendOutgoingMessage(convId, mensagem);
       } catch (err) {
         this.logger.warn(`Falha ao enviar mensagem Chatwoot: ${err instanceof Error ? err.message : err}`);
@@ -576,7 +645,7 @@ export class NfseService {
           const fileName   = `NotaFiscal_NFSe_${numeroNfse}.pdf`;
           const contentType = String(pdfResp.headers["content-type"] ?? "application/pdf").split(";")[0].trim();
 
-          this.logger.log(`PDF baixado (${pdfBuffer.length} bytes) — enviando ao Chatwoot`);
+          this.logger.log(`PDF baixado (${pdfBuffer.length} bytes) - enviando ao Chatwoot`);
           await this.chatwootService.sendAttachment(convId, pdfBuffer, fileName, contentType || "application/pdf");
           this.logger.log(`PDF da NFS-e #${numeroNfse} enviado ao cliente via Chatwoot`);
         } catch (err) {
@@ -592,7 +661,7 @@ export class NfseService {
     const quote = await this.findQuote(quoteId);
     if (!quote) throw new BadRequestException("Orçamento não encontrado");
 
-    // Busca dados do tomador para o frontend pré-preencher o formulário
+    // Busca dados do tomador para o frontend pre-preencher o formulario
     let tomador: { cnpj: string | null; cpf: string | null; nome: string | null; endereco: TomadorEndereco | null } = {
       cnpj: null, cpf: null, nome: quote.customer?.fullName ?? null, endereco: null,
     };
@@ -621,7 +690,7 @@ export class NfseService {
   }
 
   async emitirTeste() {
-    // Teste com dados reais da documentação — não altera banco
+    // Teste com dados reais da documentacao - nao altera banco
     const rpsXml = `<Rps>
     <InfDeclaracaoPrestacaoServico Id="rps1">
         <Rps>
