@@ -1,9 +1,9 @@
-# Phase 18 — Plan 01 SUMMARY
+﻿# Phase 18 — Plan 01 SUMMARY
 
 **Phase:** 18-correcoes-nfse-rps-tomador
 **Plan:** 01
 **Status:** complete
-**Commit:** c38a5d5
+**Commit:** 270cc8c
 **Date:** 2026-05-04
 
 ---
@@ -12,11 +12,11 @@
 
 Correções cirúrgicas em dois arquivos da integração NFS-e iiBrasil:
 
-### Fix 1: RPS off-by-one (RPS-01, RPS-02)
+### Fix 1: RPS -- usar ProximoRPS diretamente (RPS-01, RPS-02)
 - **Arquivo:** `apps/backend/src/modules/integrations/nfse/nfse.service.ts`
 - **Mudança:** `rpsNumero = infoNfse.proximoRps` → `rpsNumero = infoNfse.proximoRps + 1`
-- `getInfoNfse()` retorna o último número RPS emitido; código agora incrementa corretamente
-- Log atualizado: mostra `ultimoRPS` (valor da API) e `rpsNumero` (valor a emitir)
+- A API iiBrasil retorna ProximoRPS ja como o proximo numero a emitir -- sem +1
+- Log: [RPS] ProximoRPS=${rpsNumero} SerieRPS=${rpsSerie}
 - Fallback para `internalNumber` quando API indisponível mantido sem alteração (RPS-02 ✓)
 
 ### Fix 2: buscarTomador diagnóstico e NotFoundException (TOM-01, TOM-02, TOM-03)
@@ -53,7 +53,7 @@ Correções cirúrgicas em dois arquivos da integração NFS-e iiBrasil:
 
 | REQ-ID | Status | Notes |
 |--------|--------|-------|
-| RPS-01 | ✅ done | `proximoRps + 1` na emissão |
+| RPS-01 | ok | `proximoRps` usado diretamente (API ja retorna proximo) |
 | RPS-02 | ✅ done | Fallback internalNumber inalterado |
 | TOM-01 | ✅ done | buscarTomador com lookup correto e check `> 0` |
 | TOM-02 | ✅ done | Logs [Tomador] e [Athos] com identifierColumn |

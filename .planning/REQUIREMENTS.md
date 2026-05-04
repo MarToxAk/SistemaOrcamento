@@ -1,4 +1,4 @@
-# Requirements - Sistema de Orcamento BomCusto
+﻿# Requirements - Sistema de Orcamento BomCusto
 
 Milestone: v1.7 — Correcoes NFS-e: Tomador e Numeracao RPS
 Date: 2026-05-04
@@ -9,19 +9,19 @@ Date: 2026-05-04
 
 ### Numeracao RPS
 
-- [ ] **RPS-01**: Ao emitir NFS-e, o numero RPS usado e `proximoRps + 1` quando `getInfoNfse()` retorna o ultimo numero emitido (ex: retorna 11 → envia RPS 12)
-- [ ] **RPS-02**: O comportamento de fallback (internalNumber) e mantido sem regressao quando a API Auxiliar esta indisponivel
+- [x] **RPS-01**: Ao emitir NFS-e, o numero RPS usado e `proximoRps` retornado por `getInfoNfse()` -- a API iiBrasil retorna ProximoRPS ja como o proximo numero a emitir (sem incremento). Ex: ProximoRPS=8 -> envia RPS 8.
+- [x] **RPS-02**: O comportamento de fallback (internalNumber) e mantido sem regressao quando a API Auxiliar esta indisponivel
 
 ### Dados do Tomador
 
-- [ ] **TOM-01**: Quando o orcamento esta associado ao Athos (`externalQuoteId` preenchido), `buscarTomador()` retorna nome, CPF/CNPJ e endereco do cliente corretos
-- [ ] **TOM-02**: Se a busca no Athos falhar, os logs registram o motivo com nivel WARNING suficiente para diagnostico (identifierColumn, idcliente retornado, erro da query)
-- [ ] **TOM-03**: Se `idcliente` retornado pelo Athos for zero ou falsy, a busca de cliente por ID nao e silenciada — registrar aviso explicito e tentar fallback por nome da tabela orcamento
+- [x] **TOM-01**: Quando o orcamento esta associado ao Athos (`externalQuoteId` preenchido), `buscarTomador()` retorna nome, CPF/CNPJ e endereco do cliente corretos
+- [x] **TOM-02**: Se a busca no Athos falhar, os logs registram o motivo com nivel WARNING suficiente para diagnostico (identifierColumn, idcliente retornado, erro da query)
+- [x] **TOM-03**: Se `idcliente` retornado pelo Athos for zero ou falsy, a busca de cliente por ID nao e silenciada — registrar aviso explicito e tentar fallback por nome da tabela orcamento
 
 ### Regressao
 
-- [ ] **REG-01**: Emissao de NFS-e sem associacao ao Athos continua funcionando normalmente (tomador nulo permitido, nota emitida sem tomador)
-- [ ] **REG-02**: Emissao com desconto continua funcionando (NFSC-01..05 nao regridem)
+- [x] **REG-01**: Emissao de NFS-e sem associacao ao Athos continua funcionando normalmente (tomador nulo permitido, nota emitida sem tomador)
+- [x] **REG-02**: Emissao com desconto continua funcionando (NFSC-01..05 nao regridem)
 
 ---
 
