@@ -32,3 +32,39 @@ Phases: 7-8 | Plans: 4
 Delivered: Mensagens automaticas Chatwoot por eventos de orcamento e redesign das paginas publicas de aprovacao/status.
 
 Archive: .planning/milestones/v1.2-ROADMAP.md
+
+---
+
+## v1.3 - Estabilidade de Migrations no Docker Compose
+
+Shipped: 2026-05-03
+Phases: 9-10 | Plans: 4
+
+Delivered: Eliminado race condition de migration no Docker Compose com readiness check, bootstrap deterministico e runbook operacional de update com script de verificacao pos-deploy.
+
+Key accomplishments:
+- wait-for-db.js garante que o banco aceita conexoes antes de qualquer step de migration
+- bootstrap-runtime.sh padroniza sequencia de startup do backend em producao
+- Healthcheck pg_isready no compose com gate service_healthy para o backend
+- UPDATE_RUNBOOK.md com fluxo reproduzivel de update/rollback para VPS
+- verify-deploy-health.ps1 verifica status, logs criticos e health endpoint pos-deploy
+
+Archive: .planning/milestones/v1.3-ROADMAP.md
+
+---
+
+## v1.3 - Estabilidade de Migrations no Docker Compose
+
+Shipped: 2026-05-03
+Phases: 9-10 | Plans: 4
+
+Delivered: Eliminado race condition de migration no Docker Compose com readiness check, bootstrap deterministico e runbook operacional de update com script de verificacao pos-deploy.
+
+Key accomplishments:
+- wait-for-db.js garante que o banco aceita conexoes antes de qualquer step de migration
+- bootstrap-runtime.sh padroniza sequencia de startup do backend em producao
+- Healthcheck pg_isready no compose com gate service_healthy para o backend
+- UPDATE_RUNBOOK.md com fluxo reproduzivel de update/rollback para VPS
+- verify-deploy-health.ps1 verifica status, logs criticos e health endpoint pos-deploy
+
+Archive: .planning/milestones/v1.3-ROADMAP.md

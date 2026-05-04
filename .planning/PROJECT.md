@@ -2,30 +2,22 @@
 
 ## What This Is
 
-Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o ciclo completo: criacao de orcamentos, aprovacao por link publico, cobranca PIX, emissao de NFS-e e comunicacao via Chatwoot. O foco atual e garantir operacao estavel em ambientes Docker sem quebra em atualizacoes.
+Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o ciclo completo: criacao de orcamentos, aprovacao por link publico, cobranca PIX, emissao de NFS-e e comunicacao via Chatwoot. Operacao estavel em ambientes Docker com fluxo de migration confiavel e procedimentos de update reproduziveis.
 
 ## Core Value
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Last Shipped Milestone: v1.2 Mensagens e UX do Cliente
+## Last Shipped Milestone: v1.3 Estabilidade de Migrations no Docker Compose
 
 Shipped em 2026-05-03.
 
 Entregas principais:
-- Mensagens automaticas ao cliente via Chatwoot em eventos-chave
-- Melhoria de UX das paginas publicas de aprovacao e status
-- Ajustes de layout responsivo e estados de aprovacao
-
-## Current Milestone: v1.3 Estabilidade de Migrations no Docker Compose
-
-Goal: Corrigir e padronizar o fluxo de migrations para que atualizacoes via Docker Compose sejam previsiveis, idempotentes e sem downtime evitavel.
-
-Target features:
-- Subida do stack com espera explicita de prontidao do banco
-- Execucao de migrations idempotente em cenarios de update
-- Logs e falhas claras para diagnostico rapido de migration
-- Guia operacional de update com passos reprodutiveis
+- wait-for-db.js garante prontidao do banco antes de migration e start
+- bootstrap-runtime.sh padroniza sequencia de startup do backend
+- Healthcheck pg_isready no compose VPS com gate service_healthy
+- UPDATE_RUNBOOK.md para update/rollback reproduzivel na VPS
+- verify-deploy-health.ps1 para validacao pos-deploy
 
 ---
 
@@ -54,27 +46,31 @@ Target features:
 - checkmark Testes automatizados Jest + CI GitHub Actions -- v1.1
 - checkmark Paginas publicas de aprovacao e status aprimoradas -- v1.2
 - checkmark Mensagens automaticas Chatwoot por eventos -- v1.2
+- checkmark Fluxo de migration confiavel no Docker Compose -- v1.3
+- checkmark Sequenciamento de startup com banco pronto antes do backend -- v1.3
+- checkmark Observabilidade de falhas de migration nos logs -- v1.3
+- checkmark Runbook de update reproduzivel para VPS -- v1.3
 
-### Active (v1.3)
+### Active (Next Milestone)
 
-- [ ] Fluxo de migration confiavel em update de Docker Compose
-- [ ] Sequenciamento de startup com banco pronto antes do backend
-- [ ] Observabilidade de falhas de migration para operacao
-- [ ] Runbook de update para ambiente VPS
+- [ ] RBAC por role (ADMIN / VENDEDOR / ATENDENTE)
+- [ ] Relatorios e exportacao CSV de orcamentos
+- [ ] Notificacoes em tempo real (WebSocket)
+- [ ] Templates de mensagem configuraveis pelo painel
 
 ### Out of Scope
 
 - Refactor completo de dominio de orcamentos
 - Troca de ORM (Prisma permanece)
 - Mudanca de provedor de banco
-- Reescrita de pipeline de deploy
+- Reescrita de pipeline de deploy para Kubernetes
 
 ## Context
 
 - Monorepo com NestJS + Prisma + PostgreSQL + Next.js
-- Deploy em VPS via Docker Compose
-- Banco principal e remoto; ambiente local com compose opcional
-- Historico recente: v1.2 entregue e arquivado
+- Deploy em VPS via Docker Compose com Portainer webhook
+- Banco principal remoto; ambiente local com compose opcional
+- Historico: v1.0 MVP, v1.1 Aprovacao Athos, v1.2 Mensagens/UX, v1.3 Migration Stability -- todos arquivados
 
 ## Constraints
 
@@ -87,26 +83,15 @@ Target features:
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Milestone v1.3 focado em migration stability | Falha em update via compose bloqueia operacao | -- Em execucao |
-| Sem pesquisa externa para v1.3 | Problema localizado em infraestrutura existente | -- Em execucao |
-| Priorizar idempotencia e readiness checks | Evita quebra em restart e deploy incremental | -- Em execucao |
+| Autenticacao via x-internal-api-key + guard NestJS | Simples, sem OAuth overhead | checkmark Validado -- v1.0 |
+| Prisma migrate deploy em producao | Idempotente por design | checkmark Validado -- v1.3 |
+| wait-for-db.js antes de migration | Elimina race condition postgres/backend | checkmark Validado -- v1.3 |
+| Runbook manual para VPS | Sem infra CI capaz de executar docker compose | checkmark Validado -- v1.3 |
+| Monorepo npm workspaces | Compartilhamento de tipos sem publicacao | checkmark Validado -- historico |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
-After each phase transition:
-1. Requirements invalidadas? mover para Out of Scope com motivo
-2. Requirements validadas? mover para Validated com referencia de fase
-3. Novas necessidades? adicionar em Active
-4. Decisoes novas? registrar em Key Decisions
-5. What This Is continua correto? atualizar se houver drift
-
-After each milestone:
-1. Revisao completa das secoes
-2. Revalidar Core Value
-3. Auditar Out of Scope
-4. Atualizar Context com estado real do sistema
-
 ---
-Last updated: 2026-05-03 after starting milestone v1.3
+*Last updated: 2026-05-03 after v1.3 milestone*

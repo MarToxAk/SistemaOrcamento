@@ -10,7 +10,7 @@ Date: 2026-05-03
 - [x] v1.0 MVP - Phases 1-5 (shipped 2026-05-02)
 - [x] v1.1 Aprovacao Athos - Phase 6 (shipped 2026-05-03)
 - [x] v1.2 Mensagens e UX do Cliente - Phases 7-8 (shipped 2026-05-03)
-- [ ] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (in progress)
+- [x] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (shipped 2026-05-03)
 
 ---
 
@@ -48,45 +48,15 @@ Full details: .planning/milestones/v1.2-ROADMAP.md
 
 </details>
 
-### v1.3 Estabilidade de Migrations no Docker Compose
+<details>
+<summary>v1.3 Estabilidade de Migrations no Docker Compose (Phases 9-10) - SHIPPED 2026-05-03</summary>
 
-## Phase 9 - Fluxo de Migration Idempotente
-Status: complete (v1.3)
-Goal: Eliminar falhas de migration em atualizacoes de container garantindo execucao idempotente e sincronizada com prontidao do banco.
+Full details: .planning/milestones/v1.3-ROADMAP.md
 
-Requirements covered: MIG-01, MIG-02, MIG-03
-Depends on: Phase 8
-Plans: 2 plans
+- [x] Phase 9: Fluxo de Migration Idempotente (2 planos)
+- [x] Phase 10: Operacao Segura de Update (2 planos)
 
-Plans:
-- [x] 09-01-PLAN.md - Diagnosticar causa raiz e ajustar comando/entrypoint de migration
-- [x] 09-02-PLAN.md - Implementar readiness gate e logs acionaveis para falhas de migration
-
-Success criteria:
-1. Atualizacao via docker compose nao falha com erro de migration previamente aplicada
-2. Backend so tenta migration apos Postgres aceitar conexoes
-3. Falhas de migration apresentam mensagem objetiva e acao sugerida
-
----
-
-## Phase 10 - Operacao Segura de Update
-Status: complete (v1.3)
-Goal: Padronizar rotina de deploy/update para reduzir risco operacional e validar o estado do banco apos cada release.
-
-Requirements covered: MIG-04, OPS-01, OPS-02
-Depends on: Phase 9
-Plans: 2 plans
-
-Plans:
-- [x] 10-01-PLAN.md - Definir fluxo de update e restart sem loop
-- [x] 10-02-PLAN.md - Criar checklist de verificacao pos-deploy (schema + health)
-
-Success criteria:
-1. Stack sobe sem loop de restart em cenario de banco com startup lento
-2. Runbook de update permite execucao reproduzivel na VPS
-3. Checklist de validacao confirma schema aplicado e API saudavel
-
----
+</details>
 
 ## Backlog (Future)
 
