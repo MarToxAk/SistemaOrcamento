@@ -5,7 +5,7 @@
 
 ## v1.4 Requirements
 
-Requirements para o milestone v1.4 (pagamentos EFI/Athos sem n8n).
+Requirements para o milestone v1.4 (pagamentos EFI/Athos sem n8n + desconto controlado na NFS-e).
 
 ### Webhook EFI
 
@@ -29,6 +29,14 @@ Requirements para o milestone v1.4 (pagamentos EFI/Athos sem n8n).
 
 - [ ] **OBSV-01**: Logs estruturados registram resultado de cada tentativa de conciliacao (sucesso, nao pago, erro)
 - [ ] **OBSV-02**: Falhas de leitura no Athos nao derrubam o fluxo principal de orcamentos (degradacao graciosa)
+
+### NFS-e Desconto
+
+- [ ] **NFSD-01**: Emissao de NFS-e aceita campo booleano para ativar/desativar desconto
+- [ ] **NFSD-02**: Emissao de NFS-e aceita desconto por percentual e calcula valor com base no total pago informado
+- [ ] **NFSD-03**: Emissao de NFS-e aceita desconto por valor fixo em reais
+- [ ] **NFSD-04**: Regras impedem desconto invalido (negativo, maior que base, percentual acima de 100)
+- [ ] **NFSD-05**: XML da NFS-e preenche campo de desconto coerente quando a flag estiver ativa
 
 ## v2 Requirements
 
@@ -61,10 +69,15 @@ Requirements para o milestone v1.4 (pagamentos EFI/Athos sem n8n).
 | PCHK-03 | Phase 13 | Pending |
 | OBSV-01 | Phase 13 | Pending |
 | OBSV-02 | Phase 13 | Pending |
+| NFSD-01 | Phase 14 | Pending |
+| NFSD-02 | Phase 14 | Pending |
+| NFSD-03 | Phase 14 | Pending |
+| NFSD-04 | Phase 14 | Pending |
+| NFSD-05 | Phase 14 | Pending |
 
 **Coverage:**
-- v1.4 requirements: 11 total
-- Mapped to phases: 11
+- v1.4 requirements: 16 total
+- Mapped to phases: 16
 - Unmapped: 0
 
 ---

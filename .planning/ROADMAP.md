@@ -11,7 +11,7 @@ Date: 2026-05-04
 - [x] v1.1 Aprovacao Athos - Phase 6 (shipped 2026-05-03)
 - [x] v1.2 Mensagens e UX do Cliente - Phases 7-8 (shipped 2026-05-03)
 - [x] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (shipped 2026-05-03)
-- [ ] v1.4 Pagamento EFI sem autenticacao + conciliacao Athos no backend - Phases 11-13
+- [ ] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14
 
 ---
 
@@ -59,13 +59,14 @@ Full details: .planning/milestones/v1.3-ROADMAP.md
 
 </details>
 
-## v1.4 Planned (Phases 11-13)
+## v1.4 Planned (Phases 11-14)
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
 | 11 | Webhook EFI sem assinatura obrigatoria | Receber notificacoes EFI sem bloqueio por HMAC mantendo resiliencia e auditoria | EFIW-01, EFIW-02, EFIW-03 | 4 |
 | 12 | Conciliacao Athos no backend | Implementar consulta real de pagamento no Athos e sincronizar status no dominio | ATHP-01, ATHP-02, ATHP-03 | 4 |
 | 13 | Gatilhos de checagem e observabilidade | Executar checagem no abrir/enviar orcamento e expor diagnostico confiavel | PCHK-01, PCHK-02, PCHK-03, OBSV-01, OBSV-02 | 5 |
+| 14 | Desconto controlado na emissao de NFS-e | Permitir desconto por percentual/valor com flag de ativacao e base no total pago | NFSD-01, NFSD-02, NFSD-03, NFSD-04, NFSD-05 | 5 |
 
 ### Phase Details
 
@@ -96,6 +97,16 @@ Success criteria:
 3. `GET /quotes/:id/payment-status` retorna conciliacao completa com `statusSync` coerente.
 4. Logs estruturados registram tentativa, resultado e motivo de falha da conciliacao.
 5. Testes cobrem cenarios pago, nao pago e erro de consulta Athos.
+
+**Phase 14: Desconto controlado na emissao de NFS-e**
+Goal: Emitir NFS-e com desconto opcional, seguro e auditavel, usando total pago como base quando informado.
+Requirements: NFSD-01, NFSD-02, NFSD-03, NFSD-04, NFSD-05
+Success criteria:
+1. Endpoint de emissao NFS-e aceita `aplicarDesconto` e tipo de desconto (`PERCENTUAL` ou `VALOR`).
+2. Quando tipo for percentual, sistema calcula desconto com base no `totalPagoInformado`.
+3. Quando tipo for valor, sistema aplica valor fixo respeitando limite da base.
+4. Validacoes impedem valores invalidos e retornam erro explicito para o usuario.
+5. XML final preenche desconto coerente e mantem 0.00 quando flag de desconto estiver desligada.
 
 ## Backlog (Future)
 

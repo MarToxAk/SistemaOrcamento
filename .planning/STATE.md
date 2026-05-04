@@ -29,12 +29,13 @@ Last activity: 2026-05-04 - Milestone v1.4 started
 | 11 | Webhook EFI sem assinatura obrigatoria | pending (v1.4) |
 | 12 | Conciliacao Athos no backend | pending (v1.4) |
 | 13 | Gatilhos de checagem e sincronizacao de status | pending (v1.4) |
+| 14 | Desconto controlado na emissao de NFS-e | pending (v1.4) |
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-04)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.4 pagamentos EFI/Athos no backend
+Current focus: v1.4 pagamentos EFI/Athos no backend + desconto NFS-e
 
 ## Active Context
 
@@ -42,7 +43,7 @@ Current focus: v1.4 pagamentos EFI/Athos no backend
 - PR ativo: #1
 - Ultima versao tagged: v1.2
 - Milestones archived: v1.0, v1.1, v1.2, v1.3
-- Escopo v1.4: webhook EFI sem auth HMAC obrigatoria + conciliacao Athos sem n8n
+- Escopo v1.4: webhook EFI sem auth HMAC obrigatoria + conciliacao Athos sem n8n + desconto NFS-e opcional
 
 ## Decisions Log
 
@@ -52,6 +53,7 @@ Current focus: v1.4 pagamentos EFI/Athos no backend
 | 2026-05-03 | Nao usar pesquisa externa para v1.3 | Escopo interno e tecnico conhecido |
 | 2026-05-04 | Nao usar n8n para notificacao de pagamento | Fluxo deve ficar na aplicacao backend principal |
 | 2026-05-04 | Checar pagamento no Athos ao abrir e ao enviar orcamento | Sincronizar status com estado real do caixa |
+| 2026-05-04 | Incluir desconto opcional na emissao de NFS-e | Necessidade fiscal de deducao por percentual/valor sobre total pago |
 
 ## Notes
 

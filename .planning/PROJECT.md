@@ -8,15 +8,16 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Current Milestone: v1.4 Pagamento EFI sem autenticacao + conciliacao Athos no backend
+## Current Milestone: v1.4 Pagamento EFI/Athos + desconto controlado na NFS-e
 
-**Goal:** Garantir confirmacao de pagamento confiavel no proprio backend, sem dependencia de n8n, incluindo conciliacao com Athos no fluxo de orcamento.
+**Goal:** Garantir confirmacao de pagamento confiavel no proprio backend, sem dependencia de n8n, e habilitar desconto controlado na emissao de NFS-e com base no total pago.
 
 **Target features:**
 - Remover autenticacao HMAC obrigatoria do webhook EFI mantendo hardening minimo
 - Processar notificacao de pagamento diretamente no backend NestJS (sem bridge externa)
 - Implementar verificacao real de pagamento no Athos em vez de retorno stub
 - Disparar checagem de pagamento ao abrir e ao enviar orcamento, com atualizacao de status
+- Permitir desconto na NFS-e por percentual ou valor fixo, com flag de ativacao e informacao de total pago
 
 ## Last Shipped Milestone: v1.3 Estabilidade de Migrations no Docker Compose
 
@@ -67,11 +68,13 @@ Entregas principais:
 - [ ] Conciliacao de pagamento com Athos implementada em codigo (sem stub)
 - [ ] Checagem de pagamento executada ao abrir e ao enviar orcamento
 - [ ] Atualizacao automatica de status quando pagamento confirmado no Athos
+- [ ] Desconto na emissao de NFS-e por percentual/valor com flag de ativacao
 
 ### Out of Scope
 
 - Reintroduzir n8n para roteamento de pagamentos
 - Listener PG LISTEN/NOTIFY externo ao backend principal
+- Recalculo retroativo de NFS-e ja emitida
 - Refactor completo de dominio de orcamentos
 - Troca de ORM (Prisma permanece)
 - Mudanca de provedor de banco
@@ -85,6 +88,7 @@ Entregas principais:
 - Historico: v1.0 MVP, v1.1 Aprovacao Athos, v1.2 Mensagens/UX, v1.3 Migration Stability -- todos arquivados
 - Webhook EFI ja existe em /api/integrations/efi/webhook/payment e /pix, hoje com guard HMAC
 - Endpoint /api/quotes/:id/payment-status existe, mas AthosService.verificarPagamentoPorOrcamento ainda retorna stub (paid=false)
+- Emissao NFS-e hoje envia DescontoIncondicionado/DescontoCondicionado fixos em 0.00 no XML
 
 ## Constraints
 
@@ -105,6 +109,7 @@ Entregas principais:
 | Monorepo npm workspaces | Compartilhamento de tipos sem publicacao | checkmark Validado -- historico |
 | Remover obrigatoriedade de assinatura no webhook EFI | Necessidade operacional de receber notificacao sem bloqueio por segredo | -- Pendente (v1.4) |
 | Conciliar pagamento pelo Athos ao abrir/enviar orcamento | Reduz divergencia entre estado do caixa e estado do orcamento | -- Pendente (v1.4) |
+| Desconto NFS-e controlado por flag e tipo | Dar flexibilidade fiscal sem alterar emissao padrao | -- Pendente (v1.4) |
 
 ## Evolution
 
