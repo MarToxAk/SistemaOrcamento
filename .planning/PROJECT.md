@@ -19,9 +19,14 @@ Entregas principais:
 - POST body tipado como `Record<string, string | number | boolean>` — `descontoAtivo` boolean, campos numericos como `Number()`
 - Valor pos-desconto enviado corretamente ao backend e ao SOAP iiBrasil
 
-## Current Milestone
+## Current Milestone: v1.7 — Correcoes NFS-e: Tomador e Numeracao RPS
 
-Nao definido — executar `/gsd-new-milestone` para iniciar proximo ciclo.
+**Goal:** Corrigir dois bugs na emissao de NFS-e que causam XML com dados do tomador ausentes (quando o orcamento esta associado ao Athos) e numeracao RPS incorreta (usando o ultimo numero emitido em vez do proximo).
+
+**Target features:**
+- Campo `rpsNumero` usa `proximoRps + 1` para gerar o numero correto do proximo RPS
+- Dados do cliente (nome, CPF/CNPJ, endereco) preenchidos corretamente no XML quando o orcamento tem `externalQuoteId` valido
+- Logs diagnosticos claros para depuracao do caminho de busca do tomador no Athos
 
 ---
 
@@ -129,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 after v1.6 milestone*
+*Last updated: 2026-05-04 after v1.6 milestone — v1.7 started*

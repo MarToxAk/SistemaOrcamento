@@ -1,6 +1,6 @@
 # Roadmap - Sistema de Orcamento BomCusto
 
-Version: 1.6
+Version: 1.7
 Date: 2026-05-04
 
 ---
@@ -14,6 +14,7 @@ Date: 2026-05-04
 - [x] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14 (shipped 2026-05-04)
 - [x] v1.5 Correcao NFS-e — Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
 - [x] v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) — [details](.planning/milestones/v1.6-ROADMAP.md)
+- [ ] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (em andamento)
 
 ---
 
@@ -123,6 +124,30 @@ Full details: .planning/milestones/v1.6-ROADMAP.md
 
 - [x] Phase 17: Correcao do calculo de desconto no modal NFS-e (NFSC-01..05)
 
+## v1.7 Correcoes NFS-e — Tomador e Numeracao RPS (Phase 18) - EM ANDAMENTO
+
+**Plans:** 1 plan
+
+- [ ] Phase 18: Corrigir numeracao RPS e busca de dados do tomador no Athos (RPS-01..02, TOM-01..03, REG-01..02)
+
+Plans:
+- [ ] 18-01-PLAN.md — Corrigir proximoRps + 1 em getInfoNfse() e diagnosticar/corrigir buscarTomador() quando externalQuoteId presente
+
+### Phase Details
+
+**Phase 18: Correcoes na emissao de NFS-e — RPS e Tomador**
+Goal: Corrigir o numero do proximo RPS (ultimo + 1) e garantir que os dados do tomador (nome, CPF/CNPJ, endereco) sejam buscados corretamente do Athos quando o orcamento esta associado.
+Requirements: RPS-01, RPS-02, TOM-01, TOM-02, TOM-03, REG-01, REG-02
+Root causes:
+  1. getInfoNfse() retorna ultimo RPS emitido; codigo usa sem incrementar (deve ser +1)
+  2. buscarTomador() falha silenciosamente quando lookup por externalQuoteId no Athos nao encontra o orcamento ou idcliente e falsy
+Success criteria:
+1. RPS numero na NFS-e e sempre ultimo + 1 (ex: API retorna 11 -> XML envia 12)
+2. API indisponivel continua usando internalNumber como fallback sem regressao
+3. Quando externalQuoteId esta preenchido, XML da NFS-e inclui nome, CPF/CNPJ e endereco do cliente do Athos
+4. Logs identificam claramente qual coluna foi usada para lookup, idcliente encontrado, e motivo de falha
+5. Emissao sem associacao Athos (externalQuoteId null) continua funcionando normalmente
+
 ## Backlog (Future)
 
 - Relatorios e exportacao CSV de orcamentos
@@ -135,4 +160,4 @@ Full details: .planning/milestones/v1.6-ROADMAP.md
 - Historico de mensagens enviados ao cliente
 
 ---
-Roadmap v1.6 - 2026-05-04
+Roadmap v1.7 - 2026-05-04

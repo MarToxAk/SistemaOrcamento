@@ -2,16 +2,16 @@
 
 Last updated: 2026-05-04
 Current phase: —
-Milestone: v1.6 (archived)
+Milestone: v1.7 (planning)
 
 ---
 
 ## Current Position
 
-Phase: 17-correcao-desconto-nfse — COMPLETE
+Phase: Nao iniciada (definindo requisitos)
 Plan: —
-Status: v1.6 archived — milestone completo, aguardando /gsd-new-milestone
-Last activity: 2026-05-04 — v1.6 fechado; tag v1.6 criada; PR #5 aberto
+Status: Definindo requisitos
+Last activity: 2026-05-04 — Milestone v1.7 iniciado
 
 ## Project Status
 
@@ -76,7 +76,7 @@ Current focus: v1.6 Correcao do calculo de desconto no modal NFS-e
 ## Notes
 
 - SDK gsd nao encontrado no ambiente atual; ajustes de milestone feitos manualmente
-- Proximo passo: revisar/aprovar PR #5 e fazer merge quando CI estabilizar
+- Dois bugs NFS-e alvo do v1.7: RPS numero (+ 1) e tomador Athos quando associado
 - Implementacao anterior baseada em listener externo nao sera reutilizada (sem n8n)
 
 
