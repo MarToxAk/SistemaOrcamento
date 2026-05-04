@@ -46,10 +46,10 @@ completed: 2026-05-04
 
 ## Performance
 
-- **Duration:** ~10 min
+- **Duration:** ~15 min
 - **Started:** 2026-05-04T00:00:00Z
-- **Completed:** 2026-05-04T00:10:00Z
-- **Tasks:** 2 de 3 (Task 3 e checkpoint:human-verify — aguarda verificacao manual)
+- **Completed:** 2026-05-04T00:15:00Z
+- **Tasks:** 3 de 3 (COMPLETO — verificacao manual aprovada pelo usuario)
 - **Files modified:** 1
 
 ## Accomplishments
@@ -63,8 +63,7 @@ completed: 2026-05-04
 
 1. **Task 1: Corrigir as 6 ocorrencias do path errado quote?.totais?.valor** - `9bc9f6a` (fix)
 2. **Task 2: Corrigir coercao de tipos no POST body de handleEmitirNfse** - `b4138e1` (fix)
-
-_(Task 3 e checkpoint:human-verify — nao ha commit automatizado)_
+3. **Task 3: checkpoint:human-verify** - Aprovado pelo usuario. Calculos de desconto corretos e valor aparece corretamente nos logs do backend.
 
 ## Files Created/Modified
 
@@ -95,10 +94,21 @@ Nenhum — os campos corrigidos agora apontam para dados reais do orcamento.
 
 None - sem configuracao externa necessaria.
 
+## Verification Result (Task 3 — Checkpoint Approved)
+
+Verificacao estrutural pos-checkpoint confirmada:
+- `grep -c "quote?.totais\|quote\.totais"` retornou **0** — nenhum path errado remanescente
+- `grep -c "body?.totais"` retornou **6** — todos os 6 pontos com path correto
+- `Record<string, string | number | boolean>` presente na linha 349
+- `descontoAtivo = true` (boolean, sem aspas) na linha 363
+- `Number(nfseDescontoPercent)` e `Number(nfseDescontoValor)` nas linhas 364-365
+- Usuario confirmou: calculos de desconto corretos e `descontoIncondicionado` > 0 nos logs do backend
+
 ## Next Phase Readiness
 
-- Verificacao manual no browser necessaria (Task 3 checkpoint:human-verify)
-- Apos aprovacao: calculos de desconto funcionais e NFS-e com descontoIncondicionado > 0 nos logs do backend
+- Plano 17-01 COMPLETO — todos os calculos de desconto no modal NFS-e estao funcionais
+- NFS-e com desconto agora envia `descontoIncondicionado` correto ao SOAP iiBrasil
+- v1.6 pode ser encerrada apos este plano
 
 ---
 *Phase: 17-correcao-desconto-nfse*

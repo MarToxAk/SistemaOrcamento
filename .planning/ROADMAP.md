@@ -13,7 +13,7 @@ Date: 2026-05-04
 - [x] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (shipped 2026-05-03)
 - [x] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14 (shipped 2026-05-04)
 - [x] v1.5 Correcao NFS-e — Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
-- [ ] v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final - Phase 17
+- [x] v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04)
 
 ---
 
@@ -117,14 +117,14 @@ Full details: .planning/milestones/v1.5-ROADMAP.md
 - [x] Phase 15: Corrigir encoding NFS-e e proxy API (NFSFIX-01, NFSFIX-02)
 - [x] Phase 16: UI de desconto no modal de emissao NFS-e (NFSFIX-03)
 
-## v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final (Phase 17)
+## v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final (Phase 17) - SHIPPED 2026-05-04
 
 **Plans:** 1 plan
 
-- [ ] Phase 17: Corrigir calculo de desconto e envio do valor final na NFS-e (NFSC-01..05)
+- [x] Phase 17: Corrigir calculo de desconto e envio do valor final na NFS-e (NFSC-01..05)
 
 Plans:
-- [x] 17-01-PLAN.md — Corrigir 6 ocorrencias do path errado (quote?.totais?.valor → quote?.body?.totais?.valor) e coercao de tipos no POST body de handleEmitirNfse [checkpoint:human-verify pendente]
+- [x] 17-01-PLAN.md — Corrigir 6 ocorrencias do path errado (quote?.totais?.valor → quote?.body?.totais?.valor) e coercao de tipos no POST body de handleEmitirNfse [COMPLETO — verificacao manual aprovada]
 
 ### Phase Details
 

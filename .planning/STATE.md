@@ -10,8 +10,8 @@ Milestone: v1.6 (in progress)
 
 Phase: 17-correcao-desconto-nfse
 Plan: 01
-Status: At checkpoint:human-verify (Task 3) — aguardando verificacao manual no browser
-Last activity: 2026-05-04 — Tasks 1 e 2 de 17-01 concluidas; checkpoint:human-verify ativo
+Status: complete
+Last activity: 2026-05-04 — Plano 17-01 completo; checkpoint:human-verify aprovado pelo usuario
 
 ## Project Status
 
@@ -33,7 +33,7 @@ Last activity: 2026-05-04 — Tasks 1 e 2 de 17-01 concluidas; checkpoint:human-
 | 14 | Desconto controlado na emissao de NFS-e | complete (v1.4) |
 | 15 | Corrigir encoding NFS-e e proxy API | complete (v1.5) |
 | 16 | UI de desconto no modal NFS-e | complete (v1.5) |
-| 17 | Correcao do calculo de desconto no modal NFS-e | pending (v1.6) |
+| 17 | Correcao do calculo de desconto no modal NFS-e | complete (v1.6) |
 
 ## Milestones Archived
 
