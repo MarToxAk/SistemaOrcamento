@@ -1,3 +1,5 @@
+import { backendFetch } from "@/lib/backend-client";
+
 export async function GET(_req: Request, { params }: { params: { numero: string } }) {
   const numero = params.numero?.trim();
   if (!numero) {
@@ -6,20 +8,11 @@ export async function GET(_req: Request, { params }: { params: { numero: string 
 
   const url = new URL(_req.url);
   const format = url.searchParams.get("format") === "mapped" ? "mapped" : "raw";
-  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:4000/api";
 
   try {
-    const res = await fetch(`${backendUrl}/quotes/athos/${encodeURIComponent(numero)}?format=${format}`, {
-      method: "GET",
-      cache: "no-store",
-    });
-
+    const res = await backendFetch(`/quotes/athos/${encodeURIComponent(numero)}?format=${format}`, { method: "GET" });
     const data = await res.json().catch(() => ({ error: "Resposta invalida do backend." }));
-
-    if (!res.ok) {
-      return Response.json(data, { status: res.status });
-    }
-
+    if (!res.ok) return Response.json(data, { status: res.status });
     return Response.json(data, { status: 200 });
   } catch {
     return Response.json({ error: "Falha ao conectar no backend." }, { status: 500 });
