@@ -66,7 +66,7 @@ const buildProviders = () => {
     providers: [
       QuotesService,
       { provide: PrismaService, useValue: mockPrismaService },
-      { provide: AthosService, useValue: { buscarOrcamentoPorNumero: jest.fn(), testarConexao: jest.fn() } },
+      { provide: AthosService, useValue: { buscarOrcamentoPorNumero: jest.fn(), testarConexao: jest.fn(), verificarPagamentoPorOrcamento: jest.fn().mockResolvedValue({ paid: false, idVenda: null, valor: 0 }), buscarRelacaoOrcamentoVenda: jest.fn().mockResolvedValue({ idvenda: null }) } },
       { provide: QuotesPdfStorageService, useValue: { generateAndUploadPdf: jest.fn() } },
       { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(undefined) } },
       { provide: ChatwootService, useValue: { sendOutgoingMessage: jest.fn(), sendAttachment: jest.fn() } },
@@ -111,7 +111,7 @@ describe("QuotesService - changeStatus", () => {
 
     it("deve transitar de APROVADO para EM_PRODUCAO quando cliente e associado", async () => {
       const assocCustomer = { id: "cus1", fullName: "Assoc", isAssociated: true, phone: null, email: null };
-      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: false, customer: assocCustomer }));
+      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: false, saleExternalId: BigInt(1), customer: assocCustomer }));
       mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "EM_PRODUCAO", customer: assocCustomer }));
 
       const result = await service.changeStatus("quote-001", "EM_PRODUCAO", "test");
@@ -119,8 +119,9 @@ describe("QuotesService - changeStatus", () => {
     });
 
     it("deve transitar de APROVADO para EM_PRODUCAO quando orcamento foi aprovado", async () => {
-      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: true }));
-      mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "EM_PRODUCAO" }));
+      const assocCustomer2 = { id: "cus1", fullName: "Assoc", isAssociated: true, phone: null, email: null };
+      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: true, customer: assocCustomer2 }));
+      mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "EM_PRODUCAO", customer: assocCustomer2 }));
 
       const result = await service.changeStatus("quote-001", "EM_PRODUCAO", "test");
       expect(result.statusKey).toBe("EM_PRODUCAO");
@@ -149,11 +150,35 @@ describe("QuotesService - changeStatus", () => {
     });
 
     it("deve lancar BadRequestException ao tentar EM_PRODUCAO sem aprovacao e sem associado", async () => {
-      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: false }));
+      // ambos faltando: mensagem menciona "sem associacao" (primeiro check)
+      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: false, saleExternalId: null }));
       await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).rejects.toThrow(BadRequestException);
       await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).rejects.toThrow(
-        "precisa ser aprovado",
+        "sem associacao",
       );
+    });
+
+    it("deve lancar BadRequestException com mensagem clara quando associado mas sem pagamento confirmado", async () => {
+      const assocCustomer = { id: "cus1", fullName: "Assoc", isAssociated: true, phone: null, email: null };
+      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: false, saleExternalId: null, customer: assocCustomer }));
+      await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).rejects.toThrow(BadRequestException);
+      await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).rejects.toThrow(
+        "sem pagamento",
+      );
+    });
+
+    it("deve permitir EM_PRODUCAO quando associado e aprovado", async () => {
+      const assocCustomer = { id: "cus1", fullName: "Assoc", isAssociated: true, phone: null, email: null };
+      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: true, customer: assocCustomer }));
+      mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "EM_PRODUCAO", customer: assocCustomer }));
+      await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).resolves.toBeDefined();
+    });
+
+    it("deve permitir EM_PRODUCAO quando associado e tem saleExternalId", async () => {
+      const assocCustomer = { id: "cus1", fullName: "Assoc", isAssociated: true, phone: null, email: null };
+      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: false, saleExternalId: BigInt(42), customer: assocCustomer }));
+      mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "EM_PRODUCAO", customer: assocCustomer }));
+      await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).resolves.toBeDefined();
     });
   });
 
@@ -277,7 +302,7 @@ describe("QuotesService - changeStatus — Chatwoot notifications", () => {
 
   it("deve chamar sendOutgoingMessage quando newStatus === EM_PRODUCAO e conversationId existe", async () => {
     mockPrisma.quote.findFirst.mockResolvedValue(
-      makeQuote({ status: "APROVADO", approved: true, conversationId: BigInt(42) }),
+      makeQuote({ status: "APROVADO", approved: true, conversationId: BigInt(42), customer: { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null } }),
     );
     mockPrisma.quote.update.mockResolvedValue(
       makeQuote({ status: "EM_PRODUCAO", conversationId: BigInt(42), customer: { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null } }),
@@ -331,11 +356,12 @@ describe("QuotesService - changeStatus — Chatwoot notifications", () => {
   });
 
   it("deve logar warn e NAO lancar quando conversationId e null", async () => {
+    const assocCust4 = { id: "cus1", fullName: "Assoc", isAssociated: true, phone: null, email: null };
     mockPrisma.quote.findFirst.mockResolvedValue(
-      makeQuote({ status: "APROVADO", approved: true, conversationId: null }),
+      makeQuote({ status: "APROVADO", approved: true, conversationId: null, customer: assocCust4 }),
     );
     mockPrisma.quote.update.mockResolvedValue(
-      makeQuote({ status: "EM_PRODUCAO", conversationId: null }),
+      makeQuote({ status: "EM_PRODUCAO", conversationId: null, customer: assocCust4 }),
     );
     await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).resolves.toBeDefined();
     expect(chatwootMock.sendOutgoingMessage).not.toHaveBeenCalled();
@@ -343,7 +369,7 @@ describe("QuotesService - changeStatus — Chatwoot notifications", () => {
 
   it("deve logar warn e NAO lancar quando sendOutgoingMessage lanca excecao", async () => {
     mockPrisma.quote.findFirst.mockResolvedValue(
-      makeQuote({ status: "APROVADO", approved: true, conversationId: BigInt(42) }),
+      makeQuote({ status: "APROVADO", approved: true, conversationId: BigInt(42), customer: { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null } }),
     );
     mockPrisma.quote.update.mockResolvedValue(
       makeQuote({ status: "EM_PRODUCAO", conversationId: BigInt(42), customer: { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null } }),

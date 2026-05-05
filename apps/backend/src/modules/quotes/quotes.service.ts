@@ -204,7 +204,14 @@ export class QuotesService {
       }
     }
 
-    if (["PENDENTE", "ENVIADO"].includes(resolvedQuote.status)) {
+    // ATHC-01: verificar pagamento via relacao_orcamento_venda quando orcamento tem ID Athos
+    if (resolvedQuote.externalQuoteId) {
+      void this.conciliarViaCaixaAthos(resolvedQuote).catch((err: unknown) => {
+        this.logger.warn(
+          `Conciliacao Caixa Athos falhou para orcamento ${resolvedQuote.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    } else if (["PENDENTE", "ENVIADO"].includes(resolvedQuote.status)) {
       void this.checkPaymentStatus(resolvedQuote.id).catch((err: unknown) => {
         this.logger.warn(
           `Disparo de checagem de pagamento falhou para orcamento ${resolvedQuote.id}: ${err instanceof Error ? err.message : String(err)}`,
@@ -302,6 +309,36 @@ export class QuotesService {
         error: statusSyncError,
       },
     };
+  }
+
+  private async conciliarViaCaixaAthos(quote: any): Promise<void> {
+    const idOrcamento = Number(quote.externalQuoteId);
+    if (!Number.isFinite(idOrcamento) || idOrcamento <= 0) return;
+
+    // ATHC-02: Buscar vinculo idorcamento -> idvenda em relacao_orcamento_venda
+    const relacao = await this.athosService.buscarRelacaoOrcamentoVenda(idOrcamento);
+
+    // TRG-02: Idempotencia - persistir saleExternalId apenas se ainda nao definido
+    if (relacao.idvenda != null && !quote.saleExternalId) {
+      try {
+        await this.prisma.quote.update({
+          where: { id: quote.id },
+          data: { saleExternalId: this.toBigInt(relacao.idvenda) },
+        });
+        this.logger.log(
+          `conciliarViaCaixaAthos: saleExternalId=${relacao.idvenda} persistido para orcamento ${quote.id}`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `conciliarViaCaixaAthos: falha ao persistir saleExternalId para ${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // TRG-01/TRG-03: Acionar mesma rotina de conciliacao de PIX/cartao para status pendentes
+    if (["PENDENTE", "ENVIADO"].includes(quote.status)) {
+      await this.checkPaymentStatus(quote.id);
+    }
   }
 
   async create(payload: CreateQuoteDto) {
@@ -653,11 +690,26 @@ export class QuotesService {
       );
     }
 
-    // Bloqueia avanço para EM_PRODUCAO se não aprovado e cliente não for associado
+// APR-01/02/03: Bloqueia EM_PRODUCAO sem associacao Athos valida e sem pagamento confirmado
     if (newStatus === "EM_PRODUCAO") {
       const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false);
-      if (!quote.approved && !isAssociated) {
-        throw new BadRequestException("Orçamento precisa ser aprovado pelo cliente antes de entrar em produção");
+      const hasSaleId = quote.saleExternalId != null;
+      const hasApproval = Boolean(quote.approved);
+
+      if (!isAssociated && !hasApproval && !hasSaleId) {
+        throw new BadRequestException(
+          "Orcamento sem associacao com cliente Athos e sem pagamento confirmado. Associe o orcamento e verifique o pagamento antes de entrar em producao.",
+        );
+      }
+      if (!isAssociated) {
+        throw new BadRequestException(
+          "Orcamento sem associacao com cliente Athos valido. Associe o orcamento a um idcliente antes de entrar em producao.",
+        );
+      }
+      if (!hasApproval && !hasSaleId) {
+        throw new BadRequestException(
+          "Orcamento sem pagamento confirmado. Verifique o pagamento no Caixa Athos antes de entrar em producao.",
+        );
       }
     }
 
