@@ -22,6 +22,7 @@ type QuoteDetail = {
   nfseLink?: string | null;
   nfseEmitidaEm?: string | null;
   paymentConfirmedAt?: string | null;
+  saleExternalId?: number | null;
   approved?: boolean;
   approvedAt?: string | null;
   latestPdfUrl?: string | null;
