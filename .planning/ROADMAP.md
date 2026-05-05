@@ -135,24 +135,9 @@ Full details: .planning/milestones/v1.7-ROADMAP.md
 
 ## v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos (Phase 19) - SHIPPED 2026-05-05
 
-**Plans:** 2 plans
+Full details: .planning/milestones/v1.8-ROADMAP.md
 
-- [x] Phase 19: Regras de aprovacao associada, conciliacao via relacao_orcamento_venda e correcao de textos (APR-01..03, ATHC-01..03, TRG-01..03, TXT-01..02)
-
-Plans:
-- [x] 19-01-PLAN.md - Adicionar AthosService.buscarRelacaoOrcamentoVenda (consulta relacao_orcamento_venda no Athos)
-- [x] 19-02-PLAN.md - Corrigir guard EM_PRODUCAO, conciliarViaCaixaAthos em getById, mensagens ASCII
-
-### Phase Details
-
-**Phase 19: Aprovacao associada ao pagamento e conciliacao caixa Athos**
-Goal: Garantir que aprovacao/producao so aconteca com associacao valida ao cliente Athos e pagamento confirmado no Caixa, com verificacao ao abrir orcamento e por gatilho relacao_orcamento_venda.
-Requirements: APR-01, APR-02, APR-03, ATHC-01, ATHC-02, ATHC-03, TRG-01, TRG-02, TRG-03, TXT-01, TXT-02
-Success criteria:
-1. Aprovacao/producao bloqueada quando quote nao estiver associado a idcliente valido
-2. Ao abrir orcamento, sistema consulta relacao_orcamento_venda e sincroniza pagamento
-3. Trigger relacao_orcamento_venda dispara mesma rotina de conciliacao de PIX/cartao
-4. Mensagens e logs de aprovacao/pagamento sem mojibake e com diagnostico claro
+- [x] Phase 19: Aprovacao associada ao pagamento, conciliacao caixa Athos e correcao de textos (APR-01..03, ATHC-01..03, TRG-01..03, TXT-01..02)
 
 ## v1.9 Relatorios e Exportacao CSV (Phase 20) - PLANNING
 

@@ -8,24 +8,25 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Last Shipped Milestone: v1.7 - Correcoes NFS-e: Tomador e Numeracao RPS
+## Last Shipped Milestone: v1.8 - Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos
 
-Shipped em 2026-05-04.
+Shipped em 2026-05-05.
 
 Entregas principais:
-- ProximoRPS sem +1 (API iiBrasil ja retorna o proximo numero)
-- buscarTomador() reescrito com NotFoundException catch, clienteId > 0, logs diagnosticos
-- Log [Athos] identifierColumn em athos.service.ts
+- Guard EM_PRODUCAO: aprovacao/producao so ocorre com associacao Athos valida e pagamento confirmado
+- Conciliacao caixa via relacao_orcamento_venda ao abrir orcamento (fire-and-forget)
+- Badge "Pago no Caixa - Venda #N" na pagina publica do cliente
+- Notificacao Chatwoot ao confirmar pagamento via caixa
+- Mensagens de erro em ASCII, logs diagnosticos estruturados
 
-## Current Milestone: v1.8 - Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos
+## Current Milestone: v1.9 - Relatorios e Exportacao CSV
 
-**Goal:** Garantir que aprovacao/entrada em producao so ocorra para orcamento associado ao cliente Athos (idcliente) e com pagamento confirmado via Caixa, usando relacao_orcamento_venda e gatilhos de conciliacao equivalentes ao fluxo PIX/cartao.
+**Goal:** Entregar visoes operacionais e exportacao CSV para acompanhamento comercial e financeiro.
 
 **Target features:**
-- Bloquear aprovacao/producao de orcamentos sem associacao valida com idcliente
-- Verificar pagamento sempre ao abrir orcamento consultando Athos (relacao_orcamento_venda)
-- Aplicar o mesmo pipeline de conciliacao de pagamento usado em PIX/cartao para eventos de gatilho no Athos
-- Corrigir textos quebrados/mojibake em mensagens de erro e UI
+- Exportacao CSV de orcamentos com filtros basicos
+- Campos essenciais: orcamento, cliente, status, valores, datas
+- Performance preservada nas telas principais
 
 ## Requirements
 
@@ -135,4 +136,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-05 after v1.7 milestone - v1.8 started*
+*Last updated: 2026-05-05 after v1.8 milestone - v1.9 started*
