@@ -136,7 +136,7 @@ Full details: .planning/milestones/v1.7-ROADMAP.md
 Scope: implementar busca de cliente no Athos para uso na emissao de NFS-e, com selecao no frontend e resolucao consistente de tomador no backend.
 
 - [x] Phase 19: API de busca de cliente Athos (ATHCL-01, ATHCL-02, ATHCL-03)
-- [ ] Phase 20: Resolucao de tomador por cliente selecionado (TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04)
+- [x] Phase 20: Resolucao de tomador por cliente selecionado (TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04)
 - [ ] Phase 21: UI NFS-e, observabilidade e testes (NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03)
 
 ### Phase Details
@@ -185,4 +185,5 @@ Success criteria:
 
 ---
 Roadmap v1.8 - 2026-05-04
+
 
