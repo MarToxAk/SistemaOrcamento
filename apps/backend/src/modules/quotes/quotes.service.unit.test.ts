@@ -397,45 +397,24 @@ describe("QuotesService - changeStatus — Chatwoot notifications", () => {
 });
 
 
-<<<<<<< HEAD
 describe("QuotesService - checkPaymentStatus", () => {
   let service: QuotesService;
   let mockPrisma: ReturnType<typeof buildProviders>["mockPrismaService"];
   let athosMock: any;
   let chatwootMock: { sendOutgoingMessage: jest.Mock; sendAttachment: jest.Mock };
-=======
-describe("QuotesService - enviarParaCliente — regra de approvalLink por associado", () => {
-  let service: QuotesService;
-  let mockPrisma: ReturnType<typeof buildProviders>["mockPrismaService"];
-  let athosMock: { buscarOrcamentoPorNumero: jest.Mock; testarConexao: jest.Mock };
->>>>>>> origin/main
 
   beforeEach(async () => {
     const { mockPrismaService, providers } = buildProviders();
     mockPrisma = mockPrismaService;
     const module: TestingModule = await Test.createTestingModule({ providers }).compile();
     service = module.get<QuotesService>(QuotesService);
-<<<<<<< HEAD
     athosMock = module.get(AthosService);
     chatwootMock = module.get(ChatwootService) as any;
     jest.clearAllMocks();
-=======
-    athosMock = module.get(AthosService) as any;
-
-    mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO" }));
-    mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "APROVADO" }));
-    mockPrisma.quoteDocument.findFirst.mockResolvedValue(null);
-
-    // evita ruído dos fluxos opcionais
-    (service as any).checkPaymentStatus = jest.fn().mockResolvedValue(undefined);
-    const efi = module.get(EfiService) as any;
-    efi.resolvePaymentOptions = jest.fn().mockReturnValue(null);
->>>>>>> origin/main
   });
 
   afterEach(() => jest.clearAllMocks());
 
-<<<<<<< HEAD
   it("deve notificar cliente ao confirmar pagamento no caixa e incluir numero da venda", async () => {
     mockPrisma.quote.findFirst.mockResolvedValue(
       makeQuote({
@@ -464,7 +443,30 @@ describe("QuotesService - enviarParaCliente — regra de approvalLink por associ
     expect(paymentStampCall).toBeDefined();
   });
 });
-=======
+
+describe("QuotesService - enviarParaCliente — regra de approvalLink por associado", () => {
+  let service: QuotesService;
+  let mockPrisma: ReturnType<typeof buildProviders>["mockPrismaService"];
+  let athosMock: { buscarOrcamentoPorNumero: jest.Mock; testarConexao: jest.Mock };
+
+  beforeEach(async () => {
+    const { mockPrismaService, providers } = buildProviders();
+    mockPrisma = mockPrismaService;
+    const module: TestingModule = await Test.createTestingModule({ providers }).compile();
+    service = module.get<QuotesService>(QuotesService);
+    athosMock = module.get(AthosService) as any;
+
+    mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO" }));
+    mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "APROVADO" }));
+    mockPrisma.quoteDocument.findFirst.mockResolvedValue(null);
+
+    (service as any).checkPaymentStatus = jest.fn().mockResolvedValue(undefined);
+    const efi = module.get(EfiService) as any;
+    efi.resolvePaymentOptions = jest.fn().mockReturnValue(null);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
   it("deve retornar approvalLink quando cliente e associado e idcliente existe", async () => {
     mockPrisma.quote.findFirst.mockResolvedValue(
       makeQuote({
@@ -495,4 +497,3 @@ describe("QuotesService - enviarParaCliente — regra de approvalLink por associ
     expect(result.approvalLink).toBeNull();
   });
 });
->>>>>>> origin/main

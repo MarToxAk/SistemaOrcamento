@@ -679,7 +679,6 @@ export class AthosService {
     }
   }
 
-<<<<<<< HEAD
   async buscarRelacaoOrcamentoVenda(idorcamento: number): Promise<{ idvenda: number | null }> {
     this.logger.log(`buscarRelacaoOrcamentoVenda: idorcamento=${idorcamento}`);
     const pool = this.getPool();
@@ -707,7 +706,9 @@ export class AthosService {
       return { idvenda: null };
     } finally {
       client?.release();
-=======
+    }
+  }
+
   async buscarClientes(params: {
     nome?: string;
     documento?: string;
@@ -868,7 +869,6 @@ export class AthosService {
       throw new InternalServerErrorException("Erro ao buscar clientes no Athos. Tente novamente.");
     } finally {
       client.release();
->>>>>>> origin/main
     }
   }
 

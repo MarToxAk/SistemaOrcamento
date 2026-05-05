@@ -597,7 +597,7 @@ export class EfiService {
         return { transaction, quoteUpdate };
       });
 
-      // Envio de mensagem automÃ¡tica ao cliente via Chatwoot com dados do orÃ§amento
+      // Envio de mensagem automatica ao cliente via Chatwoot com dados do orcamento
       try {
         const mapped = await this.quotesService.getById(quote.id);
         const body = mapped.body ?? ({} as any);
@@ -609,15 +609,15 @@ export class EfiService {
           const clienteNome = (body.cliente as any)?.nome ?? (quote as any).customer?.fullName ?? "Cliente";
           const numero = (body as any).idorcamento ?? (body as any).idorcamento_interno ?? (quote as any).internalNumber ?? "-";
           const total = Number((body as any).totais?.valor ?? (quote as any).total ?? 0);
-          const itensList = ((body as any).itens ?? []).slice(0, 10).map((it: any) => `â€¢ ${it.produto?.descricaoproduto ?? it.produto?.descricaocurta ?? "Item"} (${it.quantidadeitem}x) â€” ${Number(it.orcamentovalorfinalitem ?? it.orcamentovalorfinalitem ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`);
+          const itensList = ((body as any).itens ?? []).slice(0, 10).map((it: any) => `- ${it.produto?.descricaoproduto ?? it.produto?.descricaocurta ?? "Item"} (${it.quantidadeitem}x) - ${Number(it.orcamentovalorfinalitem ?? it.orcamentovalorfinalitem ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`);
           const itensText = itensList.length > 0 ? itensList.join("\n") : "(sem itens listados)";
           const temArte = ((body as any).carimbos?.quantidade_total ?? (body as any).carimbos?.itens?.length ?? 0) > 0;
           const pdfUrl = (mapped as any).latestPdfUrl ?? (body as any).latestPdfUrl ?? ((body as any).documentoPdf ? (body as any).documentoPdf.publicUrl : null);
           const safePdfUrl = pdfUrl ? encodeURI(String(pdfUrl)) : null;
 
           const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-          let mensagem = `OlÃ¡, ${clienteNome}. `;
-          // Detecta se o pagamento recebido corresponde Ã  metade do total (entrada 50%)
+          let mensagem = `Ola, ${clienteNome}. `;
+          // Detecta se o pagamento recebido corresponde a metade do total (entrada 50%)
           const halfAmount = Number((Number(total) / 2).toFixed(2));
           const isHalf = Math.abs(payment.amount - halfAmount) < 0.01 || Number((quote as any).firstInstallmentAmount ?? 0) === payment.amount;
 
@@ -632,28 +632,28 @@ export class EfiService {
             }
           }
 
-          mensagem += `\n\nðŸ“‹ OrÃ§amento #${numero}`;
+          mensagem += `\n\nOrcamento #${numero}`;
           mensagem += `\n${itensText}`;
-          mensagem += `\n\nðŸ’° Total: ${fmt(total)}`;
+          mensagem += `\n\nTotal: ${fmt(total)}`;
           mensagem += "\n\n";
           if (temArte) {
-            mensagem += "Sua arte serÃ¡ enviada para aprovaÃ§Ã£o. Assim que aprovada, daremos continuidade Ã  produÃ§Ã£o.";
+            mensagem += "Sua arte sera enviada para aprovacao. Assim que aprovada, daremos continuidade a producao.";
           } else if (isHalf) {
-            mensagem += "Seu pedido serÃ¡ enviado para produÃ§Ã£o. O restante do pagamento deverÃ¡ ser realizado na loja no momento da retirada.";
+            mensagem += "Seu pedido sera enviado para producao. O restante do pagamento devera ser realizado na loja no momento da retirada.";
           } else if (fullyPaid) {
-            mensagem += "Seu pedido serÃ¡ enviado para produÃ§Ã£o.";
+            mensagem += "Seu pedido sera enviado para producao.";
           } else {
-            mensagem += "Aguardaremos a confirmaÃ§Ã£o do restante do pagamento para prosseguir.";
+            mensagem += "Aguardaremos a confirmacao do restante do pagamento para prosseguir.";
           }
           if (safePdfUrl) {
-            mensagem += `\n\nðŸ“„ PDF: ${safePdfUrl}`;
+            mensagem += `\n\nPDF: ${safePdfUrl}`;
           }
           mensagem += "\n\nPrecisa de CNPJ ou CPF na nota? Precisa de nota fiscal?";
 
           await this.chatwootService.sendOutgoingMessage(convId, mensagem);
         }
       } catch (err) {
-        this.logger.warn(`Falha ao notificar cliente via Chatwoot apÃ³s pagamento: ${err instanceof Error ? err.message : err}`);
+        this.logger.warn(`Falha ao notificar cliente via Chatwoot apos pagamento: ${err instanceof Error ? err.message : err}`);
       }
 
       results.push({
