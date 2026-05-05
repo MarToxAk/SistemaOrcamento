@@ -367,6 +367,32 @@ export class NfseService {
           this.logger.warn(
             `[Tomador] orcamento "${lookupId}" nao encontrado no Athos (NotFoundException) - sem dados do tomador`,
           );
+          const nomeBusca = (quote.customer?.fullName ?? "").trim();
+          if (nomeBusca.length >= 3) {
+            try {
+              const resultado = await this.athosService.buscarClientes({ nome: nomeBusca, take: 1 });
+              if (resultado.items.length === 1) {
+                const cli = resultado.items[0];
+                nome     = cli.nome || nome;
+                endereco = cli.endereco ?? endereco;
+                if (cli.tipoPessoa === "juridico" && cli.documento?.replace(/\D/g,"").length === 14)
+                  cnpj = cli.documento!.replace(/\D/g,"");
+                else if (cli.tipoPessoa === "fisico" && cli.documento?.replace(/\D/g,"").length === 11)
+                  cpf = cli.documento!.replace(/\D/g,"");
+                this.logger.log(
+                  `[Tomador] fallback nome="${nomeBusca}" → encontrado: tipo=${cli.tipoPessoa} doc=${cli.documento ?? "null"}`,
+                );
+              } else {
+                this.logger.warn(
+                  `[Tomador] fallback nome="${nomeBusca}" → ${resultado.total} resultados (ambiguo ou ausente) — sem dados`,
+                );
+              }
+            } catch (fbErr) {
+              this.logger.warn(
+                `[Tomador] fallback nome="${nomeBusca}" → erro: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}`,
+              );
+            }
+          }
         } else {
           this.logger.warn(
             `[Tomador] erro ao buscar orcamento "${lookupId}" no Athos: ${err instanceof Error ? err.message : String(err)}`,
@@ -395,6 +421,32 @@ export class NfseService {
           this.logger.warn(
             `[Tomador] idcliente=${clienteId} invalido ou ausente no mapeamento do orcamento "${lookupId}"`,
           );
+          const nomeBusca = ((athosData as any)?.mapped?.cliente ?? quote.customer?.fullName ?? "").trim();
+          if (nomeBusca.length >= 3) {
+            try {
+              const resultado = await this.athosService.buscarClientes({ nome: nomeBusca, take: 1 });
+              if (resultado.items.length === 1) {
+                const cli = resultado.items[0];
+                nome     = cli.nome || nome;
+                endereco = cli.endereco ?? endereco;
+                if (cli.tipoPessoa === "juridico" && cli.documento?.replace(/\D/g,"").length === 14)
+                  cnpj = cli.documento!.replace(/\D/g,"");
+                else if (cli.tipoPessoa === "fisico" && cli.documento?.replace(/\D/g,"").length === 11)
+                  cpf = cli.documento!.replace(/\D/g,"");
+                this.logger.log(
+                  `[Tomador] fallback nome="${nomeBusca}" → encontrado: tipo=${cli.tipoPessoa} doc=${cli.documento ?? "null"}`,
+                );
+              } else {
+                this.logger.warn(
+                  `[Tomador] fallback nome="${nomeBusca}" → ${resultado.total} resultados (ambiguo ou ausente) — sem dados`,
+                );
+              }
+            } catch (fbErr) {
+              this.logger.warn(
+                `[Tomador] fallback nome="${nomeBusca}" → erro: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}`,
+              );
+            }
+          }
         }
       }
     } catch (err) {
