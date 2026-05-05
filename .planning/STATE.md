@@ -56,20 +56,20 @@ Last activity: 2026-05-04 - Plano 22-01 executado: getWebhookUrl() corrigido com
 
 See: .planning/PROJECT.md (updated 2026-05-05)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: verificar e shipar milestone v1.9
+Current focus: aguardando merge do PR #7 para completar milestone v1.9
 
 ## Active Context
 
 - Branch atual: planning/v1.4-athos-nfse-cliente-busca
-- PR ativo: #6 (https://github.com/MarToxAk/SistemaOrcamento/pull/6)
-- Ultima versao tagged: v1.8 (pushed to remote)
-- Milestones archived: v1.0 a v1.8
-- Proximo passo recomendado: /gsd-new-milestone
+- PR ativo: #7 (https://github.com/MarToxAk/SistemaOrcamento/pull/7)
+- Fase 22 completa: getWebhookUrl() /pix + NfseService fallback + 3 testes
+- Proximo passo: merge PR #7 e completar milestone v1.9
 
 ## Notes
 
 - Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
 - Recomendada auditoria consolidada no inicio do proximo ciclo.
+
 
 
 
