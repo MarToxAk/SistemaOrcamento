@@ -1,5 +1,5 @@
 ﻿---
-status: complete
+status: resolved
 phase: 18-correcoes-nfse-rps-tomador
 source: [18-01-SUMMARY.md]
 started: 2026-05-04T00:00:00Z
