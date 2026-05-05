@@ -14,8 +14,8 @@ Date: 2026-05-05
 - [x] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14 (shipped 2026-05-04)
 - [x] v1.5 Correcao NFS-e â€” Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
 - [x] v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) â€” [details](.planning/milestones/v1.6-ROADMAP.md)
-- [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
-- [ ] v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos - Phase 19 (em andamento)
+- [x] v1.7 Correcoes NFS-e ï¿½ Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) ï¿½ [details](.planning/milestones/v1.7-ROADMAP.md)
+- [x] v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos - Phase 19 (shipped 2026-05-05)
 
 ---
 
@@ -125,22 +125,22 @@ Full details: .planning/milestones/v1.6-ROADMAP.md
 
 - [x] Phase 17: Correcao do calculo de desconto no modal NFS-e (NFSC-01..05)
 
-## v1.7 Correcoes NFS-e — Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
+## v1.7 Correcoes NFS-e ï¿½ Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
 
 Full details: .planning/milestones/v1.7-ROADMAP.md
 
 - [x] Phase 18: Correcoes NFS-e RPS e Tomador (RPS-01, RPS-02, TOM-01, TOM-02, TOM-03, REG-01, REG-02)
 
 
-## v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos (Phase 19) - EM ANDAMENTO
+## v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos (Phase 19) - SHIPPED 2026-05-05
 
 **Plans:** 2 plans
 
-- [ ] Phase 19: Regras de aprovacao associada, conciliacao via relacao_orcamento_venda e correcao de textos (APR-01..03, ATHC-01..03, TRG-01..03, TXT-01..02)
+- [x] Phase 19: Regras de aprovacao associada, conciliacao via relacao_orcamento_venda e correcao de textos (APR-01..03, ATHC-01..03, TRG-01..03, TXT-01..02)
 
 Plans:
-- [ ] 19-01-PLAN.md - Adicionar AthosService.buscarRelacaoOrcamentoVenda (consulta relacao_orcamento_venda no Athos)
-- [ ] 19-02-PLAN.md - Corrigir guard EM_PRODUCAO, conciliarViaCaixaAthos em getById, mensagens ASCII
+- [x] 19-01-PLAN.md - Adicionar AthosService.buscarRelacaoOrcamentoVenda (consulta relacao_orcamento_venda no Athos)
+- [x] 19-02-PLAN.md - Corrigir guard EM_PRODUCAO, conciliarViaCaixaAthos em getById, mensagens ASCII
 
 ### Phase Details
 
