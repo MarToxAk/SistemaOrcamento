@@ -184,11 +184,7 @@ describe("AthosService - verificarPagamentoPorOrcamento", () => {
   });
 });
 
-<<<<<<< HEAD
 describe("AthosService - buscarRelacaoOrcamentoVenda", () => {
-=======
-describe("AthosService - buscarClientes", () => {
->>>>>>> origin/main
   let service: AthosService;
 
   beforeAll(() => {
@@ -209,7 +205,6 @@ describe("AthosService - buscarClientes", () => {
 
   afterEach(() => jest.clearAllMocks());
 
-<<<<<<< HEAD
   it("deve retornar idvenda quando row encontrado em relacao_orcamento_venda", async () => {
     const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
     const client = { query: jest.fn(), release: jest.fn() };
@@ -241,16 +236,34 @@ describe("AthosService - buscarClientes", () => {
   });
 });
 
-=======
+describe("AthosService - buscarClientes", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
   it("deve retornar cliente PF ao buscar por documento (CPF)", async () => {
     const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
     const client = { query: jest.fn(), release: jest.fn() };
     pool.connect = jest.fn().mockResolvedValue(client);
 
     client.query
-      // COUNT
       .mockResolvedValueOnce({ rows: [{ total: "1" }] })
-      // SELECT data
       .mockResolvedValueOnce({
         rows: [
           {
@@ -344,4 +357,3 @@ describe("AthosService - buscarClientes", () => {
     expect(client.release).toHaveBeenCalled();
   });
 });
->>>>>>> origin/main
