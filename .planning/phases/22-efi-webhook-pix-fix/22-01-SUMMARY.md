@@ -97,6 +97,13 @@ None — nenhuma variavel de ambiente nova exigida. A correcao e puramente de lo
 
 Nenhuma nova superficie de seguranca introduzida. O endpoint `/webhook/payment/pix` permanece `@Public()` por design conforme T-22-01 do threat model.
 
+## Self-Check: PASSED
+
+- FOUND: .planning/phases/22-efi-webhook-pix-fix/22-01-SUMMARY.md
+- FOUND: commit a668f80 (fix: getWebhookUrl /pix + NfseService fallback)
+- FOUND: commit 3700ee3 (docs: plan 22-01 complete)
+- Build backend: exit code 0, no TypeScript errors
+
 ---
 *Phase: 22-efi-webhook-pix-fix*
 *Completed: 2026-05-04*
