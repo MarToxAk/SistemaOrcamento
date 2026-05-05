@@ -690,7 +690,8 @@ export class QuotesService {
       );
     }
 
-// APR-01/02/03: Bloqueia EM_PRODUCAO sem associacao Athos valida e sem pagamento confirmado
+// APR-01: Sem associacao Athos exige pagamento confirmado (PIX, cartao ou caixa)
+    // Clientes associados avancam livremente (link de aprovacao e enviado separadamente)
     if (newStatus === "EM_PRODUCAO") {
       const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false);
       const hasSaleId = quote.saleExternalId != null;
@@ -698,17 +699,7 @@ export class QuotesService {
 
       if (!isAssociated && !hasApproval && !hasSaleId) {
         throw new BadRequestException(
-          "Orcamento sem associacao com cliente Athos e sem pagamento confirmado. Associe o orcamento e verifique o pagamento antes de entrar em producao.",
-        );
-      }
-      if (!isAssociated) {
-        throw new BadRequestException(
-          "Orcamento sem associacao com cliente Athos valido. Associe o orcamento a um idcliente antes de entrar em producao.",
-        );
-      }
-      if (!hasApproval && !hasSaleId) {
-        throw new BadRequestException(
-          "Orcamento sem pagamento confirmado. Verifique o pagamento no Caixa Athos antes de entrar em producao.",
+          "Orcamento aguardando confirmacao de pagamento. Confirme o pagamento (PIX, cartao ou caixa) antes de entrar em producao.",
         );
       }
     }
