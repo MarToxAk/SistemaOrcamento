@@ -1,17 +1,17 @@
 ﻿# STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: 20-resolucao-de-tomador-por-cliente-selecionado
-Milestone: v1.8 (phase 20 executed)
+Current phase: 21-ui-nfse-observabilidade-e-testes
+Milestone: v1.8 (phase 21 executed)
 
 ---
 
 ## Current Position
 
-Phase: 20-resolucao-de-tomador-por-cliente-selecionado
-Plan: 20-01-PLAN.md
+Phase: 21-ui-nfse-observabilidade-e-testes
+Plan: 21-02-PLAN.md
 Status: complete
-Last activity: 2026-05-05 - Phase 20 plan 01 validated and summarized: clienteAthosId in EmitirNfseInput + Tomador-A/B/C resolution + TOMAD-04 validations + tests/build passing
+Last activity: 2026-05-05 - Phase 21 revalidated and marked complete: frontend build + backend tests/build passing and summaries 21-01/21-02 confirmed
 
 ## Project Status
 
@@ -86,6 +86,7 @@ Current focus: v1.8 Phase 21 - UI NFS-e, observabilidade e testes
 - SDK gsd nao encontrado no ambiente atual; ajustes de milestone feitos manualmente
 - Milestone v1.8 iniciou em modo planejamento para detalhar fases 19-21
 - Tabelas-alvo informadas para busca de cliente: cliente, cliente_fisico, cliente_juridico, cliente_endereco
+
 
 
 

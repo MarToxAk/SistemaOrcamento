@@ -137,7 +137,7 @@ Scope: implementar busca de cliente no Athos para uso na emissao de NFS-e, com s
 
 - [x] Phase 19: API de busca de cliente Athos (ATHCL-01, ATHCL-02, ATHCL-03)
 - [x] Phase 20: Resolucao de tomador por cliente selecionado (TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04)
-- [ ] Phase 21: UI NFS-e, observabilidade e testes (NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03)
+- [x] Phase 21: UI NFS-e, observabilidade e testes (NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03)
 
 ### Phase Details
 
@@ -151,7 +151,7 @@ Success criteria:
 
 Phase 20: Resolucao de tomador por cliente selecionado
 **Plans:** 1 plano
-- [ ] 20-01-PLAN.md — clienteAthosId em EmitirNfseInput + resolucao prioritaria + validacoes TOMAD-04
+- [x] 20-01-PLAN.md — clienteAthosId em EmitirNfseInput + resolucao prioritaria + validacoes TOMAD-04
 Goal: usar cliente Athos explicitamente selecionado para montar tomador completo no XML NFS-e.
 Requirements: TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04
 Success criteria:
@@ -162,8 +162,8 @@ Success criteria:
 
 Phase 21: UI NFS-e, observabilidade e testes
 **Plans:** 2 planos
-- [ ] 21-01-PLAN.md — Frontend: rota proxy Athos + busca/selecao de cliente no modal NFS-e (NFUI-01, NFUI-02, NFUI-03, QUAL-03)
-- [ ] 21-02-PLAN.md — Backend: logs estruturados + teste unitario PF (QUAL-01, QUAL-02)
+- [x] 21-01-PLAN.md — Frontend: rota proxy Athos + busca/selecao de cliente no modal NFS-e (NFUI-01, NFUI-02, NFUI-03, QUAL-03)
+- [x] 21-02-PLAN.md — Backend: logs estruturados + teste unitario PF (QUAL-01, QUAL-02)
 Goal: permitir selecao de cliente na interface e garantir confiabilidade operacional da feature.
 Requirements: NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03
 Success criteria:
@@ -185,5 +185,6 @@ Success criteria:
 
 ---
 Roadmap v1.8 - 2026-05-04
+
 
 
