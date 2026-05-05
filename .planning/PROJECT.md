@@ -10,7 +10,7 @@ Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes
 
 ## Current State
 
-Milestone em andamento: v1.9 - Webhook EFI PIX e Robustez de URLs.
+Milestone shipped: v1.9 - Webhook EFI PIX e Robustez de URLs (2026-05-05).
 
 Estado atual validado:
 - Busca de cliente Athos por nome/documento/idcliente entregue no backend.
@@ -29,12 +29,19 @@ Entregas principais:
 - UX do modal NFS-e com busca/selecao e preenchimento assistido.
 - Logs estruturados e cobertura de testes PF/PJ/falhas de resolucao.
 
-## Current Milestone: v1.9
+## Last Shipped Milestone: v1.9 - Webhook EFI PIX e Robustez de URLs
 
-Phase 22: Corrigir getWebhookUrl() no EFI Service (retornar URL com sufixo /pix) e tratar NFSE_SOAP_URL vazia no NfseService.
-- EFIWH-01: getWebhookUrl() com /pix
-- EFIWH-02: NfseService trata string vazia em URL
-- EFIWH-03: Testes unitários cobrindo /pix
+Shipped em 2026-05-05.
+
+Entregas principais:
+- getWebhookUrl() corrigido com sufixo /pix — EFI Pay envia eventos para o endpoint correto.
+- NfseService robusto — string vazia em NFSE_SOAP_URL/NFSE_AUX_URL usa fallback correto.
+- 3 testes unitarios de regressao para getWebhookUrl().
+
+## Next Milestone Goals
+
+Proximo milestone a definir.
+Candidatos: configurar webhook EFI na dashboard (manual), validar emissao NFS-e em producao com variaveis corretas, evolucoes de UX ou relatorios.
 ## Requirements
 
 ### Validated
@@ -130,4 +137,5 @@ Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
 *Last updated: 2026-05-05 after v1.8 milestone shipped*
+
 

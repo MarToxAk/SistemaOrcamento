@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-04
 Current phase: 22-efi-webhook-pix-fix
-Milestone: v1.9 (in progress)
+Milestone: v1.9 (shipped)
 
 ---
 
@@ -38,7 +38,7 @@ Last activity: 2026-05-04 - Plano 22-01 executado: getWebhookUrl() corrigido com
 | 19 | API de busca de cliente Athos | complete (v1.8) |
 | 20 | Resolucao de tomador por cliente selecionado | complete (v1.8) |
 | 21 | UI NFS-e, observabilidade e testes | complete (v1.8) |
-| 22 | Correcao webhook EFI /pix e robustez NfseService | in-progress (v1.9) |
+| 22 | Correcao webhook EFI /pix e robustez NfseService | complete (v1.9) |
 
 ## Milestones Archived
 
@@ -51,12 +51,13 @@ Last activity: 2026-05-04 - Plano 22-01 executado: getWebhookUrl() corrigido com
 - v1.6 — phase 17 (.planning/milestones/v1.6-ROADMAP.md)
 - v1.7 — phase 18 (.planning/milestones/v1.7-ROADMAP.md)
 - v1.8 — phases 19-21 (.planning/milestones/v1.8-ROADMAP.md)
+- v1.9 — phase 22 (.planning/milestones/v1.9-ROADMAP.md)
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-05)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: aguardando merge do PR #7 para completar milestone v1.9
+Current focus: proximo milestone a definir
 
 ## Active Context
 
@@ -69,6 +70,8 @@ Current focus: aguardando merge do PR #7 para completar milestone v1.9
 
 - Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
 - Recomendada auditoria consolidada no inicio do proximo ciclo.
+
+
 
 
 
