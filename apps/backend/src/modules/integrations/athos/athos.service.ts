@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { Client, Pool, PoolClient } from "pg";
 
 type Row = Record<string, unknown>;
@@ -678,4 +678,168 @@ export class AthosService {
       client.release();
     }
   }
+
+  async buscarClientes(params: {
+    nome?: string;
+    documento?: string;
+    idcliente?: number | string;
+    page?: number;
+    take?: number;
+  }): Promise<{
+    total: number;
+    page: number;
+    take: number;
+    items: Array<{
+      idcliente: number;
+      tipoPessoa: "fisico" | "juridico";
+      nome: string;
+      documento: string | null;
+      endereco: {
+        logradouro: string;
+        numero: string;
+        bairro: string;
+        cep: string;
+        codigoMunicipio: string;
+        uf: string;
+      } | null;
+    }>;
+  }> {
+    const take = Math.min(Math.max(1, Number(params.take ?? 20) || 20), 50);
+    const page = Math.max(1, Number(params.page ?? 1) || 1);
+    const offset = (page - 1) * take;
+
+    const nomeFilter = params.nome?.trim();
+    const documentoFilter = params.documento?.replace(/\D/g, "") || undefined;
+    const idclienteFilter = params.idcliente != null ? Number(params.idcliente) : undefined;
+
+    const hasFiltro =
+      (nomeFilter && nomeFilter.length >= 3) ||
+      (documentoFilter && documentoFilter.length > 0) ||
+      (idclienteFilter != null && Number.isFinite(idclienteFilter) && idclienteFilter > 0);
+
+    if (!hasFiltro) {
+      throw new BadRequestException(
+        "Informe ao menos um filtro: nome (min 3 caracteres), documento (CPF/CNPJ) ou idcliente.",
+      );
+    }
+
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const conditions: string[] = [];
+      const qParams: (string | number)[] = [];
+      let idx = 1;
+
+      if (idclienteFilter != null && Number.isFinite(idclienteFilter) && idclienteFilter > 0) {
+        conditions.push(`c.idcliente = $${idx++}`);
+        qParams.push(idclienteFilter);
+      } else {
+        if (documentoFilter) {
+          conditions.push(
+            `(REGEXP_REPLACE(COALESCE(cf.cpf, ''), '[^0-9]', '', 'g') = $${idx} OR REGEXP_REPLACE(COALESCE(cj.cnpj, ''), '[^0-9]', '', 'g') = $${idx})`,
+          );
+          qParams.push(documentoFilter);
+          idx++;
+        }
+        if (nomeFilter && nomeFilter.length >= 3) {
+          conditions.push(
+            `(cf.nome ILIKE $${idx} OR cj.nomefantasia ILIKE $${idx} OR cj.razaosocial ILIKE $${idx})`,
+          );
+          qParams.push(`%${nomeFilter}%`);
+          idx++;
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const baseJoins = `
+        FROM cliente c
+        LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+        LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+        LEFT JOIN (
+          SELECT DISTINCT ON (idcliente)
+            idcliente, tipologradouro, logradouro, numero, bairro, cep, codigocidade, uf
+          FROM cliente_endereco
+          ORDER BY idcliente, idenderecocliente
+        ) ce ON ce.idcliente = c.idcliente
+        ${whereClause}
+      `;
+
+      const countResult = await client.query(`SELECT COUNT(*) AS total ${baseJoins}`, qParams);
+      const total = Number(countResult.rows[0]?.total ?? 0);
+
+      const dataResult = await client.query(
+        `SELECT
+          c.idcliente,
+          cf.nome AS nome_fisico,
+          cj.nomefantasia,
+          cj.razaosocial,
+          cf.cpf,
+          cj.cnpj,
+          ce.tipologradouro,
+          ce.logradouro,
+          ce.numero AS end_numero,
+          ce.bairro,
+          ce.cep,
+          ce.codigocidade,
+          ce.uf
+        ${baseJoins}
+        ORDER BY c.idcliente
+        LIMIT $${idx} OFFSET $${idx + 1}`,
+        [...qParams, take, offset],
+      );
+
+      const items = (dataResult.rows as Row[]).map((row) => {
+        const isFisico = !!pickString(row, ["nome_fisico"]);
+        const nome = isFisico
+          ? pickString(row, ["nome_fisico"])
+          : pickString(row, ["nomefantasia", "razaosocial"]);
+        const documento = isFisico
+          ? pickString(row, ["cpf"]).replace(/\D/g, "") || null
+          : pickString(row, ["cnpj"]).replace(/\D/g, "") || null;
+
+        let endereco: {
+          logradouro: string;
+          numero: string;
+          bairro: string;
+          cep: string;
+          codigoMunicipio: string;
+          uf: string;
+        } | null = null;
+        const logradouro = pickString(row, ["logradouro"]);
+        if (logradouro) {
+          const tipo = pickString(row, ["tipologradouro"]);
+          endereco = {
+            logradouro: tipo ? `${tipo} ${logradouro}` : logradouro,
+            numero: pickString(row, ["end_numero"]) || "S/N",
+            bairro: pickString(row, ["bairro"]) || "Centro",
+            cep: pickString(row, ["cep"]).replace(/\D/g, ""),
+            codigoMunicipio: pickString(row, ["codigocidade"]) || "3520400",
+            uf: pickString(row, ["uf"]) || "SP",
+          };
+        }
+
+        return {
+          idcliente: Number(row["idcliente"]),
+          tipoPessoa: (isFisico ? "fisico" : "juridico") as "fisico" | "juridico",
+          nome,
+          documento,
+          endereco,
+        };
+      });
+
+      this.logger.log(
+        `[Athos-busca] nome="${nomeFilter ?? ""}" doc="${documentoFilter ?? ""}" idcliente=${idclienteFilter ?? ""} → ${total} resultado(s) page=${page} take=${take}`,
+      );
+      return { total, page, take, items };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.warn(
+        `Falha ao buscar clientes no Athos: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw new InternalServerErrorException("Erro ao buscar clientes no Athos. Tente novamente.");
+    } finally {
+      client.release();
+    }
+  }
+
 }

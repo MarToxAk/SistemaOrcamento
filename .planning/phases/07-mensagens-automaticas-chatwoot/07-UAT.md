@@ -2,7 +2,7 @@
 phase: 07
 phase_title: Mensagens Automáticas ao Cliente via Chatwoot
 uat_date: 2026-05-03
-status: in-progress
+status: complete
 plans_tested:
   - 07-01
   - 07-02

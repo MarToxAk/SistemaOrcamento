@@ -127,6 +127,17 @@ export default function OrcamentoDetailPage() {
   const [nfseDescontoPercent, setNfseDescontoPercent] = useState("");
   const [nfseDescontoValor, setNfseDescontoValor] = useState("");
   const [nfseValorTotal, setNfseValorTotal] = useState("");
+  const [nfseAthosQuery, setNfseAthosQuery] = useState("");
+  const [nfseAthosResults, setNfseAthosResults] = useState<Array<{
+    idcliente: number;
+    tipoPessoa: "fisico" | "juridico";
+    nome: string;
+    documento: string | null;
+    endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+  }>>([]);
+  const [nfseAthosSearching, setNfseAthosSearching] = useState(false);
+  const [nfseClienteAthosSelecionado, setNfseClienteAthosSelecionado] = useState<number | null>(null);
+  const [nfseAthosError, setNfseAthosError] = useState("");
 
   useEffect(() => {
     const isDevBypass =
@@ -297,7 +308,56 @@ export default function OrcamentoDetailPage() {
     }
 
     // Sempre abre o modal — usuário pode escolher o serviço e confirmar os dados
+    setNfseAthosQuery("");
+    setNfseAthosResults([]);
+    setNfseAthosSearching(false);
+    setNfseClienteAthosSelecionado(null);
+    setNfseAthosError("");
     setNfseModal(true);
+  }
+
+  async function searchAthosClientes() {
+    const q = nfseAthosQuery.trim();
+    if (!q) return;
+    setNfseAthosSearching(true);
+    setNfseAthosError("");
+    setNfseAthosResults([]);
+    try {
+      const isDoc = /^\d{3,}$/.test(q.replace(/\D/g, "")) && q.replace(/\D/g, "").length >= 8;
+      const param = isDoc
+        ? `documento=${encodeURIComponent(q.replace(/\D/g, ""))}`
+        : `nome=${encodeURIComponent(q)}`;
+      const res = await fetch(`/api/athos/clientes?${param}&take=10`);
+      const data = await res.json().catch(() => ({ error: "Resposta inválida." })) as {
+        items?: typeof nfseAthosResults;
+        error?: string;
+      };
+      if (!res.ok || data.error) {
+        setNfseAthosError(data.error ?? "Erro ao buscar clientes.");
+      } else {
+        setNfseAthosResults(data.items ?? []);
+        if ((data.items ?? []).length === 0) setNfseAthosError("Nenhum cliente encontrado.");
+      }
+    } catch {
+      setNfseAthosError("Falha ao conectar ao backend.");
+    } finally {
+      setNfseAthosSearching(false);
+    }
+  }
+
+  function selecionarClienteAthos(item: typeof nfseAthosResults[0]) {
+    setNfseClienteAthosSelecionado(item.idcliente);
+    setNfseTomadorTipo(item.tipoPessoa === "juridico" ? "cnpj" : "cpf");
+    setNfseTomadorDoc(item.documento ?? "");
+    setNfseTomadorNome(item.nome);
+    setNfseTomadorEnderecoLogradouro(item.endereco?.logradouro ?? "");
+    setNfseTomadorEnderecoNumero(item.endereco?.numero ?? "");
+    setNfseTomadorEnderecoBairro(item.endereco?.bairro ?? "");
+    setNfseTomadorEnderecoCep(item.endereco?.cep ?? "");
+    setNfseTomadorEnderecoCodigoMunicipio(item.endereco?.codigoMunicipio ?? "");
+    setNfseTomadorEnderecoUf(item.endereco?.uf ?? "");
+    setNfseAthosResults([]);
+    setNfseAthosQuery("");
   }
 
   function syncDesconto(field: "percent" | "valor" | "total", raw: string) {
@@ -365,6 +425,9 @@ export default function OrcamentoDetailPage() {
         body.descontoValor = Number(nfseDescontoValor);
       }
 
+      if (nfseClienteAthosSelecionado != null) {
+        body.clienteAthosId = nfseClienteAthosSelecionado;
+      }
       const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -720,8 +783,81 @@ export default function OrcamentoDetailPage() {
       {/* Modal emissão NFS-e */}
       {nfseModal ? (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1060 }}>
-          <div style={{ background: "#fff", borderRadius: 8, width: "100%", maxWidth: 480, padding: "1.5rem", boxShadow: "0 4px 24px #0003" }}>
+          <div style={{ background: "#fff", borderRadius: 8, width: "100%", maxWidth: 480, padding: "1.5rem", boxShadow: "0 4px 24px #0003", maxHeight: "90vh", overflowY: "auto" }}>
             <h5 className="mb-3"><i className="bi bi-file-earmark-text me-2" />Emitir Nota Fiscal (NFS-e)</h5>
+
+            {/* Busca cliente Athos */}
+            <div className="mb-3">
+              <label className="form-label fw-semibold">Buscar cliente Athos</label>
+              {nfseClienteAthosSelecionado ? (
+                <div className="alert alert-success py-2 d-flex justify-content-between align-items-center">
+                  <span>
+                    <i className="bi bi-person-check me-2" />
+                    <strong>{nfseTomadorNome}</strong>
+                    {nfseTomadorDoc ? ` — ${nfseTomadorDoc}` : ""}
+                    <small className="text-muted ms-2">(id {nfseClienteAthosSelecionado})</small>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-close btn-sm"
+                    aria-label="Remover seleção"
+                    onClick={() => {
+                      setNfseClienteAthosSelecionado(null);
+                      setNfseTomadorDoc("");
+                      setNfseTomadorNome("");
+                      setNfseAthosResults([]);
+                      setNfseAthosQuery("");
+                      setNfseAthosError("");
+                    }}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="input-group mb-1">
+                    <input
+                      className="form-control"
+                      placeholder="Nome ou CPF/CNPJ"
+                      value={nfseAthosQuery}
+                      onChange={e => setNfseAthosQuery(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void searchAthosClientes(); } }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      onClick={() => void searchAthosClientes()}
+                      disabled={nfseAthosSearching || !nfseAthosQuery.trim()}
+                    >
+                      {nfseAthosSearching
+                        ? <span className="spinner-border spinner-border-sm" role="status" />
+                        : <i className="bi bi-search" />}
+                    </button>
+                  </div>
+                  {nfseAthosError && <div className="text-danger small">{nfseAthosError}</div>}
+                  {nfseAthosResults.length > 0 && (
+                    <ul className="list-group list-group-flush border rounded" style={{ maxHeight: 180, overflowY: "auto" }}>
+                      {nfseAthosResults.map(item => (
+                        <li key={item.idcliente} className="list-group-item list-group-item-action py-2 px-3 d-flex justify-content-between align-items-center">
+                          <span>
+                            <span className={`badge me-2 ${item.tipoPessoa === "juridico" ? "bg-info text-dark" : "bg-secondary"}`}>
+                              {item.tipoPessoa === "juridico" ? "PJ" : "PF"}
+                            </span>
+                            <strong>{item.nome}</strong>
+                            {item.documento ? <small className="text-muted ms-2">{item.documento}</small> : null}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() => selecionarClienteAthos(item)}
+                          >
+                            Selecionar
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
 
             <div className="mb-3">
               <label className="form-label fw-semibold">Serviço</label>
@@ -814,7 +950,7 @@ export default function OrcamentoDetailPage() {
             </div>
 
             <div className="alert alert-light small mb-4">
-              Se o tomador não estiver associado no Athos, preencha documento e endereço manualmente para emitir a NFS-e.
+              Use a busca acima para selecionar um cliente Athos. Se preferir, preencha documento e endereço manualmente.
             </div>
 
             {/* Seção de desconto */}

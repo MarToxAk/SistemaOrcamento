@@ -1,17 +1,17 @@
-# STATE.md - Sistema de Orcamento BomCusto
+﻿# STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-04
-Current phase: —
-Milestone: v1.7 (shipped 2026-05-04)
+Last updated: 2026-05-05
+Current phase: milestone-v1.8-complete
+Milestone: v1.8 (shipped)
 
 ---
 
 ## Current Position
 
-Phase: 18-correcoes-nfse-rps-tomador
-Plan: —
-Status: v1.7 complete — arquivado
-Last activity: 2026-05-04 — Milestone v1.7 arquivado
+Phase: milestone-v1.8-complete
+Plan: n/a
+Status: complete
+Last activity: 2026-05-05 - Milestone v1.8 archived (ROADMAP/REQUIREMENTS/PROJECT updated, summaries conferidos, tag criada).
 
 ## Project Status
 
@@ -35,6 +35,9 @@ Last activity: 2026-05-04 — Milestone v1.7 arquivado
 | 16 | UI de desconto no modal NFS-e | complete (v1.5) |
 | 17 | Correcao do calculo de desconto no modal NFS-e | complete (v1.6) |
 | 18 | Correcoes NFS-e - RPS e Tomador | complete (v1.7) |
+| 19 | API de busca de cliente Athos | complete (v1.8) |
+| 20 | Resolucao de tomador por cliente selecionado | complete (v1.8) |
+| 21 | UI NFS-e, observabilidade e testes | complete (v1.8) |
 
 ## Milestones Archived
 
@@ -46,39 +49,23 @@ Last activity: 2026-05-04 — Milestone v1.7 arquivado
 - v1.5 — phases 15-16 (.planning/milestones/v1.5-ROADMAP.md)
 - v1.6 — phase 17 (.planning/milestones/v1.6-ROADMAP.md)
 - v1.7 — phase 18 (.planning/milestones/v1.7-ROADMAP.md)
+- v1.8 — phases 19-21 (.planning/milestones/v1.8-ROADMAP.md)
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-04)
+See: .planning/PROJECT.md (updated 2026-05-05)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.7 Phase 18 - correcao NFS-e (RPS e tomador)
+Current focus: definir escopo e requisitos do proximo milestone
 
 ## Active Context
 
-- Branch atual: fix/frontend-proxy-auth-header
-- PR ativo: #5
-- Ultima versao tagged: v1.6
-- Milestones archived: v1.0, v1.1, v1.2, v1.3
-- Escopo v1.4: webhook EFI sem auth HMAC obrigatoria + conciliacao Athos sem n8n + desconto NFS-e opcional
-
-## Decisions Log
-
-| Date | Decision | Reason |
-|------|----------|--------|
-| 2026-05-03 | Iniciar v1.3 focado em migration reliability | Erro de migration no update via compose bloqueia deploy |
-| 2026-05-03 | Nao usar pesquisa externa para v1.3 | Escopo interno e tecnico conhecido |
-| 2026-05-04 | Nao usar n8n para notificacao de pagamento | Fluxo deve ficar na aplicacao backend principal |
-| 2026-05-04 | Checar pagamento no Athos ao abrir e ao enviar orcamento | Sincronizar status com estado real do caixa |
-| 2026-05-04 | Incluir desconto opcional na emissao de NFS-e | Necessidade fiscal de deducao por percentual/valor sobre total pago |
-| 2026-05-04 | v1.5 foca em dois bugs de NFS-e: mojibake no backend + UI de desconto ausente no frontend | Emissao de NFS-e com valor correto nao era possivel sem esses fixes |
-| 2026-05-04 | v1.6 foca no path errado de quote?.totais?.valor no frontend | Base de calculo era sempre 0, quebrando todos os calculos de desconto no modal NFS-e |
-| 2026-05-04 | Corrigir quote?.totais?.valor para quote?.body?.totais?.valor em 6 pontos do modal NFS-e | totais existe somente dentro de body no tipo QuoteDetail; acesso direto retornava undefined |
-| 2026-05-04 | Usar Record<string, string | number | boolean> no body do POST NFS-e | descontoAtivo precisava ser boolean true para satisfazer igualdade estrita do backend |
+- Branch atual: planning/v1.8-athos-nfse-cliente-busca
+- PR ativo: none
+- Ultima versao tagged: v1.7
+- Milestones archived: v1.0 a v1.8
+- Proximo passo recomendado: /gsd-new-milestone
 
 ## Notes
 
-- SDK gsd nao encontrado no ambiente atual; ajustes de milestone feitos manualmente
-- Dois bugs NFS-e alvo do v1.7: RPS numero (+ 1) e tomador Athos quando associado
-- Implementacao anterior baseada em listener externo nao sera reutilizada (sem n8n)
-
-
+- Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
+- Recomendada auditoria consolidada no inicio do proximo ciclo.

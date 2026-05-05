@@ -352,3 +352,59 @@ describe("QuotesService - changeStatus — Chatwoot notifications", () => {
     await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).resolves.toBeDefined();
   });
 });
+
+
+describe("QuotesService - enviarParaCliente — regra de approvalLink por associado", () => {
+  let service: QuotesService;
+  let mockPrisma: ReturnType<typeof buildProviders>["mockPrismaService"];
+  let athosMock: { buscarOrcamentoPorNumero: jest.Mock; testarConexao: jest.Mock };
+
+  beforeEach(async () => {
+    const { mockPrismaService, providers } = buildProviders();
+    mockPrisma = mockPrismaService;
+    const module: TestingModule = await Test.createTestingModule({ providers }).compile();
+    service = module.get<QuotesService>(QuotesService);
+    athosMock = module.get(AthosService) as any;
+
+    mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO" }));
+    mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "APROVADO" }));
+    mockPrisma.quoteDocument.findFirst.mockResolvedValue(null);
+
+    // evita ruído dos fluxos opcionais
+    (service as any).checkPaymentStatus = jest.fn().mockResolvedValue(undefined);
+    const efi = module.get(EfiService) as any;
+    efi.resolvePaymentOptions = jest.fn().mockReturnValue(null);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve retornar approvalLink quando cliente e associado e idcliente existe", async () => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({
+        status: "APROVADO",
+        customer: { id: "cus1", fullName: "Cliente Assoc", isAssociated: true, phone: null, email: null },
+      }),
+    );
+
+    athosMock.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: { idcliente: 123 } });
+
+    const result = await service.enviarParaCliente("quote-001");
+
+    expect(result.approvalLink).toEqual(expect.stringContaining('/orcamento/quote-001/approve?token='));
+  });
+
+  it("nao deve retornar approvalLink quando cliente NAO e associado mesmo com idcliente", async () => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({
+        status: "APROVADO",
+        customer: { id: "cus1", fullName: "Cliente Nao Assoc", isAssociated: false, phone: null, email: null },
+      }),
+    );
+
+    athosMock.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: { idcliente: 456 } });
+
+    const result = await service.enviarParaCliente("quote-001");
+
+    expect(result.approvalLink).toBeNull();
+  });
+});

@@ -1445,6 +1445,8 @@ export class QuotesService {
     let clienteEmail: string | undefined = (quote.customer as any)?.email ?? undefined;
 
     let athosMapped: any = null;
+    const isAssociatedCustomer = Boolean((quote as any)?.customer?.isAssociated);
+
     if (!clienteId) {
       try {
         const lookupId = String(quote.externalQuoteId ?? quote.internalNumber ?? "");
@@ -1533,7 +1535,7 @@ export class QuotesService {
     // Se houver idcliente, garantir token de aprovacao e montar link de aprovacao
     let approvalToken: string | undefined = undefined;
     let approvalLink: string | undefined = undefined;
-    if (clienteId) {
+    if (clienteId && isAssociatedCustomer) {
       if (quote.approvalToken && quote.approvalExpiresAt && new Date(quote.approvalExpiresAt) > new Date()) {
         approvalToken = quote.approvalToken;
       } else {
@@ -1574,7 +1576,7 @@ export class QuotesService {
 
     // Observacao sobre orcamento associado ao cliente Athos (quando idcliente identificado)
     let observacao = "";
-    if (clienteId) {
+    if (clienteId && isAssociatedCustomer) {
       let associatedName: string | undefined = undefined;
       try {
         const clientInfo = await this.athosService.buscarClientePorId(clienteId);
