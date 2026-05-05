@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, Inject, forwardRef } from "@nestjs/common";
+﻿import { BadRequestException, Injectable, InternalServerErrorException, Logger, Inject, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { QuoteStatus } from "@prisma/client";
 import axios, { AxiosInstance } from "axios";
@@ -50,7 +50,7 @@ export class EfiService {
         .filter((p) => p.txid && p.amount > 0 && p.externalId);
     }
 
-    // Fallback simples para payload único
+    // Fallback simples para payload Ãºnico
     const txid = String(data.txid ?? "").trim();
     const externalId = String(data.endToEndId ?? data.e2eId ?? data.eventId ?? "").trim();
     const amount = this.toMoney(data.valor ?? data.amount);
@@ -72,8 +72,8 @@ export class EfiService {
   }
 
   /**
-   * Carrega um PEM a partir de três fontes em ordem de prioridade:
-   *   1. Texto PEM direto na variável (ex: EFI_CERT_PEM) — suporta \n literal
+   * Carrega um PEM a partir de trÃªs fontes em ordem de prioridade:
+   *   1. Texto PEM direto na variÃ¡vel (ex: EFI_CERT_PEM) â€” suporta \n literal
    *   2. Base64 do arquivo PEM (ex: EFI_CERT_BASE64)
    *   3. Caminho de arquivo no disco (ex: EFI_CERT_PATH)
    */
@@ -99,7 +99,7 @@ export class EfiService {
       if (fs.existsSync(resolved)) {
         return fs.readFileSync(resolved, "utf8");
       }
-      this.logger.warn(`${label} não encontrado em: ${resolved}`);
+      this.logger.warn(`${label} nÃ£o encontrado em: ${resolved}`);
     }
 
     return null;
@@ -116,8 +116,8 @@ export class EfiService {
     const key  = this.loadPem("EFI_KEY_PEM",  "EFI_KEY_BASE64",  "EFI_KEY_PATH",  "Chave privada EFI");
 
     if (!cert || !key) {
-      if (!cert) this.logger.warn("Certificado EFI (cert) não configurado.");
-      if (!key)  this.logger.warn("Chave privada EFI (key) não configurada.");
+      if (!cert) this.logger.warn("Certificado EFI (cert) nÃ£o configurado.");
+      if (!key)  this.logger.warn("Chave privada EFI (key) nÃ£o configurada.");
       return null;
     }
 
@@ -232,7 +232,7 @@ export class EfiService {
       calendario: { expiracao: 3600 },
       valor: { original: finalAmount.toFixed(2) },
       chave: pixKey,
-      solicitacaoPagador: (input.payerMessage ?? `Pagamento do orçamento ${input.quoteIdentifier}`).slice(0, 140),
+      solicitacaoPagador: (input.payerMessage ?? `Pagamento do orÃ§amento ${input.quoteIdentifier}`).slice(0, 140),
     };
     if (devedorBase) body.devedor = devedorBase;
 
@@ -286,8 +286,8 @@ export class EfiService {
   }
 
   /**
-   * Gera um link de pagamento via API Cobranças EFI (cartão de crédito parcelado).
-   * Usa Basic Auth sem mTLS — endpoint: POST /v1/charge/one-step/link
+   * Gera um link de pagamento via API CobranÃ§as EFI (cartÃ£o de crÃ©dito parcelado).
+   * Usa Basic Auth sem mTLS â€” endpoint: POST /v1/charge/one-step/link
    */
   async createCardPaymentLink(input: {
     quoteIdentifier: string;
@@ -302,7 +302,7 @@ export class EfiService {
 
     const cobrancaClient = axios.create({ baseURL: baseUrl, timeout: 15_000 });
 
-    // Obtém token da API Cobranças (Basic Auth, sem mTLS)
+    // ObtÃ©m token da API CobranÃ§as (Basic Auth, sem mTLS)
     let token: string;
     try {
       const authResp = await cobrancaClient.post(
@@ -311,11 +311,11 @@ export class EfiService {
         { headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" } },
       );
       token = authResp.data?.access_token;
-      if (!token) throw new Error("Token não retornado");
+      if (!token) throw new Error("Token nÃ£o retornado");
     } catch (e: any) {
       const detail = e?.response?.data ?? e?.message;
-      this.logger.error(`Falha ao autenticar na API Cobranças EFI. ${JSON.stringify(detail)}`);
-      throw new InternalServerErrorException("Não foi possível autenticar na API Cobranças EFI.");
+      this.logger.error(`Falha ao autenticar na API CobranÃ§as EFI. ${JSON.stringify(detail)}`);
+      throw new InternalServerErrorException("NÃ£o foi possÃ­vel autenticar na API CobranÃ§as EFI.");
     }
 
     // Valor em centavos (inteiro)
@@ -328,7 +328,7 @@ export class EfiService {
     const body: Record<string, unknown> = {
       items: [
         {
-          name: `Orçamento #${input.quoteIdentifier}`.slice(0, 255),
+          name: `OrÃ§amento #${input.quoteIdentifier}`.slice(0, 255),
           value: valorCentavos,
           amount: 1,
         },
@@ -344,7 +344,7 @@ export class EfiService {
       },
     };
 
-    // customer.email é obrigatório pela API — incluir quando disponível
+    // customer.email Ã© obrigatÃ³rio pela API â€” incluir quando disponÃ­vel
     const email = input.customerEmail?.trim();
     if (email) {
       body.customer = {
@@ -362,13 +362,13 @@ export class EfiService {
 
       const paymentUrl: string = resp.data?.data?.payment_url;
       const chargeId: number = resp.data?.data?.charge_id;
-      if (!paymentUrl) throw new Error("payment_url não retornado pela EFI");
+      if (!paymentUrl) throw new Error("payment_url nÃ£o retornado pela EFI");
       return { paymentUrl, chargeId };
     } catch (e: any) {
       const status = e?.response?.status;
       const detail = e?.response?.data ?? e?.message;
-      this.logger.error(`Falha ao criar link de pagamento (cartão) na EFI. status=${status} detalhe=${JSON.stringify(detail)}`);
-      throw new InternalServerErrorException("Não foi possível gerar o link de pagamento com cartão na EFI.");
+      this.logger.error(`Falha ao criar link de pagamento (cartÃ£o) na EFI. status=${status} detalhe=${JSON.stringify(detail)}`);
+      throw new InternalServerErrorException("NÃ£o foi possÃ­vel gerar o link de pagamento com cartÃ£o na EFI.");
     }
   }
 
@@ -385,7 +385,7 @@ export class EfiService {
       quoteIdentifier: `${input.quoteIdentifier}E`,
       amount: halfAmount,
       customerName: input.customerName,
-      payerMessage: `Entrada 50% - Orçamento #${input.quoteIdentifier}`,
+      payerMessage: `Entrada 50% - OrÃ§amento #${input.quoteIdentifier}`,
     });
     return { linkVisualizacao: result.linkVisualizacao, txid: result.txid, halfAmount };
   }
@@ -399,14 +399,14 @@ export class EfiService {
     const options = [
       {
         code: "PIX_AVISTA",
-        label: "PIX à vista",
+        label: "PIX Ã  vista",
         enabled: true,
         discountPercent: pixDiscountPercent,
         finalAmount: pixFinalAmount,
       },
       {
         code: "CARTAO_2X",
-        label: "Cartão de crédito em até 2x",
+        label: "CartÃ£o de crÃ©dito em atÃ© 2x",
         enabled: value >= 150,
         discountPercent: 0,
         finalAmount: Number(value.toFixed(2)),
@@ -436,14 +436,14 @@ export class EfiService {
 
   buildCommercialMessage(amount: number) {
     if (amount > 150) {
-      return "Para valores acima de R$ 150,00 você pode parcelar em até 2x no cartão. No PIX à vista, você recebe 5% de desconto.";
+      return "Para valores acima de R$ 150,00 vocÃª pode parcelar em atÃ© 2x no cartÃ£o. No PIX Ã  vista, vocÃª recebe 5% de desconto.";
     }
 
     if (amount > 100) {
-      return "Para valores acima de R$ 100,00, você pode pagar com 50% de entrada e 50% na loja.";
+      return "Para valores acima de R$ 100,00, vocÃª pode pagar com 50% de entrada e 50% na loja.";
     }
 
-    return "Para valores até R$ 100,00, o pagamento é via PIX.";
+    return "Para valores atÃ© R$ 100,00, o pagamento Ã© via PIX.";
   }
 
   getIntegrationStatus() {
@@ -478,15 +478,15 @@ export class EfiService {
       keySource,
       message:
         clientId && clientSecret && pixKey && baseUrl
-          ? "Integração EFI configurada para implementação da cobrança."
-          : "Configure EFI_CLIENT_ID, EFI_CLIENT_SECRET, EFI_PIX_KEY e EFI_BASE_URL para ativar a integração EFI.",
+          ? "IntegraÃ§Ã£o EFI configurada para implementaÃ§Ã£o da cobranÃ§a."
+          : "Configure EFI_CLIENT_ID, EFI_CLIENT_SECRET, EFI_PIX_KEY e EFI_BASE_URL para ativar a integraÃ§Ã£o EFI.",
     };
   }
 
   private getWebhookUrl(): string {
     const base = this.config.get<string>("BACKEND_URL") ?? this.config.get<string>("APP_BASE_URL") ?? "http://localhost:4000/api";
     const baseNoTrailing = base.replace(/\/$/, "");
-    return `${baseNoTrailing}/integrations/efi/webhook/payment`;
+    return `${baseNoTrailing}/integrations/efi/webhook/payment/pix`;
   }
 
   async processWebhook(payload: unknown, signature?: string) {
@@ -509,7 +509,7 @@ export class EfiService {
     for (const payment of payments) {
       const eventId = payment.externalId;
 
-      // Idempotência por eventId
+      // IdempotÃªncia por eventId
       const existing = await (this.prisma as any).paymentTransaction.findFirst({
         where: {
           OR: [
@@ -597,7 +597,7 @@ export class EfiService {
         return { transaction, quoteUpdate };
       });
 
-      // Envio de mensagem automática ao cliente via Chatwoot com dados do orçamento
+      // Envio de mensagem automÃ¡tica ao cliente via Chatwoot com dados do orÃ§amento
       try {
         const mapped = await this.quotesService.getById(quote.id);
         const body = mapped.body ?? ({} as any);
@@ -609,15 +609,15 @@ export class EfiService {
           const clienteNome = (body.cliente as any)?.nome ?? (quote as any).customer?.fullName ?? "Cliente";
           const numero = (body as any).idorcamento ?? (body as any).idorcamento_interno ?? (quote as any).internalNumber ?? "-";
           const total = Number((body as any).totais?.valor ?? (quote as any).total ?? 0);
-          const itensList = ((body as any).itens ?? []).slice(0, 10).map((it: any) => `• ${it.produto?.descricaoproduto ?? it.produto?.descricaocurta ?? "Item"} (${it.quantidadeitem}x) — ${Number(it.orcamentovalorfinalitem ?? it.orcamentovalorfinalitem ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`);
+          const itensList = ((body as any).itens ?? []).slice(0, 10).map((it: any) => `â€¢ ${it.produto?.descricaoproduto ?? it.produto?.descricaocurta ?? "Item"} (${it.quantidadeitem}x) â€” ${Number(it.orcamentovalorfinalitem ?? it.orcamentovalorfinalitem ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`);
           const itensText = itensList.length > 0 ? itensList.join("\n") : "(sem itens listados)";
           const temArte = ((body as any).carimbos?.quantidade_total ?? (body as any).carimbos?.itens?.length ?? 0) > 0;
           const pdfUrl = (mapped as any).latestPdfUrl ?? (body as any).latestPdfUrl ?? ((body as any).documentoPdf ? (body as any).documentoPdf.publicUrl : null);
           const safePdfUrl = pdfUrl ? encodeURI(String(pdfUrl)) : null;
 
           const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-          let mensagem = `Olá, ${clienteNome}. `;
-          // Detecta se o pagamento recebido corresponde à metade do total (entrada 50%)
+          let mensagem = `OlÃ¡, ${clienteNome}. `;
+          // Detecta se o pagamento recebido corresponde Ã  metade do total (entrada 50%)
           const halfAmount = Number((Number(total) / 2).toFixed(2));
           const isHalf = Math.abs(payment.amount - halfAmount) < 0.01 || Number((quote as any).firstInstallmentAmount ?? 0) === payment.amount;
 
@@ -632,28 +632,28 @@ export class EfiService {
             }
           }
 
-          mensagem += `\n\n📋 Orçamento #${numero}`;
+          mensagem += `\n\nðŸ“‹ OrÃ§amento #${numero}`;
           mensagem += `\n${itensText}`;
-          mensagem += `\n\n💰 Total: ${fmt(total)}`;
+          mensagem += `\n\nðŸ’° Total: ${fmt(total)}`;
           mensagem += "\n\n";
           if (temArte) {
-            mensagem += "Sua arte será enviada para aprovação. Assim que aprovada, daremos continuidade à produção.";
+            mensagem += "Sua arte serÃ¡ enviada para aprovaÃ§Ã£o. Assim que aprovada, daremos continuidade Ã  produÃ§Ã£o.";
           } else if (isHalf) {
-            mensagem += "Seu pedido será enviado para produção. O restante do pagamento deverá ser realizado na loja no momento da retirada.";
+            mensagem += "Seu pedido serÃ¡ enviado para produÃ§Ã£o. O restante do pagamento deverÃ¡ ser realizado na loja no momento da retirada.";
           } else if (fullyPaid) {
-            mensagem += "Seu pedido será enviado para produção.";
+            mensagem += "Seu pedido serÃ¡ enviado para produÃ§Ã£o.";
           } else {
-            mensagem += "Aguardaremos a confirmação do restante do pagamento para prosseguir.";
+            mensagem += "Aguardaremos a confirmaÃ§Ã£o do restante do pagamento para prosseguir.";
           }
           if (safePdfUrl) {
-            mensagem += `\n\n📄 PDF: ${safePdfUrl}`;
+            mensagem += `\n\nðŸ“„ PDF: ${safePdfUrl}`;
           }
           mensagem += "\n\nPrecisa de CNPJ ou CPF na nota? Precisa de nota fiscal?";
 
           await this.chatwootService.sendOutgoingMessage(convId, mensagem);
         }
       } catch (err) {
-        this.logger.warn(`Falha ao notificar cliente via Chatwoot após pagamento: ${err instanceof Error ? err.message : err}`);
+        this.logger.warn(`Falha ao notificar cliente via Chatwoot apÃ³s pagamento: ${err instanceof Error ? err.message : err}`);
       }
 
       results.push({

@@ -1,17 +1,17 @@
 ﻿# STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-05
-Current phase: milestone-v1.8-complete
-Milestone: v1.8 (shipped)
+Last updated: 2026-05-04
+Current phase: 22-efi-webhook-pix-fix
+Milestone: v1.9 (in progress)
 
 ---
 
 ## Current Position
 
-Phase: milestone-v1.8-complete
-Plan: n/a
-Status: complete
-Last activity: 2026-05-05 - Milestone v1.8 archived (ROADMAP/REQUIREMENTS/PROJECT updated, summaries conferidos, tag criada).
+Phase: 22-efi-webhook-pix-fix
+Plan: 22-02 (wave 2) — 22-01 complete
+Status: in-progress
+Last activity: 2026-05-04 - Plano 22-01 executado: getWebhookUrl() corrigido com /pix; NfseService usa .trim() || para fallback de URL vazia. Build backend OK.
 
 ## Project Status
 
@@ -38,6 +38,7 @@ Last activity: 2026-05-05 - Milestone v1.8 archived (ROADMAP/REQUIREMENTS/PROJEC
 | 19 | API de busca de cliente Athos | complete (v1.8) |
 | 20 | Resolucao de tomador por cliente selecionado | complete (v1.8) |
 | 21 | UI NFS-e, observabilidade e testes | complete (v1.8) |
+| 22 | Correcao webhook EFI /pix e robustez NfseService | in-progress (v1.9) |
 
 ## Milestones Archived
 
@@ -55,17 +56,20 @@ Last activity: 2026-05-05 - Milestone v1.8 archived (ROADMAP/REQUIREMENTS/PROJEC
 
 See: .planning/PROJECT.md (updated 2026-05-05)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: definir escopo e requisitos do proximo milestone
+Current focus: aguardando merge do PR #7 para completar milestone v1.9
 
 ## Active Context
 
-- Branch atual: planning/v1.8-athos-nfse-cliente-busca
-- PR ativo: none
-- Ultima versao tagged: v1.7
-- Milestones archived: v1.0 a v1.8
-- Proximo passo recomendado: /gsd-new-milestone
+- Branch atual: planning/v1.4-athos-nfse-cliente-busca
+- PR ativo: #7 (https://github.com/MarToxAk/SistemaOrcamento/pull/7)
+- Fase 22 completa: getWebhookUrl() /pix + NfseService fallback + 3 testes
+- Proximo passo: merge PR #7 e completar milestone v1.9
 
 ## Notes
 
 - Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
 - Recomendada auditoria consolidada no inicio do proximo ciclo.
+
+
+
+

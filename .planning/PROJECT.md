@@ -10,7 +10,7 @@ Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes
 
 ## Current State
 
-Milestone shipped: v1.8 - Busca de Cliente Athos para NFS-e (2026-05-05).
+Milestone em andamento: v1.9 - Webhook EFI PIX e Robustez de URLs.
 
 Estado atual validado:
 - Busca de cliente Athos por nome/documento/idcliente entregue no backend.
@@ -29,13 +29,12 @@ Entregas principais:
 - UX do modal NFS-e com busca/selecao e preenchimento assistido.
 - Logs estruturados e cobertura de testes PF/PJ/falhas de resolucao.
 
-## Next Milestone Goals
+## Current Milestone: v1.9
 
-Objetivo de curto prazo (v1.9 em definicao):
-- Fechar pendencias de verificacao/UAT diagnosticadas (especialmente trilhas com status diagnosed).
-- Consolidar fechamento de milestone com auditoria formal recorrente antes de ship.
-- Evoluir robustez operacional de NFS-e (validacoes de dados de tomador e monitoramento de erros de emissao).
-
+Phase 22: Corrigir getWebhookUrl() no EFI Service (retornar URL com sufixo /pix) e tratar NFSE_SOAP_URL vazia no NfseService.
+- EFIWH-01: getWebhookUrl() com /pix
+- EFIWH-02: NfseService trata string vazia em URL
+- EFIWH-03: Testes unitários cobrindo /pix
 ## Requirements
 
 ### Validated
@@ -131,3 +130,4 @@ Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
 *Last updated: 2026-05-05 after v1.8 milestone shipped*
+
