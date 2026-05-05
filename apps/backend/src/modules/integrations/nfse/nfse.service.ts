@@ -494,7 +494,7 @@ export class NfseService {
     if (infoNfse) {
       rpsNumero = infoNfse.proximoRps;
       rpsSerie  = infoNfse.serieRps || this.SERIE_RPS;
-      this.logger.log(`[RPS] ProximoRPS=${rpsNumero} SerieRPS=${rpsSerie}`);
+      this.logger.log(`[RPS] AUXILIARRPS proximoRPS=${rpsNumero} serie=${rpsSerie} (proximo a emitir — sem +1)`);
     } else {
       this.logger.warn(`API Auxiliar indisponível, usando internalNumber=${rpsNumero} como RPS`);
     }
