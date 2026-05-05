@@ -59,9 +59,9 @@ Current focus: definir escopo e requisitos do proximo milestone
 
 ## Active Context
 
-- Branch atual: planning/v1.8-athos-nfse-cliente-busca
-- PR ativo: none
-- Ultima versao tagged: v1.7
+- Branch atual: planning/v1.4-athos-nfse-cliente-busca
+- PR ativo: #6 (https://github.com/MarToxAk/SistemaOrcamento/pull/6)
+- Ultima versao tagged: v1.8 (pushed to remote)
 - Milestones archived: v1.0 a v1.8
 - Proximo passo recomendado: /gsd-new-milestone
 
@@ -69,3 +69,4 @@ Current focus: definir escopo e requisitos do proximo milestone
 
 - Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
 - Recomendada auditoria consolidada no inicio do proximo ciclo.
+
