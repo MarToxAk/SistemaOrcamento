@@ -1,4 +1,4 @@
-﻿# Roadmap - Sistema de Orcamento BomCusto
+# Roadmap - Sistema de Orcamento BomCusto
 
 Version: 1.8
 Date: 2026-05-05
@@ -12,9 +12,9 @@ Date: 2026-05-05
 - [x] v1.2 Mensagens e UX do Cliente - Phases 7-8 (shipped 2026-05-03)
 - [x] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (shipped 2026-05-03)
 - [x] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14 (shipped 2026-05-04)
-- [x] v1.5 Correcao NFS-e â€” Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
-- [x] v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) â€” [details](.planning/milestones/v1.6-ROADMAP.md)
-- [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
+- [x] v1.5 Correcao NFS-e — Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
+- [x] v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) — [details](.planning/milestones/v1.6-ROADMAP.md)
+- [x] v1.7 Correcoes NFS-e � Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) � [details](.planning/milestones/v1.7-ROADMAP.md)
 - [ ] v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos - Phase 19 (em andamento)
 
 ---
@@ -112,20 +112,20 @@ Success criteria:
 4. Validacoes impedem valores invalidos e retornam erro explicito para o usuario.
 5. XML final preenche desconto coerente e mantem 0.00 quando flag de desconto estiver desligada.
 
-## v1.5 Correcao NFS-e â€” Encoding + UI de Desconto (Phases 15-16) - SHIPPED 2026-05-04
+## v1.5 Correcao NFS-e — Encoding + UI de Desconto (Phases 15-16) - SHIPPED 2026-05-04
 
 Full details: .planning/milestones/v1.5-ROADMAP.md
 
 - [x] Phase 15: Corrigir encoding NFS-e e proxy API (NFSFIX-01, NFSFIX-02)
 - [x] Phase 16: UI de desconto no modal de emissao NFS-e (NFSFIX-03)
 
-## v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final (Phase 17) - SHIPPED 2026-05-04
+## v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final (Phase 17) - SHIPPED 2026-05-04
 
 Full details: .planning/milestones/v1.6-ROADMAP.md
 
 - [x] Phase 17: Correcao do calculo de desconto no modal NFS-e (NFSC-01..05)
 
-## v1.7 Correcoes NFS-e — Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
+## v1.7 Correcoes NFS-e � Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
 
 Full details: .planning/milestones/v1.7-ROADMAP.md
 
@@ -134,12 +134,13 @@ Full details: .planning/milestones/v1.7-ROADMAP.md
 
 ## v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos (Phase 19) - EM ANDAMENTO
 
-**Plans:** 1 plan
+**Plans:** 2 plans
 
 - [ ] Phase 19: Regras de aprovacao associada, conciliacao via relacao_orcamento_venda e correcao de textos (APR-01..03, ATHC-01..03, TRG-01..03, TXT-01..02)
 
 Plans:
-- [ ] 19-01-PLAN.md - Ajustar regras de aprovacao e entrada em producao, integrar verificacao de pagamento por relacao_orcamento_venda e pipeline de trigger equivalente a PIX/cartao, corrigindo textos quebrados
+- [ ] 19-01-PLAN.md - Adicionar AthosService.buscarRelacaoOrcamentoVenda (consulta relacao_orcamento_venda no Athos)
+- [ ] 19-02-PLAN.md - Corrigir guard EM_PRODUCAO, conciliarViaCaixaAthos em getById, mensagens ASCII
 
 ### Phase Details
 
