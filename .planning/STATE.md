@@ -1,7 +1,7 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: 19-api-de-busca-de-cliente-athos
+Current phase: 21-ui-nfse-observabilidade-e-testes
 Milestone: v1.8 (in progress)
 
 ---
@@ -37,7 +37,7 @@ Last activity: 2026-05-04 - Phase 20 executed: clienteAthosId + resolucao tomado
 | 18 | Correcoes NFS-e - RPS e Tomador | complete (v1.7) |
 | 19 | API de busca de cliente Athos | complete (v1.8) |
 | 20 | Resolucao de tomador por cliente selecionado | complete (v1.8) |
-| 21 | UI NFS-e, observabilidade e testes | planned (v1.8) |
+| 21 | UI NFS-e, observabilidade e testes | complete (v1.8) |
 
 ## Milestones Archived
 
