@@ -141,8 +141,9 @@ export class NfseService {
     tomadorNome?: string | null;
     tomadorEndereco?: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
   }): string {
-    const valorCbs      = Number((input.valorServicos * CBS_RATE).toFixed(2));
-    const valorIbs      = Number((input.valorServicos * IBS_RATE).toFixed(2));
+    const valorLiquido  = Number((input.valorServicos - input.descontoIncondicionado).toFixed(2));
+    const valorCbs      = Number((valorLiquido * CBS_RATE).toFixed(2));
+    const valorIbs      = Number((valorLiquido * IBS_RATE).toFixed(2));
     const aliquotaCbs   = (CBS_RATE * 100).toFixed(2);
     const aliquotaIbs   = (IBS_RATE * 100).toFixed(2);
 
