@@ -15,7 +15,7 @@ Date: 2026-05-04
 - [x] v1.5 Correcao NFS-e â€” Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
 - [x] v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) â€” [details](.planning/milestones/v1.6-ROADMAP.md)
 - [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
-- [ ] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (planning)
+- [ ] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (in progress)
 
 ---
 
@@ -131,11 +131,11 @@ Full details: .planning/milestones/v1.7-ROADMAP.md
 
 - [x] Phase 18: Correcoes NFS-e RPS e Tomador (RPS-01, RPS-02, TOM-01, TOM-02, TOM-03, REG-01, REG-02)
 
-## v1.8 Busca de Cliente Athos para NFS-e (Phases 19-21) - PLANNING
+## v1.8 Busca de Cliente Athos para NFS-e (Phases 19-21) - IN PROGRESS
 
 Scope: implementar busca de cliente no Athos para uso na emissao de NFS-e, com selecao no frontend e resolucao consistente de tomador no backend.
 
-- [ ] Phase 19: API de busca de cliente Athos (ATHCL-01, ATHCL-02, ATHCL-03)
+- [x] Phase 19: API de busca de cliente Athos (ATHCL-01, ATHCL-02, ATHCL-03)
 - [ ] Phase 20: Resolucao de tomador por cliente selecionado (TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04)
 - [ ] Phase 21: UI NFS-e, observabilidade e testes (NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03)
 
@@ -185,3 +185,4 @@ Success criteria:
 
 ---
 Roadmap v1.8 - 2026-05-04
+

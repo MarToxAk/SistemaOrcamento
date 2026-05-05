@@ -1,17 +1,17 @@
-# STATE.md - Sistema de Orcamento BomCusto
+﻿# STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: 18-correcoes-nfse-rps-tomador
-Milestone: v1.7 (gap-closure patch applied)
+Current phase: 19-api-de-busca-de-cliente-athos
+Milestone: v1.8 (phase 19 executed)
 
 ---
 
 ## Current Position
 
-Phase: 18-correcoes-nfse-rps-tomador
-Plan: 18-02-PLAN.md
+Phase: 19-api-de-busca-de-cliente-athos
+Plan: 19-01-PLAN.md
 Status: complete
-Last activity: 2026-05-04 - Phase 18 plan 02 executed: log RPS clarificado (AUXILIARRPS sem +1) + fallback buscarTomador por nome em 2 caminhos
+Last activity: 2026-05-04 - Phase 19 plan 01 validated and summarized: endpoint GET /athos/clientes + buscarClientes with pagination/validation + tests passing
 
 ## Project Status
 
@@ -41,20 +41,20 @@ Last activity: 2026-05-04 - Phase 18 plan 02 executed: log RPS clarificado (AUXI
 
 ## Milestones Archived
 
-- v1.0 — phases 1-5 (.planning/milestones/v1.0-ROADMAP.md)
-- v1.1 — phase 6 (.planning/milestones/v1.1-ROADMAP.md)
-- v1.2 — phases 7-8 (.planning/milestones/v1.2-ROADMAP.md)
-- v1.3 — phases 9-10 (.planning/milestones/v1.3-ROADMAP.md)
-- v1.4 — phases 11-14 (.planning/milestones/v1.4-ROADMAP.md)
-- v1.5 — phases 15-16 (.planning/milestones/v1.5-ROADMAP.md)
-- v1.6 — phase 17 (.planning/milestones/v1.6-ROADMAP.md)
-- v1.7 — phase 18 (.planning/milestones/v1.7-ROADMAP.md)
+- v1.0 â€” phases 1-5 (.planning/milestones/v1.0-ROADMAP.md)
+- v1.1 â€” phase 6 (.planning/milestones/v1.1-ROADMAP.md)
+- v1.2 â€” phases 7-8 (.planning/milestones/v1.2-ROADMAP.md)
+- v1.3 â€” phases 9-10 (.planning/milestones/v1.3-ROADMAP.md)
+- v1.4 â€” phases 11-14 (.planning/milestones/v1.4-ROADMAP.md)
+- v1.5 â€” phases 15-16 (.planning/milestones/v1.5-ROADMAP.md)
+- v1.6 â€” phase 17 (.planning/milestones/v1.6-ROADMAP.md)
+- v1.7 â€” phase 18 (.planning/milestones/v1.7-ROADMAP.md)
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-04)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.8 Phase 19 - API de busca de cliente Athos
+Current focus: v1.8 Phase 20 - Resolucao de tomador por cliente selecionado
 
 ## Active Context
 
@@ -86,5 +86,6 @@ Current focus: v1.8 Phase 19 - API de busca de cliente Athos
 - SDK gsd nao encontrado no ambiente atual; ajustes de milestone feitos manualmente
 - Milestone v1.8 iniciou em modo planejamento para detalhar fases 19-21
 - Tabelas-alvo informadas para busca de cliente: cliente, cliente_fisico, cliente_juridico, cliente_endereco
+
 
 
