@@ -22,11 +22,11 @@ export interface EmitirNfseInput {
   codigoTributacaoNacional?: string; // override manual
   /** Ativa aplicacao de desconto na emissao da NFS-e (NFSD-01) */
   descontoAtivo?: boolean;
-  /** Percentual de desconto (0-100) sobre totalPago ou valorServicos (NFSD-02) */
+  /** Percentual de desconto (0-100) sobre valorServicos (NFSD-02) */
   descontoPorcentagem?: number;
   /** Valor fixo de desconto em reais (NFSD-03) */
   descontoValor?: number;
-  /** Base de calculo para desconto percentual; se ausente usa valorServicos (NFSD-02) */
+  /** @deprecated Mantido por compatibilidade; percentual agora usa sempre valorServicos */
   totalPago?: number;
   /** ID do cliente Athos selecionado explicitamente; quando informado substitui o lookup via orcamento (TOMAD-01) */
   clienteAthosId?: number;
@@ -141,9 +141,8 @@ export class NfseService {
     tomadorNome?: string | null;
     tomadorEndereco?: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
   }): string {
-    const valorLiquido  = Number((input.valorServicos - input.descontoIncondicionado).toFixed(2));
-    const valorCbs      = Number((valorLiquido * CBS_RATE).toFixed(2));
-    const valorIbs      = Number((valorLiquido * IBS_RATE).toFixed(2));
+    const valorCbs      = Number((input.valorServicos * CBS_RATE).toFixed(2));
+    const valorIbs      = Number((input.valorServicos * IBS_RATE).toFixed(2));
     const aliquotaCbs   = (CBS_RATE * 100).toFixed(2);
     const aliquotaIbs   = (IBS_RATE * 100).toFixed(2);
 
@@ -506,9 +505,7 @@ export class NfseService {
     // Calcular desconto (NFSD-01..04)
     let descontoIncondicionado = 0;
     if (input?.descontoAtivo === true) {
-      const base = (input.totalPago != null && Number.isFinite(input.totalPago) && input.totalPago > 0)
-        ? input.totalPago
-        : valorServicos;
+      const base = valorServicos;
 
       if (input.descontoPorcentagem != null) {
         if (input.descontoPorcentagem < 0 || input.descontoPorcentagem > 100) {
