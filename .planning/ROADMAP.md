@@ -1,6 +1,6 @@
 # Roadmap - Sistema de Orcamento BomCusto
 
-Version: 1.8
+Version: 1.9
 Date: 2026-05-05
 
 ---
@@ -16,6 +16,7 @@ Date: 2026-05-05
 - [x] v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) — [details](.planning/milestones/v1.6-ROADMAP.md)
 - [x] v1.7 Correcoes NFS-e � Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) � [details](.planning/milestones/v1.7-ROADMAP.md)
 - [x] v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos - Phase 19 (shipped 2026-05-05)
+- [ ] v1.9 Relatorios e Exportacao CSV - Phase 20 (planning)
 
 ---
 
@@ -152,6 +153,26 @@ Success criteria:
 2. Ao abrir orcamento, sistema consulta relacao_orcamento_venda e sincroniza pagamento
 3. Trigger relacao_orcamento_venda dispara mesma rotina de conciliacao de PIX/cartao
 4. Mensagens e logs de aprovacao/pagamento sem mojibake e com diagnostico claro
+
+## v1.9 Relatorios e Exportacao CSV (Phase 20) - PLANNING
+
+**Plans:** 0 plans
+
+- [ ] Phase 20: Relatorios e exportacao CSV de orcamentos (a definir no discuss/plan)
+
+Plans:
+- [ ] 20-01-PLAN.md - [To be planned]
+
+### Phase Details
+
+**Phase 20: Relatorios e exportacao CSV de orcamentos**
+Goal: Entregar visoes operacionais e exportacao CSV para acompanhamento comercial e financeiro.
+Requirements: [To be defined]
+Success criteria:
+1. Usuario consegue gerar exportacao CSV com filtros basicos
+2. Exportacao contem campos essenciais do orcamento, cliente, status e valores
+3. Fluxo nao degrada performance das telas principais
+
 ## Backlog (Future)
 
 - Relatorios e exportacao CSV de orcamentos
@@ -164,4 +185,4 @@ Success criteria:
 - Historico de mensagens enviados ao cliente
 
 ---
-Roadmap v1.8 - 2026-05-05
+Roadmap v1.9 - 2026-05-05

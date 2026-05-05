@@ -1,17 +1,17 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-05
-Current phase: 19 (complete)
-Milestone: v1.8 (complete)
+Current phase: 20 (planning)
+Milestone: v1.9 (planning)
 
 ---
 
 ## Current Position
 
-Phase: 19 - aprovacao-associada-caixa-athos (complete)
+Phase: 20 - relatorios-exportacao-csv (planning)
 Plan: -
-Status: Phase 19 complete
-Last activity: 2026-05-05 - Phase 19 complete e revalidada (commits 8fd4df7, fd36b4e, 1673cc5, 962464e, eb2abc6)
+Status: Defining requirements
+Last activity: 2026-05-05 - Milestone v1.9 started (phase 20 planning)
 
 ## Project Status
 
@@ -36,6 +36,7 @@ Last activity: 2026-05-05 - Phase 19 complete e revalidada (commits 8fd4df7, fd3
 | 17 | Correcao do calculo de desconto no modal NFS-e | complete (v1.6) |
 | 18 | Correcoes NFS-e - RPS e Tomador | complete (v1.7) |
 | 19 | Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos | complete (v1.8) |
+| 20 | Relatorios e Exportacao CSV de Orcamentos | planning (v1.9) |
 
 ## Milestones Archived
 
@@ -52,7 +53,7 @@ Last activity: 2026-05-05 - Phase 19 complete e revalidada (commits 8fd4df7, fd3
 
 See: .planning/PROJECT.md (updated 2026-05-04)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: aguardando planejamento da proxima fase/milestone
+Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 
 ## Active Context
 
