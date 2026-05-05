@@ -1,6 +1,6 @@
 ﻿# STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-05
+Last updated: 2026-05-04
 Current phase: 22-efi-webhook-pix-fix
 Milestone: v1.9 (in progress)
 
@@ -9,9 +9,9 @@ Milestone: v1.9 (in progress)
 ## Current Position
 
 Phase: 22-efi-webhook-pix-fix
-Plan: 22-01 (wave 1), 22-02 (wave 2)
-Status: planning
-Last activity: 2026-05-05 - Milestone v1.9 iniciado. Fase 22 planejada: correcao getWebhookUrl() EFI + fallback NfseService.
+Plan: 22-02 (wave 2) — 22-01 complete
+Status: in-progress
+Last activity: 2026-05-04 - Plano 22-01 executado: getWebhookUrl() corrigido com /pix; NfseService usa .trim() || para fallback de URL vazia. Build backend OK.
 
 ## Project Status
 
@@ -38,7 +38,7 @@ Last activity: 2026-05-05 - Milestone v1.9 iniciado. Fase 22 planejada: correcao
 | 19 | API de busca de cliente Athos | complete (v1.8) |
 | 20 | Resolucao de tomador por cliente selecionado | complete (v1.8) |
 | 21 | UI NFS-e, observabilidade e testes | complete (v1.8) |
-| 22 | Correcao webhook EFI /pix e robustez NfseService | planning (v1.9) |
+| 22 | Correcao webhook EFI /pix e robustez NfseService | in-progress (v1.9) |
 
 ## Milestones Archived
 
@@ -56,7 +56,7 @@ Last activity: 2026-05-05 - Milestone v1.9 iniciado. Fase 22 planejada: correcao
 
 See: .planning/PROJECT.md (updated 2026-05-05)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: executar fase 22 — corrigir getWebhookUrl() EFI e fallback NfseService
+Current focus: executar fase 22 — 22-01 completo, aguarda 22-02 (testes unitarios getWebhookUrl)
 
 ## Active Context
 

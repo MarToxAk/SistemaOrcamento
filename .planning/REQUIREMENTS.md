@@ -2,7 +2,7 @@
 
 ## v1.9 — Webhook EFI PIX e Robustez de URLs de Integração
 
-### EFIWH-01 — URL de webhook EFI usa sufixo /pix
+### EFIWH-01 — URL de webhook EFI usa sufixo /pix [COMPLETE - 22-01]
 
 **Contexto:** `getWebhookUrl()` em `efi.service.ts` gera a URL de notificação que é registrada na EFI Pay. Atualmente retorna `…/integrations/efi/webhook/payment` sem o sufixo `/pix`, fazendo o gateway enviar eventos para o endpoint errado.
 
@@ -14,7 +14,7 @@
 
 ---
 
-### EFIWH-02 — NfseService trata variáveis de URL vazias
+### EFIWH-02 — NfseService trata variáveis de URL vazias [COMPLETE - 22-01]
 
 **Contexto:** `NFSE_SOAP_URL` e `NFSE_AUX_URL` podem estar definidas como string vazia no `.env`. O operador `??` não trata string vazia, causando erro `ENOENT '?wsdl'` porque o fallback para `DEFAULT_ENDPOINT` nunca é usado.
 

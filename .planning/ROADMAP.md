@@ -151,7 +151,7 @@ Full details: .planning/milestones/v1.8-ROADMAP.md
 **Plans:** 2 plans
 
 Plans:
-- [ ] 22-01-PLAN.md — Corrigir getWebhookUrl() e fallback NfseService (wave 1)
+- [x] 22-01-PLAN.md — Corrigir getWebhookUrl() e fallback NfseService (wave 1) — complete
 - [ ] 22-02-PLAN.md — Testes unitários de getWebhookUrl() (wave 2)
 
 **Success criteria:**
