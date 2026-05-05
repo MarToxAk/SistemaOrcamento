@@ -1,7 +1,7 @@
 ﻿# Roadmap - Sistema de Orcamento BomCusto
 
-Version: 1.8
-Date: 2026-05-04
+Version: 1.9
+Date: 2026-05-05
 
 ---
 
@@ -16,6 +16,7 @@ Date: 2026-05-04
 - [x] v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) â€” [details](.planning/milestones/v1.6-ROADMAP.md)
 - [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
 - [x] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (shipped 2026-05-05) - [details](.planning/milestones/v1.8-ROADMAP.md)
+- [ ] v1.9 Webhook EFI PIX e Robustez de URLs - Phase 22 (in progress)
 
 ---
 
@@ -139,6 +140,26 @@ Full details: .planning/milestones/v1.8-ROADMAP.md
 - [x] Phase 20: Resolucao de tomador por cliente selecionado (TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04)
 - [x] Phase 21: UI NFS-e, observabilidade e testes (NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03)
 
+## v1.9 Webhook EFI PIX e Robustez de URLs (Phase 22) - IN PROGRESS
+
+### Phase 22: Correcao webhook EFI /pix e fallback NfseService
+
+**Goal:** Garantir que webhooks EFI PIX cheguem ao endpoint correto (/webhook/payment/pix) e que NfseService nao quebre quando NFSE_SOAP_URL esta definida como string vazia.
+
+**Requirements:** EFIWH-01, EFIWH-02, EFIWH-03
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 22-01-PLAN.md — Corrigir getWebhookUrl() e fallback NfseService (wave 1)
+- [ ] 22-02-PLAN.md — Testes unitários de getWebhookUrl() (wave 2)
+
+**Success criteria:**
+1. getWebhookUrl() retorna URL terminada em /webhook/payment/pix.
+2. Com NFSE_SOAP_URL= vazio, NfseService usa endpoint padrão sem erro ENOENT.
+3. Spec de efi.service inclui teste cobrindo a URL com /pix.
+4. Build backend sem erros após as correções.
+
 ## Backlog (Future)
 
 - Relatorios e exportacao CSV de orcamentos
@@ -152,6 +173,7 @@ Full details: .planning/milestones/v1.8-ROADMAP.md
 
 ---
 Roadmap v1.8 - 2026-05-04
+
 
 
 

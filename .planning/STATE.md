@@ -1,17 +1,17 @@
 ﻿# STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-05
-Current phase: milestone-v1.8-complete
-Milestone: v1.8 (shipped)
+Current phase: 22-efi-webhook-pix-fix
+Milestone: v1.9 (in progress)
 
 ---
 
 ## Current Position
 
-Phase: milestone-v1.8-complete
-Plan: n/a
-Status: complete
-Last activity: 2026-05-05 - Milestone v1.8 archived (ROADMAP/REQUIREMENTS/PROJECT updated, summaries conferidos, tag criada).
+Phase: 22-efi-webhook-pix-fix
+Plan: 22-01 (wave 1), 22-02 (wave 2)
+Status: planning
+Last activity: 2026-05-05 - Milestone v1.9 iniciado. Fase 22 planejada: correcao getWebhookUrl() EFI + fallback NfseService.
 
 ## Project Status
 
@@ -38,6 +38,7 @@ Last activity: 2026-05-05 - Milestone v1.8 archived (ROADMAP/REQUIREMENTS/PROJEC
 | 19 | API de busca de cliente Athos | complete (v1.8) |
 | 20 | Resolucao de tomador por cliente selecionado | complete (v1.8) |
 | 21 | UI NFS-e, observabilidade e testes | complete (v1.8) |
+| 22 | Correcao webhook EFI /pix e robustez NfseService | planning (v1.9) |
 
 ## Milestones Archived
 
@@ -55,7 +56,7 @@ Last activity: 2026-05-05 - Milestone v1.8 archived (ROADMAP/REQUIREMENTS/PROJEC
 
 See: .planning/PROJECT.md (updated 2026-05-05)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: definir escopo e requisitos do proximo milestone
+Current focus: executar fase 22 — corrigir getWebhookUrl() EFI e fallback NfseService
 
 ## Active Context
 
@@ -69,4 +70,5 @@ Current focus: definir escopo e requisitos do proximo milestone
 
 - Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
 - Recomendada auditoria consolidada no inicio do proximo ciclo.
+
 
