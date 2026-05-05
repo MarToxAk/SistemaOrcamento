@@ -755,13 +755,12 @@ export class AthosService {
         FROM cliente c
         LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
         LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
-        LEFT JOIN LATERAL (
-          SELECT tipologradouro, logradouro, numero, bairro, cep, codigocidade, uf
+        LEFT JOIN (
+          SELECT DISTINCT ON (idcliente)
+            idcliente, tipologradouro, logradouro, numero, bairro, cep, codigocidade, uf
           FROM cliente_endereco
-          WHERE idcliente = c.idcliente
-          ORDER BY idenderecocliente
-          LIMIT 1
-        ) ce ON true
+          ORDER BY idcliente, idenderecocliente
+        ) ce ON ce.idcliente = c.idcliente
         ${whereClause}
       `;
 
