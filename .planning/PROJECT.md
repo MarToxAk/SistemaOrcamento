@@ -8,6 +8,27 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
+<<<<<<< HEAD
+## Last Shipped Milestone: v1.8 - Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos
+
+Shipped em 2026-05-05.
+
+Entregas principais:
+- Guard EM_PRODUCAO: aprovacao/producao so ocorre com associacao Athos valida e pagamento confirmado
+- Conciliacao caixa via relacao_orcamento_venda ao abrir orcamento (fire-and-forget)
+- Badge "Pago no Caixa - Venda #N" na pagina publica do cliente
+- Notificacao Chatwoot ao confirmar pagamento via caixa
+- Mensagens de erro em ASCII, logs diagnosticos estruturados
+
+## Current Milestone: v1.9 - Relatorios e Exportacao CSV
+
+**Goal:** Entregar visoes operacionais e exportacao CSV para acompanhamento comercial e financeiro.
+
+**Target features:**
+- Exportacao CSV de orcamentos com filtros basicos
+- Campos essenciais: orcamento, cliente, status, valores, datas
+- Performance preservada nas telas principais
+=======
 ## Current State
 
 Milestone em andamento: v1.9 - Webhook EFI PIX e Robustez de URLs.
@@ -28,6 +49,7 @@ Entregas principais:
 - Resolucao deterministica de tomador por cliente selecionado na emissao NFS-e.
 - UX do modal NFS-e com busca/selecao e preenchimento assistido.
 - Logs estruturados e cobertura de testes PF/PJ/falhas de resolucao.
+>>>>>>> origin/main
 
 ## Current Milestone: v1.9
 
@@ -129,5 +151,9 @@ Phase 22: Corrigir getWebhookUrl() no EFI Service (retornar URL com sufixo /pix)
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
+<<<<<<< HEAD
+*Last updated: 2026-05-05 after v1.8 milestone - v1.9 started*
+=======
 *Last updated: 2026-05-05 after v1.8 milestone shipped*
 
+>>>>>>> origin/main

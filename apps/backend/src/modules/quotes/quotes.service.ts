@@ -204,7 +204,14 @@ export class QuotesService {
       }
     }
 
-    if (["PENDENTE", "ENVIADO"].includes(resolvedQuote.status)) {
+    // ATHC-01: verificar pagamento via relacao_orcamento_venda quando orcamento tem ID Athos
+    if (resolvedQuote.externalQuoteId) {
+      void this.conciliarViaCaixaAthos(resolvedQuote).catch((err: unknown) => {
+        this.logger.warn(
+          `Conciliacao Caixa Athos falhou para orcamento ${resolvedQuote.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    } else if (["PENDENTE", "ENVIADO"].includes(resolvedQuote.status)) {
       void this.checkPaymentStatus(resolvedQuote.id).catch((err: unknown) => {
         this.logger.warn(
           `Disparo de checagem de pagamento falhou para orcamento ${resolvedQuote.id}: ${err instanceof Error ? err.message : String(err)}`,
@@ -270,6 +277,7 @@ export class QuotesService {
     let previousStatus = quote.status;
     let currentStatus = quote.status;
     let statusSyncError: string | null = null;
+    const paymentJustConfirmed = Boolean(payment.paid && !quote.paymentConfirmedAt);
 
     if (payment.paid && ["PENDENTE", "ENVIADO"].includes(quote.status)) {
       try {
@@ -281,6 +289,40 @@ export class QuotesService {
         this.logger.warn(
           `Pagamento detectado, mas status nao foi atualizado automaticamente para o orcamento ${quote.id}: ${statusSyncError}`,
         );
+      }
+    }
+
+    if (paymentJustConfirmed) {
+      try {
+        await this.prisma.quote.update({
+          where: { id: quote.id },
+          data: { paymentConfirmedAt: new Date() },
+        });
+      } catch (error) {
+        this.logger.warn(
+          "Nao foi possivel persistir paymentConfirmedAt para o orcamento " +
+            quote.id +
+            ": " +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      }
+
+      if (quote.conversationId) {
+        try {
+          const numero = quote.externalQuoteId ? Number(quote.externalQuoteId) : quote.internalNumber;
+          const venda = resolvedIdVenda != null ? " (venda #" + resolvedIdVenda + ")" : "";
+          await this.chatwootService.sendOutgoingMessage(
+            String(quote.conversationId),
+            "Pagamento confirmado no caixa para o orcamento #" + numero + venda + ". Obrigado!",
+          );
+        } catch (err) {
+          this.logger.warn(
+            "Falha ao notificar pagamento no caixa via Chatwoot para orcamento " +
+              quote.id +
+              ": " +
+              (err instanceof Error ? err.message : String(err)),
+          );
+        }
       }
     }
 
@@ -302,6 +344,36 @@ export class QuotesService {
         error: statusSyncError,
       },
     };
+  }
+
+  private async conciliarViaCaixaAthos(quote: any): Promise<void> {
+    const idOrcamento = Number(quote.externalQuoteId);
+    if (!Number.isFinite(idOrcamento) || idOrcamento <= 0) return;
+
+    // ATHC-02: Buscar vinculo idorcamento -> idvenda em relacao_orcamento_venda
+    const relacao = await this.athosService.buscarRelacaoOrcamentoVenda(idOrcamento);
+
+    // TRG-02: Idempotencia - persistir saleExternalId apenas se ainda nao definido
+    if (relacao.idvenda != null && !quote.saleExternalId) {
+      try {
+        await this.prisma.quote.update({
+          where: { id: quote.id },
+          data: { saleExternalId: this.toBigInt(relacao.idvenda) },
+        });
+        this.logger.log(
+          `conciliarViaCaixaAthos: saleExternalId=${relacao.idvenda} persistido para orcamento ${quote.id}`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `conciliarViaCaixaAthos: falha ao persistir saleExternalId para ${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // TRG-01/TRG-03: Acionar mesma rotina de conciliacao de PIX/cartao para status pendentes
+    if (["PENDENTE", "ENVIADO"].includes(quote.status)) {
+      await this.checkPaymentStatus(quote.id);
+    }
   }
 
   async create(payload: CreateQuoteDto) {
@@ -653,14 +725,45 @@ export class QuotesService {
       );
     }
 
-    // Bloqueia avanço para EM_PRODUCAO se não aprovado e cliente não for associado
+// APR-01/02: Regras de entrada em EM_PRODUCAO
+    // - Cliente associado Athos (ou com fluxo de aprovacao por link): exige approved=true
+    // - Cliente nao associado: exige pagamento confirmado (approved=true ou saleExternalId)
     if (newStatus === "EM_PRODUCAO") {
       const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false);
-      if (!quote.approved && !isAssociated) {
-        throw new BadRequestException("Orçamento precisa ser aprovado pelo cliente antes de entrar em produção");
+      const hasSaleId = quote.saleExternalId != null;
+      const hasApproval = Boolean(quote.approved);
+
+      let requiresLinkApproval =
+        isAssociated || Boolean((quote as any).approvalRequestedAt || quote.approvalToken || quote.approvalExpiresAt);
+
+      // Fallback: se o cadastro local nao vier marcado como associado, consulta o Athos por idcliente
+      if (!requiresLinkApproval && quote.externalQuoteId) {
+        try {
+          const athosData = await this.athosService.buscarOrcamentoPorNumero(String(Number(quote.externalQuoteId)));
+          const mapped = (athosData as any)?.mapped ?? null;
+          requiresLinkApproval = Boolean(mapped?.idcliente ?? mapped?.clienteid);
+        } catch (err) {
+          this.logger.debug(
+            "Falha ao verificar associacao Athos para bloqueio de producao no orcamento " +
+              quote.id +
+              ": " +
+              (err instanceof Error ? err.message : String(err)),
+          );
+        }
+      }
+
+      if (requiresLinkApproval && !hasApproval) {
+        throw new BadRequestException(
+          "Cliente associado ao Athos aguardando aprovacao via link. A aprovacao do cliente e obrigatoria antes de entrar em producao.",
+        );
+      }
+
+      if (!requiresLinkApproval && !hasApproval && !hasSaleId) {
+        throw new BadRequestException(
+          "Orcamento aguardando confirmacao de pagamento. Confirme o pagamento (PIX, pix parcial, cartao ou caixa) antes de entrar em producao.",
+        );
       }
     }
-
     const updated = await this.prisma.quote.update({
       where: { id: quote.id },
       data: {
@@ -1234,6 +1337,8 @@ export class QuotesService {
       nfseLink: quote.nfseLink ?? null,
       nfseEmitidaEm: quote.nfseEmitidaEm ? quote.nfseEmitidaEm.toISOString() : null,
       paymentConfirmedAt: quote.paymentConfirmedAt ? quote.paymentConfirmedAt.toISOString() : null,
+      saleExternalId: quote.saleExternalId ? Number(quote.saleExternalId) : null,
+      paidInCashier: Boolean(quote.saleExternalId),
       approved: Boolean(quote.approved ?? false),
       approvedAt: quote.approvedAt ? quote.approvedAt.toISOString() : null,
       isAssociated: Boolean((quote.customer as any).isAssociated ?? false),
