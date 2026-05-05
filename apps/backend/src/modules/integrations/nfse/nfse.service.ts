@@ -500,12 +500,12 @@ export class NfseService {
     }
 
     const dataEmissao    = new Date().toISOString().slice(0, 10);
-    const valorServicos  = Number(quote.total);
+    const valorServicosBruto  = Number(quote.total);
 
     // Calcular desconto (NFSD-01..04)
     let descontoIncondicionado = 0;
     if (input?.descontoAtivo === true) {
-      const base = valorServicos;
+      const base = valorServicosBruto;
 
       if (input.descontoPorcentagem != null) {
         if (input.descontoPorcentagem < 0 || input.descontoPorcentagem > 100) {
@@ -519,12 +519,14 @@ export class NfseService {
         descontoIncondicionado = Number(input.descontoValor.toFixed(2));
       }
 
-      if (descontoIncondicionado > valorServicos) {
+      if (descontoIncondicionado > valorServicosBruto) {
         throw new BadRequestException(
-          `descontoIncondicionado (${descontoIncondicionado.toFixed(2)}) nao pode ser maior que valorServicos (${valorServicos.toFixed(2)}).`,
+          `descontoIncondicionado (${descontoIncondicionado.toFixed(2)}) nao pode ser maior que valorServicos (${valorServicosBruto.toFixed(2)}).`,
         );
       }
     }
+
+    const valorServicos = Number((valorServicosBruto - descontoIncondicionado).toFixed(2));
 
     const itensDesc = (quote.items ?? [])
       .map((item: any, i: number) => `${i + 1}. ${item.shortDescription || item.description} (${Number(item.quantity)}x) - R$ ${Number(item.finalPrice).toFixed(2)}`)

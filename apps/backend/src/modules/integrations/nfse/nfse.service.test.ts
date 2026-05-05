@@ -178,4 +178,29 @@ describe("NfseService - resolucao de tomador por clienteAthosId", () => {
     expect(xmlSent).not.toMatch(/<CNPJ>12345678901<\/CNPJ>/);
     expect(result).toHaveProperty("numero");
   });
+
+
+  it("cenario 7: desconto incondicionado reduz ValorServicos no XML", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValueOnce(CLIENTE_PJ) });
+    const service = await buildService(mocks);
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(
+        `<GerarNfseResposta><Nfse><InfNfse><NumeroNfse>1003</NumeroNfse><CodigoVerificacao>XYZ</CodigoVerificacao></InfNfse></Nfse></GerarNfseResposta>`,
+      );
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    await service.emitir("q1", {
+      clienteAthosId: 100,
+      servicoCodigo: "24.01",
+      descontoAtivo: true,
+      descontoValor: 10,
+    });
+
+    const xmlSent: string = (soapSpy.mock.calls[0] as string[])[1];
+    expect(xmlSent).toContain("<ValorServicos>90.00</ValorServicos>");
+    expect(xmlSent).toContain("<DescontoIncondicionado>10.00</DescontoIncondicionado>");
+  });
+
 });
