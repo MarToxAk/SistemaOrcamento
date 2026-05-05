@@ -1,17 +1,17 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-04
-Current phase: 21-ui-nfse-observabilidade-e-testes
-Milestone: v1.8 (in progress)
+Current phase: 18-correcoes-nfse-rps-tomador
+Milestone: v1.7 (gap-closure patch applied)
 
 ---
 
 ## Current Position
 
-Phase: 20-resolucao-de-tomador-por-cliente-selecionado
-Plan: 20-01-PLAN.md
+Phase: 18-correcoes-nfse-rps-tomador
+Plan: 18-02-PLAN.md
 Status: complete
-Last activity: 2026-05-04 - Phase 20 executed: clienteAthosId + resolucao tomador + 5 testes passando
+Last activity: 2026-05-04 - Phase 18 plan 02 executed: log RPS clarificado (AUXILIARRPS sem +1) + fallback buscarTomador por nome em 2 caminhos
 
 ## Project Status
 
@@ -78,6 +78,8 @@ Current focus: v1.8 Phase 19 - API de busca de cliente Athos
 | 2026-05-04 | Corrigir quote?.totais?.valor para quote?.body?.totais?.valor em 6 pontos do modal NFS-e | totais existe somente dentro de body no tipo QuoteDetail; acesso direto retornava undefined |
 | 2026-05-04 | Usar Record<string, string | number | boolean> no body do POST NFS-e | descontoAtivo precisava ser boolean true para satisfazer igualdade estrita do backend |
 | 2026-05-04 | Iniciar v1.8 focado em busca de cliente Athos no fluxo NFS-e | Reduz erro de tomador e evita preenchimento manual inconsistente |
+| 2026-05-04 | Log RPS deixar explicito que AUXILIARRPS retorna proximo diretamente (sem +1) | Clareza operacional no log de emissao NFS-e |
+| 2026-05-04 | Fallback buscarClientes por nome em buscarTomador() para NotFoundException e idcliente=0 | Reduz emissoes com tomador em branco quando orcamento nao encontrado no Athos |
 
 ## Notes
 
