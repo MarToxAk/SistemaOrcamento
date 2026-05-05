@@ -560,10 +560,11 @@ export class NfseService {
         tomadorCpf = info.documento.replace(/\D/g, "");
       }
       this.logger.log(
-        `[Tomador] resolvido via clienteAthosId=${input.clienteAthosId} tipo=${info.type} doc=${info.documento ?? "null"}`,
+        `[Tomador-A] clienteAthosId=${input.clienteAthosId} tipo=${info.type} nome="${info.name ?? "?"}" doc=${info.documento ? info.documento.slice(0, 4) + "****" : "null"}`,
       );
     } else if (!tomadorCnpj && !tomadorCpf) {
       // Caminho C — nenhum clienteAthosId nem documento manual: lookup via orçamento
+      this.logger.log(`[Tomador-C] quoteId=${quoteId} — lookup completo de tomador via orcamento (sem clienteAthosId e sem documento manual)`);
       const tomador = await this.buscarTomador(quote);
       tomadorCnpj    = tomador.cnpj;
       tomadorCpf     = tomador.cpf;
@@ -571,6 +572,7 @@ export class NfseService {
       tomadorEndereco = tomadorEndereco ?? tomador.endereco;
     } else {
       // Caminho B — documento manual informado: buscar apenas endereço se ausente
+      this.logger.log(`[Tomador-B] quoteId=${quoteId} — documento manual informado; buscando endereco via Athos/orcamento se ausente`);
       tomadorNome = tomadorNome ?? quote.customer?.fullName ?? null;
       if (!tomadorEndereco) {
         const tomador = await this.buscarTomador(quote);

@@ -828,6 +828,9 @@ export class AthosService {
         };
       });
 
+      this.logger.log(
+        `[Athos-busca] nome="${nomeFilter ?? ""}" doc="${documentoFilter ?? ""}" idcliente=${idclienteFilter ?? ""} → ${total} resultado(s) page=${page} take=${take}`,
+      );
       return { total, page, take, items };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;

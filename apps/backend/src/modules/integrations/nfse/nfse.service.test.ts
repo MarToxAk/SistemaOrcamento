@@ -156,4 +156,26 @@ describe("NfseService - resolucao de tomador por clienteAthosId", () => {
     await expect(service.emitir("q1", {})).rejects.toThrow(BadRequestException);
     expect(mocks.mockAthos.buscarClientePorId).not.toHaveBeenCalled();
   });
+
+  it("cenario 6: clienteAthosId PF - CPF do tomador presente no XML enviado ao SOAP (QUAL-02)", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValueOnce(CLIENTE_PF) });
+    const service = await buildService(mocks);
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(
+        `<GerarNfseResposta><Nfse><InfNfse><NumeroNfse>1002</NumeroNfse><CodigoVerificacao>XYZ</CodigoVerificacao></InfNfse></Nfse></GerarNfseResposta>`,
+      );
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    const result = await service.emitir("q1", { clienteAthosId: 200, servicoCodigo: "24.01" });
+
+    expect(soapSpy).toHaveBeenCalledTimes(1);
+    const xmlSent: string = (soapSpy.mock.calls[0] as string[])[1];  // arg[1] = dados (arg[0] = cabecalho)
+    // CPF deve estar presente no XML (sem pontuacao)
+    expect(xmlSent).toMatch(/12345678901/);
+    // CNPJ nao deve aparecer com este numero de CPF
+    expect(xmlSent).not.toMatch(/<CNPJ>12345678901<\/CNPJ>/);
+    expect(result).toHaveProperty("numero");
+  });
 });
