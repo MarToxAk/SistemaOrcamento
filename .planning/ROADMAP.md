@@ -1,4 +1,4 @@
-# Roadmap - Sistema de Orcamento BomCusto
+﻿# Roadmap - Sistema de Orcamento BomCusto
 
 Version: 1.9
 Date: 2026-05-05
@@ -12,19 +12,11 @@ Date: 2026-05-05
 - [x] v1.2 Mensagens e UX do Cliente - Phases 7-8 (shipped 2026-05-03)
 - [x] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (shipped 2026-05-03)
 - [x] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14 (shipped 2026-05-04)
-<<<<<<< HEAD
-- [x] v1.5 Correcao NFS-e — Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
-- [x] v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) — [details](.planning/milestones/v1.6-ROADMAP.md)
-- [x] v1.7 Correcoes NFS-e � Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) � [details](.planning/milestones/v1.7-ROADMAP.md)
-- [x] v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos - Phase 19 (shipped 2026-05-05)
-- [ ] v1.9 Relatorios e Exportacao CSV - Phase 20 (planning)
-=======
 - [x] v1.5 Correcao NFS-e â€” Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
 - [x] v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) â€” [details](.planning/milestones/v1.6-ROADMAP.md)
 - [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
 - [x] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (shipped 2026-05-05) - [details](.planning/milestones/v1.8-ROADMAP.md)
 - [ ] v1.9 Webhook EFI PIX e Robustez de URLs - Phase 22 (in progress)
->>>>>>> origin/main
 
 ---
 
@@ -121,52 +113,25 @@ Success criteria:
 4. Validacoes impedem valores invalidos e retornam erro explicito para o usuario.
 5. XML final preenche desconto coerente e mantem 0.00 quando flag de desconto estiver desligada.
 
-## v1.5 Correcao NFS-e — Encoding + UI de Desconto (Phases 15-16) - SHIPPED 2026-05-04
+## v1.5 Correcao NFS-e â€” Encoding + UI de Desconto (Phases 15-16) - SHIPPED 2026-05-04
 
 Full details: .planning/milestones/v1.5-ROADMAP.md
 
 - [x] Phase 15: Corrigir encoding NFS-e e proxy API (NFSFIX-01, NFSFIX-02)
 - [x] Phase 16: UI de desconto no modal de emissao NFS-e (NFSFIX-03)
 
-## v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final (Phase 17) - SHIPPED 2026-05-04
+## v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final (Phase 17) - SHIPPED 2026-05-04
 
 Full details: .planning/milestones/v1.6-ROADMAP.md
 
 - [x] Phase 17: Correcao do calculo de desconto no modal NFS-e (NFSC-01..05)
 
-## v1.7 Correcoes NFS-e � Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
+## v1.7 Correcoes NFS-e — Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
 
 Full details: .planning/milestones/v1.7-ROADMAP.md
 
 - [x] Phase 18: Correcoes NFS-e RPS e Tomador (RPS-01, RPS-02, TOM-01, TOM-02, TOM-03, REG-01, REG-02)
 
-<<<<<<< HEAD
-
-## v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos (Phase 19) - SHIPPED 2026-05-05
-
-Full details: .planning/milestones/v1.8-ROADMAP.md
-
-- [x] Phase 19: Aprovacao associada ao pagamento, conciliacao caixa Athos e correcao de textos (APR-01..03, ATHC-01..03, TRG-01..03, TXT-01..02)
-
-## v1.9 Relatorios e Exportacao CSV (Phase 20) - PLANNING
-
-**Plans:** 0 plans
-
-- [ ] Phase 20: Relatorios e exportacao CSV de orcamentos (a definir no discuss/plan)
-
-Plans:
-- [ ] 20-01-PLAN.md - [To be planned]
-
-### Phase Details
-
-**Phase 20: Relatorios e exportacao CSV de orcamentos**
-Goal: Entregar visoes operacionais e exportacao CSV para acompanhamento comercial e financeiro.
-Requirements: [To be defined]
-Success criteria:
-1. Usuario consegue gerar exportacao CSV com filtros basicos
-2. Exportacao contem campos essenciais do orcamento, cliente, status e valores
-3. Fluxo nao degrada performance das telas principais
-=======
 ## v1.8 Busca de Cliente Athos para NFS-e (Phases 19-21) - SHIPPED 2026-05-05
 
 Full details: .planning/milestones/v1.8-ROADMAP.md
@@ -194,7 +159,6 @@ Plans:
 2. Com NFSE_SOAP_URL= vazio, NfseService usa endpoint padrão sem erro ENOENT.
 3. Spec de efi.service inclui teste cobrindo a URL com /pix.
 4. Build backend sem erros após as correções.
->>>>>>> origin/main
 
 ## Backlog (Future)
 
@@ -208,13 +172,9 @@ Plans:
 - Historico de mensagens enviados ao cliente
 
 ---
-<<<<<<< HEAD
-Roadmap v1.9 - 2026-05-05
-=======
 Roadmap v1.8 - 2026-05-04
 
 
 
 
 
->>>>>>> origin/main

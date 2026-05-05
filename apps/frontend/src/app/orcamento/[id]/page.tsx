@@ -542,7 +542,7 @@ export default function OrcamentoDetailPage() {
             </div>
           </div>
           {/* Integration status badges */}
-          {(quote?.latestPdfUrl || quote?.nfseNumero || quote?.paymentConfirmedAt || quote?.saleExternalId || quote?.approved) && (
+          {(quote?.latestPdfUrl || quote?.nfseNumero || quote?.paymentConfirmedAt || quote?.approved) && (
             <div className="d-flex flex-wrap gap-2 px-3 py-2" style={{background: "rgba(255,255,255,0.7)"}}>
               {quote?.latestPdfUrl && (
                 <span className="badge bg-secondary">
