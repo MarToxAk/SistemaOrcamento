@@ -184,11 +184,7 @@ describe("AthosService - verificarPagamentoPorOrcamento", () => {
   });
 });
 
-<<<<<<< HEAD
-describe("AthosService - buscarRelacaoOrcamentoVenda", () => {
-=======
 describe("AthosService - buscarClientes", () => {
->>>>>>> origin/main
   let service: AthosService;
 
   beforeAll(() => {
@@ -209,39 +205,6 @@ describe("AthosService - buscarClientes", () => {
 
   afterEach(() => jest.clearAllMocks());
 
-<<<<<<< HEAD
-  it("deve retornar idvenda quando row encontrado em relacao_orcamento_venda", async () => {
-    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
-    const client = { query: jest.fn(), release: jest.fn() };
-    pool.connect = jest.fn().mockResolvedValue(client);
-    client.query.mockResolvedValue({ rows: [{ idvenda: 42 }] });
-
-    const result = await service.buscarRelacaoOrcamentoVenda(5);
-    expect(result).toEqual({ idvenda: 42 });
-    expect(client.release).toHaveBeenCalled();
-  });
-
-  it("deve retornar idvenda=null quando nenhuma row encontrada", async () => {
-    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
-    const client = { query: jest.fn(), release: jest.fn() };
-    pool.connect = jest.fn().mockResolvedValue(client);
-    client.query.mockResolvedValue({ rows: [] });
-
-    const result = await service.buscarRelacaoOrcamentoVenda(99);
-    expect(result).toEqual({ idvenda: null });
-    expect(client.release).toHaveBeenCalled();
-  });
-
-  it("deve retornar idvenda=null sem lancar excecao quando pool.connect falha", async () => {
-    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
-    pool.connect = jest.fn().mockRejectedValue(new Error("connection refused"));
-
-    const result = await service.buscarRelacaoOrcamentoVenda(1);
-    expect(result).toEqual({ idvenda: null });
-  });
-});
-
-=======
   it("deve retornar cliente PF ao buscar por documento (CPF)", async () => {
     const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
     const client = { query: jest.fn(), release: jest.fn() };
@@ -344,4 +307,3 @@ describe("AthosService - buscarClientes", () => {
     expect(client.release).toHaveBeenCalled();
   });
 });
->>>>>>> origin/main
