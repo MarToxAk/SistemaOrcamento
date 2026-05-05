@@ -1,4 +1,4 @@
-services:
+﻿services:
   ts-webserver2:
     image: tailscale/tailscale:latest
     container_name: bomcusto-ts-webserver2
@@ -17,7 +17,7 @@ services:
       - NET_ADMIN
       - SYS_MODULE
     networks:
-      - app_net # Adicionado à rede para que outros o vejam
+      - app_net # Adicionado Ã  rede para que outros o vejam
     ports:
       - "4001:4000"
 
@@ -66,6 +66,7 @@ services:
       ATHOS_PG_USER: ${ATHOS_PG_USER}
       ATHOS_PG_PASS: ${ATHOS_PG_PASS}
       ATHOS_PG_PORT: ${ATHOS_PG_PORT}
+      ATHOS_API_TOKEN: ${ATHOS_API_TOKEN}
       PDV_DB_URL: ${PDV_DB_URL}
       PDV_DB_SCHEMA: ${PDV_DB_SCHEMA}
       PDV_DB_READONLY_USER: ${PDV_DB_READONLY_USER}
@@ -89,6 +90,7 @@ services:
       EFI_KEY_PEM: ${EFI_KEY_PEM}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       EFI_WEBHOOK_SECRET: ${EFI_WEBHOOK_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS}
       NFSE_TOKEN: ${NFSE_TOKEN}
       NFSE_CNPJ_PRESTADOR: ${NFSE_CNPJ_PRESTADOR}
       NFSE_INSCRICAO_MUNICIPAL: ${NFSE_INSCRICAO_MUNICIPAL}
@@ -117,3 +119,4 @@ volumes:
 
 networks:
   app_net:
+
