@@ -8,25 +8,33 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Last Shipped Milestone: v1.7 - Correcoes NFS-e: Tomador e Numeracao RPS
+## Current State
 
-Shipped em 2026-05-04.
+Milestone shipped: v1.8 - Busca de Cliente Athos para NFS-e (2026-05-05).
+
+Estado atual validado:
+- Busca de cliente Athos por nome/documento/idcliente entregue no backend.
+- Emissao de NFS-e com clienteAthosId explicito e resolucao prioritaria de tomador.
+- Modal frontend com busca/selecao de cliente e envio de clienteAthosId no payload.
+- Observabilidade com logs Tomador-A/B/C e Athos-busca.
+- Testes e builds de frontend/backend executados com sucesso no fechamento.
+
+## Last Shipped Milestone: v1.8 - Busca de Cliente Athos para NFS-e
+
+Shipped em 2026-05-05.
 
 Entregas principais:
-- ProximoRPS sem +1 (API iiBrasil ja retorna o proximo numero)
-- buscarTomador() reescrito com NotFoundException catch, clienteId > 0, logs diagnosticos
-- Log [Athos] identifierColumn em athos.service.ts
+- API interna de busca de clientes Athos com paginacao e validacoes.
+- Resolucao deterministica de tomador por cliente selecionado na emissao NFS-e.
+- UX do modal NFS-e com busca/selecao e preenchimento assistido.
+- Logs estruturados e cobertura de testes PF/PJ/falhas de resolucao.
 
-## Current Milestone: v1.8 - Busca de Cliente Athos para NFS-e
+## Next Milestone Goals
 
-Goal: Implementar busca e selecao de cliente Athos na emissao de NFS-e, com preenchimento consistente de tomador (PF/PJ/endereco) e rastreabilidade no backend.
-
-Target features:
-- Busca de cliente Athos por nome, CPF/CNPJ e idcliente para uso no fluxo de NFS-e
-- Resolucao de tomador com joins em cliente, cliente_fisico, cliente_juridico e cliente_endereco
-- Endpoint interno para pesquisa de clientes do Athos com protecao existente (x-internal-api-key)
-- Selecao manual no frontend de NFS-e e envio de referencia do cliente Athos na emissao
-- Logs e testes para casos de cliente nao encontrado, ambiguo e sem endereco valido
+Objetivo de curto prazo (v1.9 em definicao):
+- Fechar pendencias de verificacao/UAT diagnosticadas (especialmente trilhas com status diagnosed).
+- Consolidar fechamento de milestone com auditoria formal recorrente antes de ship.
+- Evoluir robustez operacional de NFS-e (validacoes de dados de tomador e monitoramento de erros de emissao).
 
 ## Requirements
 
@@ -61,23 +69,22 @@ Target features:
 - checkmark Encoding UTF-8 correto nas strings de servico NFS-e -- v1.5
 - checkmark Proxy Next.js NFS-e repassa body do POST ao backend -- v1.5
 - checkmark UI de desconto bidirecional no modal de emissao NFS-e -- v1.5
-- checkmark Sequenciamento de startup com banco pronto antes do backend -- v1.3
-- checkmark Observabilidade de falhas de migration nos logs -- v1.3
-- checkmark Runbook de update reproduzivel para VPS -- v1.3
-- checkmark Campo "valor total" no modal NFS-e pre-preenchido com total real do orcamento -- v1.6
-- checkmark Calculo de desconto bidirecional (%, R$, valor total) funcionando com base correta -- v1.6
+- checkmark Campo valor total no modal NFS-e pre-preenchido com total real do orcamento -- v1.6
+- checkmark Calculo de desconto bidirecional funcionando com base correta -- v1.6
 - checkmark Valor pos-desconto enviado corretamente ao backend e ao SOAP da NFS-e -- v1.6
 - checkmark ProximoRPS sem +1 -- API iiBrasil retorna proximo numero diretamente -- v1.7
-- checkmark buscarTomador() com NotFoundException catch e clienteId > 0 check -- v1.7
+- checkmark buscarTomador() com NotFoundException catch e clienteId > 0 -- v1.7
 - checkmark Logs [Tomador] diagnosticos e [Athos] identifierColumn -- v1.7
+- checkmark Busca de cliente Athos para NFS-e por nome, CPF/CNPJ e idcliente -- v1.8
+- checkmark Selecao explicita de cliente Athos no fluxo de emissao NFS-e -- v1.8
+- checkmark Resolucao deterministica do tomador com dados PF/PJ/endereco -- v1.8
+- checkmark Validacoes e mensagens de erro claras para cliente inexistente ou dados incompletos -- v1.8
+- checkmark Testes automatizados cobrindo mapeamento de cliente e emissao com cliente selecionado -- v1.8
 
-### Active (v1.8)
+### Active
 
-- [ ] Busca de cliente Athos para NFS-e por nome, CPF/CNPJ e idcliente
-- [ ] Selecao explicita de cliente Athos no fluxo de emissao NFS-e
-- [ ] Resolucao deterministica do tomador com dados PF/PJ/endereco
-- [ ] Validacoes e mensagens de erro claras para cliente inexistente ou dados incompletos
-- [ ] Testes automatizados cobrindo mapeamento de cliente e emissao com cliente selecionado
+- [ ] Definir requisitos funcionais do proximo milestone (v1.9)
+- [ ] Consolidar politica de auditoria de milestone antes de ship
 
 ### Out of Scope
 
@@ -94,12 +101,8 @@ Target features:
 - Monorepo com NestJS + Prisma + PostgreSQL + Next.js
 - Deploy em VPS via Docker Compose com Portainer webhook
 - Banco principal remoto; ambiente local com compose opcional
-- Historico: v1.0 MVP, v1.1 Aprovacao Athos, v1.2 Mensagens/UX, v1.3 Migration Stability -- todos arquivados
-- Webhook EFI ja existe em /api/integrations/efi/webhook/payment e /pix, hoje com guard HMAC
-- Endpoint /api/quotes/:id/payment-status existe, mas AthosService.verificarPagamentoPorOrcamento ainda retorna stub (paid=false)
-- Emissao NFS-e hoje envia DescontoIncondicionado/DescontoCondicionado fixos em 0.00 no XML
-- Base Athos para cliente/tomador inclui tabelas cliente, cliente_fisico, cliente_juridico e cliente_endereco
-- A base Athos permanece read-only, com usuario de leitura (sem escrita de sincronizacao)
+- Milestones arquivados: v1.0 a v1.8 em .planning/milestones/
+- Integracao Athos permanece read-only
 
 ## Constraints
 
@@ -118,29 +121,13 @@ Target features:
 | wait-for-db.js antes de migration | Elimina race condition postgres/backend | checkmark Validado -- v1.3 |
 | Runbook manual para VPS | Sem infra CI capaz de executar docker compose | checkmark Validado -- v1.3 |
 | Monorepo npm workspaces | Compartilhamento de tipos sem publicacao | checkmark Validado -- historico |
-| Remover obrigatoriedade de assinatura no webhook EFI | Necessidade operacional de receber notificacao sem bloqueio por segredo | checkmark Validado â€” v1.4 |
-| Conciliar pagamento pelo Athos ao abrir/enviar orcamento | Reduz divergencia entre estado do caixa e estado do orcamento | checkmark Validado â€” v1.4 |
-| Desconto NFS-e controlado por flag e tipo | Dar flexibilidade fiscal sem alterar emissao padrao | checkmark Validado â€” v1.4 |
-| Corrigir path quote?.totais?.valor para quote?.body?.totais?.valor | totais existe somente dentro de body no tipo QuoteDetail | checkmark Validado â€” v1.6 |
-| Usar Record<string, string \| number \| boolean> no POST NFS-e | descontoAtivo precisa ser boolean true para igualdade estrita no backend | checkmark Validado â€” v1.6 |
-| Buscar cliente de NFS-e direto no Athos (sem replicacao local) | Evita drift de cadastro e aproveita fonte oficial ja integrada em modo leitura | — Em execucao (v1.8) |
+| Buscar cliente de NFS-e direto no Athos (sem replicacao local) | Evita drift de cadastro e aproveita fonte oficial em modo leitura | checkmark Validado -- v1.8 |
+| clienteAthosId com prioridade na resolucao do tomador | Reduz erro manual e aumenta previsibilidade da emissao | checkmark Validado -- v1.8 |
+| Logs estruturados Tomador-A/B/C e Athos-busca | Aumenta rastreabilidade operacional de emissao | checkmark Validado -- v1.8 |
 
 ## Evolution
 
-This document evolves at phase transitions and milestone boundaries.
-
-**After each phase transition** (via /gsd-transition):
-1. Requirements invalidated? -> Move to Out of Scope with reason
-2. Requirements validated? -> Move to Validated with phase reference
-3. New requirements emerged? -> Add to Active
-4. Decisions to log? -> Add to Key Decisions
-5. "What This Is" still accurate? -> Update if drifted
-
-**After each milestone** (via /gsd-complete-milestone):
-1. Full review of all sections
-2. Core Value check - still the right priority?
-3. Audit Out of Scope - reasons still valid?
-4. Update Context with current state
+Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-05-04 after v1.7 milestone - v1.8 started*
+*Last updated: 2026-05-05 after v1.8 milestone shipped*

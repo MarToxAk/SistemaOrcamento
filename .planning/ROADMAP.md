@@ -15,7 +15,7 @@ Date: 2026-05-04
 - [x] v1.5 Correcao NFS-e â€” Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
 - [x] v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) â€” [details](.planning/milestones/v1.6-ROADMAP.md)
 - [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
-- [ ] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (in progress)
+- [x] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (shipped 2026-05-05) - [details](.planning/milestones/v1.8-ROADMAP.md)
 
 ---
 
@@ -131,46 +131,13 @@ Full details: .planning/milestones/v1.7-ROADMAP.md
 
 - [x] Phase 18: Correcoes NFS-e RPS e Tomador (RPS-01, RPS-02, TOM-01, TOM-02, TOM-03, REG-01, REG-02)
 
-## v1.8 Busca de Cliente Athos para NFS-e (Phases 19-21) - IN PROGRESS
+## v1.8 Busca de Cliente Athos para NFS-e (Phases 19-21) - SHIPPED 2026-05-05
 
-Scope: implementar busca de cliente no Athos para uso na emissao de NFS-e, com selecao no frontend e resolucao consistente de tomador no backend.
+Full details: .planning/milestones/v1.8-ROADMAP.md
 
 - [x] Phase 19: API de busca de cliente Athos (ATHCL-01, ATHCL-02, ATHCL-03)
 - [x] Phase 20: Resolucao de tomador por cliente selecionado (TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04)
 - [x] Phase 21: UI NFS-e, observabilidade e testes (NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03)
-
-### Phase Details
-
-Phase 19: API de busca de cliente Athos
-Goal: disponibilizar endpoint interno para pesquisa de cliente no Athos com filtros por nome/documento/id.
-Requirements: ATHCL-01, ATHCL-02, ATHCL-03
-Success criteria:
-1. Endpoint retorna lista paginada com idcliente, nome exibicao, documento e tipo de pessoa.
-2. Filtros por nome, CPF/CNPJ e idcliente funcionam de forma combinada e previsivel.
-3. Consultas invalidas ou muito amplas retornam erro de validacao claro.
-
-Phase 20: Resolucao de tomador por cliente selecionado
-**Plans:** 1 plano
-- [x] 20-01-PLAN.md — clienteAthosId em EmitirNfseInput + resolucao prioritaria + validacoes TOMAD-04
-Goal: usar cliente Athos explicitamente selecionado para montar tomador completo no XML NFS-e.
-Requirements: TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04
-Success criteria:
-1. Emissao aceita clienteAthosId no payload sem quebrar compatibilidade com fluxo atual.
-2. Backend resolve CPF/CNPJ e razao/nome a partir de cliente_fisico/cliente_juridico com fallback definido.
-3. Endereco e selecionado por regra deterministica e validado antes da emissao.
-4. Falta de dados obrigatorios bloqueia emissao com mensagem acionavel.
-
-Phase 21: UI NFS-e, observabilidade e testes
-**Plans:** 2 planos
-- [x] 21-01-PLAN.md — Frontend: rota proxy Athos + busca/selecao de cliente no modal NFS-e (NFUI-01, NFUI-02, NFUI-03, QUAL-03)
-- [x] 21-02-PLAN.md — Backend: logs estruturados + teste unitario PF (QUAL-01, QUAL-02)
-Goal: permitir selecao de cliente na interface e garantir confiabilidade operacional da feature.
-Requirements: NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03
-Success criteria:
-1. Modal/pagina de emissao permite pesquisar cliente e confirmar selecao.
-2. Preview do tomador mostra dados usados antes do envio.
-3. Logs estruturados permitem rastrear cliente selecionado, fallback e erros de dados.
-4. Testes automatizados cobrem cenarios PF/PJ e falhas principais.
 
 ## Backlog (Future)
 
@@ -185,6 +152,7 @@ Success criteria:
 
 ---
 Roadmap v1.8 - 2026-05-04
+
 
 
 

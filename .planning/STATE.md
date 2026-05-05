@@ -1,17 +1,17 @@
 ﻿# STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-04
-Current phase: 21-ui-nfse-observabilidade-e-testes
-Milestone: v1.8 (phase 21 executed)
+Last updated: 2026-05-05
+Current phase: milestone-v1.8-complete
+Milestone: v1.8 (shipped)
 
 ---
 
 ## Current Position
 
-Phase: 21-ui-nfse-observabilidade-e-testes
-Plan: 21-02-PLAN.md
+Phase: milestone-v1.8-complete
+Plan: n/a
 Status: complete
-Last activity: 2026-05-05 - Phase 21 revalidated and marked complete: frontend build + backend tests/build passing and summaries 21-01/21-02 confirmed
+Last activity: 2026-05-05 - Milestone v1.8 archived (ROADMAP/REQUIREMENTS/PROJECT updated, summaries conferidos, tag criada).
 
 ## Project Status
 
@@ -41,53 +41,31 @@ Last activity: 2026-05-05 - Phase 21 revalidated and marked complete: frontend b
 
 ## Milestones Archived
 
-- v1.0 â€” phases 1-5 (.planning/milestones/v1.0-ROADMAP.md)
-- v1.1 â€” phase 6 (.planning/milestones/v1.1-ROADMAP.md)
-- v1.2 â€” phases 7-8 (.planning/milestones/v1.2-ROADMAP.md)
-- v1.3 â€” phases 9-10 (.planning/milestones/v1.3-ROADMAP.md)
-- v1.4 â€” phases 11-14 (.planning/milestones/v1.4-ROADMAP.md)
-- v1.5 â€” phases 15-16 (.planning/milestones/v1.5-ROADMAP.md)
-- v1.6 â€” phase 17 (.planning/milestones/v1.6-ROADMAP.md)
-- v1.7 â€” phase 18 (.planning/milestones/v1.7-ROADMAP.md)
+- v1.0 — phases 1-5 (.planning/milestones/v1.0-ROADMAP.md)
+- v1.1 — phase 6 (.planning/milestones/v1.1-ROADMAP.md)
+- v1.2 — phases 7-8 (.planning/milestones/v1.2-ROADMAP.md)
+- v1.3 — phases 9-10 (.planning/milestones/v1.3-ROADMAP.md)
+- v1.4 — phases 11-14 (.planning/milestones/v1.4-ROADMAP.md)
+- v1.5 — phases 15-16 (.planning/milestones/v1.5-ROADMAP.md)
+- v1.6 — phase 17 (.planning/milestones/v1.6-ROADMAP.md)
+- v1.7 — phase 18 (.planning/milestones/v1.7-ROADMAP.md)
+- v1.8 — phases 19-21 (.planning/milestones/v1.8-ROADMAP.md)
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-04)
+See: .planning/PROJECT.md (updated 2026-05-05)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.8 Phase 21 - UI NFS-e, observabilidade e testes
+Current focus: definir escopo e requisitos do proximo milestone
 
 ## Active Context
 
 - Branch atual: planning/v1.8-athos-nfse-cliente-busca
 - PR ativo: none
 - Ultima versao tagged: v1.7
-- Milestones archived: v1.0 a v1.7
-- Escopo v1.8: busca de cliente Athos para emissao de NFS-e com resolucao de tomador e selecao manual no frontend
-
-## Decisions Log
-
-| Date | Decision | Reason |
-|------|----------|--------|
-| 2026-05-03 | Iniciar v1.3 focado em migration reliability | Erro de migration no update via compose bloqueia deploy |
-| 2026-05-03 | Nao usar pesquisa externa para v1.3 | Escopo interno e tecnico conhecido |
-| 2026-05-04 | Nao usar n8n para notificacao de pagamento | Fluxo deve ficar na aplicacao backend principal |
-| 2026-05-04 | Checar pagamento no Athos ao abrir e ao enviar orcamento | Sincronizar status com estado real do caixa |
-| 2026-05-04 | Incluir desconto opcional na emissao de NFS-e | Necessidade fiscal de deducao por percentual/valor sobre total pago |
-| 2026-05-04 | v1.5 foca em dois bugs de NFS-e: mojibake no backend + UI de desconto ausente no frontend | Emissao de NFS-e com valor correto nao era possivel sem esses fixes |
-| 2026-05-04 | v1.6 foca no path errado de quote?.totais?.valor no frontend | Base de calculo era sempre 0, quebrando todos os calculos de desconto no modal NFS-e |
-| 2026-05-04 | Corrigir quote?.totais?.valor para quote?.body?.totais?.valor em 6 pontos do modal NFS-e | totais existe somente dentro de body no tipo QuoteDetail; acesso direto retornava undefined |
-| 2026-05-04 | Usar Record<string, string | number | boolean> no body do POST NFS-e | descontoAtivo precisava ser boolean true para satisfazer igualdade estrita do backend |
-| 2026-05-04 | Iniciar v1.8 focado em busca de cliente Athos no fluxo NFS-e | Reduz erro de tomador e evita preenchimento manual inconsistente |
-| 2026-05-04 | Log RPS deixar explicito que AUXILIARRPS retorna proximo diretamente (sem +1) | Clareza operacional no log de emissao NFS-e |
-| 2026-05-04 | Fallback buscarClientes por nome em buscarTomador() para NotFoundException e idcliente=0 | Reduz emissoes com tomador em branco quando orcamento nao encontrado no Athos |
+- Milestones archived: v1.0 a v1.8
+- Proximo passo recomendado: /gsd-new-milestone
 
 ## Notes
 
-- SDK gsd nao encontrado no ambiente atual; ajustes de milestone feitos manualmente
-- Milestone v1.8 iniciou em modo planejamento para detalhar fases 19-21
-- Tabelas-alvo informadas para busca de cliente: cliente, cliente_fisico, cliente_juridico, cliente_endereco
-
-
-
-
-
+- Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
+- Recomendada auditoria consolidada no inicio do proximo ciclo.
