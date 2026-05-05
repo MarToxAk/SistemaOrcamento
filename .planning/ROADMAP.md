@@ -1,7 +1,7 @@
 ﻿# Roadmap - Sistema de Orcamento BomCusto
 
-Version: 1.7
-Date: 2026-05-04
+Version: 1.8
+Date: 2026-05-05
 
 ---
 
@@ -15,6 +15,7 @@ Date: 2026-05-04
 - [x] v1.5 Correcao NFS-e â€” Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
 - [x] v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) â€” [details](.planning/milestones/v1.6-ROADMAP.md)
 - [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
+- [ ] v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos - Phase 19 (em andamento)
 
 ---
 
@@ -130,6 +131,26 @@ Full details: .planning/milestones/v1.7-ROADMAP.md
 
 - [x] Phase 18: Correcoes NFS-e RPS e Tomador (RPS-01, RPS-02, TOM-01, TOM-02, TOM-03, REG-01, REG-02)
 
+
+## v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos (Phase 19) - EM ANDAMENTO
+
+**Plans:** 1 plan
+
+- [ ] Phase 19: Regras de aprovacao associada, conciliacao via relacao_orcamento_venda e correcao de textos (APR-01..03, ATHC-01..03, TRG-01..03, TXT-01..02)
+
+Plans:
+- [ ] 19-01-PLAN.md - Ajustar regras de aprovacao e entrada em producao, integrar verificacao de pagamento por relacao_orcamento_venda e pipeline de trigger equivalente a PIX/cartao, corrigindo textos quebrados
+
+### Phase Details
+
+**Phase 19: Aprovacao associada ao pagamento e conciliacao caixa Athos**
+Goal: Garantir que aprovacao/producao so aconteca com associacao valida ao cliente Athos e pagamento confirmado no Caixa, com verificacao ao abrir orcamento e por gatilho relacao_orcamento_venda.
+Requirements: APR-01, APR-02, APR-03, ATHC-01, ATHC-02, ATHC-03, TRG-01, TRG-02, TRG-03, TXT-01, TXT-02
+Success criteria:
+1. Aprovacao/producao bloqueada quando quote nao estiver associado a idcliente valido
+2. Ao abrir orcamento, sistema consulta relacao_orcamento_venda e sincroniza pagamento
+3. Trigger relacao_orcamento_venda dispara mesma rotina de conciliacao de PIX/cartao
+4. Mensagens e logs de aprovacao/pagamento sem mojibake e com diagnostico claro
 ## Backlog (Future)
 
 - Relatorios e exportacao CSV de orcamentos
@@ -142,4 +163,4 @@ Full details: .planning/milestones/v1.7-ROADMAP.md
 - Historico de mensagens enviados ao cliente
 
 ---
-Roadmap v1.7 - 2026-05-04
+Roadmap v1.8 - 2026-05-05

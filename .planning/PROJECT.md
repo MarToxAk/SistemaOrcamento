@@ -17,6 +17,16 @@ Entregas principais:
 - buscarTomador() reescrito com NotFoundException catch, clienteId > 0, logs diagnosticos
 - Log [Athos] identifierColumn em athos.service.ts
 
+## Current Milestone: v1.8 - Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos
+
+**Goal:** Garantir que aprovacao/entrada em producao so ocorra para orcamento associado ao cliente Athos (idcliente) e com pagamento confirmado via Caixa, usando relacao_orcamento_venda e gatilhos de conciliacao equivalentes ao fluxo PIX/cartao.
+
+**Target features:**
+- Bloquear aprovacao/producao de orcamentos sem associacao valida com idcliente
+- Verificar pagamento sempre ao abrir orcamento consultando Athos (relacao_orcamento_venda)
+- Aplicar o mesmo pipeline de conciliacao de pagamento usado em PIX/cartao para eventos de gatilho no Athos
+- Corrigir textos quebrados/mojibake em mensagens de erro e UI
+
 ## Requirements
 
 ### Validated
@@ -125,4 +135,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 after v1.6 milestone â€” v1.7 started*
+*Last updated: 2026-05-05 after v1.7 milestone - v1.8 started*

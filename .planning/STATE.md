@@ -1,17 +1,17 @@
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-04
+Last updated: 2026-05-05
 Current phase: —
-Milestone: v1.7 (shipped 2026-05-04)
+Milestone: v1.8 (planning)
 
 ---
 
 ## Current Position
 
-Phase: 18-correcoes-nfse-rps-tomador
-Plan: —
-Status: v1.7 complete — arquivado
-Last activity: 2026-05-04 — Milestone v1.7 arquivado
+Phase: Not started (defining requirements)
+Plan: -
+Status: Defining requirements
+Last activity: 2026-05-05 - Milestone v1.8 started
 
 ## Project Status
 
@@ -51,13 +51,13 @@ Last activity: 2026-05-04 — Milestone v1.7 arquivado
 
 See: .planning/PROJECT.md (updated 2026-05-04)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.7 Phase 18 - correcao NFS-e (RPS e tomador)
+Current focus: v1.8 - aprovacao associada ao pagamento + conciliacao caixa Athos
 
 ## Active Context
 
 - Branch atual: fix/frontend-proxy-auth-header
 - PR ativo: #5
-- Ultima versao tagged: v1.6
+- Ultima versao tagged: v1.7
 - Milestones archived: v1.0, v1.1, v1.2, v1.3
 - Escopo v1.4: webhook EFI sem auth HMAC obrigatoria + conciliacao Athos sem n8n + desconto NFS-e opcional
 
