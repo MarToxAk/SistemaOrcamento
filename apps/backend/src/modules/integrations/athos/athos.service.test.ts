@@ -184,7 +184,11 @@ describe("AthosService - verificarPagamentoPorOrcamento", () => {
   });
 });
 
+<<<<<<< HEAD
 describe("AthosService - buscarRelacaoOrcamentoVenda", () => {
+=======
+describe("AthosService - buscarClientes", () => {
+>>>>>>> origin/main
   let service: AthosService;
 
   beforeAll(() => {
@@ -205,6 +209,7 @@ describe("AthosService - buscarRelacaoOrcamentoVenda", () => {
 
   afterEach(() => jest.clearAllMocks());
 
+<<<<<<< HEAD
   it("deve retornar idvenda quando row encontrado em relacao_orcamento_venda", async () => {
     const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
     const client = { query: jest.fn(), release: jest.fn() };
@@ -236,3 +241,107 @@ describe("AthosService - buscarRelacaoOrcamentoVenda", () => {
   });
 });
 
+=======
+  it("deve retornar cliente PF ao buscar por documento (CPF)", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      // COUNT
+      .mockResolvedValueOnce({ rows: [{ total: "1" }] })
+      // SELECT data
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            idcliente: 123,
+            nome_fisico: "João da Silva",
+            nomefantasia: null,
+            razaosocial: null,
+            cpf: "123.456.789-01",
+            cnpj: null,
+            tipologradouro: "Rua",
+            logradouro: "das Flores",
+            end_numero: "10",
+            bairro: "Centro",
+            cep: "11630-000",
+            codigocidade: "3520400",
+            uf: "SP",
+          },
+        ],
+      });
+
+    const result = await service.buscarClientes({ documento: "12345678901" });
+
+    expect(result.total).toBe(1);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].tipoPessoa).toBe("fisico");
+    expect(result.items[0].nome).toBe("João da Silva");
+    expect(result.items[0].documento).toBe("12345678901");
+    expect(result.items[0].endereco?.logradouro).toBe("Rua das Flores");
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve retornar lista paginada ao buscar por nome", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      .mockResolvedValueOnce({ rows: [{ total: "2" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            idcliente: 10,
+            nome_fisico: "Ana Souza",
+            nomefantasia: null,
+            razaosocial: null,
+            cpf: "111.111.111-11",
+            cnpj: null,
+            logradouro: null,
+          },
+          {
+            idcliente: 20,
+            nome_fisico: null,
+            nomefantasia: "Ana Comercio",
+            razaosocial: "Ana Comercio Ltda",
+            cpf: null,
+            cnpj: "12.345.678/0001-90",
+            logradouro: null,
+          },
+        ],
+      });
+
+    const result = await service.buscarClientes({ nome: "Ana", page: 1, take: 10 });
+
+    expect(result.total).toBe(2);
+    expect(result.page).toBe(1);
+    expect(result.take).toBe(10);
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0].tipoPessoa).toBe("fisico");
+    expect(result.items[1].tipoPessoa).toBe("juridico");
+    expect(result.items[1].documento).toBe("12345678000190");
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve lançar BadRequestException quando nenhum filtro significativo for fornecido", async () => {
+    await expect(service.buscarClientes({})).rejects.toThrow();
+    await expect(service.buscarClientes({ nome: "ab" })).rejects.toThrow();
+  });
+
+  it("deve limitar take ao máximo de 50", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      .mockResolvedValueOnce({ rows: [{ total: "0" }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await service.buscarClientes({ idcliente: 1, take: 999 });
+
+    expect(result.take).toBe(50);
+    expect(client.release).toHaveBeenCalled();
+  });
+});
+>>>>>>> origin/main

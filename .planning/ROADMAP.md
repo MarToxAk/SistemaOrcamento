@@ -12,11 +12,19 @@ Date: 2026-05-05
 - [x] v1.2 Mensagens e UX do Cliente - Phases 7-8 (shipped 2026-05-03)
 - [x] v1.3 Estabilidade de Migrations no Docker Compose - Phases 9-10 (shipped 2026-05-03)
 - [x] v1.4 Pagamento EFI/Athos + desconto na NFS-e - Phases 11-14 (shipped 2026-05-04)
+<<<<<<< HEAD
 - [x] v1.5 Correcao NFS-e — Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
 - [x] v1.6 Correcao NFS-e — Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) — [details](.planning/milestones/v1.6-ROADMAP.md)
 - [x] v1.7 Correcoes NFS-e � Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) � [details](.planning/milestones/v1.7-ROADMAP.md)
 - [x] v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos - Phase 19 (shipped 2026-05-05)
 - [ ] v1.9 Relatorios e Exportacao CSV - Phase 20 (planning)
+=======
+- [x] v1.5 Correcao NFS-e â€” Encoding + UI de desconto - Phases 15-16 (shipped 2026-05-04)
+- [x] v1.6 Correcao NFS-e â€” Calculo de Desconto e Valor Final - Phase 17 (shipped 2026-05-04) â€” [details](.planning/milestones/v1.6-ROADMAP.md)
+- [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
+- [x] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (shipped 2026-05-05) - [details](.planning/milestones/v1.8-ROADMAP.md)
+- [ ] v1.9 Webhook EFI PIX e Robustez de URLs - Phase 22 (in progress)
+>>>>>>> origin/main
 
 ---
 
@@ -132,6 +140,7 @@ Full details: .planning/milestones/v1.7-ROADMAP.md
 
 - [x] Phase 18: Correcoes NFS-e RPS e Tomador (RPS-01, RPS-02, TOM-01, TOM-02, TOM-03, REG-01, REG-02)
 
+<<<<<<< HEAD
 
 ## v1.8 Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos (Phase 19) - SHIPPED 2026-05-05
 
@@ -157,6 +166,35 @@ Success criteria:
 1. Usuario consegue gerar exportacao CSV com filtros basicos
 2. Exportacao contem campos essenciais do orcamento, cliente, status e valores
 3. Fluxo nao degrada performance das telas principais
+=======
+## v1.8 Busca de Cliente Athos para NFS-e (Phases 19-21) - SHIPPED 2026-05-05
+
+Full details: .planning/milestones/v1.8-ROADMAP.md
+
+- [x] Phase 19: API de busca de cliente Athos (ATHCL-01, ATHCL-02, ATHCL-03)
+- [x] Phase 20: Resolucao de tomador por cliente selecionado (TOMAD-01, TOMAD-02, TOMAD-03, TOMAD-04)
+- [x] Phase 21: UI NFS-e, observabilidade e testes (NFUI-01, NFUI-02, NFUI-03, QUAL-01, QUAL-02, QUAL-03)
+
+## v1.9 Webhook EFI PIX e Robustez de URLs (Phase 22) - IN PROGRESS
+
+### Phase 22: Correcao webhook EFI /pix e fallback NfseService
+
+**Goal:** Garantir que webhooks EFI PIX cheguem ao endpoint correto (/webhook/payment/pix) e que NfseService nao quebre quando NFSE_SOAP_URL esta definida como string vazia.
+
+**Requirements:** EFIWH-01, EFIWH-02, EFIWH-03
+
+**Plans:** 2 plans
+
+Plans:
+- [x] 22-01-PLAN.md — Corrigir getWebhookUrl() e fallback NfseService (wave 1) — complete
+- [ ] 22-02-PLAN.md — Testes unitários de getWebhookUrl() (wave 2)
+
+**Success criteria:**
+1. getWebhookUrl() retorna URL terminada em /webhook/payment/pix.
+2. Com NFSE_SOAP_URL= vazio, NfseService usa endpoint padrão sem erro ENOENT.
+3. Spec de efi.service inclui teste cobrindo a URL com /pix.
+4. Build backend sem erros após as correções.
+>>>>>>> origin/main
 
 ## Backlog (Future)
 
@@ -170,4 +208,13 @@ Success criteria:
 - Historico de mensagens enviados ao cliente
 
 ---
+<<<<<<< HEAD
 Roadmap v1.9 - 2026-05-05
+=======
+Roadmap v1.8 - 2026-05-04
+
+
+
+
+
+>>>>>>> origin/main

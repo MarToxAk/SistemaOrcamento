@@ -1,4 +1,4 @@
-# Milestones - Sistema de Orcamento BomCusto
+﻿# Milestones - Sistema de Orcamento BomCusto
 
 ---
 
@@ -42,13 +42,6 @@ Phases: 9-10 | Plans: 4
 
 Delivered: Eliminado race condition de migration no Docker Compose com readiness check, bootstrap deterministico e runbook operacional de update com script de verificacao pos-deploy.
 
-Key accomplishments:
-- wait-for-db.js garante que o banco aceita conexoes antes de qualquer step de migration
-- bootstrap-runtime.sh padroniza sequencia de startup do backend em producao
-- Healthcheck pg_isready no compose com gate service_healthy para o backend
-- UPDATE_RUNBOOK.md com fluxo reproduzivel de update/rollback para VPS
-- verify-deploy-health.ps1 verifica status, logs criticos e health endpoint pos-deploy
-
 Archive: .planning/milestones/v1.3-ROADMAP.md
 
 ---
@@ -79,15 +72,30 @@ Archive: .planning/milestones/v1.5-ROADMAP.md
 
 Shipped: 2026-05-04
 Phases: 17 | Plans: 1
-Git range: 44fbc2f..895e91e (10 commits) | 11 files, +1226/-32 lines
 
-Delivered: Corrigidos dois bugs criticos no modal NFS-e — path de leitura do total do orcamento (`quote?.body?.totais?.valor`) e tipagem correta do POST body (`boolean` + `Number()`), garantindo que calculos de desconto e envio ao SOAP iiBrasil sejam corretos.
-
-Key accomplishments:
-- Corrigidas 6 ocorrencias do path `quote?.totais?.valor` → `quote?.body?.totais?.valor` (base zero → valor real)
-- Tipo do body alterado para `Record<string, string | number | boolean>` — suporta boolean e number
-- `descontoAtivo = true` (boolean) — satisfaz igualdade estrita `=== true` no backend
-- `Number(nfseDescontoPercent)` e `Number(nfseDescontoValor)` — valores numericos no POST
-- Verificacao 5/5 must-haves; checkpoint humano aprovado
+Delivered: Corrigidos bugs criticos no modal NFS-e garantindo base de calculo correta e envio tipado para o backend.
 
 Archive: .planning/milestones/v1.6-ROADMAP.md
+
+---
+
+## v1.7 - Correcoes NFS-e: Tomador e Numeracao RPS
+
+Shipped: 2026-05-04
+Phases: 18 | Plans: 1
+
+Delivered: Correcao da numeracao RPS e fortalecimento da resolucao de tomador com logs diagnosticos.
+
+Archive: .planning/milestones/v1.7-ROADMAP.md
+
+---
+
+## v1.8 - Busca de Cliente Athos para NFS-e
+
+Shipped: 2026-05-05
+Phases: 19-21 | Plans: 4
+Git range: v1.7..HEAD (26 commits) | 37 files, +4619/-122 lines
+
+Delivered: Busca de cliente Athos para NFS-e no backend e frontend, resolucao de tomador por cliente selecionado (clienteAthosId), observabilidade com logs estruturados e cobertura de testes PF/PJ/falhas.
+
+Archive: .planning/milestones/v1.8-ROADMAP.md
