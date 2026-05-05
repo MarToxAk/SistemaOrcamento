@@ -109,9 +109,9 @@ describe("QuotesService - changeStatus", () => {
       expect(result.statusKey).toBe("CANCELADO");
     });
 
-    it("deve transitar de APROVADO para EM_PRODUCAO quando cliente e associado", async () => {
+    it("deve transitar de APROVADO para EM_PRODUCAO quando cliente e associado e aprovado via link", async () => {
       const assocCustomer = { id: "cus1", fullName: "Assoc", isAssociated: true, phone: null, email: null };
-      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: false, saleExternalId: BigInt(1), customer: assocCustomer }));
+      mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: true, saleExternalId: null, customer: assocCustomer }));
       mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "EM_PRODUCAO", customer: assocCustomer }));
 
       const result = await service.changeStatus("quote-001", "EM_PRODUCAO", "test");
@@ -158,12 +158,12 @@ describe("QuotesService - changeStatus", () => {
       );
     });
 
-    it("deve permitir EM_PRODUCAO quando cliente associado sem pagamento (associado avanca livremente)", async () => {
-      // isAssociated=true: nao precisa de pagamento confirmado
+    it("deve bloquear EM_PRODUCAO quando cliente associado sem aprovacao via link", async () => {
+      // isAssociated=true sem approved: bloqueia ate aprovacao via link
       const assocCustomer = { id: "cus1", fullName: "Assoc", isAssociated: true, phone: null, email: null };
       mockPrisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "APROVADO", approved: false, saleExternalId: null, customer: assocCustomer }));
       mockPrisma.quote.update.mockResolvedValue(makeQuote({ status: "EM_PRODUCAO", customer: assocCustomer }));
-      await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).resolves.toBeDefined();
+      await expect(service.changeStatus("quote-001", "EM_PRODUCAO", "test")).rejects.toThrow(BadRequestException);
     });
 
     it("deve permitir EM_PRODUCAO sem associacao quando tem approved=true", async () => {

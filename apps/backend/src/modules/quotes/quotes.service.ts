@@ -690,20 +690,26 @@ export class QuotesService {
       );
     }
 
-// APR-01: Sem associacao Athos exige pagamento confirmado (PIX, cartao ou caixa)
-    // Clientes associados avancam livremente (link de aprovacao e enviado separadamente)
+// APR-01/02: Regras de entrada em EM_PRODUCAO
+    // - Cliente associado Athos: exige aprovacao via link (approved=true)
+    // - Cliente nao associado: exige pagamento confirmado (approved=true ou saleExternalId)
     if (newStatus === "EM_PRODUCAO") {
       const isAssociated = Boolean((quote as any).customer?.isAssociated ?? false);
       const hasSaleId = quote.saleExternalId != null;
       const hasApproval = Boolean(quote.approved);
 
+      if (isAssociated && !hasApproval) {
+        throw new BadRequestException(
+          "Cliente associado ao Athos aguardando aprovacao via link. A aprovacao do cliente e obrigatoria antes de entrar em producao.",
+        );
+      }
+
       if (!isAssociated && !hasApproval && !hasSaleId) {
         throw new BadRequestException(
-          "Orcamento aguardando confirmacao de pagamento. Confirme o pagamento (PIX, cartao ou caixa) antes de entrar em producao.",
+          "Orcamento aguardando confirmacao de pagamento. Confirme o pagamento (PIX, pix parcial, cartao ou caixa) antes de entrar em producao.",
         );
       }
     }
-
     const updated = await this.prisma.quote.update({
       where: { id: quote.id },
       data: {
