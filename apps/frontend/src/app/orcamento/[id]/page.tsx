@@ -783,7 +783,7 @@ export default function OrcamentoDetailPage() {
       {/* Modal emissão NFS-e */}
       {nfseModal ? (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1060 }}>
-          <div style={{ background: "#fff", borderRadius: 8, width: "100%", maxWidth: 480, padding: "1.5rem", boxShadow: "0 4px 24px #0003" }}>
+          <div style={{ background: "#fff", borderRadius: 8, width: "100%", maxWidth: 480, padding: "1.5rem", boxShadow: "0 4px 24px #0003", maxHeight: "90vh", overflowY: "auto" }}>
             <h5 className="mb-3"><i className="bi bi-file-earmark-text me-2" />Emitir Nota Fiscal (NFS-e)</h5>
 
             {/* Busca cliente Athos */}
