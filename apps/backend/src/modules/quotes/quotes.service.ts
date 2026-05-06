@@ -63,6 +63,22 @@ export class QuotesService {
     private readonly efiService: EfiService,
   ) {}
 
+  private async resolveVendaCaixa(idvenda: number): Promise<{ numeroordem: string | null; isCaixa: boolean }> {
+    const maybeBuscarVendaCaixa = (this.athosService as any)?.buscarVendaCaixa;
+    if (typeof maybeBuscarVendaCaixa === "function") {
+      try {
+        return await maybeBuscarVendaCaixa.call(this.athosService, idvenda);
+      } catch (err) {
+        this.logger.warn(
+          `resolveVendaCaixa: falha ao consultar venda ${idvenda}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // Fallback para branches onde AthosService ainda nao possui buscarVendaCaixa.
+    return { numeroordem: String(idvenda), isCaixa: true };
+  }
+
   async buscarNoAthosPorNumero(numero: string, format: "raw" | "mapped" = "raw") {
     // Se já existe um orcamento salvo com esse externalQuoteId, preferir os dados do banco
     const parsed = Number(numero);
@@ -204,6 +220,29 @@ export class QuotesService {
       }
     }
 
+    if (!resolvedQuote.saleExternalId && resolvedQuote.externalQuoteId) {
+      try {
+        const relacao = await this.athosService.buscarRelacaoOrcamentoVenda(Number(resolvedQuote.externalQuoteId));
+        if (relacao.idvenda != null) {
+          await this.prisma.quote.update({
+            where: { id: resolvedQuote.id },
+            data: { saleExternalId: this.toBigInt(relacao.idvenda) },
+          });
+
+          resolvedQuote = {
+            ...resolvedQuote,
+            saleExternalId: this.toBigInt(relacao.idvenda),
+          };
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Nao foi possivel preencher idvenda via relacao_orcamento_venda para o orcamento ${resolvedQuote.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
     // ATHC-01: verificar pagamento via relacao_orcamento_venda quando orcamento tem ID Athos
     if (resolvedQuote.externalQuoteId) {
       void this.conciliarViaCaixaAthos(resolvedQuote).catch((err: unknown) => {
@@ -218,6 +257,19 @@ export class QuotesService {
         );
       });
     }
+
+    let orderNumber: string | null = null;
+    if (resolvedQuote.saleExternalId) {
+      const { numeroordem, isCaixa } = await this.resolveVendaCaixa(Number(resolvedQuote.saleExternalId));
+      if (isCaixa) {
+        orderNumber = numeroordem ?? String(Number(resolvedQuote.saleExternalId));
+      }
+    }
+
+    resolvedQuote = {
+      ...resolvedQuote,
+      orderNumber,
+    };
 
     const mapped = this.mapQuoteBody(resolvedQuote);
 
@@ -350,30 +402,71 @@ export class QuotesService {
     const idOrcamento = Number(quote.externalQuoteId);
     if (!Number.isFinite(idOrcamento) || idOrcamento <= 0) return;
 
-    // ATHC-02: Buscar vinculo idorcamento -> idvenda em relacao_orcamento_venda
     const relacao = await this.athosService.buscarRelacaoOrcamentoVenda(idOrcamento);
 
-    // TRG-02: Idempotencia - persistir saleExternalId apenas se ainda nao definido
-    if (relacao.idvenda != null && !quote.saleExternalId) {
+    if (relacao.idvenda == null) return;
+
+    // Persiste saleExternalId se ainda nao definido (idempotente)
+    if (!quote.saleExternalId) {
       try {
         await this.prisma.quote.update({
           where: { id: quote.id },
           data: { saleExternalId: this.toBigInt(relacao.idvenda) },
         });
-        this.logger.log(
-          `conciliarViaCaixaAthos: saleExternalId=${relacao.idvenda} persistido para orcamento ${quote.id}`,
-        );
+        this.logger.log(`conciliarViaCaixaAthos: saleExternalId=${relacao.idvenda} persistido para ${quote.id}`);
       } catch (err) {
-        this.logger.warn(
-          `conciliarViaCaixaAthos: falha ao persistir saleExternalId para ${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        this.logger.warn(`conciliarViaCaixaAthos: falha ao persistir saleExternalId para ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
-    // TRG-01/TRG-03: Acionar mesma rotina de conciliacao de PIX/cartao para status pendentes
-    if (["PENDENTE", "ENVIADO"].includes(quote.status)) {
-      await this.checkPaymentStatus(quote.id);
+    // Verifica se a venda foi feita no caixa (idcaixamovimento IS NOT NULL)
+    const { numeroordem, isCaixa } = await this.resolveVendaCaixa(relacao.idvenda);
+
+    if (!isCaixa) {
+      this.logger.log(`conciliarViaCaixaAthos: venda ${relacao.idvenda} nao e pagamento no caixa — ignorado`);
+      return;
     }
+
+    this.logger.log(`conciliarViaCaixaAthos: pagamento no caixa confirmado — numeroordem=${numeroordem ?? relacao.idvenda} quoteId=${quote.id}`);
+
+    const needsUpdate = ["PENDENTE", "ENVIADO"].includes(quote.status);
+    const alreadyNoted = quote.paymentNote != null;
+
+    if (!needsUpdate && alreadyNoted) return;
+
+    try {
+      await this.prisma.quote.update({
+        where: { id: quote.id },
+        data: {
+          ...(!alreadyNoted && { paymentNote: "Pagamento feito no caixa" }),
+          ...(needsUpdate && !quote.paymentConfirmedAt && { paymentConfirmedAt: new Date() }),
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`conciliarViaCaixaAthos: falha ao persistir paymentNote para ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    if (needsUpdate) {
+      try {
+        await this.changeStatus(quote.id, "APROVADO", "Pagamento confirmado no caixa Athos");
+      } catch (err) {
+        this.logger.warn(`conciliarViaCaixaAthos: falha ao mudar status para APROVADO em ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      if (quote.conversationId) {
+        try {
+          const numero = quote.externalQuoteId ? Number(quote.externalQuoteId) : quote.internalNumber;
+          await this.chatwootService.sendOutgoingMessage(
+            String(quote.conversationId),
+            `Pagamento confirmado no caixa para o orcamento #${numero} (venda #${relacao.idvenda}). Obrigado!`,
+          );
+        } catch (err) {
+          this.logger.warn(`conciliarViaCaixaAthos: falha ao notificar Chatwoot para ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+
+    // Evento SSE removido nesta branch por ausencia do modulo de events.
   }
 
   async create(payload: CreateQuoteDto) {
@@ -1290,6 +1383,8 @@ export class QuotesService {
     nfseLink?: string | null;
     nfseEmitidaEm?: Date | null;
     paymentConfirmedAt?: Date | null;
+    paymentNote?: string | null;
+    orderNumber?: string | null;
     approved?: boolean;
     approvedAt?: Date | null;
   }) {
@@ -1337,8 +1432,9 @@ export class QuotesService {
       nfseLink: quote.nfseLink ?? null,
       nfseEmitidaEm: quote.nfseEmitidaEm ? quote.nfseEmitidaEm.toISOString() : null,
       paymentConfirmedAt: quote.paymentConfirmedAt ? quote.paymentConfirmedAt.toISOString() : null,
+      orderNumber: quote.orderNumber ?? null,
       saleExternalId: quote.saleExternalId ? Number(quote.saleExternalId) : null,
-      paidInCashier: Boolean(quote.saleExternalId),
+      paidInCashier: Boolean(quote.orderNumber || quote.paymentNote),
       approved: Boolean(quote.approved ?? false),
       approvedAt: quote.approvedAt ? quote.approvedAt.toISOString() : null,
       isAssociated: Boolean((quote.customer as any).isAssociated ?? false),
@@ -1357,6 +1453,7 @@ export class QuotesService {
         vendedorNome: quote.sellerName,
         conversationId: quote.conversationId ? Number(quote.conversationId) : undefined,
         chatwootContactId: quote.chatwootContactId ? Number(quote.chatwootContactId) : undefined,
+        numeroordem: quote.orderNumber ?? undefined,
         status: statusLabels[quote.status],
         cliente: {
           nome: quote.customer.fullName,
@@ -1368,6 +1465,7 @@ export class QuotesService {
         validade: quote.validity,
         prazoEntrega: quote.deliveryDate?.toISOString().slice(0, 10),
         condicaoPagamento: quote.paymentTerms,
+        pagamentoNoCaixa: quote.paymentNote ?? null,
         itens: items,
         carimbos: {
           quantidade_total: quote.stamps.length,

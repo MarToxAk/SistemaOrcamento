@@ -114,6 +114,14 @@ Current focus: aguardando merge do PR #7 para completar milestone v1.9
 - Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
 - Recomendada auditoria consolidada no inicio do proximo ciclo.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260506-001 | Front-end nao tem nenhuma representacao visual do pagamento nem numero do pedido aparecendo | 2026-05-06 | n/a | [260506-001-frontend-pagamento-pedido-visual](./quick/260506-001-frontend-pagamento-pedido-visual/) |
+| 260506-002 | Front-end nao mostra icone de pago no caixa nem numero do pedido (numeroordem) na pagina de detalhe do orcamento | 2026-05-06 | n/a | [260506-002-frontend-pago-no-caixa-numeroordem](./quick/260506-002-frontend-pago-no-caixa-numeroordem/) |
+| 260506-003 | Exibir numero do pedido na lista de orcamentos com cor diferente para pagamento confirmado | 2026-05-06 | n/a | [260506-003-lista-orcamento-numero-pedido-pagamento](./quick/260506-003-lista-orcamento-numero-pedido-pagamento/) |
+
 
 
 

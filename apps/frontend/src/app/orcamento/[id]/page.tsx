@@ -22,6 +22,7 @@ type QuoteDetail = {
   nfseLink?: string | null;
   nfseEmitidaEm?: string | null;
   paymentConfirmedAt?: string | null;
+  orderNumber?: string | null;
   saleExternalId?: number | null;
   approved?: boolean;
   approvedAt?: string | null;
@@ -543,7 +544,7 @@ export default function OrcamentoDetailPage() {
             </div>
           </div>
           {/* Integration status badges */}
-          {(quote?.latestPdfUrl || quote?.nfseNumero || quote?.paymentConfirmedAt || quote?.saleExternalId || quote?.approved) && (
+          {(quote?.latestPdfUrl || quote?.nfseNumero || quote?.paymentConfirmedAt || quote?.saleExternalId || quote?.orderNumber || quote?.approved) && (
             <div className="d-flex flex-wrap gap-2 px-3 py-2" style={{background: "rgba(255,255,255,0.7)"}}>
               {quote?.latestPdfUrl && (
                 <span className="badge bg-secondary">
@@ -560,7 +561,13 @@ export default function OrcamentoDetailPage() {
                   <i className="bi bi-file-check me-1" />NFS-e #{quote.nfseNumero}
                 </a>
               )}
-              {quote?.paymentConfirmedAt && (
+              {(quote?.orderNumber || quote?.saleExternalId) && (
+                <span className="badge bg-success">
+                  <i className="bi bi-cash-coin me-1" />
+                  Pago no Caixa - Pedido #{quote.orderNumber ?? String(quote.saleExternalId)}
+                </span>
+              )}
+              {!quote?.orderNumber && !quote?.saleExternalId && quote?.paymentConfirmedAt && (
                 <span className="badge bg-primary">
                   <i className="bi bi-check-circle me-1" />PIX Confirmado
                 </span>
