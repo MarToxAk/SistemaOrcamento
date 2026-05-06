@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import path from "node:path";
 
 import { DatabaseModule } from "./database/database.module";
+import { EventsModule } from "./events/events.module";
 import { HealthController } from "./health.controller";
 import { ChatwootModule } from "./integrations/chatwoot/chatwoot.module";
 import { EfiModule } from "./integrations/efi/efi.module";
@@ -57,6 +58,7 @@ function validateEnv(config: Record<string, unknown>) {
     ]),
     SecurityModule,
     DatabaseModule,
+    EventsModule,
     QuotesModule,
     ChatwootModule,
     EfiModule,

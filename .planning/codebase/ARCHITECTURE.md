@@ -1,228 +1,255 @@
-<!-- refreshed: 2026-05-01 -->
+<!-- refreshed: 2026-05-06 -->
 # Architecture
 
-**Analysis Date:** 2026-05-01
+**Analysis Date:** 2026-05-06
 
 ## System Overview
 
 ```text
-┌──────────────────────────────────────────────────────────────────┐
-│                    Browser / Chatwoot Widget                      │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │ HTTP
-                           ▼
-┌──────────────────────────────────────────────────────────────────┐
-│              Next.js App Router (Frontend)                        │
-│              apps/frontend/src/app/                               │
-│  ┌───────────────────┐   ┌──────────────────────────────────┐    │
-│  │  Pages (UI)       │   │  API Routes (BFF Proxy)          │    │
-│  │  /orcamento       │   │  /api/quotes/*, /api/efi/status  │    │
-│  │  /status          │   │  (passthrough to backend)        │    │
-│  └───────────────────┘   └─────────────────┬────────────────┘    │
-└────────────────────────────────────────────┼─────────────────────┘
-                                             │ HTTP (BACKEND_URL)
-                                             ▼
-┌──────────────────────────────────────────────────────────────────┐
-│              NestJS Backend  apps/backend/src/                    │
-│  ┌────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │  Quotes    │  │ Integrations │  │  Database (Global)       │  │
-│  │  Module    │  │  chatwoot    │  │  PrismaService           │  │
-│  │  /quotes   │  │  efi         │  │  apps/backend/src/       │  │
-│  └────────────┘  │  nfse        │  │  modules/database/       │  │
-│                  │  pdv         │  └──────────────────────────┘  │
-│                  │  athos       │                                  │
-│                  └──────────────┘                                  │
-└──────────────────────────────────────────────────────────────────┘
-                           │ Prisma
-                           ▼
-┌──────────────────────────────────────────────────────────────────┐
-│              PostgreSQL (remote VPS / docker local)               │
-│              apps/backend/prisma/schema.prisma                    │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Client Browser / Chatwoot Widget                  │
+└───────────────────────────┬─────────────────────────────────────────┘
+                            │ HTTP (port 3000 / 3001 in prod via Nginx)
+                            ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  @bomcusto/frontend  (Next.js 14)                    │
+│  Page Routes          API Route Handlers (proxies)                  │
+│  /orcamento           /api/quotes/*           → backend /api/quotes │
+│  /orcamento/novo      /api/quotes/[id]/nfse   → backend nfse        │
+│  /orcamento/[id]      /api/quotes/[id]/pdf    → backend pdf         │
+│  /orcamento/[id]/approve  /api/athos/clientes → backend athos       │
+│  /orcamento/andamento /api/efi/status          → backend efi        │
+│  `apps/frontend/src/`                                               │
+└───────────────────────────┬─────────────────────────────────────────┘
+                            │ HTTP x-internal-api-key header (port 4000)
+                            ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  @bomcusto/backend  (NestJS 11)                      │
+│                                                                      │
+│  SecurityModule     ThrottlerGuard     LoggingInterceptor           │
+│  InternalAuthGuard  ValidationPipe     ConfigModule                 │
+│                                                                      │
+│  ┌──────────────┐  ┌──────────────────────────────────────────┐     │
+│  │ QuotesModule │  │              IntegrationsModules           │    │
+│  │              │  │  AthosModule  EfiModule  NfseModule        │    │
+│  │ quotes.      │  │  ChatwootModule   PdvModule                │    │
+│  │ controller   │  │                                            │    │
+│  │ quotes.      │  └──────────────────────────────────────────┘     │
+│  │ service      │                                                    │
+│  │ pdf-storage  │                                                    │
+│  │ service      │                                                    │
+│  └──────────────┘                                                    │
+│           │                                                          │
+│           ▼                                                          │
+│  DatabaseModule (PrismaService)                                      │
+│  `apps/backend/src/`                                                 │
+└──────┬──────────────┬──────────────────────┬────────────────────────┘
+       │              │                      │
+       ▼              ▼                      ▼
+┌──────────┐  ┌───────────────────┐  ┌────────────────────────────────┐
+│ Primary  │  │  Athos ERP        │  │  External Services             │
+│ Postgres │  │  PostgreSQL       │  │  Chatwoot CRM (HTTP REST)      │
+│ (app DB) │  │  (read-only via   │  │  EFI Pay (HTTPS mTLS REST)     │
+│          │  │   pg.Pool,        │  │  NFS-e iiBrasil (SOAP/XML)     │
+│          │  │   Tailscale VPN)  │  │  MinIO / S3 (PDF storage)      │
+└──────────┘  └───────────────────┘  └────────────────────────────────┘
 ```
 
-## Component Responsibilities
+## Module Breakdown
 
-| Component | Responsibility | File |
-|-----------|----------------|------|
-| AppModule | Root NestJS module, global config wiring | `apps/backend/src/modules/app.module.ts` |
-| QuotesModule | Core business domain — CRUD, status machine, PDF, approval | `apps/backend/src/modules/quotes/` |
-| QuotesService | All quote business logic, status transitions, integrations orchestration | `apps/backend/src/modules/quotes/quotes.service.ts` |
-| QuotesPdfStorageService | PDF generation and storage | `apps/backend/src/modules/quotes/quotes-pdf-storage.service.ts` |
-| QuotesController | REST endpoints under `/api/quotes` | `apps/backend/src/modules/quotes/quotes.controller.ts` |
-| DatabaseModule | Global PrismaService provider (singleton) | `apps/backend/src/modules/database/database.module.ts` |
-| ChatwootModule | Chatwoot messaging API integration | `apps/backend/src/modules/integrations/chatwoot/` |
-| EfiModule | EFI payment gateway (webhook handling, Pix) | `apps/backend/src/modules/integrations/efi/` |
-| NfseModule | Nota Fiscal de Serviço Eletrônica emission | `apps/backend/src/modules/integrations/nfse/` |
-| PdvModule | PDV (point of sale) read-only integration | `apps/backend/src/modules/integrations/pdv/` |
-| AthosModule | Athos legacy ERP — quote lookup | `apps/backend/src/modules/integrations/athos/` |
-| Frontend API Routes | BFF proxy layer — forward requests to backend, no business logic | `apps/frontend/src/app/api/` |
-| Frontend Pages | Operator UI — quote list, detail, creation, status tracking | `apps/frontend/src/app/orcamento/` |
-| packages/shared | Shared TypeScript types (QuoteStatus, QuoteSummary) | `packages/shared/src/index.ts` |
+### Backend Modules (`apps/backend/src/modules/`)
 
-## Pattern Overview
+| Module | Files | Responsibility |
+|--------|-------|----------------|
+| `AppModule` | `app.module.ts` | Root module; wires all others; global guards and interceptor |
+| `DatabaseModule` | `database/database.module.ts`, `database/prisma.service.ts` | Exports `PrismaService` (extends PrismaClient); lifecycle connect/disconnect |
+| `SecurityModule` | `security/` | `InternalAuthGuard` (x-internal-api-key header, timing-safe compare), `@Public()` decorator, throttle constants |
+| `QuotesModule` | `quotes/` | Core business — CRUD, status machine, PDF generation + storage, Chatwoot messaging, EFI payment links, Athos conciliation |
+| `ChatwootModule` | `integrations/chatwoot/` | Outbound messages, notes, file attachments; purely outbound (no webhooks) |
+| `EfiModule` | `integrations/efi/` | PIX payment links (mTLS), card links, webhook receipt and payment reconciliation |
+| `NfseModule` | `integrations/nfse/` | Fiscal note emission via SOAP/XML to iiBrasil; discount application; Athos tomador lookup |
+| `AthosModule` | `integrations/athos/` | Read-only `pg.Pool` against Athos ERP PostgreSQL; quote lookup, payment verification, `relacao_orcamento_venda`, client search |
+| `PdvModule` | `integrations/pdv/` | Stub PDV connector (read-only config; SQL not yet implemented) |
+| `HealthController` | `health.controller.ts` | `GET /api/health` — liveness check (public, no auth) |
 
-**Overall:** Monorepo (npm workspaces) with a NestJS API backend and Next.js App Router frontend acting as a thin BFF proxy.
+### Frontend Routes (`apps/frontend/src/app/`)
 
-**Key Characteristics:**
-- Frontend has zero direct database access — all persistence goes through the backend API
-- Frontend API routes in `apps/frontend/src/app/api/` are pure HTTP proxies that forward to `BACKEND_URL`
-- Backend enforces all business rules, validation (class-validator DTOs), and integrations
-- NestJS modules are feature-scoped; cross-module dependencies use `forwardRef()` where circular
-- `DatabaseModule` is marked `@Global()` — `PrismaService` is available everywhere without explicit import
+| Route | Type | Purpose |
+|-------|------|---------|
+| `/` | Server page | Redirect / landing |
+| `/orcamento` | Client page | Quote list + Chatwoot widget integration; receives postMessage from CRM |
+| `/orcamento/novo` | Client page | New quote creation form (items, stamps, customer) |
+| `/orcamento/[id]` | Client page | Quote detail view (status, PDF, NFS-e actions) |
+| `/orcamento/[id]/approve` | Client page | Public token-based approval page for customers |
+| `/orcamento/[id]/status` | Client page | Order status tracker (public-facing) |
+| `/orcamento/andamento` | Client page | Orders in-progress view |
+| `/status` | Client page | System status overview |
+| `/api/quotes/*` | Route Handlers | Proxy to backend; inject `x-internal-api-key` |
+| `/api/athos/clientes` | Route Handler | Proxy to `GET /api/athos/clientes` |
+| `/api/efi/status` | Route Handler | Proxy to `GET /api/integrations/efi/status` |
 
-## Layers
+### Shared Package (`packages/shared/src/index.ts`)
 
-**Presentation (UI):**
-- Purpose: Operator-facing pages for managing quotes
-- Location: `apps/frontend/src/app/orcamento/`, `apps/frontend/src/app/status/`
-- Contains: React Server/Client components, page layouts
-- Depends on: Frontend API Routes
-- Used by: Browser, Chatwoot iframe widget
+Contains lightweight TypeScript types for cross-boundary use:
+- `QuoteStatus` union type (`"draft" | "sent" | "approved" | "rejected" | "cancelled"`)
+- `QuoteSummary` type
 
-**BFF / API Proxy:**
-- Purpose: Next.js API routes that proxy frontend requests to the NestJS backend
-- Location: `apps/frontend/src/app/api/`
-- Contains: Route handlers (GET, POST, PATCH) with `fetch()` to `BACKEND_URL`
-- Depends on: `BACKEND_URL` env var (default `http://localhost:4000/api`)
-- Used by: Frontend pages
+Note: The backend uses its own Prisma-generated `QuoteStatus` enum (more detailed). The shared package types are not currently imported by backend or frontend — they are stubs.
 
-**Application / Domain:**
-- Purpose: All business logic — quote lifecycle, status machine, payment, approval
-- Location: `apps/backend/src/modules/quotes/`
-- Contains: Service, Controller, DTOs, PDF storage
-- Depends on: DatabaseModule (global), integration modules
-- Used by: HTTP clients via `/api/quotes`
+## Security Architecture
 
-**Integration:**
-- Purpose: Adapters to external systems
-- Location: `apps/backend/src/modules/integrations/`
-- Contains: chatwoot, efi, nfse, pdv, athos modules
-- Depends on: DatabaseModule, each other via forwardRef where needed
-- Used by: QuotesService, NfseModule
+**Internal API authentication:**
+- Every backend request (except `@Public()` endpoints) requires header `x-internal-api-key`
+- Guard: `apps/backend/src/modules/security/internal-auth.guard.ts`
+- Timing-safe comparison via Node.js `crypto.timingSafeEqual`
+- Public endpoints: `POST /api/quotes/:id/approve` (customer approval), `POST /api/integrations/efi/webhook/*` (EFI Pay webhooks), `GET /api/health`
 
-**Persistence:**
-- Purpose: PostgreSQL access via Prisma ORM
-- Location: `apps/backend/src/modules/database/`, `apps/backend/prisma/`
-- Contains: PrismaService, schema.prisma, migrations
-- Depends on: `DATABASE_URL` env var
-- Used by: All backend modules (global)
+**Rate limiting:**
+- Default: 60 requests / 60 seconds (global via `ThrottlerGuard`)
+- Sensitive (PDF gen, NFS-e emit): 10 requests / 60 seconds
+- Webhook endpoints: 30 requests / 60 seconds
+- Config: `apps/backend/src/modules/security/throttle.config.ts`
+
+**CORS:**
+- Origins configured via `CORS_ORIGINS` env var (comma-separated)
+- Default allows `http://localhost:3000` and `http://localhost:3001`
 
 ## Data Flow
 
-### Create Quote (POST /api/quotes)
+### 1. New Quote Creation (from Chatwoot CRM widget)
 
-1. Browser POST → Next.js API route `apps/frontend/src/app/api/quotes/route.ts`
-2. API route proxies to `BACKEND_URL/quotes` with `fetch()`
-3. `QuotesController.create()` (`apps/backend/src/modules/quotes/quotes.controller.ts:62`)
-4. `QuotesService.create()` validates payload (CreateQuoteDto), persists via PrismaService
-5. Optional: ChatwootService notified; PDF generated
+1. Chatwoot sends `postMessage` to frontend `/orcamento` page with conversation/contact context
+2. Frontend page (`apps/frontend/src/app/orcamento/page.tsx`) captures event, pre-fills form data
+3. User submits form → `POST /api/quotes` (frontend Route Handler)
+4. Route Handler proxies to `POST http://backend:4000/api/quotes` with `x-internal-api-key`
+5. `QuotesController.create()` → `QuotesService.create()`
+6. Prisma transaction: upsert Customer, create Quote + QuoteItems + QuoteStampItems + QuoteStatusHistory
+7. `QuotesPdfStorageService.generateAndStore()`: Puppeteer renders Handlebars HTML → PDF bytes → MinIO upload
+8. `QuoteDocument` record saved with `publicUrl` pointing to MinIO
+9. Response returns mapped quote + PDF metadata
 
-### Status Change (PATCH /api/quotes/:id/status)
+### 2. Send Quote to Customer (enviarParaCliente)
 
-1. Browser PATCH → `apps/frontend/src/app/api/quotes/[id]/status/route.ts`
-2. Proxied to `BACKEND_URL/quotes/:id/status`
-3. `QuotesController.updateStatus()` receives `UpdateStatusDto`
-4. `QuotesService.changeStatus()` validates transition via `statusTransitions` map (`apps/backend/src/modules/quotes/quotes.service.ts:15`)
-5. Prisma updates `Quote.status` and appends `QuoteStatusHistory` record
+1. `POST /api/quotes/:id/enviar`
+2. `QuotesService.enviarParaCliente()`:
+   a. Status updated to `ENVIADO`
+   b. Athos lookup for `idcliente`
+   c. `EfiService.createPixPaymentLink()` — mTLS call to EFI Pay API → txid stored on Quote
+   d. Optional: `createPix5050Link()`, `createCardPaymentLink()`
+   e. If customer is associated (`isAssociated=true`): generate `approvalToken` (random 24-char hex), persist with expiry
+   f. `ChatwootService.sendOutgoingMessage()` — payment message with links
+   g. `ChatwootService.sendAttachment()` — PDF attachment
+3. Returns `{ message, approvalLink }` immediately (fire-and-forget pattern — caller does not await)
 
-### Athos Quote Lookup (GET /api/quotes/athos-health)
+### 3. EFI Pay Webhook (PIX payment confirmation)
 
-1. `QuotesController.buscarNoAthos()` (`apps/backend/src/modules/quotes/quotes.controller.ts:19`)
-2. `QuotesService.buscarNoAthosPorNumero()` checks local DB first (by `externalQuoteId`)
-3. Falls back to `AthosService.buscarOrcamentoPorNumero()` if not found locally
-4. Returns raw rows or mapped DTO depending on `format` query param
+1. EFI Pay POSTs to `POST /api/integrations/efi/webhook/payment` or `/pix` (public, throttled)
+2. `EfiService.processWebhook()` parses `pix[]` array from payload
+3. For each txid: lookup Quote by `paymentExternalId` or `secondInstallmentExternalId`
+4. Payment status logic: full payment → `APROVADO`; partial → `PAGAMENTO_PARCIAL`
+5. `QuotesService.changeStatus()` updates status and writes `QuoteStatusHistory`
+6. `ChatwootService.sendOutgoingMessage()` notifies customer
 
-### EFI Payment Webhook
+### 4. Athos Cash Register Conciliation (ATHC flow)
 
-1. Webhook POST to `/api/efi/*` (backend EfiController)
-2. `EfiService` processes payment event, updates `PaymentTransaction`
-3. `EfiService` calls `QuotesService` (via forwardRef) to update quote payment fields
-4. `ChatwootService` notified if conversation linked
+1. Triggered on `GET /api/quotes/:id` when quote has `externalQuoteId`
+2. `conciliarViaCaixaAthos()` calls `AthosService.buscarRelacaoOrcamentoVenda(idorcamento)`
+3. If `idvenda` found: persist `saleExternalId` on Quote (idempotent — only if null)
+4. If status is `PENDENTE`/`ENVIADO`: calls `checkPaymentStatus()` → `AthosService.verificarPagamentoPorOrcamento()`
+5. If paid: `changeStatus()` to `APROVADO`, `paymentConfirmedAt` persisted, Chatwoot notified
 
-**State Management:**
-- No client-side state management library; pages use React `useState`/`useEffect`
-- Backend is stateless; all state in PostgreSQL via Prisma
+### 5. Customer Approval via Link
 
-## Key Abstractions
+1. Email/WhatsApp link: `GET /orcamento/:id/approve?token=XXX`
+2. Frontend page shows summary → customer clicks "Approve"
+3. `POST /api/quotes/:id/approve?token=XXX` (public endpoint, no API key)
+4. `QuotesService.approveByToken()`: validates token, clears token, sets `approved=true`, `approvedAt`
+5. `changeStatus()` transitions to `APROVADO`
+6. Chatwoot notified with confirmation message
 
-**QuoteStatus State Machine:**
-- Purpose: Enforces valid lifecycle transitions on every status change
-- Definition: `statusTransitions` map at `apps/backend/src/modules/quotes/quotes.service.ts:15`
-- Transitions:
-  - `PENDENTE` → `ENVIADO`, `PAGAMENTO_PARCIAL`, `APROVADO`, `CANCELADO`
-  - `ENVIADO` → `PAGAMENTO_PARCIAL`, `APROVADO`, `CANCELADO`
-  - `PAGAMENTO_PARCIAL` → `APROVADO`, `CANCELADO`
-  - `APROVADO` → `EM_PRODUCAO`, `CANCELADO`
-  - `EM_PRODUCAO` → `PRONTO_PARA_ENTREGA`, `CANCELADO`
-  - `PRONTO_PARA_ENTREGA` → `ENTREGUE`, `CANCELADO`
-  - `ENTREGUE`, `CANCELADO` → terminal states
+### 6. NFS-e Emission
 
-**DTOs (class-validator):**
-- Purpose: Boundary validation for all inbound payloads
-- Location: `apps/backend/src/modules/quotes/dto/`
-- Files: `create-quote.dto.ts`, `update-status.dto.ts`, `merge-duplicates.dto.ts`
-- Pattern: `@IsString()`, `@IsEnum()` decorators + `ValidationPipe(whitelist: true)`
+1. `POST /api/quotes/:quoteId/nfse` (requires API key + sensitive throttle)
+2. `NfseService.emitir()`:
+   a. Lookup Quote via Prisma
+   b. If `clienteAthosId` provided: `AthosService.buscarClientePorId()` for tomador CNPJ/CPF/address
+   c. Build XML RPS using validated service codes (24.01, 13.05, 14.08) and ISS rates
+   d. Optional discount: `descontoAtivo` + `descontoPorcentagem`/`descontoValor`
+   e. SOAP call to iiBrasil endpoint via `soap` library (token auth)
+   f. Parse response, persist `nfseNumero`, `nfseCodigoVerificacao`, `nfseLink`, `nfseEmitidaEm` on Quote
 
-**Shared Types:**
-- Purpose: TypeScript types shared across packages
-- Location: `packages/shared/src/index.ts`
-- Current contents: `QuoteStatus` union type, `QuoteSummary` type
-- Note: Backend uses Prisma-generated enums; shared package types are frontend-facing
+## Quote Status State Machine
 
-## Entry Points
+```
+PENDENTE ──► ENVIADO ──► PAGAMENTO_PARCIAL ──► APROVADO
+    │                              │               │
+    └──────────────────────────────┘               ▼
+    │                                         EM_PRODUCAO
+    └──────────────────────────────────────────────►│
+                                                    ▼
+                                          PRONTO_PARA_ENTREGA
+                                                    │
+                                                    ▼
+                                                ENTREGUE
+All states (except ENTREGUE) ──► CANCELADO
+```
 
-**Backend HTTP Server:**
-- Location: `apps/backend/src/main.ts`
-- Triggers: `npm run dev:backend` or production start
-- Responsibilities: Bootstraps NestJS, sets global prefix `/api`, enables CORS, registers `ValidationPipe`
+**Guard for EM_PRODUCAO entry:**
+- Associated customers (Athos linked or approval token used): require `approved=true`
+- Non-associated customers: require `approved=true` OR `saleExternalId` (cash payment confirmed)
 
-**Frontend Dev Server:**
-- Location: `apps/frontend/src/app/layout.tsx`
-- Triggers: `npm run dev:frontend`
+## Key Data Models (Prisma)
 
-**Health Check:**
-- Location: `apps/backend/src/modules/health.controller.ts`
-- Endpoint: `GET /api/health`
-
-## Architectural Constraints
-
-- **CORS:** `app.enableCors()` is called with no origin restriction — suitable for development; production should restrict origins
-- **Global state:** `PrismaService` is a global singleton via `@Global()` DatabaseModule
-- **Circular imports:** `QuotesModule ↔ EfiModule` and `QuotesModule ↔ ChatwootModule` resolved with `forwardRef()`
-- **Payload compatibility:** `QuotesController.create()` handles both `{ body: CreateQuoteDto }` and bare `CreateQuoteDto` for legacy caller compatibility (Chatwoot webhook payload)
-- **BigInt serialization:** `externalQuoteId`, `conversationId`, `chatwootContactId` are `BigInt` in Prisma — require special handling when JSON serialized
-
-## Anti-Patterns
-
-### Payload shape ambiguity in QuotesController.create
-
-**What happens:** `create()` checks if `payload.body` exists before using `payload as CreateQuoteDto` directly (`apps/backend/src/modules/quotes/quotes.controller.ts:62`)
-**Why it's wrong:** Bypasses ValidationPipe's DTO enforcement for one code path; two shapes are accepted silently
-**Do this instead:** Normalize callers to always send bare `CreateQuoteDto`; use an explicit transformation interceptor if legacy callers cannot be updated
-
-### Frontend type divergence from backend
-
-**What happens:** `packages/shared/src/index.ts` defines its own `QuoteStatus` as string literals that partially overlap with the Prisma enum
-**Why it's wrong:** Status values can drift between frontend and backend without compile-time errors
-**Do this instead:** Generate or export Prisma enum values to shared package, or import from a single source of truth
-
-## Error Handling
-
-**Strategy:** NestJS built-in exception filters + manual throws
-
-**Patterns:**
-- `NotFoundException` thrown in service when entity not found
-- `BadRequestException` thrown for invalid status transitions
-- `InternalServerErrorException` for unexpected failures
-- Frontend API routes catch `fetch` errors and return `{ error: "Falha ao conectar no backend." }` with 500
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `Quote` | Core entity | `internalNumber` (auto-increment), `externalQuoteId` (BigInt, Athos ID), `status`, `approvalToken`, `paymentExternalId` (EFI txid), `saleExternalId` (Athos sale ID), `nfseNumero` |
+| `Customer` | Buyer/contact | `phone`, `email`, `chatwootContactId`, `isAssociated` (Athos link flag) |
+| `QuoteItem` | Line items | Supports parent-child hierarchy (`parentItemId`); `priceSource` (PDV or MANUAL) |
+| `QuoteStampItem` | Stamp/seal items | `stampType`, `dimensions` — domain-specific to rubber stamp printing business |
+| `QuoteStatusHistory` | Audit trail | Every status transition recorded with actor name |
+| `QuoteDocument` | PDF records | `storagePath` (MinIO object key), `publicUrl` |
+| `PaymentTransaction` | Payment events | EFI webhook events; `externalId` (e2eId), `source`, `method`, `status` |
 
 ## Cross-Cutting Concerns
 
-**Logging:** NestJS `Logger` class used in `QuotesService` (`this.logger = new Logger(QuotesService.name)`)
-**Validation:** Global `ValidationPipe` with `whitelist: true`, `transform: true`, `forbidNonWhitelisted: true` in `apps/backend/src/main.ts`
-**Authentication:** No authentication layer implemented — all backend routes are publicly accessible
+**Logging:**
+- `LoggingInterceptor` (`apps/backend/src/modules/common/logging.interceptor.ts`) — applied globally via `APP_INTERCEPTOR`
+- Services use `new Logger(ClassName.name)` — NestJS built-in logger
+
+**Validation:**
+- Global `ValidationPipe` with `whitelist: true`, `transform: true`, `forbidNonWhitelisted: true`
+- DTOs: `apps/backend/src/modules/quotes/dto/` (create-quote, update-status, merge-duplicates)
+
+**Error Handling:**
+- NestJS exception filters: `BadRequestException`, `NotFoundException`, `InternalServerErrorException`
+- Integration failures are logged as warnings and do not abort the primary response (fire-and-forget for Chatwoot notifications)
+
+**Quote Lookup:**
+- `findQuoteByIdentifier()` in `QuotesService` — resolves by `externalQuoteId` (Athos number), then `internalNumber`, then UUID `id`
+
+## Architectural Constraints
+
+- **Circular DI:** `EfiModule` ↔ `QuotesModule` use `forwardRef()` to resolve circular injection (EfiService needs QuotesService for status updates; QuotesService needs EfiService for payment links)
+- **BigInt serialization:** Prisma uses `BigInt` for external IDs; all responses convert to `Number` before JSON serialization (BigInt is not JSON-serializable)
+- **Fire-and-forget:** `enviarParaCliente` is called fire-and-forget from the controller; Chatwoot/EFI failures log warnings but never surface errors to the caller
+- **Athos read-only:** All Athos access is raw SQL SELECT only; no writes to Athos database ever
+- **PDV stub:** `PdvService.searchCustomer()` returns empty results — implementation pending
+- **No session/JWT auth:** The system uses a single shared `INTERNAL_API_KEY` for frontend→backend; no per-user authentication implemented yet
+
+## Anti-Patterns
+
+### Circular module dependency via forwardRef
+
+**What happens:** `EfiModule` imports `QuotesModule` and `QuotesModule` imports `EfiModule` — resolved with `forwardRef(() => EfiService)` and `@Inject(forwardRef(() => EfiService))`
+**Why it's wrong:** Masks a design issue; makes injection order fragile
+**Do this instead:** Extract shared logic (status update after payment) to a third service (e.g., `PaymentReconciliationService`) that both can depend on without creating a cycle
+
+### Inline HTML template string in service
+
+**What happens:** The full Bootstrap-styled quote PDF HTML template is embedded as a multi-hundred-line string literal in `apps/backend/src/modules/quotes/quotes-pdf-storage.service.ts`
+**Why it's wrong:** Untestable in isolation; mixing template and business logic; large file
+**Do this instead:** Move to a separate `.hbs` file in `apps/backend/src/templates/` and load with `fs.readFileSync`
 
 ---
 
-*Architecture analysis: 2026-05-01*
+*Architecture analysis: 2026-05-06*
