@@ -10,6 +10,9 @@ type QuoteRow = {
   statusLabel?: string;
   statusKey?: string;
   updatedAt?: string;
+  saleExternalId?: number | string | null;
+  paymentConfirmedAt?: string | null;
+  orderNumber?: string | null;
   availableNextStatuses?: Array<{ value: string; label: string }>;
   body?: {
     idorcamento?: number;
@@ -161,6 +164,21 @@ export default function OrcamentoListaPage() {
   const [chatwootContactId, setChatwootContactId] = useState<number | undefined>(undefined);
   const [activeFilter, setActiveFilter] = useState<string>("");
   const createQuoteHref = getCreateQuoteHref();
+
+  useEffect(() => {
+    const es = new EventSource("/api/events/pagamentos");
+    es.onmessage = (event: MessageEvent<string>) => {
+      try {
+        const data = JSON.parse(event.data) as { numeroordem?: string };
+        const ordem = data?.numeroordem ?? "—";
+        showToast(`Pagamento do Pedido #${ordem} confirmado no caixa`, "success");
+      } catch {
+        // payload inesperado — ignora
+      }
+    };
+    es.onerror = () => es.close();
+    return () => es.close();
+  }, []);
 
   useEffect(() => {
     const isDevBypass =
@@ -389,6 +407,7 @@ export default function OrcamentoListaPage() {
               <thead>
                 <tr>
                   <th>Nº</th>
+                  <th>Pedido/Pagamento</th>
                   <th>Cliente</th>
                   <th>Data</th>
                   <th>Vendedor</th>
@@ -400,14 +419,14 @@ export default function OrcamentoListaPage() {
               <tbody>
                 {loadingQuotes ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">
+                    <td colSpan={8} className="text-center text-muted py-4">
                       <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
                       Carregando orçamentos do contato...
                     </td>
                   </tr>
                 ) : quotes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">
+                    <td colSpan={8} className="text-center text-muted py-4">
                       {activeFilter
                         ? `Nenhum orçamento com status "${activeFilter}" para este contato.`
                         : "Nenhum orçamento encontrado para este contato."}
@@ -419,10 +438,22 @@ export default function OrcamentoListaPage() {
                     const quoteNumber = quote.body?.idorcamento ?? quote.internalNumber;
                     const quoteIdentifier = getQuoteIdentifier(quote);
                     const statusClass = STATUS_CLASS[(quote.statusKey ?? "").toLowerCase()] ?? "";
+                    const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
+                    const isPaid = Boolean(orderNumber || quote.paymentConfirmedAt);
 
                     return (
-                      <tr key={quote.id}>
+                      <tr key={quote.id} className={isPaid ? "row-paid" : ""}>
                         <td>{quoteNumber ?? "-"}</td>
+                        <td>
+                          <div className="d-flex flex-column gap-1">
+                            <span className={`badge ${orderNumber ? "bg-success" : "bg-secondary"}`}>
+                              Pedido: {orderNumber ? `#${orderNumber}` : "nao gerado"}
+                            </span>
+                            <span className={`badge ${isPaid ? "bg-success-subtle text-success-emphasis" : "bg-warning text-dark"}`}>
+                              {isPaid ? "Pagamento confirmado" : "Aguardando pagamento"}
+                            </span>
+                          </div>
+                        </td>
                         <td>{quote.body?.cliente?.nome || "Não informado"}</td>
                         <td>{quote.updatedAt ? new Date(quote.updatedAt).toLocaleDateString("pt-BR") : "-"}</td>
                         <td>{quote.body?.vendedorNome || "-"}</td>
@@ -480,6 +511,7 @@ export default function OrcamentoListaPage() {
         .status-pronto_para_entrega { color: #a65b12; font-weight: 600; }
         .status-entregue { color: #444; font-weight: 600; }
         .status-enviado { color: #1565c0; font-weight: 600; }
+        .row-paid { background: #effaf3; }
         .acoes-lista { display: flex; gap: 0.5rem; }
         .orcamento-header { border-radius: 8px 8px 0 0; }
         .orcamento-section { border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
