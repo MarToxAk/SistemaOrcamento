@@ -5,12 +5,14 @@ import { QuotesService } from "./quotes.service";
 import { AthosModule } from "../integrations/athos/athos.module";
 import { ChatwootModule } from "../integrations/chatwoot/chatwoot.module";
 import { EfiModule } from "../integrations/efi/efi.module";
+import { EventsModule } from "../events/events.module";
 
 @Module({
   imports: [
     forwardRef(() => AthosModule),
     forwardRef(() => ChatwootModule),
     forwardRef(() => EfiModule),
+    EventsModule,
   ],
   controllers: [QuotesController],
   providers: [QuotesService, QuotesPdfStorageService],

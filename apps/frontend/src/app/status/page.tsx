@@ -14,6 +14,8 @@ type QuoteRow = {
   updatedAt: string;
   statusKey: string;
   statusLabel: string;
+  saleExternalId?: number | string | null;
+  paymentConfirmedAt?: string | null;
   latestPdfUrl: string | null;
   chatwootConversationUrl: string | null;
   availableNextStatuses: StatusOption[];
@@ -379,6 +381,7 @@ export default function StatusPage() {
                       const customerName = quote.body.cliente?.nome || "Cliente não informado";
                       const total = quote.body.totais?.valor ?? 0;
                       const quoteNumber = quote.body.idorcamento ?? quote.internalNumber;
+                      const orderNumber = quote.saleExternalId != null ? String(quote.saleExternalId) : null;
                       const canOpenPdf = Boolean(quote.latestPdfUrl);
                       const statusBusy = statusSavingId === quote.id;
                       const pdfBusy = pdfLoadingId === quote.id;
@@ -388,6 +391,18 @@ export default function StatusPage() {
                           <td>
                             <div className="fw-semibold">#{quoteNumber}</div>
                             <div className="text-muted small">{quote.id}</div>
+                            <div className="mt-1">
+                              <span className={`badge ${orderNumber ? "bg-info text-dark" : "bg-secondary"}`}>
+                                Pedido: {orderNumber ? `#${orderNumber}` : "não gerado"}
+                              </span>
+                            </div>
+                            <div className="mt-1">
+                              <span className={`badge ${quote.paymentConfirmedAt ? "bg-primary" : "bg-warning text-dark"}`}>
+                                {quote.paymentConfirmedAt
+                                  ? `Pagamento confirmado ${new Date(quote.paymentConfirmedAt).toLocaleDateString("pt-BR")}`
+                                  : "Pagamento pendente"}
+                              </span>
+                            </div>
                           </td>
                           <td>
                             <div className="fw-semibold">{customerName}</div>

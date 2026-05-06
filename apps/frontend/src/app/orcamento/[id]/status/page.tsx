@@ -24,6 +24,8 @@ export default function StatusPage() {
   const [statusLabel, setStatusLabel] = useState<string>("-");
   const [statusKey, setStatusKey] = useState<string>("");
   const [quoteNumber, setQuoteNumber] = useState<number | null>(null);
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [paymentConfirmedAt, setPaymentConfirmedAt] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string>("");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -38,6 +40,8 @@ export default function StatusPage() {
         setStatusLabel(data?.statusLabel ?? data?.body?.status ?? "-");
         setStatusKey((data?.statusKey ?? "").toLowerCase());
         setQuoteNumber(data?.body?.idorcamento_interno ?? null);
+        setOrderNumber(data?.saleExternalId != null ? String(data.saleExternalId) : null);
+        setPaymentConfirmedAt(data?.paymentConfirmedAt ?? null);
         setClientName(data?.body?.cliente?.nome ?? "");
         setUpdatedAt(data?.updatedAt ?? null);
         setPageState("loaded");
@@ -138,6 +142,25 @@ export default function StatusPage() {
                 {clientName && (
                   <div className="text-muted mb-4 small">{clientName}</div>
                 )}
+
+                <div className="row g-2 text-start mb-3">
+                  <div className="col-12 col-sm-6">
+                    <div className="border rounded p-2 h-100 bg-light-subtle">
+                      <div className="text-muted small">Nº do pedido</div>
+                      <div className="fw-semibold">{orderNumber ? `#${orderNumber}` : "Aguardando geração"}</div>
+                    </div>
+                  </div>
+                  <div className="col-12 col-sm-6">
+                    <div className="border rounded p-2 h-100 bg-light-subtle">
+                      <div className="text-muted small">Pagamento</div>
+                      <div className="fw-semibold">
+                        {paymentConfirmedAt
+                          ? `Confirmado em ${new Date(paymentConfirmedAt).toLocaleString("pt-BR")}`
+                          : "Aguardando confirmação"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
                 <div className="my-4">
                   <span className="status-pill" style={{ backgroundColor: badgeColor }}>

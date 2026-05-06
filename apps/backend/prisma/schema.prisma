@@ -95,6 +95,7 @@ model Quote {
   paymentConfirmedAt DateTime?
   paymentFailedAt    DateTime?
   paymentFailureReason String?
+  paymentNote        String?
   validity           String?
   deliveryDate       DateTime?
   paymentTerms       String?

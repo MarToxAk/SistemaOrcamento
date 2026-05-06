@@ -872,4 +872,26 @@ export class AthosService {
     }
   }
 
+  async buscarVendaCaixa(idvenda: number): Promise<{ numeroordem: string | null; isCaixa: boolean }> {
+    const pool = this.getPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query<{ numeroordem: string | null; idcaixamovimento: number | null }>(
+        "SELECT numeroordem, idcaixamovimento FROM venda WHERE idvenda = $1 LIMIT 1",
+        [idvenda],
+      );
+      const row = result.rows[0];
+      if (!row) return { numeroordem: null, isCaixa: false };
+      return {
+        numeroordem: row.numeroordem?.trim() || String(idvenda),
+        isCaixa: row.idcaixamovimento != null,
+      };
+    } catch (err) {
+      this.logger.warn(`buscarVendaCaixa idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`);
+      return { numeroordem: null, isCaixa: false };
+    } finally {
+      client.release();
+    }
+  }
+
 }

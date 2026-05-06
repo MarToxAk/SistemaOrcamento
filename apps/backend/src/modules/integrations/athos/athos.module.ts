@@ -1,9 +1,14 @@
 import { Module } from "@nestjs/common";
-import { AthosService } from "./athos.service";
+
+import { DatabaseModule } from "../../database/database.module";
+import { EventsModule } from "../../events/events.module";
 import { AthosController } from "./athos.controller";
+import { AthosListenerService } from "./athos-listener.service";
+import { AthosService } from "./athos.service";
 
 @Module({
-  providers: [AthosService],
+  imports: [DatabaseModule, EventsModule],
+  providers: [AthosService, AthosListenerService],
   controllers: [AthosController],
   exports: [AthosService],
 })
