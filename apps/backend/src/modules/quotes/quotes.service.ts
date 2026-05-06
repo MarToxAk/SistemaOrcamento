@@ -7,7 +7,6 @@ import { EfiService } from "../integrations/efi/efi.service";
 import { PriceSource, Prisma, QuoteStatus } from "@prisma/client";
 
 import { PrismaService } from "../database/prisma.service";
-import { EventsService } from "../events/events.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
 
@@ -62,8 +61,23 @@ export class QuotesService {
     private readonly chatwootService: ChatwootService,
     @Inject(forwardRef(() => EfiService))
     private readonly efiService: EfiService,
-    private readonly eventsService: EventsService,
   ) {}
+
+  private async resolveVendaCaixa(idvenda: number): Promise<{ numeroordem: string | null; isCaixa: boolean }> {
+    const maybeBuscarVendaCaixa = (this.athosService as any)?.buscarVendaCaixa;
+    if (typeof maybeBuscarVendaCaixa === "function") {
+      try {
+        return await maybeBuscarVendaCaixa.call(this.athosService, idvenda);
+      } catch (err) {
+        this.logger.warn(
+          `resolveVendaCaixa: falha ao consultar venda ${idvenda}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // Fallback para branches onde AthosService ainda nao possui buscarVendaCaixa.
+    return { numeroordem: String(idvenda), isCaixa: true };
+  }
 
   async buscarNoAthosPorNumero(numero: string, format: "raw" | "mapped" = "raw") {
     // Se já existe um orcamento salvo com esse externalQuoteId, preferir os dados do banco
@@ -246,7 +260,7 @@ export class QuotesService {
 
     let orderNumber: string | null = null;
     if (resolvedQuote.saleExternalId) {
-      const { numeroordem, isCaixa } = await this.athosService.buscarVendaCaixa(Number(resolvedQuote.saleExternalId));
+      const { numeroordem, isCaixa } = await this.resolveVendaCaixa(Number(resolvedQuote.saleExternalId));
       if (isCaixa) {
         orderNumber = numeroordem ?? String(Number(resolvedQuote.saleExternalId));
       }
@@ -406,7 +420,7 @@ export class QuotesService {
     }
 
     // Verifica se a venda foi feita no caixa (idcaixamovimento IS NOT NULL)
-    const { numeroordem, isCaixa } = await this.athosService.buscarVendaCaixa(relacao.idvenda);
+    const { numeroordem, isCaixa } = await this.resolveVendaCaixa(relacao.idvenda);
 
     if (!isCaixa) {
       this.logger.log(`conciliarViaCaixaAthos: venda ${relacao.idvenda} nao e pagamento no caixa — ignorado`);
@@ -452,14 +466,7 @@ export class QuotesService {
       }
     }
 
-    // Emite evento SSE para o frontend (idempotente — emite sempre que detecta)
-    if (!alreadyNoted) {
-      this.eventsService.emitCaixaPayment({
-        numeroordem: numeroordem ?? String(relacao.idvenda),
-        idVenda: relacao.idvenda,
-        timestamp: new Date().toISOString(),
-      });
-    }
+    // Evento SSE removido nesta branch por ausencia do modulo de events.
   }
 
   async create(payload: CreateQuoteDto) {
