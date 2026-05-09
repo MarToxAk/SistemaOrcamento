@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { Client, Pool, PoolClient } from "pg";
+import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
 
 type Row = Record<string, unknown>;
 
@@ -95,6 +96,25 @@ function pickDateTimeISO(row: Row, keys: string[]) {
     }
   }
   return null;
+}
+
+function parseDateFilter(value: string, fieldName: string, endOfDay = false) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new BadRequestException(`Parametro ${fieldName} invalido: valor vazio`);
+  }
+
+  const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+  const normalized = dateOnlyPattern.test(trimmed)
+    ? `${trimmed}${endOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z"}`
+    : trimmed;
+
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestException(`Parametro ${fieldName} invalido: use formato de data valido (ex: YYYY-MM-DD)`);
+  }
+
+  return parsed;
 }
 
 async function loadItems(client: Pick<Client, "query">, idOrcamento: string) {
@@ -410,7 +430,7 @@ export class AthosService {
     }
   }
 
-  async listarContasPagar() {
+  async listarContasPagar(dataInicio?: string, dataFinal?: string, statusconta?: string) {
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
 
@@ -453,18 +473,50 @@ export class AthosService {
         throw new InternalServerErrorException("Nao foi possivel identificar coluna de data de vencimento para filtrar");
       }
 
-      const now = new Date();
-      const start = new Date(now);
-      start.setDate(now.getDate() - 30);
-      const end = new Date(now);
-      end.setDate(now.getDate() + 30);
+      let start: Date | null = null;
+      let end: Date | null = null;
 
-      const startISO = start.toISOString();
-      const endISO = end.toISOString();
+      if (typeof dataInicio === "string" && dataInicio.trim()) {
+        start = parseDateFilter(dataInicio, "dataInicio", false);
+      }
 
-      const query = `SELECT * FROM ${table.tableName} WHERE ${dateColumn} IS NOT NULL AND CAST(${dateColumn} AS timestamp) BETWEEN $1 AND $2 ORDER BY CAST(${dateColumn} AS timestamp) DESC`;
+      if (typeof dataFinal === "string" && dataFinal.trim()) {
+        end = parseDateFilter(dataFinal, "dataFinal", true);
+      }
 
-      const result = await client.query(query, [startISO, endISO]);
+      if (!start && !end) {
+        const now = new Date();
+        start = new Date(now);
+        start.setDate(now.getDate() - 30);
+        end = new Date(now);
+        end.setDate(now.getDate() + 30);
+      }
+
+      if (start && end && start.getTime() > end.getTime()) {
+        throw new BadRequestException("Parametro dataInicio nao pode ser maior que dataFinal");
+      }
+
+      const conditions = [`${dateColumn} IS NOT NULL`];
+      const params: string[] = [];
+
+      if (start) {
+        params.push(start.toISOString());
+        conditions.push(`CAST(${dateColumn} AS timestamp) >= $${params.length}`);
+      }
+
+      if (end) {
+        params.push(end.toISOString());
+        conditions.push(`CAST(${dateColumn} AS timestamp) <= $${params.length}`);
+      }
+
+      if (typeof statusconta === "string" && statusconta.trim()) {
+        params.push(statusconta.trim().toUpperCase());
+        conditions.push(`statusconta = $${params.length}`);
+      }
+
+      const query = `SELECT * FROM ${table.tableName} WHERE ${conditions.join(" AND ")} ORDER BY CAST(${dateColumn} AS timestamp) DESC`;
+
+      const result = await client.query(query, params);
 
       return (result.rows as Row[]).map((row) => ({
         descricaoconta: pickString(row, ["descricaoconta", "descricao", "descricaocurta", "nome", "descricao_conta"]),
@@ -480,7 +532,7 @@ export class AthosService {
       }));
     } catch (error) {
       this.logger.error(`Erro ao listar contas a pagar no Athos: ${error}`);
-      if (error instanceof NotFoundException || error instanceof InternalServerErrorException) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof InternalServerErrorException) {
         throw error;
       }
       throw new InternalServerErrorException("Erro ao listar contas a pagar no Athos");
@@ -889,6 +941,49 @@ export class AthosService {
     } catch (err) {
       this.logger.warn(`buscarVendaCaixa idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`);
       return { numeroordem: null, isCaixa: false };
+    } finally {
+      client.release();
+    }
+  }
+
+  async criarContaPagar(dto: CreateContaPagarDto): Promise<{ idcontapagar: number }> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const candidates = [
+        "conta_pagar",
+        "contaspagar",
+        "contas_pagar",
+        "contasapagar",
+        "conta_pagar_fornecedor",
+      ];
+      const table = await findExistingTable(client, candidates);
+      if (!table) {
+        throw new NotFoundException("Tabela de contas a pagar nao encontrada");
+      }
+      const result = await client.query<{ idcontapagar: number }>(
+        `INSERT INTO ${table.tableName}
+           (descricaoconta, datavencimento, valorconta, dataemissao, observacao, idfornecedor, numerodocumento)
+         VALUES ($1, CAST($2 AS date), $3, CAST($4 AS date), $5, $6, $7)
+         RETURNING idcontapagar`,
+        [
+          dto.descricaoconta,
+          dto.datavencimento,
+          dto.valorconta,
+          dto.dataemissao ?? null,
+          dto.observacao ?? null,
+          dto.idfornecedor ?? null,
+          dto.numerodocumento ?? null,
+        ],
+      );
+      const idcontapagar = result.rows[0].idcontapagar;
+      this.logger.log(`[Athos] conta_pagar criada: idcontapagar=${idcontapagar}`);
+      return { idcontapagar };
+    } catch (error) {
+      this.logger.error(`Erro ao criar conta a pagar no Athos: ${error}`);
+      if (error instanceof InternalServerErrorException) throw error;
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException("Erro ao criar conta a pagar no Athos");
     } finally {
       client.release();
     }
