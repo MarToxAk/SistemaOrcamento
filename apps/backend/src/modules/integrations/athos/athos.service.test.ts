@@ -357,3 +357,230 @@ describe("AthosService - buscarClientes", () => {
     expect(client.release).toHaveBeenCalled();
   });
 });
+
+describe("AthosService - criarContaPagar", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve criar conta a pagar com INSERT bem-sucedido e retornar idcontapagar", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock para findExistingTable (information_schema)
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "idcontapagar" },
+          { column_name: "descricaoconta" },
+          { column_name: "datavencimento" },
+        ],
+      })
+      // Mock para INSERT RETURNING
+      .mockResolvedValueOnce({ rows: [{ idcontapagar: 42 }] });
+
+    const result = await service.criarContaPagar({
+      descricaoconta: "Conta fornecedor ABC",
+      datavencimento: "2026-06-30",
+      valorconta: 1500.5,
+      dataemissao: "2026-05-01",
+      observacao: "Pagamento após aprovação",
+      idfornecedor: 10,
+      numerodocumento: "NF-001",
+    });
+
+    expect(result.idcontapagar).toBe(42);
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve lançar erro quando tabela de contas a pagar não encontrada", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock client.query to return empty rows for all table candidates
+    // findExistingTable will call getTableColumns for each candidate table
+    client.query.mockResolvedValue({ rows: [] });
+
+    await expect(
+      service.criarContaPagar({
+        descricaoconta: "Conta teste",
+        datavencimento: "2026-06-30",
+        valorconta: 100,
+      }),
+    ).rejects.toThrow();
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve lançar erro quando pool.connect falha", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    pool.connect = jest.fn().mockRejectedValue(new Error("connection refused"));
+
+    await expect(
+      service.criarContaPagar({
+        descricaoconta: "Conta teste",
+        datavencimento: "2026-06-30",
+        valorconta: 100,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("deve chamar client.release() mesmo quando query falha", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock para findExistingTable (sucesso)
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "idcontapagar" },
+          { column_name: "descricaoconta" },
+        ],
+      })
+      // Mock para INSERT que falha
+      .mockRejectedValueOnce(new Error("database error"));
+
+    await expect(
+      service.criarContaPagar({
+        descricaoconta: "Conta teste",
+        datavencimento: "2026-06-30",
+        valorconta: 100,
+      }),
+    ).rejects.toThrow("Erro ao criar conta a pagar no Athos");
+    expect(client.release).toHaveBeenCalled();
+  });
+});
+
+describe("AthosService - listarContasPagar com statusconta filter", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve aplicar filtro statusconta corretamente no WHERE", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock para findExistingTable
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "datavencimento" },
+          { column_name: "statusconta" },
+          { column_name: "descricaoconta" },
+        ],
+      })
+      // Mock para SELECT com filtro statusconta
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            descricaoconta: "Conta ABERTA",
+            dataemissao: "2026-05-01",
+            datavencimento: "2026-06-30",
+            valorconta: 500,
+            statusconta: "ABERTO",
+            observacao: "Pagamento pendente",
+          },
+        ],
+      });
+
+    const result = await service.listarContasPagar(undefined, undefined, "ABERTO");
+
+    expect(result).toHaveLength(1);
+    expect(result[0].statusconta).toBe("ABERTO");
+    // Verificar que o client foi liberado
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve converter statusconta para UPPERCASE mesmo se fornecido em minúsculas", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock para findExistingTable
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "datavencimento" },
+          { column_name: "statusconta" },
+        ],
+      })
+      // Mock para SELECT
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            descricaoconta: "Conta PAGO",
+            datavencimento: "2026-05-30",
+            valorconta: 1000,
+            statusconta: "PAGO",
+          },
+        ],
+      });
+
+    const result = await service.listarContasPagar(undefined, undefined, "pago");
+
+    expect(result).toHaveLength(1);
+    expect(result[0].statusconta).toBe("PAGO");
+    expect(client.release).toHaveBeenCalled();
+
+    // Verificar que statusconta foi convertido para UPPERCASE na query
+    const queryCall = client.query.mock.calls[1];
+    expect(queryCall[1]).toContain("PAGO");
+  });
+
+  it("deve retornar lista vazia quando nenhuma conta tem o statusconta especificado", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock para findExistingTable
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "datavencimento" },
+          { column_name: "statusconta" },
+        ],
+      })
+      // Mock para SELECT retornando vazio
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await service.listarContasPagar(undefined, undefined, "CANCELADO");
+
+    expect(result).toHaveLength(0);
+    expect(client.release).toHaveBeenCalled();
+  });
+});
