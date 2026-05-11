@@ -44,6 +44,15 @@ async function findExistingTable(client: Pick<Client, "query">, tableCandidates:
   return null;
 }
 
+async function allocateNextContaPagarId(client: PoolClient, tableName: string, idColumn: string) {
+  await client.query(`LOCK TABLE "${tableName}" IN EXCLUSIVE MODE`);
+  const result = await client.query<{ next_id: number }>(
+    `SELECT COALESCE(MAX(CAST("${idColumn}" AS INTEGER)), 0) + 1 AS next_id FROM "${tableName}"`,
+  );
+
+  return Number(result.rows[0]?.next_id ?? 1);
+}
+
 function pickString(row: Row, keys: string[]) {
   for (const key of keys) {
     const value = row[key];
@@ -951,6 +960,7 @@ export class AthosService {
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
     try {
+      await client.query("BEGIN");
       const candidates = [
         "conta_pagar",
         "contaspagar",
@@ -976,16 +986,26 @@ export class AthosService {
         throw new BadRequestException("Nenhum campo valido informado para criar conta a pagar");
       }
 
+      const nextId = await allocateNextContaPagarId(client, table.tableName, idColumn);
+      const insertColumnsWithId = [`"${idColumn}"`, ...insertColumns];
+      const valueExpressionsWithId = [
+        "$1",
+        ...valueExpressions.map((expression) => expression.replace(/\$(\d+)/g, (_, index) => `$${Number(index) + 1}`)),
+      ];
+      const paramsWithId = [nextId, ...params];
+
       const result = await client.query<{ idcontapagar: number }>(
-        `INSERT INTO "${table.tableName}" (${insertColumns.join(", ")})
-         VALUES (${valueExpressions.join(", ")})
+        `INSERT INTO "${table.tableName}" (${insertColumnsWithId.join(", ")})
+         VALUES (${valueExpressionsWithId.join(", ")})
          RETURNING "${idColumn}" as "idcontapagar"`,
-        params,
+        paramsWithId,
       );
+      await client.query("COMMIT");
       const idcontapagar = result.rows[0].idcontapagar;
       this.logger.log(`[Athos] conta_pagar criada: idcontapagar=${idcontapagar}`);
       return { idcontapagar };
     } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
       this.logger.error(`Erro ao criar conta a pagar no Athos: ${error}`);
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException || error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException("Erro ao criar conta a pagar no Athos");

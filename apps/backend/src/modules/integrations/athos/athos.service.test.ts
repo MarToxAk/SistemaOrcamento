@@ -392,17 +392,34 @@ describe("AthosService - criarContaPagar", () => {
     const client = { query: jest.fn(), release: jest.fn() };
     pool.connect = jest.fn().mockResolvedValue(client);
 
-    // Mock para findExistingTable (information_schema)
-    client.query
-      .mockResolvedValueOnce({
-        rows: [
-          { column_name: "idcontapagar" },
-          { column_name: "descricaoconta" },
-          { column_name: "datavencimento" },
-        ],
-      })
-      // Mock para INSERT RETURNING
-      .mockResolvedValueOnce({ rows: [{ idcontapagar: 42 }] });
+    client.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+
+      if (text.includes("information_schema.columns")) {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "descricaoconta" },
+            { column_name: "datavencimento" },
+            { column_name: "valorconta" },
+          ],
+        };
+      }
+
+      if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) {
+        return { rows: [] };
+      }
+
+      if (text.includes("SELECT COALESCE(MAX(CAST(\"idcontapagar\" AS INTEGER))")) {
+        return { rows: [{ next_id: 42 }] };
+      }
+
+      if (text.includes("INSERT INTO \"conta_pagar\"")) {
+        return { rows: [{ idcontapagar: 42 }] };
+      }
+
+      return { rows: [] };
+    });
 
     const result = await service.criarContaPagar({
       descricaoconta: "Conta fornecedor ABC",
@@ -455,16 +472,34 @@ describe("AthosService - criarContaPagar", () => {
     const client = { query: jest.fn(), release: jest.fn() };
     pool.connect = jest.fn().mockResolvedValue(client);
 
-    // Mock para findExistingTable (sucesso)
-    client.query
-      .mockResolvedValueOnce({
-        rows: [
-          { column_name: "idcontapagar" },
-          { column_name: "descricaoconta" },
-        ],
-      })
-      // Mock para INSERT que falha
-      .mockRejectedValueOnce(new Error("database error"));
+    client.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+
+      if (text.includes("information_schema.columns")) {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "descricaoconta" },
+            { column_name: "datavencimento" },
+            { column_name: "valorconta" },
+          ],
+        };
+      }
+
+      if (text === "BEGIN" || text === "ROLLBACK" || text.startsWith("LOCK TABLE")) {
+        return { rows: [] };
+      }
+
+      if (text.includes("SELECT COALESCE(MAX(CAST(\"idcontapagar\" AS INTEGER))")) {
+        return { rows: [{ next_id: 42 }] };
+      }
+
+      if (text.includes("INSERT INTO \"conta_pagar\"")) {
+        throw new Error("database error");
+      }
+
+      return { rows: [] };
+    });
 
     await expect(
       service.criarContaPagar({
