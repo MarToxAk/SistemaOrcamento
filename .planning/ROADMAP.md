@@ -227,6 +227,12 @@ Success criteria:
 **Phase 25: Upload de Anexos via SMB**
 Goal: Receber arquivo via multipart e gravá-lo em \\192.168.3.203\html\Anexo\contapagar\{id}\.
 Requirements: ANEX-01, ANEX-02, ANEX-03
+Plans: 2 plans
+
+Plans:
+- [x] 25-01-PLAN.md - Confirmar contrato de idclientehistorico e implementar upload SMB + insert em anexo
+- [x] 25-02-PLAN.md - Cobertura de testes unitarios para upload de anexo Athos
+
 Success criteria:
 1. POST /athos/contas-pagar/:id/anexo grava arquivo no servidor de rede.
 2. Registro inserido em tabela `anexo` com path UNC e nome do arquivo.

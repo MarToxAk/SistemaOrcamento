@@ -3,9 +3,13 @@ import { AthosController } from "./athos.controller";
 
 describe("AthosController - Autenticacao fail-closed", () => {
   let controller: AthosController;
+  let athosServiceMock: { anexarContaPagar: jest.Mock };
 
   beforeEach(() => {
-    controller = new AthosController(null as any);
+    athosServiceMock = {
+      anexarContaPagar: jest.fn(),
+    };
+    controller = new AthosController(athosServiceMock as any);
   });
 
   afterEach(() => {
@@ -73,6 +77,47 @@ describe("AthosController - Autenticacao fail-closed", () => {
       expect(() => controller["validateAthosToken"](undefined, "valid-token-123")).not.toThrow();
       expect(() => controller["validateAthosToken"]("Bearer valid-token-123", undefined)).not.toThrow();
       expect(() => controller["validateAthosToken"](undefined, "wrong-token")).toThrow(UnauthorizedException);
+    });
+  });
+
+  describe("anexarContaPagar", () => {
+    it("deve delegar upload ao service quando token for valido", async () => {
+      process.env.ATHOS_API_TOKEN = "valid-token-123";
+      const file = {
+        originalname: "boleto.pdf",
+        buffer: Buffer.from("file"),
+        mimetype: "application/pdf",
+        size: 4,
+      };
+
+      athosServiceMock.anexarContaPagar.mockResolvedValue({
+        idanexo: 77,
+        idcontapagar: 42,
+        arquivo: "boleto.pdf",
+        caminhoanexo: "\\\\192.168.3.203\\html\\Anexo\\contapagar\\42",
+      });
+
+      const result = await controller.anexarContaPagar(42, { idfuncionario: 9 }, file, undefined, "valid-token-123");
+
+      expect(athosServiceMock.anexarContaPagar).toHaveBeenCalledWith({
+        idcontapagar: 42,
+        file,
+        idfuncionario: 9,
+      });
+      expect(result.idanexo).toBe(77);
+    });
+
+    it("deve falhar antes de delegar quando token for invalido", async () => {
+      process.env.ATHOS_API_TOKEN = "valid-token-123";
+      const file = {
+        originalname: "boleto.pdf",
+        buffer: Buffer.from("file"),
+        mimetype: "application/pdf",
+        size: 4,
+      };
+
+      await expect(controller.anexarContaPagar(42, {}, file, undefined, "wrong-token")).rejects.toThrow(UnauthorizedException);
+      expect(athosServiceMock.anexarContaPagar).not.toHaveBeenCalled();
     });
   });
 });

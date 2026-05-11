@@ -99,3 +99,14 @@ Git range: v1.7..HEAD (26 commits) | 37 files, +4619/-122 lines
 Delivered: Busca de cliente Athos para NFS-e no backend e frontend, resolucao de tomador por cliente selecionado (clienteAthosId), observabilidade com logs estruturados e cobertura de testes PF/PJ/falhas.
 
 Archive: .planning/milestones/v1.8-ROADMAP.md
+
+---
+
+## v2.0 - Gestão Integrada Financeira e Caixa
+
+Status: PLANNING
+Phases: 23-25 | Plans: 1 (23-01-PLAN.md)
+
+Goal: Consolidar ciclo financeiro interno: hardening do listener de caixa, lançamento de contas a pagar via API REST e upload de comprovantes via SMB.
+
+Archive: .planning/milestones/v2.0-ROADMAP.md

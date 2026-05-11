@@ -15,8 +15,16 @@ jest.mock("pg", () => {
   return { Pool: jest.fn(() => mPool), Client: jest.fn(() => mClient) };
 });
 
+jest.mock("node:fs/promises", () => ({
+  mkdir: jest.fn(),
+  writeFile: jest.fn(),
+  unlink: jest.fn(),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pgMock = require("pg");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fsMock = require("node:fs/promises");
 
 function getMockClient() {
   return pgMock.Pool.mock.results[0]?.value?.connect.mock.results[0]?.value ?? pgMock.Pool.mock.results[0]?.value?.connect();
@@ -581,6 +589,153 @@ describe("AthosService - listarContasPagar com statusconta filter", () => {
     const result = await service.listarContasPagar(undefined, undefined, "CANCELADO");
 
     expect(result).toHaveLength(0);
+    expect(client.release).toHaveBeenCalled();
+  });
+});
+
+describe("AthosService - anexarContaPagar", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    fsMock.mkdir.mockResolvedValue(undefined);
+    fsMock.writeFile.mockResolvedValue(undefined);
+    fsMock.unlink.mockResolvedValue(undefined);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve gravar arquivo, inserir em anexo e retornar metadados", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      .mockResolvedValueOnce({ rows: [{ column_name: "idcontapagar" }] })
+      .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "idanexo" },
+          { column_name: "idfuncionario" },
+          { column_name: "caminhoanexo" },
+          { column_name: "arquivo" },
+          { column_name: "idclientehistorico" },
+          { column_name: "idcontapagar" },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ idanexo: 77 }] });
+
+    const result = await service.anexarContaPagar({
+      idcontapagar: 55,
+      file: {
+        originalname: "boleto final.pdf",
+        buffer: Buffer.from("pdf"),
+        mimetype: "application/pdf",
+        size: 3,
+      },
+    });
+
+    expect(fsMock.mkdir).toHaveBeenCalledWith("\\\\192.168.3.203\\html\\Anexo\\contapagar\\55", { recursive: true });
+    expect(fsMock.writeFile).toHaveBeenCalledWith(
+      "\\\\192.168.3.203\\html\\Anexo\\contapagar\\55\\boleto-final.pdf",
+      expect.any(Buffer),
+    );
+    expect(client.query.mock.calls[3][1]).toEqual([1, "\\\\192.168.3.203\\html\\Anexo\\contapagar\\55", "boleto-final.pdf", 0, 55]);
+    expect(result).toEqual({
+      idanexo: 77,
+      idcontapagar: 55,
+      arquivo: "boleto-final.pdf",
+      caminhoanexo: "\\\\192.168.3.203\\html\\Anexo\\contapagar\\55",
+    });
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve abortar antes do INSERT quando a escrita SMB falha", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+    fsMock.writeFile.mockRejectedValue(new Error("share unavailable"));
+
+    client.query
+      .mockResolvedValueOnce({ rows: [{ column_name: "idcontapagar" }] })
+      .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "idanexo" },
+          { column_name: "idfuncionario" },
+          { column_name: "caminhoanexo" },
+          { column_name: "arquivo" },
+          { column_name: "idclientehistorico" },
+          { column_name: "idcontapagar" },
+        ],
+      });
+
+    await expect(
+      service.anexarContaPagar({
+        idcontapagar: 55,
+        file: {
+          originalname: "boleto.pdf",
+          buffer: Buffer.from("pdf"),
+          mimetype: "application/pdf",
+          size: 3,
+        },
+      }),
+    ).rejects.toThrow("Erro ao anexar conta a pagar no Athos");
+
+    expect(client.query).toHaveBeenCalledTimes(3);
+    expect(fsMock.unlink).not.toHaveBeenCalled();
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve fazer cleanup do arquivo quando o INSERT em anexo falha", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      .mockResolvedValueOnce({ rows: [{ column_name: "idcontapagar" }] })
+      .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "idanexo" },
+          { column_name: "idfuncionario" },
+          { column_name: "caminhoanexo" },
+          { column_name: "arquivo" },
+          { column_name: "idclientehistorico" },
+          { column_name: "idcontapagar" },
+        ],
+      })
+      .mockRejectedValueOnce(new Error("insert failed"));
+
+    await expect(
+      service.anexarContaPagar({
+        idcontapagar: 88,
+        file: {
+          originalname: "comprovante.jpg",
+          buffer: Buffer.from("img"),
+          mimetype: "image/jpeg",
+          size: 3,
+        },
+        idfuncionario: 7,
+      }),
+    ).rejects.toThrow("Erro ao anexar conta a pagar no Athos");
+
+    expect(fsMock.unlink).toHaveBeenCalledWith(
+      "\\\\192.168.3.203\\html\\Anexo\\contapagar\\88\\comprovante.jpg",
+    );
     expect(client.release).toHaveBeenCalled();
   });
 });

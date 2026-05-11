@@ -1,8 +1,13 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { Client, Pool, PoolClient } from "pg";
+import { buildContaPagarAnexoPaths } from "./athos-anexo.util";
 import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
 
 type Row = Record<string, unknown>;
+type AthosAttachmentFile = { originalname: string; buffer: Buffer; mimetype: string; size: number };
+
+const DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO = 0;
 
 function isSafeIdentifier(value: string) {
   return /^[a-z_][a-z0-9_]*$/i.test(value);
@@ -519,6 +524,7 @@ export class AthosService {
       const result = await client.query(query, params);
 
       return (result.rows as Row[]).map((row) => ({
+        idcontapagar: pickNumber(row, ["idcontapagar", "id_contapagar", "id"], undefined),
         descricaoconta: pickString(row, ["descricaoconta", "descricao", "descricaocurta", "nome", "descricao_conta"]),
         dataemissao: pickDateISO(row, ["dataemissao", "data_emissao", "dt_emissao", "dtemissao", "data"]),
         datavencimento: pickDateISO(row, ["datavencimento", "data_vencimento", "vencimento", "dtvenc", "dt_vencimento"]),
@@ -986,6 +992,134 @@ export class AthosService {
       throw new InternalServerErrorException("Erro ao criar conta a pagar no Athos");
     } finally {
       client.release();
+    }
+  }
+
+  async anexarContaPagar(input: {
+    idcontapagar: number;
+    file: AthosAttachmentFile;
+    idfuncionario?: number;
+  }): Promise<{ idanexo: number; idcontapagar: number; arquivo: string; caminhoanexo: string }> {
+    const { idcontapagar, file, idfuncionario } = input;
+
+    if (!Number.isInteger(idcontapagar) || idcontapagar <= 0) {
+      throw new BadRequestException("idcontapagar invalido");
+    }
+
+    if (!file?.buffer || !file.originalname) {
+      throw new BadRequestException("Arquivo obrigatorio");
+    }
+
+    const pool = this.getPool();
+    let client: PoolClient | null = null;
+    let writtenFilePath: string | null = null;
+
+    try {
+      client = await pool.connect();
+
+      const contaPagarTable = await findExistingTable(client, [
+        "conta_pagar",
+        "contaspagar",
+        "contas_pagar",
+        "contasapagar",
+        "conta_pagar_fornecedor",
+      ]);
+
+      if (!contaPagarTable || !isSafeIdentifier(contaPagarTable.tableName)) {
+        throw new NotFoundException("Tabela de contas a pagar nao encontrada");
+      }
+
+      const contaPagarIdColumn = ["idcontapagar", "id_contapagar", "id"].find(
+        (column) => contaPagarTable.columns.has(column) && isSafeIdentifier(column),
+      );
+
+      if (!contaPagarIdColumn) {
+        throw new InternalServerErrorException("Tabela de contas a pagar sem coluna identificadora reconhecida");
+      }
+
+      const contaPagarResult = await client.query(
+        `SELECT 1 FROM "${contaPagarTable.tableName}" WHERE CAST("${contaPagarIdColumn}" AS TEXT) = $1 LIMIT 1`,
+        [String(idcontapagar)],
+      );
+
+      if (contaPagarResult.rows.length === 0) {
+        throw new NotFoundException("Conta a pagar nao encontrada no Athos");
+      }
+
+      const anexoTable = await findExistingTable(client, ["anexo", "anexos"]);
+      if (!anexoTable || !isSafeIdentifier(anexoTable.tableName)) {
+        throw new NotFoundException("Tabela de anexos nao encontrada no Athos");
+      }
+
+      const idAnexoColumn = ["idanexo", "id_anexo", "id"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const caminhoColumn = ["caminhoanexo", "caminho_anexo", "caminho"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const arquivoColumn = ["arquivo", "nomearquivo", "nome_arquivo"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const funcionarioColumn = ["idfuncionario", "id_funcionario"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const clienteHistoricoColumn = ["idclientehistorico", "id_clientehistorico", "idcliente_historico"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const contaPagarColumn = ["idcontapagar", "id_contapagar"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+
+      if (!idAnexoColumn || !caminhoColumn || !arquivoColumn || !funcionarioColumn || !clienteHistoricoColumn || !contaPagarColumn) {
+        throw new InternalServerErrorException("Tabela de anexos sem colunas obrigatorias para upload");
+      }
+
+      const { directoryPath, fullPath, fileName } = buildContaPagarAnexoPaths(idcontapagar, file.originalname);
+
+      await mkdir(directoryPath, { recursive: true });
+      await writeFile(fullPath, file.buffer);
+      writtenFilePath = fullPath;
+
+      this.logger.log(
+        `[Athos] anexarContaPagar: idcontapagar=${idcontapagar} idclientehistorico=${DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO}`,
+      );
+
+      const result = await client.query<{ idanexo: number }>(
+        `INSERT INTO "${anexoTable.tableName}"
+           ("${funcionarioColumn}", "${caminhoColumn}", "${arquivoColumn}", "${clienteHistoricoColumn}", "${contaPagarColumn}")
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING "${idAnexoColumn}" as "idanexo"`,
+        [
+          idfuncionario ?? 1,
+          directoryPath,
+          fileName,
+          DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO,
+          idcontapagar,
+        ],
+      );
+
+      return {
+        idanexo: Number(result.rows[0].idanexo),
+        idcontapagar,
+        arquivo: fileName,
+        caminhoanexo: directoryPath,
+      };
+    } catch (error) {
+      if (writtenFilePath) {
+        await unlink(writtenFilePath).catch(() => undefined);
+      }
+
+      this.logger.error(`Erro ao anexar conta a pagar no Athos: ${error}`);
+      if (
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException("Erro ao anexar conta a pagar no Athos");
+    } finally {
+      client?.release();
     }
   }
 

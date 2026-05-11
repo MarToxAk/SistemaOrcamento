@@ -1002,3 +1002,241 @@ CREATE TRIGGER tg_alterarproduto
   FOR EACH ROW
   EXECUTE PROCEDURE alterarproduto();
 
+
+
+Esquema do Banco de Dados - Athos Empresarial
+
+Este documento serve como referência de contexto para o GSD sobre a estrutura de tabelas do PostgreSQL.
+
+1. Fluxo de Vendas e Caixa
+
+Tabelas usadas para monitorar vendas e confirmar pagamentos via terminal de caixa.
+
+Tabela: venda
+
+Armazena os dados principais da venda/pedido.
+
+idvenda: Primary Key.
+
+numeroordem: Número visual do pedido (ex: "0005").
+
+observacao: Campo para registrar "Pagamento feito no caixa".
+
+valor: Valor total da venda.
+
+Tabela: relacao_orcamento_venda
+
+Tabela de ligação que dispara notificações via trigger.
+
+idrelataocaorcamentovenda: Primary Key.
+
+idvenda: Foreign Key para venda.idvenda.
+
+idorcamento: ID do orçamento original.
+
+2. Fluxo Financeiro e Documentos
+
+Tabelas para gestão de contas a pagar e anexos físicos.
+
+Tabela: conta_pagar
+
+idcontapagar: Primary Key.
+
+numerodocumento: Identificador do documento/nota.
+
+descricaoconta: Detalhes do pagamento.
+
+datavencimento: Data de vencimento.
+
+valorconta: Valor original.
+
+valorpago: Valor efetivamente pago.
+
+Tabela: anexo
+
+Armazena o caminho dos arquivos físicos (boletos/comprovantes).
+
+idanexo: Primary Key.
+
+idcontapagar: Foreign Key para conta_pagar.idcontapagar.
+
+caminhoanexo: Path UNC completo (ex: \\192.168.3.203\html\Anexo\contapagar\ID\arquivo.png).
+
+arquivo: Nome do arquivo com extensão.
+
+idfuncionario: Quem realizou o upload.
+
+3. Triggers e Notificações
+
+Canal de Escuta: n8n_channel.
+
+Trigger: trigger_relacao_orcamento_venda_notify dispara AFTER INSERT OR UPDATE em relacao_orcamento_venda.
+
+
+
+-- Table: conta_pagar
+
+-- DROP TABLE conta_pagar;
+
+CREATE TABLE conta_pagar
+(
+  idcontapagar serial NOT NULL,
+  idtipoconta integer,
+  idgrupoconta integer,
+  idsubgrupoconta integer,
+  idconta integer,
+  idcentrocusto integer,
+  numerodocumento descricao,
+  descricaoconta descricao,
+  dataemissao dmdata,
+  datavencimento dmdata,
+  valorconta monetario,
+  observacao descricao,
+  statusconta character varying(3),
+  valorpago monetario,
+  jurosconta monetario,
+  competenciames character varying(2),
+  competenciaano character varying(4),
+  desconto numeric(9,3),
+  datapagamento date,
+  idfuncionario integer,
+  datalancamento dmdata,
+  enviaalerta boolean,
+  idnivel5 integer,
+  idfornecedor integer,
+  multaconta monetario,
+  idorigempagamento integer,
+  ultimaalteracao timestamp without time zone DEFAULT now(),
+  sincronizado boolean DEFAULT false,
+  historicocontabil character varying(100),
+  agruparconta boolean DEFAULT false,
+  idloja integer,
+  idbudget integer,
+  recorrenciafornecedor boolean NOT NULL DEFAULT true,
+  exibemsgrecorrencia boolean NOT NULL DEFAULT true,
+  numeronota descricao_curta,
+  CONSTRAINT pk_conta_pagar PRIMARY KEY (idcontapagar),
+  CONSTRAINT fk_conta_pa_centro_cu_centro_c FOREIGN KEY (idcentrocusto)
+      REFERENCES centro_custo (idcentrocusto) MATCH SIMPLE
+      ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_conta_pa_conta_con_conta FOREIGN KEY (idconta)
+      REFERENCES conta (idconta) MATCH SIMPLE
+      ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_conta_pa_funcionar_funciona FOREIGN KEY (idfuncionario)
+      REFERENCES funcionario (idfuncionario) MATCH SIMPLE
+      ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_conta_pa_grupo_con_grupo_co FOREIGN KEY (idgrupoconta)
+      REFERENCES grupo_conta (idgrupoconta) MATCH SIMPLE
+      ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_conta_pa_subgrupo__subgrupo FOREIGN KEY (idsubgrupoconta)
+      REFERENCES subgrupo_conta (idsubgrupoconta) MATCH SIMPLE
+      ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_conta_pa_tipo_cont_tipo_con FOREIGN KEY (idtipoconta)
+      REFERENCES tipo_conta (idtipoconta) MATCH SIMPLE
+      ON UPDATE RESTRICT ON DELETE RESTRICT
+)
+WITH (
+  OIDS=FALSE
+);
+ALTER TABLE conta_pagar
+  OWNER TO postgres;
+GRANT ALL ON TABLE conta_pagar TO postgres;
+GRANT SELECT ON TABLE conta_pagar TO usuario_leitura;
+
+-- Index: centro_custo_conta_pagar_fk
+
+-- DROP INDEX centro_custo_conta_pagar_fk;
+
+CREATE INDEX centro_custo_conta_pagar_fk
+  ON conta_pagar
+  USING btree
+  (idcentrocusto);
+
+-- Index: conta_conta_pagar_fk
+
+-- DROP INDEX conta_conta_pagar_fk;
+
+CREATE INDEX conta_conta_pagar_fk
+  ON conta_pagar
+  USING btree
+  (idconta);
+
+-- Index: conta_pagar_pk
+
+-- DROP INDEX conta_pagar_pk;
+
+CREATE UNIQUE INDEX conta_pagar_pk
+  ON conta_pagar
+  USING btree
+  (idcontapagar);
+
+-- Index: funcionario_conta_pagar_fk
+
+-- DROP INDEX funcionario_conta_pagar_fk;
+
+CREATE INDEX funcionario_conta_pagar_fk
+  ON conta_pagar
+  USING btree
+  (idfuncionario);
+
+-- Index: grupo_conta_conta_pagar_fk
+
+-- DROP INDEX grupo_conta_conta_pagar_fk;
+
+CREATE INDEX grupo_conta_conta_pagar_fk
+  ON conta_pagar
+  USING btree
+  (idgrupoconta);
+
+-- Index: subgrupo_conta_conta_pagar_fk
+
+-- DROP INDEX subgrupo_conta_conta_pagar_fk;
+
+CREATE INDEX subgrupo_conta_conta_pagar_fk
+  ON conta_pagar
+  USING btree
+  (idsubgrupoconta);
+
+-- Index: tipo_conta_conta_pagar_fk
+
+-- DROP INDEX tipo_conta_conta_pagar_fk;
+
+CREATE INDEX tipo_conta_conta_pagar_fk
+  ON conta_pagar
+  USING btree
+  (idtipoconta);
+
+
+-- Trigger: tg_alterarcontapagar on conta_pagar
+
+-- DROP TRIGGER tg_alterarcontapagar ON conta_pagar;
+
+CREATE TRIGGER tg_alterarcontapagar
+  BEFORE INSERT OR UPDATE
+  ON conta_pagar
+  FOR EACH ROW
+  EXECUTE PROCEDURE alterarcontapagar();
+
+
+
+-- Table: anexo
+
+-- DROP TABLE anexo;
+
+CREATE TABLE anexo
+(
+  idfuncionario bigint NOT NULL,
+  caminhoanexo character varying(255) NOT NULL,
+  arquivo character varying(255) NOT NULL,
+  idclientehistorico bigint NOT NULL,
+  idcontapagar integer,
+  idanexo serial NOT NULL,
+  CONSTRAINT anexo_pkey PRIMARY KEY (idanexo)
+)
+WITH (
+  OIDS=FALSE
+);
+ALTER TABLE anexo
+  OWNER TO postgres;
+GRANT ALL ON TABLE anexo TO postgres;
+GRANT SELECT ON TABLE anexo TO usuario_leitura;
