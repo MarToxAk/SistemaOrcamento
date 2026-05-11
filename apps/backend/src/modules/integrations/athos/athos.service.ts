@@ -1102,7 +1102,6 @@ export class AthosService {
       if (statusAtualizado === "PAG") {
         const idFuncionario = pickIntFromUnknown(dto.idfuncionario ?? contaAtualizada.idfuncionario);
         const valorSaida = pickNumberFromUnknown(dto.valorpago ?? contaAtualizada.valorpago ?? contaAtualizada.valorconta);
-        const idCaixaCentral = pickIntFromUnknown(dto.idcaixacentral);
 
         if (!idFuncionario || idFuncionario <= 0) {
           throw new BadRequestException("idfuncionario obrigatorio para liquidacao de pagamento");
@@ -1110,10 +1109,6 @@ export class AthosService {
 
         if (valorSaida === null || valorSaida <= 0) {
           throw new BadRequestException("valorpago ou valorconta obrigatorio para liquidacao de pagamento");
-        }
-
-        if (!idCaixaCentral || idCaixaCentral <= 0) {
-          throw new BadRequestException("idcaixacentral obrigatorio quando statusconta = PAG");
         }
 
         const livroTable = await findExistingTable(client, ["livro_registro_io", "livroregistroio"]);
@@ -1179,70 +1174,6 @@ export class AthosService {
         await client.query(
           `INSERT INTO "${livroTable.tableName}" (${livroColumns.join(", ")}) VALUES (${livroValues.join(", ")})`,
           livroParams,
-        );
-
-        const caixaTable = await findExistingTable(client, ["caixa_saida", "caixasaida"]);
-        if (!caixaTable || !isSafeIdentifier(caixaTable.tableName)) {
-          throw new NotFoundException("Tabela caixa_saida nao encontrada");
-        }
-
-        const caixaIdCaixaCentralColumn = ["idcaixacentral", "id_caixacentral"].find(
-          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
-        );
-        const caixaIdContaPagarColumn = ["idcontapagar", "id_contapagar"].find(
-          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
-        );
-        const caixaValorColumn = ["valor"].find(
-          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
-        );
-        const caixaDataDocumentoColumn = ["datadocumento", "data_documento"].find(
-          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
-        );
-        const caixaDataLancamentoColumn = ["datalancamento", "data_lancamento"].find(
-          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
-        );
-        const caixaDescricaoColumn = ["descricao"].find(
-          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
-        );
-        const caixaObservacaoColumn = ["observacao"].find(
-          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
-        );
-
-        if (!caixaIdCaixaCentralColumn || !caixaIdContaPagarColumn || !caixaValorColumn) {
-          throw new InternalServerErrorException("Tabela caixa_saida sem colunas obrigatorias para liquidacao");
-        }
-
-        const caixaColumns = [`"${caixaIdCaixaCentralColumn}"`, `"${caixaIdContaPagarColumn}"`, `"${caixaValorColumn}"`];
-        const caixaValues = [`$1`, `$2`, `$3`];
-        const caixaParams: unknown[] = [idCaixaCentral, idcontapagar, valorSaida];
-
-        if (caixaDataDocumentoColumn && dataPagamento) {
-          caixaColumns.push(`"${caixaDataDocumentoColumn}"`);
-          caixaValues.push(`CAST($${caixaParams.length + 1} AS date)`);
-          caixaParams.push(dataPagamento);
-        }
-
-        if (caixaDataLancamentoColumn && dataPagamento) {
-          caixaColumns.push(`"${caixaDataLancamentoColumn}"`);
-          caixaValues.push(`CAST($${caixaParams.length + 1} AS date)`);
-          caixaParams.push(dataPagamento);
-        }
-
-        if (caixaDescricaoColumn) {
-          caixaColumns.push(`"${caixaDescricaoColumn}"`);
-          caixaValues.push(`$${caixaParams.length + 1}`);
-          caixaParams.push("Saida automatica de caixa via PATCH Athos");
-        }
-
-        if (caixaObservacaoColumn) {
-          caixaColumns.push(`"${caixaObservacaoColumn}"`);
-          caixaValues.push(`$${caixaParams.length + 1}`);
-          caixaParams.push(String(contaAtualizada.observacao ?? "").trim() || "Pagamento liquidado automaticamente");
-        }
-
-        await client.query(
-          `INSERT INTO "${caixaTable.tableName}" (${caixaColumns.join(", ")}) VALUES (${caixaValues.join(", ")})`,
-          caixaParams,
         );
       }
 

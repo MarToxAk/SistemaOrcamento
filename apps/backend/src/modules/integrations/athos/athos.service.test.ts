@@ -722,24 +722,6 @@ describe("AthosService - updateContaPagar", () => {
         return { rows: [] };
       }
 
-      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "caixa_saida") {
-        return {
-          rows: [
-            { column_name: "idcaixacentral" },
-            { column_name: "idcontapagar" },
-            { column_name: "valor" },
-            { column_name: "datadocumento" },
-            { column_name: "datalancamento" },
-            { column_name: "descricao" },
-            { column_name: "observacao" },
-          ],
-        };
-      }
-
-      if (text.includes('INSERT INTO "caixa_saida"')) {
-        return { rows: [] };
-      }
-
       return { rows: [] };
     });
 
@@ -748,7 +730,6 @@ describe("AthosService - updateContaPagar", () => {
       valorpago: 600,
       datapagamento: "2026-05-11",
       idfuncionario: 3,
-      idcaixacentral: 1,
     });
 
     expect(result).toMatchObject({
@@ -759,11 +740,11 @@ describe("AthosService - updateContaPagar", () => {
     });
     const queries = client.query.mock.calls.map((call) => String(call[0]));
     expect(queries.some((query) => query.includes('INSERT INTO "livro_registro_io"'))).toBe(true);
-    expect(queries.some((query) => query.includes('INSERT INTO "caixa_saida"'))).toBe(true);
+    expect(queries.some((query) => query.includes('INSERT INTO "caixa_saida"'))).toBe(false);
     expect(client.release).toHaveBeenCalled();
   });
 
-  it("deve rejeitar liquidacao PAG sem idcaixacentral", async () => {
+  it("deve permitir liquidacao PAG sem idcaixacentral", async () => {
     const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
     const client = { query: jest.fn(), release: jest.fn() };
     pool.connect = jest.fn().mockResolvedValue(client);
@@ -793,10 +774,26 @@ describe("AthosService - updateContaPagar", () => {
               idcontapagar: 42,
               statusconta: "PAG",
               valorpago: 600,
+              valorconta: 600,
+              datapagamento: "2026-05-11",
               idfuncionario: 3,
             },
           ],
         };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro_io") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "idfuncionario" },
+            { column_name: "valorsaida" },
+          ],
+        };
+      }
+
+      if (text.includes('INSERT INTO "livro_registro_io"')) {
+        return { rows: [] };
       }
 
       return { rows: [] };
@@ -808,7 +805,11 @@ describe("AthosService - updateContaPagar", () => {
         valorpago: 600,
         idfuncionario: 3,
       }),
-    ).rejects.toThrow("idcaixacentral obrigatorio quando statusconta = PAG");
+    ).resolves.toMatchObject({
+      idcontapagar: 42,
+      statusconta: "PAG",
+      valorpago: 600,
+    });
 
     expect(client.release).toHaveBeenCalled();
   });
