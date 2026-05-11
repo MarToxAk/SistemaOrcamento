@@ -712,8 +712,17 @@ describe("AthosService - updateContaPagar", () => {
             { column_name: "valorsaida" },
             { column_name: "datadocumento" },
             { column_name: "datalancamento" },
+            { column_name: "horalancamento" },
             { column_name: "descricao" },
+            { column_name: "numerodocumento" },
+            { column_name: "tipopagamento" },
             { column_name: "observacao" },
+            { column_name: "idorigemlancamento" },
+            { column_name: "idrevenda" },
+            { column_name: "sincronizado" },
+            { column_name: "transferencia" },
+            { column_name: "history_code" },
+            { column_name: "transaction_id" },
           ],
         };
       }
@@ -741,6 +750,14 @@ describe("AthosService - updateContaPagar", () => {
     const queries = client.query.mock.calls.map((call) => String(call[0]));
     expect(queries.some((query) => query.includes('INSERT INTO "livro_registro_io"'))).toBe(true);
     expect(queries.some((query) => query.includes('INSERT INTO "caixa_saida"'))).toBe(false);
+
+    const livroInsertCall = client.query.mock.calls.find((call) => String(call[0]).includes('INSERT INTO "livro_registro_io"'));
+    const livroInsertParams = (livroInsertCall?.[1] ?? []) as unknown[];
+    expect(livroInsertParams).toContain("DINHEIRO");
+    expect(livroInsertParams).toContain("Dinheiro");
+    expect(livroInsertParams).toContain(11305);
+    expect(livroInsertParams).toContain(false);
+
     expect(client.release).toHaveBeenCalled();
   });
 

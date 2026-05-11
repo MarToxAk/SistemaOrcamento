@@ -1131,10 +1131,37 @@ export class AthosService {
         const livroDataLancamentoColumn = ["datalancamento", "data_lancamento"].find(
           (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
         );
+        const livroHoraLancamentoColumn = ["horalancamento", "hora_lancamento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
         const livroDescricaoColumn = ["descricao"].find(
           (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
         );
+        const livroNumeroDocumentoColumn = ["numerodocumento", "numero_documento", "numerodoc"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroTipoPagamentoColumn = ["tipopagamento", "tipo_pagamento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
         const livroObservacaoColumn = ["observacao"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroIdOrigemLancamentoColumn = ["idorigemlancamento", "id_origem_lancamento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroIdRevendaColumn = ["idrevenda", "id_revenda"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroSincronizadoColumn = ["sincronizado"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroTransferenciaColumn = ["transferencia"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroHistoryCodeColumn = ["history_code"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroTransactionIdColumn = ["transaction_id"].find(
           (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
         );
 
@@ -1159,6 +1186,13 @@ export class AthosService {
           livroParams.push(dataPagamento);
         }
 
+        if (livroHoraLancamentoColumn) {
+          const horaAtual = new Date().toTimeString().slice(0, 8);
+          livroColumns.push(`"${livroHoraLancamentoColumn}"`);
+          livroValues.push(`CAST($${livroParams.length + 1} AS time)`);
+          livroParams.push(horaAtual);
+        }
+
         if (livroDescricaoColumn) {
           livroColumns.push(`"${livroDescricaoColumn}"`);
           livroValues.push(`$${livroParams.length + 1}`);
@@ -1169,6 +1203,54 @@ export class AthosService {
           livroColumns.push(`"${livroObservacaoColumn}"`);
           livroValues.push(`$${livroParams.length + 1}`);
           livroParams.push(String(contaAtualizada.observacao ?? "").trim() || "Pagamento liquidado automaticamente");
+        }
+
+        if (livroNumeroDocumentoColumn) {
+          livroColumns.push(`"${livroNumeroDocumentoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push("DINHEIRO");
+        }
+
+        if (livroTipoPagamentoColumn) {
+          livroColumns.push(`"${livroTipoPagamentoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push("Dinheiro");
+        }
+
+        if (livroIdOrigemLancamentoColumn) {
+          livroColumns.push(`"${livroIdOrigemLancamentoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(11305);
+        }
+
+        if (livroIdRevendaColumn) {
+          livroColumns.push(`"${livroIdRevendaColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(null);
+        }
+
+        if (livroSincronizadoColumn) {
+          livroColumns.push(`"${livroSincronizadoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(false);
+        }
+
+        if (livroTransferenciaColumn) {
+          livroColumns.push(`"${livroTransferenciaColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(false);
+        }
+
+        if (livroHistoryCodeColumn) {
+          livroColumns.push(`"${livroHistoryCodeColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(null);
+        }
+
+        if (livroTransactionIdColumn) {
+          livroColumns.push(`"${livroTransactionIdColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(null);
         }
 
         await client.query(
