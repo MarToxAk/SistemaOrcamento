@@ -131,6 +131,13 @@ Content-Type: application/json
 
 **Descrição**: Atualiza parcialmente qualquer campo suportado. Retorna o registro completo após update.
 
+Quando `statusconta = "PAG"`, o backend executa automaticamente a liquidação tripla em transação SQL:
+- Update em `conta_pagar`
+- Insert em `livro_registro_io` (lançamento de saída)
+- Insert em `caixa_saida` (movimentação de caixa)
+
+Se qualquer etapa falhar, a transação faz rollback e nenhuma alteração é persistida.
+
 **Headers**:
 ```
 Authorization: Bearer {ATHOS_API_TOKEN}
@@ -144,12 +151,15 @@ Content-Type: application/json
 
 **Body** (todos os campos são opcionais — envie apenas os que deseja atualizar):
 
-#### Exemplo 1: Marcar como Pago
+#### Exemplo 1: Marcar como Pago com liquidação automática
 ```json
 {
   "statusconta": "PAG",
   "datapagamento": "2026-05-11",
-  "valorpago": 4500.00
+  "valorpago": 4500.00,
+  "idfuncionario": 3,
+  "idcaixacentral": 1,
+  "observacao": "Pagamento efetuado - baixa automática em livro_registro_io e caixa_saida"
 }
 ```
 
@@ -231,6 +241,8 @@ Content-Type: application/json
 
 **Respostas de Erro**:
 - `400 Bad Request` — Nenhum campo válido informado para atualização
+- `400 Bad Request` — `idcaixacentral` obrigatório quando `statusconta = PAG`
+- `400 Bad Request` — `idfuncionario` obrigatório para liquidação de pagamento
 - `401 Unauthorized` — Token ausente ou inválido
 - `404 Not Found` — Conta com esse ID não encontrada
 

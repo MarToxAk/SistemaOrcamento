@@ -667,30 +667,88 @@ describe("AthosService - updateContaPagar", () => {
     const client = { query: jest.fn(), release: jest.fn() };
     pool.connect = jest.fn().mockResolvedValue(client);
 
-    client.query
-      .mockResolvedValueOnce({
-        rows: [
-          { column_name: "idcontapagar" },
-          { column_name: "statusconta" },
-          { column_name: "valorpago" },
-          { column_name: "datapagamento" },
-        ],
-      })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            idcontapagar: 42,
-            statusconta: "PAG",
-            valorpago: 600,
-            datapagamento: "2026-05-11",
-          },
-        ],
-      });
+    client.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+
+      if (text === "BEGIN" || text === "COMMIT") {
+        return { rows: [] };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "conta_pagar") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "statusconta" },
+            { column_name: "valorpago" },
+            { column_name: "datapagamento" },
+            { column_name: "idfuncionario" },
+            { column_name: "valorconta" },
+            { column_name: "observacao" },
+          ],
+        };
+      }
+
+      if (text.includes('UPDATE "conta_pagar"')) {
+        return {
+          rows: [
+            {
+              idcontapagar: 42,
+              statusconta: "PAG",
+              valorpago: 600,
+              valorconta: 600,
+              datapagamento: "2026-05-11",
+              idfuncionario: 3,
+              observacao: "Pagamento efetuado",
+            },
+          ],
+        };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro_io") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "idfuncionario" },
+            { column_name: "valorsaida" },
+            { column_name: "datadocumento" },
+            { column_name: "datalancamento" },
+            { column_name: "descricao" },
+            { column_name: "observacao" },
+          ],
+        };
+      }
+
+      if (text.includes('INSERT INTO "livro_registro_io"')) {
+        return { rows: [] };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "caixa_saida") {
+        return {
+          rows: [
+            { column_name: "idcaixacentral" },
+            { column_name: "idcontapagar" },
+            { column_name: "valor" },
+            { column_name: "datadocumento" },
+            { column_name: "datalancamento" },
+            { column_name: "descricao" },
+            { column_name: "observacao" },
+          ],
+        };
+      }
+
+      if (text.includes('INSERT INTO "caixa_saida"')) {
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
 
     const result = await service.updateContaPagar(42, {
       statusconta: "PAG",
       valorpago: 600,
       datapagamento: "2026-05-11",
+      idfuncionario: 3,
+      idcaixacentral: 1,
     });
 
     expect(result).toMatchObject({
@@ -699,6 +757,59 @@ describe("AthosService - updateContaPagar", () => {
       valorpago: 600,
       datapagamento: "2026-05-11",
     });
+    const queries = client.query.mock.calls.map((call) => String(call[0]));
+    expect(queries.some((query) => query.includes('INSERT INTO "livro_registro_io"'))).toBe(true);
+    expect(queries.some((query) => query.includes('INSERT INTO "caixa_saida"'))).toBe(true);
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve rejeitar liquidacao PAG sem idcaixacentral", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+
+      if (text === "BEGIN" || text === "ROLLBACK") {
+        return { rows: [] };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "conta_pagar") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "statusconta" },
+            { column_name: "valorpago" },
+            { column_name: "idfuncionario" },
+          ],
+        };
+      }
+
+      if (text.includes('UPDATE "conta_pagar"')) {
+        return {
+          rows: [
+            {
+              idcontapagar: 42,
+              statusconta: "PAG",
+              valorpago: 600,
+              idfuncionario: 3,
+            },
+          ],
+        };
+      }
+
+      return { rows: [] };
+    });
+
+    await expect(
+      service.updateContaPagar(42, {
+        statusconta: "PAG",
+        valorpago: 600,
+        idfuncionario: 3,
+      }),
+    ).rejects.toThrow("idcaixacentral obrigatorio quando statusconta = PAG");
+
     expect(client.release).toHaveBeenCalled();
   });
 
@@ -707,7 +818,18 @@ describe("AthosService - updateContaPagar", () => {
     const client = { query: jest.fn(), release: jest.fn() };
     pool.connect = jest.fn().mockResolvedValue(client);
 
-    client.query.mockResolvedValueOnce({ rows: [{ column_name: "idcontapagar" }] });
+    client.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text === "BEGIN" || text === "ROLLBACK") {
+        return { rows: [] };
+      }
+
+      if (text.includes("information_schema.columns")) {
+        return { rows: [{ column_name: "idcontapagar" }] };
+      }
+
+      return { rows: [] };
+    });
 
     await expect(service.updateContaPagar(42, {})).rejects.toThrow("Nenhum campo valido informado para atualizacao");
     expect(client.release).toHaveBeenCalled();

@@ -119,6 +119,36 @@ function pickDateTimeISO(row: Row, keys: string[]) {
   return null;
 }
 
+function pickIntFromUnknown(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return Math.trunc(parsed);
+    }
+  }
+
+  return null;
+}
+
+function pickNumberFromUnknown(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 function parseDateFilter(value: string, fieldName: string, endOfDay = false) {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -1005,7 +1035,11 @@ export class AthosService {
       this.logger.log(`[Athos] conta_pagar criada: idcontapagar=${idcontapagar}`);
       return { idcontapagar };
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // noop
+      }
       this.logger.error(`Erro ao criar conta a pagar no Athos: ${error}`);
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException || error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException("Erro ao criar conta a pagar no Athos");
@@ -1022,6 +1056,8 @@ export class AthosService {
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
     try {
+      await client.query("BEGIN");
+
       const candidates = [
         "conta_pagar",
         "contaspagar",
@@ -1060,8 +1096,165 @@ export class AthosService {
         throw new NotFoundException("Conta a pagar nao encontrada no Athos");
       }
 
-      return mapContaPagarRow(result.rows[0]);
+      const contaAtualizada = mapContaPagarRow(result.rows[0]);
+      const statusAtualizado = String(contaAtualizada.statusconta ?? "").toUpperCase();
+
+      if (statusAtualizado === "PAG") {
+        const idFuncionario = pickIntFromUnknown(dto.idfuncionario ?? contaAtualizada.idfuncionario);
+        const valorSaida = pickNumberFromUnknown(dto.valorpago ?? contaAtualizada.valorpago ?? contaAtualizada.valorconta);
+        const idCaixaCentral = pickIntFromUnknown(dto.idcaixacentral);
+
+        if (!idFuncionario || idFuncionario <= 0) {
+          throw new BadRequestException("idfuncionario obrigatorio para liquidacao de pagamento");
+        }
+
+        if (valorSaida === null || valorSaida <= 0) {
+          throw new BadRequestException("valorpago ou valorconta obrigatorio para liquidacao de pagamento");
+        }
+
+        if (!idCaixaCentral || idCaixaCentral <= 0) {
+          throw new BadRequestException("idcaixacentral obrigatorio quando statusconta = PAG");
+        }
+
+        const livroTable = await findExistingTable(client, ["livro_registro_io", "livroregistroio"]);
+        if (!livroTable || !isSafeIdentifier(livroTable.tableName)) {
+          throw new NotFoundException("Tabela livro_registro_io nao encontrada");
+        }
+
+        const livroIdContaPagarColumn = ["idcontapagar", "id_contapagar"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroIdFuncionarioColumn = ["idfuncionario", "id_funcionario"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroValorSaidaColumn = ["valorsaida", "valor_saida"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroDataDocumentoColumn = ["datadocumento", "data_documento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroDataLancamentoColumn = ["datalancamento", "data_lancamento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroDescricaoColumn = ["descricao"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroObservacaoColumn = ["observacao"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+
+        if (!livroIdContaPagarColumn || !livroIdFuncionarioColumn || !livroValorSaidaColumn) {
+          throw new InternalServerErrorException("Tabela livro_registro_io sem colunas obrigatorias para liquidacao");
+        }
+
+        const livroColumns = [`"${livroIdContaPagarColumn}"`, `"${livroIdFuncionarioColumn}"`, `"${livroValorSaidaColumn}"`];
+        const livroValues = [`$1`, `$2`, `$3`];
+        const livroParams: unknown[] = [idcontapagar, idFuncionario, valorSaida];
+
+        const dataPagamento = String(contaAtualizada.datapagamento ?? "").trim();
+        if (livroDataDocumentoColumn && dataPagamento) {
+          livroColumns.push(`"${livroDataDocumentoColumn}"`);
+          livroValues.push(`CAST($${livroParams.length + 1} AS date)`);
+          livroParams.push(dataPagamento);
+        }
+
+        if (livroDataLancamentoColumn && dataPagamento) {
+          livroColumns.push(`"${livroDataLancamentoColumn}"`);
+          livroValues.push(`CAST($${livroParams.length + 1} AS date)`);
+          livroParams.push(dataPagamento);
+        }
+
+        if (livroDescricaoColumn) {
+          livroColumns.push(`"${livroDescricaoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push("Baixa automatica via PATCH Athos");
+        }
+
+        if (livroObservacaoColumn) {
+          livroColumns.push(`"${livroObservacaoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(String(contaAtualizada.observacao ?? "").trim() || "Pagamento liquidado automaticamente");
+        }
+
+        await client.query(
+          `INSERT INTO "${livroTable.tableName}" (${livroColumns.join(", ")}) VALUES (${livroValues.join(", ")})`,
+          livroParams,
+        );
+
+        const caixaTable = await findExistingTable(client, ["caixa_saida", "caixasaida"]);
+        if (!caixaTable || !isSafeIdentifier(caixaTable.tableName)) {
+          throw new NotFoundException("Tabela caixa_saida nao encontrada");
+        }
+
+        const caixaIdCaixaCentralColumn = ["idcaixacentral", "id_caixacentral"].find(
+          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const caixaIdContaPagarColumn = ["idcontapagar", "id_contapagar"].find(
+          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const caixaValorColumn = ["valor"].find(
+          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const caixaDataDocumentoColumn = ["datadocumento", "data_documento"].find(
+          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const caixaDataLancamentoColumn = ["datalancamento", "data_lancamento"].find(
+          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const caixaDescricaoColumn = ["descricao"].find(
+          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const caixaObservacaoColumn = ["observacao"].find(
+          (column) => caixaTable.columns.has(column) && isSafeIdentifier(column),
+        );
+
+        if (!caixaIdCaixaCentralColumn || !caixaIdContaPagarColumn || !caixaValorColumn) {
+          throw new InternalServerErrorException("Tabela caixa_saida sem colunas obrigatorias para liquidacao");
+        }
+
+        const caixaColumns = [`"${caixaIdCaixaCentralColumn}"`, `"${caixaIdContaPagarColumn}"`, `"${caixaValorColumn}"`];
+        const caixaValues = [`$1`, `$2`, `$3`];
+        const caixaParams: unknown[] = [idCaixaCentral, idcontapagar, valorSaida];
+
+        if (caixaDataDocumentoColumn && dataPagamento) {
+          caixaColumns.push(`"${caixaDataDocumentoColumn}"`);
+          caixaValues.push(`CAST($${caixaParams.length + 1} AS date)`);
+          caixaParams.push(dataPagamento);
+        }
+
+        if (caixaDataLancamentoColumn && dataPagamento) {
+          caixaColumns.push(`"${caixaDataLancamentoColumn}"`);
+          caixaValues.push(`CAST($${caixaParams.length + 1} AS date)`);
+          caixaParams.push(dataPagamento);
+        }
+
+        if (caixaDescricaoColumn) {
+          caixaColumns.push(`"${caixaDescricaoColumn}"`);
+          caixaValues.push(`$${caixaParams.length + 1}`);
+          caixaParams.push("Saida automatica de caixa via PATCH Athos");
+        }
+
+        if (caixaObservacaoColumn) {
+          caixaColumns.push(`"${caixaObservacaoColumn}"`);
+          caixaValues.push(`$${caixaParams.length + 1}`);
+          caixaParams.push(String(contaAtualizada.observacao ?? "").trim() || "Pagamento liquidado automaticamente");
+        }
+
+        await client.query(
+          `INSERT INTO "${caixaTable.tableName}" (${caixaColumns.join(", ")}) VALUES (${caixaValues.join(", ")})`,
+          caixaParams,
+        );
+      }
+
+      await client.query("COMMIT");
+
+      return contaAtualizada;
     } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // noop
+      }
       this.logger.error(`Erro ao atualizar conta a pagar no Athos: ${error}`);
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException || error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException("Erro ao atualizar conta a pagar no Athos");

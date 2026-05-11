@@ -123,6 +123,7 @@ Current focus: aguardando merge do PR #7 para completar milestone v1.9
 | 260506-003 | Exibir numero do pedido na lista de orcamentos com cor diferente para pagamento confirmado | 2026-05-06 | n/a | [260506-003-lista-orcamento-numero-pedido-pagamento](./quick/260506-003-lista-orcamento-numero-pedido-pagamento/) |
 | 260511-swg | Gere a documentação OpenAPI (Swagger) para os novos endpoints de Contas a Pagar e Anexos | 2026-05-11 | 271b9c9 | [260511-swg-swagger-contas-pagar-anexos](./quick/260511-swg-swagger-contas-pagar-anexos/) |
 | 260511-athos | Implementar Schema Completo Athos para GET, POST e PATCH de conta_pagar | 2026-05-11 | 6aabae0, 54597d2 | [260511-athos-schema-completo](./quick/260511-athos-schema-completo/) |
+| 260511-kvy | Implementar Fluxo Completo de Pagamento e GED (Patch Athos V2) com liquidacao transacional | 2026-05-11 | n/a | [260511-kvy-para-aplicar-este-patch-de-fluxo-complet](./quick/260511-kvy-para-aplicar-este-patch-de-fluxo-complet/) |
 
 
 
