@@ -1,8 +1,15 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { Client, Pool, PoolClient } from "pg";
+import {
+  buildContaPagarInsertParts,
+  buildContaPagarUpdateParts,
+  mapContaPagarRow,
+  resolveContaPagarIdColumn,
+} from "./athos-conta-pagar.util";
 import { buildContaPagarAnexoPaths } from "./athos-anexo.util";
 import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
+import { UpdateContaPagarDto } from "./dto/update-conta-pagar.dto";
 
 type Row = Record<string, unknown>;
 type AthosAttachmentFile = { originalname: string; buffer: Buffer; mimetype: string; size: number };
@@ -523,19 +530,7 @@ export class AthosService {
 
       const result = await client.query(query, params);
 
-      return (result.rows as Row[]).map((row) => ({
-        idcontapagar: pickNumber(row, ["idcontapagar", "id_contapagar", "id"], undefined),
-        descricaoconta: pickString(row, ["descricaoconta", "descricao", "descricaocurta", "nome", "descricao_conta"]),
-        dataemissao: pickDateISO(row, ["dataemissao", "data_emissao", "dt_emissao", "dtemissao", "data"]),
-        datavencimento: pickDateISO(row, ["datavencimento", "data_vencimento", "vencimento", "dtvenc", "dt_vencimento"]),
-        valorconta: pickNumber(row, ["valorconta", "valor_conta", "valor", "valortotal", "valorconta"], 0),
-        observacao: pickString(row, ["observacao", "obs", "observacoes", "descricao", "observacao_conta"]),
-        statusconta: pickString(row, ["statusconta", "status_conta", "status", "situacao"]),
-        valorpago: pickNumber(row, ["valorpago", "valor_pago", "valorquitado", "valorpago"], 0),
-        datapagamento: pickDateISO(row, ["datapagamento", "data_pagamento", "dataquitacao", "datapagamento"]),
-        ultimaalteracao: pickDateTimeISO(row, ["ultimaalteracao", "ultima_alteracao", "ultimaAlteracao", "ultimaalteracao", "ultimaalteracao"]),
-        numerodocumento: pickString(row, ["numerodocumento", "numerodoc", "numero_documento", "numero", "documento", "numeronota"]),
-      }));
+      return (result.rows as Row[]).map((row) => mapContaPagarRow(row));
     } catch (error) {
       this.logger.error(`Erro ao listar contas a pagar no Athos: ${error}`);
       if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof InternalServerErrorException) {
@@ -964,32 +959,92 @@ export class AthosService {
         "conta_pagar_fornecedor",
       ];
       const table = await findExistingTable(client, candidates);
-      if (!table) {
+      if (!table || !isSafeIdentifier(table.tableName)) {
         throw new NotFoundException("Tabela de contas a pagar nao encontrada");
       }
+
+      const idColumn = resolveContaPagarIdColumn(table.columns);
+      if (!idColumn) {
+        throw new InternalServerErrorException("Tabela de contas a pagar sem coluna identificadora reconhecida");
+      }
+
+      const { insertColumns, valueExpressions, params } = buildContaPagarInsertParts(
+        table.columns,
+        dto as unknown as Record<string, unknown>,
+      );
+      if (insertColumns.length === 0) {
+        throw new BadRequestException("Nenhum campo valido informado para criar conta a pagar");
+      }
+
       const result = await client.query<{ idcontapagar: number }>(
-        `INSERT INTO ${table.tableName}
-           (descricaoconta, datavencimento, valorconta, dataemissao, observacao, idfornecedor, numerodocumento)
-         VALUES ($1, CAST($2 AS date), $3, CAST($4 AS date), $5, $6, $7)
-         RETURNING idcontapagar`,
-        [
-          dto.descricaoconta,
-          dto.datavencimento,
-          dto.valorconta,
-          dto.dataemissao ?? null,
-          dto.observacao ?? null,
-          dto.idfornecedor ?? null,
-          dto.numerodocumento ?? null,
-        ],
+        `INSERT INTO "${table.tableName}" (${insertColumns.join(", ")})
+         VALUES (${valueExpressions.join(", ")})
+         RETURNING "${idColumn}" as "idcontapagar"`,
+        params,
       );
       const idcontapagar = result.rows[0].idcontapagar;
       this.logger.log(`[Athos] conta_pagar criada: idcontapagar=${idcontapagar}`);
       return { idcontapagar };
     } catch (error) {
       this.logger.error(`Erro ao criar conta a pagar no Athos: ${error}`);
-      if (error instanceof InternalServerErrorException) throw error;
-      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException || error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException("Erro ao criar conta a pagar no Athos");
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateContaPagar(idcontapagar: number, dto: UpdateContaPagarDto) {
+    if (!Number.isInteger(idcontapagar) || idcontapagar <= 0) {
+      throw new BadRequestException("idcontapagar invalido");
+    }
+
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const candidates = [
+        "conta_pagar",
+        "contaspagar",
+        "contas_pagar",
+        "contasapagar",
+        "conta_pagar_fornecedor",
+      ];
+      const table = await findExistingTable(client, candidates);
+      if (!table || !isSafeIdentifier(table.tableName)) {
+        throw new NotFoundException("Tabela de contas a pagar nao encontrada");
+      }
+
+      const idColumn = resolveContaPagarIdColumn(table.columns);
+      if (!idColumn) {
+        throw new InternalServerErrorException("Tabela de contas a pagar sem coluna identificadora reconhecida");
+      }
+
+      const { assignments, params } = buildContaPagarUpdateParts(
+        table.columns,
+        dto as unknown as Record<string, unknown>,
+      );
+      if (assignments.length === 0) {
+        throw new BadRequestException("Nenhum campo valido informado para atualizacao");
+      }
+
+      params.push(String(idcontapagar));
+      const result = await client.query<Row>(
+        `UPDATE "${table.tableName}"
+            SET ${assignments.join(", ")}
+          WHERE CAST("${idColumn}" AS TEXT) = $${params.length}
+          RETURNING *`,
+        params,
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException("Conta a pagar nao encontrada no Athos");
+      }
+
+      return mapContaPagarRow(result.rows[0]);
+    } catch (error) {
+      this.logger.error(`Erro ao atualizar conta a pagar no Athos: ${error}`);
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException || error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException("Erro ao atualizar conta a pagar no Athos");
     } finally {
       client.release();
     }
@@ -1091,7 +1146,7 @@ export class AthosService {
          RETURNING "${idAnexoColumn}" as "idanexo"`,
         [
           idfuncionario ?? 1,
-          directoryPath,
+          fullPath,
           fileName,
           DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO,
           idcontapagar,
@@ -1102,7 +1157,7 @@ export class AthosService {
         idanexo: Number(result.rows[0].idanexo),
         idcontapagar,
         arquivo: fileName,
-        caminhoanexo: directoryPath,
+        caminhoanexo: fullPath,
       };
     } catch (error) {
       if (writtenFilePath) {

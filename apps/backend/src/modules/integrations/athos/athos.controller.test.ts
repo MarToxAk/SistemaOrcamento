@@ -3,11 +3,12 @@ import { AthosController } from "./athos.controller";
 
 describe("AthosController - Autenticacao fail-closed", () => {
   let controller: AthosController;
-  let athosServiceMock: { anexarContaPagar: jest.Mock };
+  let athosServiceMock: { anexarContaPagar: jest.Mock; updateContaPagar: jest.Mock };
 
   beforeEach(() => {
     athosServiceMock = {
       anexarContaPagar: jest.fn(),
+      updateContaPagar: jest.fn(),
     };
     controller = new AthosController(athosServiceMock as any);
   });
@@ -80,6 +81,36 @@ describe("AthosController - Autenticacao fail-closed", () => {
     });
   });
 
+  describe("updateContaPagar", () => {
+    it("deve delegar update ao service quando token for valido", async () => {
+      process.env.ATHOS_API_TOKEN = "valid-token-123";
+      athosServiceMock.updateContaPagar.mockResolvedValue({
+        idcontapagar: 42,
+        statusconta: "PAG",
+        valorpago: 600,
+      });
+
+      const result = await controller.updateContaPagar(
+        42,
+        { statusconta: "PAG", valorpago: 600 },
+        undefined,
+        "valid-token-123",
+      );
+
+      expect(athosServiceMock.updateContaPagar).toHaveBeenCalledWith(42, { statusconta: "PAG", valorpago: 600 });
+      expect(result.idcontapagar).toBe(42);
+    });
+
+    it("deve falhar antes de delegar update quando token for invalido", async () => {
+      process.env.ATHOS_API_TOKEN = "valid-token-123";
+
+      await expect(
+        controller.updateContaPagar(42, { statusconta: "PAG" }, undefined, "wrong-token"),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(athosServiceMock.updateContaPagar).not.toHaveBeenCalled();
+    });
+  });
+
   describe("anexarContaPagar", () => {
     it("deve delegar upload ao service quando token for valido", async () => {
       process.env.ATHOS_API_TOKEN = "valid-token-123";
@@ -94,7 +125,7 @@ describe("AthosController - Autenticacao fail-closed", () => {
         idanexo: 77,
         idcontapagar: 42,
         arquivo: "boleto.pdf",
-        caminhoanexo: "\\\\192.168.3.203\\html\\Anexo\\contapagar\\42",
+        caminhoanexo: "\\\\192.168.3.203\\html\\Anexo\\contapagar\\42\\boleto.pdf",
       });
 
       const result = await controller.anexarContaPagar(42, { idfuncionario: 9 }, file, undefined, "valid-token-123");

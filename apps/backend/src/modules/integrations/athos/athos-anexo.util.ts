@@ -1,9 +1,9 @@
 import { BadRequestException } from "@nestjs/common";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 
 const ATHOS_ANEXO_ROOT = "\\\\192.168.3.203\\html\\Anexo\\contapagar";
 const ALLOWED_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg"]);
-const INVALID_FILE_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
 
 export function sanitizeAthosAttachmentName(originalName: string): string {
   const normalizedName = String(originalName ?? "").trim();
@@ -18,19 +18,8 @@ export function sanitizeAthosAttachmentName(originalName: string): string {
     throw new BadRequestException("Arquivo invalido: extensao permitida apenas para pdf, png, jpg e jpeg");
   }
 
-  const stem = baseName.slice(0, baseName.length - extension.length);
-  const sanitizedStem = stem
-    .replace(INVALID_FILE_CHARS, "-")
-    .replace(/\s+/g, "-")
-    .replace(/\.+/g, ".")
-    .replace(/^-+|-+$/g, "")
-    .replace(/^[.\s]+|[.\s]+$/g, "");
-
-  if (!sanitizedStem || sanitizedStem === "." || sanitizedStem === "..") {
-    throw new BadRequestException("Arquivo invalido: nome final vazio apos saneamento");
-  }
-
-  return `${sanitizedStem}${extension}`;
+  const token = randomBytes(16).toString("hex");
+  return `${token}${extension}`;
 }
 
 export function buildContaPagarAnexoPaths(idcontapagar: number, originalName: string) {

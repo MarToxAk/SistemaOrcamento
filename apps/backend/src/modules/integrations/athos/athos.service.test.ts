@@ -516,12 +516,19 @@ describe("AthosService - listarContasPagar com statusconta filter", () => {
       .mockResolvedValueOnce({
         rows: [
           {
+            idcontapagar: 15,
             descricaoconta: "Conta ABERTA",
             dataemissao: "2026-05-01",
             datavencimento: "2026-06-30",
             valorconta: 500,
             statusconta: "ABERTO",
             observacao: "Pagamento pendente",
+            jurosconta: 12.5,
+            multaconta: 8.75,
+            competenciames: "05",
+            competenciaano: "2026",
+            enviaalerta: true,
+            recorrenciafornecedor: false,
           },
         ],
       });
@@ -529,8 +536,14 @@ describe("AthosService - listarContasPagar com statusconta filter", () => {
     const result = await service.listarContasPagar(undefined, undefined, "ABERTO");
 
     expect(result).toHaveLength(1);
+    expect(result[0].idcontapagar).toBe(15);
     expect(result[0].statusconta).toBe("ABERTO");
-    // Verificar que o client foi liberado
+    expect(result[0].jurosconta).toBe(12.5);
+    expect(result[0].multaconta).toBe(8.75);
+    expect(result[0].competenciames).toBe("05");
+    expect(result[0].competenciaano).toBe("2026");
+    expect(result[0].enviaalerta).toBe(true);
+    expect(result[0].recorrenciafornecedor).toBe(false);
     expect(client.release).toHaveBeenCalled();
   });
 
@@ -593,6 +606,79 @@ describe("AthosService - listarContasPagar com statusconta filter", () => {
   });
 });
 
+describe("AthosService - updateContaPagar", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve atualizar conta a pagar com payload parcial e retornar registro completo", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "idcontapagar" },
+          { column_name: "statusconta" },
+          { column_name: "valorpago" },
+          { column_name: "datapagamento" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            idcontapagar: 42,
+            statusconta: "PAG",
+            valorpago: 600,
+            datapagamento: "2026-05-11",
+          },
+        ],
+      });
+
+    const result = await service.updateContaPagar(42, {
+      statusconta: "PAG",
+      valorpago: 600,
+      datapagamento: "2026-05-11",
+    });
+
+    expect(result).toMatchObject({
+      idcontapagar: 42,
+      statusconta: "PAG",
+      valorpago: 600,
+      datapagamento: "2026-05-11",
+    });
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve rejeitar PATCH sem nenhum campo valido para atualizar", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query.mockResolvedValueOnce({ rows: [{ column_name: "idcontapagar" }] });
+
+    await expect(service.updateContaPagar(42, {})).rejects.toThrow("Nenhum campo valido informado para atualizacao");
+    expect(client.release).toHaveBeenCalled();
+  });
+});
+
 describe("AthosService - anexarContaPagar", () => {
   let service: AthosService;
 
@@ -649,16 +735,21 @@ describe("AthosService - anexarContaPagar", () => {
     });
 
     expect(fsMock.mkdir).toHaveBeenCalledWith("\\\\192.168.3.203\\html\\Anexo\\contapagar\\55", { recursive: true });
-    expect(fsMock.writeFile).toHaveBeenCalledWith(
-      "\\\\192.168.3.203\\html\\Anexo\\contapagar\\55\\boleto-final.pdf",
-      expect.any(Buffer),
-    );
-    expect(client.query.mock.calls[3][1]).toEqual([1, "\\\\192.168.3.203\\html\\Anexo\\contapagar\\55", "boleto-final.pdf", 0, 55]);
+    const writtenFilePath = String(fsMock.writeFile.mock.calls[0][0]);
+    expect(writtenFilePath).toMatch(/^\\\\192\.168\.3\.203\\html\\Anexo\\contapagar\\55\\[a-f0-9]{32}\.pdf$/);
+
+    const insertParams = client.query.mock.calls[3][1] as unknown[];
+    expect(insertParams[0]).toBe(1);
+    expect(String(insertParams[1])).toMatch(/^\\\\192\.168\.3\.203\\html\\Anexo\\contapagar\\55\\[a-f0-9]{32}\.pdf$/);
+    expect(String(insertParams[2])).toMatch(/^[a-f0-9]{32}\.pdf$/);
+    expect(insertParams[3]).toBe(0);
+    expect(insertParams[4]).toBe(55);
+
     expect(result).toEqual({
       idanexo: 77,
       idcontapagar: 55,
-      arquivo: "boleto-final.pdf",
-      caminhoanexo: "\\\\192.168.3.203\\html\\Anexo\\contapagar\\55",
+      arquivo: expect.stringMatching(/^[a-f0-9]{32}\.pdf$/),
+      caminhoanexo: expect.stringMatching(/^\\\\192\.168\.3\.203\\html\\Anexo\\contapagar\\55\\[a-f0-9]{32}\.pdf$/),
     });
     expect(client.release).toHaveBeenCalled();
   });
@@ -733,8 +824,8 @@ describe("AthosService - anexarContaPagar", () => {
       }),
     ).rejects.toThrow("Erro ao anexar conta a pagar no Athos");
 
-    expect(fsMock.unlink).toHaveBeenCalledWith(
-      "\\\\192.168.3.203\\html\\Anexo\\contapagar\\88\\comprovante.jpg",
+    expect(String(fsMock.unlink.mock.calls[0][0])).toMatch(
+      /^\\\\192\.168\.3\.203\\html\\Anexo\\contapagar\\88\\[a-f0-9]{32}\.jpg$/,
     );
     expect(client.release).toHaveBeenCalled();
   });

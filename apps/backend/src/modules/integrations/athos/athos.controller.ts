@@ -7,6 +7,7 @@ import {
   Param,
   ParseFilePipeBuilder,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   UnauthorizedException,
@@ -27,6 +28,7 @@ import {
 } from "@nestjs/swagger";
 import { AthosService } from "./athos.service";
 import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
+import { UpdateContaPagarDto } from "./dto/update-conta-pagar.dto";
 import { UploadContaPagarAnexoDto } from "./dto/upload-conta-pagar-anexo.dto";
 
 const ATHOS_ATTACHMENT_MAX_SIZE_BYTES = 10 * 1024 * 1024;
@@ -124,6 +126,36 @@ export class AthosController {
   ) {
     this.validateAthosToken(authorization, xApiToken);
     return this.athosService.criarContaPagar(dto);
+  }
+
+  @ApiOperation({
+    summary: "Atualizar conta a pagar no Athos",
+    description: "Atualiza parcialmente qualquer campo suportado pela tabela conta_pagar e retorna o registro completo.",
+  })
+  @ApiParam({ name: "id", description: "ID da conta a pagar no Athos", example: 15 })
+  @ApiResponse({
+    status: 200,
+    description: "Conta atualizada com sucesso",
+    schema: {
+      example: {
+        idcontapagar: 15,
+        statusconta: "PAG",
+        valorconta: 600,
+        valorpago: 600,
+        datapagamento: "2026-05-11",
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Patch("contas-pagar/:id")
+  async updateContaPagar(
+    @Param("id", ParseIntPipe) idcontapagar: number,
+    @Body() dto: UpdateContaPagarDto,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    return this.athosService.updateContaPagar(idcontapagar, dto);
   }
 
   @ApiOperation({
