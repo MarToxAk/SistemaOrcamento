@@ -196,13 +196,54 @@ Plans:
 4. Build backend sem erros após as correções.
 >>>>>>> origin/main
 
+## v2.0 Gestão Integrada Financeira e Caixa (Phases 23-25) - PLANNING
+
+Full details: .planning/milestones/v2.0-ROADMAP.md
+
+- [ ] Phase 23: Notificação de Caixa Interna — Hardening AthosListenerService (CAIXA-01..04)
+- [ ] Phase 24: API Contas a Pagar — Endpoint POST e autenticação obrigatória (CPAG-01..04)
+- [ ] Phase 25: Upload de Anexos — Gravação SMB \\192.168.3.203 e registro tabela `anexo` (ANEX-01..03)
+
+### Phase Details
+
+**Phase 23: Notificação de Caixa Interna — Hardening**
+Goal: Hardenar o AthosListenerService com reconexão automática, notificação Chatwoot e testes.
+Requirements: CAIXA-01, CAIXA-02, CAIXA-03, CAIXA-04
+Success criteria:
+1. Listener reconecta com backoff exponencial (máx 30s) após queda do PG.
+2. Chatwoot notificado (fire-and-forget) ao detectar pagamento no caixa.
+3. GET /api/events/pagamentos protegido por x-internal-api-key.
+4. Unit tests cobrem: caixa detectado, venda sem caixa, reconnect, falha Chatwoot.
+
+**Phase 24: API Contas a Pagar — POST**
+Goal: Expor endpoint POST /athos/contas-pagar para lançar contas a pagar direto no Athos.
+Requirements: CPAG-01, CPAG-02, CPAG-03, CPAG-04
+Success criteria:
+1. POST /athos/contas-pagar insere em `conta_pagar` e retorna `idcontapagar`.
+2. Validações de campos obrigatórios com mensagens claras.
+3. GET aprimorado com filtro por `statusconta`.
+4. ATHOS_API_TOKEN obrigatório (fail-closed) em todos os endpoints.
+
+**Phase 25: Upload de Anexos via SMB**
+Goal: Receber arquivo via multipart e gravá-lo em \\192.168.3.203\html\Anexo\contapagar\{id}\.
+Requirements: ANEX-01, ANEX-02, ANEX-03
+Plans: 2 plans
+
+Plans:
+- [x] 25-01-PLAN.md - Confirmar contrato de idclientehistorico e implementar upload SMB + insert em anexo
+- [x] 25-02-PLAN.md - Cobertura de testes unitarios para upload de anexo Athos
+
+Success criteria:
+1. POST /athos/contas-pagar/:id/anexo grava arquivo no servidor de rede.
+2. Registro inserido em tabela `anexo` com path UNC e nome do arquivo.
+3. Extensões validadas (pdf/png/jpg/jpeg), tamanho máx 10MB, sem path traversal.
+
+---
 ## Backlog (Future)
+## v2.0 Gestão Integrada Financeira e Caixa (Phases 23-25) - IN PROGRESS
 
 - Relatorios e exportacao CSV de orcamentos
 - Notificacoes em tempo real (WebSocket) para mudanca de status
-- Refactor gradual de quotes.service.ts
-- Migrar PDF de Puppeteer para Gotenberg
-- Redis para cache do token EFI
 - RBAC por role (ADMIN / VENDEDOR / ATENDENTE)
 - Templates de mensagem configuraveis pelo painel
 - Historico de mensagens enviados ao cliente

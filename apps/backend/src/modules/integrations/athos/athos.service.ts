@@ -1,7 +1,20 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { Client, Pool, PoolClient } from "pg";
+import {
+  buildContaPagarInsertParts,
+  buildContaPagarUpdateParts,
+  mapContaPagarRow,
+  resolveContaPagarIdColumn,
+} from "./athos-conta-pagar.util";
+import { buildContaPagarAnexoPaths } from "./athos-anexo.util";
+import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
+import { UpdateContaPagarDto } from "./dto/update-conta-pagar.dto";
 
 type Row = Record<string, unknown>;
+type AthosAttachmentFile = { originalname: string; buffer: Buffer; mimetype: string; size: number };
+
+const DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO = 0;
 
 function isSafeIdentifier(value: string) {
   return /^[a-z_][a-z0-9_]*$/i.test(value);
@@ -29,6 +42,15 @@ async function findExistingTable(client: Pick<Client, "query">, tableCandidates:
   }
 
   return null;
+}
+
+async function allocateNextContaPagarId(client: PoolClient, tableName: string, idColumn: string) {
+  await client.query(`LOCK TABLE "${tableName}" IN EXCLUSIVE MODE`);
+  const result = await client.query<{ next_id: number }>(
+    `SELECT COALESCE(MAX(CAST("${idColumn}" AS INTEGER)), 0) + 1 AS next_id FROM "${tableName}"`,
+  );
+
+  return Number(result.rows[0]?.next_id ?? 1);
 }
 
 function pickString(row: Row, keys: string[]) {
@@ -95,6 +117,55 @@ function pickDateTimeISO(row: Row, keys: string[]) {
     }
   }
   return null;
+}
+
+function pickIntFromUnknown(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return Math.trunc(parsed);
+    }
+  }
+
+  return null;
+}
+
+function pickNumberFromUnknown(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function parseDateFilter(value: string, fieldName: string, endOfDay = false) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new BadRequestException(`Parametro ${fieldName} invalido: valor vazio`);
+  }
+
+  const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+  const normalized = dateOnlyPattern.test(trimmed)
+    ? `${trimmed}${endOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z"}`
+    : trimmed;
+
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestException(`Parametro ${fieldName} invalido: use formato de data valido (ex: YYYY-MM-DD)`);
+  }
+
+  return parsed;
 }
 
 async function loadItems(client: Pick<Client, "query">, idOrcamento: string) {
@@ -410,7 +481,7 @@ export class AthosService {
     }
   }
 
-  async listarContasPagar() {
+  async listarContasPagar(dataInicio?: string, dataFinal?: string, statusconta?: string) {
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
 
@@ -453,34 +524,55 @@ export class AthosService {
         throw new InternalServerErrorException("Nao foi possivel identificar coluna de data de vencimento para filtrar");
       }
 
-      const now = new Date();
-      const start = new Date(now);
-      start.setDate(now.getDate() - 30);
-      const end = new Date(now);
-      end.setDate(now.getDate() + 30);
+      let start: Date | null = null;
+      let end: Date | null = null;
 
-      const startISO = start.toISOString();
-      const endISO = end.toISOString();
+      if (typeof dataInicio === "string" && dataInicio.trim()) {
+        start = parseDateFilter(dataInicio, "dataInicio", false);
+      }
 
-      const query = `SELECT * FROM ${table.tableName} WHERE ${dateColumn} IS NOT NULL AND CAST(${dateColumn} AS timestamp) BETWEEN $1 AND $2 ORDER BY CAST(${dateColumn} AS timestamp) DESC`;
+      if (typeof dataFinal === "string" && dataFinal.trim()) {
+        end = parseDateFilter(dataFinal, "dataFinal", true);
+      }
 
-      const result = await client.query(query, [startISO, endISO]);
+      if (!start && !end) {
+        const now = new Date();
+        start = new Date(now);
+        start.setDate(now.getDate() - 30);
+        end = new Date(now);
+        end.setDate(now.getDate() + 30);
+      }
 
-      return (result.rows as Row[]).map((row) => ({
-        descricaoconta: pickString(row, ["descricaoconta", "descricao", "descricaocurta", "nome", "descricao_conta"]),
-        dataemissao: pickDateISO(row, ["dataemissao", "data_emissao", "dt_emissao", "dtemissao", "data"]),
-        datavencimento: pickDateISO(row, ["datavencimento", "data_vencimento", "vencimento", "dtvenc", "dt_vencimento"]),
-        valorconta: pickNumber(row, ["valorconta", "valor_conta", "valor", "valortotal", "valorconta"], 0),
-        observacao: pickString(row, ["observacao", "obs", "observacoes", "descricao", "observacao_conta"]),
-        statusconta: pickString(row, ["statusconta", "status_conta", "status", "situacao"]),
-        valorpago: pickNumber(row, ["valorpago", "valor_pago", "valorquitado", "valorpago"], 0),
-        datapagamento: pickDateISO(row, ["datapagamento", "data_pagamento", "dataquitacao", "datapagamento"]),
-        ultimaalteracao: pickDateTimeISO(row, ["ultimaalteracao", "ultima_alteracao", "ultimaAlteracao", "ultimaalteracao", "ultimaalteracao"]),
-        numerodocumento: pickString(row, ["numerodocumento", "numerodoc", "numero_documento", "numero", "documento", "numeronota"]),
-      }));
+      if (start && end && start.getTime() > end.getTime()) {
+        throw new BadRequestException("Parametro dataInicio nao pode ser maior que dataFinal");
+      }
+
+      const conditions = [`${dateColumn} IS NOT NULL`];
+      const params: string[] = [];
+
+      if (start) {
+        params.push(start.toISOString());
+        conditions.push(`CAST(${dateColumn} AS timestamp) >= $${params.length}`);
+      }
+
+      if (end) {
+        params.push(end.toISOString());
+        conditions.push(`CAST(${dateColumn} AS timestamp) <= $${params.length}`);
+      }
+
+      if (typeof statusconta === "string" && statusconta.trim()) {
+        params.push(statusconta.trim().toUpperCase());
+        conditions.push(`statusconta = $${params.length}`);
+      }
+
+      const query = `SELECT * FROM ${table.tableName} WHERE ${conditions.join(" AND ")} ORDER BY CAST(${dateColumn} AS timestamp) DESC`;
+
+      const result = await client.query(query, params);
+
+      return (result.rows as Row[]).map((row) => mapContaPagarRow(row));
     } catch (error) {
       this.logger.error(`Erro ao listar contas a pagar no Athos: ${error}`);
-      if (error instanceof NotFoundException || error instanceof InternalServerErrorException) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof InternalServerErrorException) {
         throw error;
       }
       throw new InternalServerErrorException("Erro ao listar contas a pagar no Athos");
@@ -891,6 +983,433 @@ export class AthosService {
       return { numeroordem: null, isCaixa: false };
     } finally {
       client.release();
+    }
+  }
+
+  async criarContaPagar(dto: CreateContaPagarDto): Promise<{ idcontapagar: number }> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const candidates = [
+        "conta_pagar",
+        "contaspagar",
+        "contas_pagar",
+        "contasapagar",
+        "conta_pagar_fornecedor",
+      ];
+      const table = await findExistingTable(client, candidates);
+      if (!table || !isSafeIdentifier(table.tableName)) {
+        throw new NotFoundException("Tabela de contas a pagar nao encontrada");
+      }
+
+      const idColumn = resolveContaPagarIdColumn(table.columns);
+      if (!idColumn) {
+        throw new InternalServerErrorException("Tabela de contas a pagar sem coluna identificadora reconhecida");
+      }
+
+      const { insertColumns, valueExpressions, params } = buildContaPagarInsertParts(
+        table.columns,
+        dto as unknown as Record<string, unknown>,
+      );
+      if (insertColumns.length === 0) {
+        throw new BadRequestException("Nenhum campo valido informado para criar conta a pagar");
+      }
+
+      const nextId = await allocateNextContaPagarId(client, table.tableName, idColumn);
+      const insertColumnsWithId = [`"${idColumn}"`, ...insertColumns];
+      const valueExpressionsWithId = [
+        "$1",
+        ...valueExpressions.map((expression) => expression.replace(/\$(\d+)/g, (_, index) => `$${Number(index) + 1}`)),
+      ];
+      const paramsWithId = [nextId, ...params];
+
+      const result = await client.query<{ idcontapagar: number }>(
+        `INSERT INTO "${table.tableName}" (${insertColumnsWithId.join(", ")})
+         VALUES (${valueExpressionsWithId.join(", ")})
+         RETURNING "${idColumn}" as "idcontapagar"`,
+        paramsWithId,
+      );
+      await client.query("COMMIT");
+      const idcontapagar = result.rows[0].idcontapagar;
+      this.logger.log(`[Athos] conta_pagar criada: idcontapagar=${idcontapagar}`);
+      return { idcontapagar };
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // noop
+      }
+      this.logger.error(`Erro ao criar conta a pagar no Athos: ${error}`);
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException || error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException("Erro ao criar conta a pagar no Athos");
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateContaPagar(idcontapagar: number, dto: UpdateContaPagarDto) {
+    if (!Number.isInteger(idcontapagar) || idcontapagar <= 0) {
+      throw new BadRequestException("idcontapagar invalido");
+    }
+
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const candidates = [
+        "conta_pagar",
+        "contaspagar",
+        "contas_pagar",
+        "contasapagar",
+        "conta_pagar_fornecedor",
+      ];
+      const table = await findExistingTable(client, candidates);
+      if (!table || !isSafeIdentifier(table.tableName)) {
+        throw new NotFoundException("Tabela de contas a pagar nao encontrada");
+      }
+
+      const idColumn = resolveContaPagarIdColumn(table.columns);
+      if (!idColumn) {
+        throw new InternalServerErrorException("Tabela de contas a pagar sem coluna identificadora reconhecida");
+      }
+
+      const { assignments, params } = buildContaPagarUpdateParts(
+        table.columns,
+        dto as unknown as Record<string, unknown>,
+      );
+      if (assignments.length === 0) {
+        throw new BadRequestException("Nenhum campo valido informado para atualizacao");
+      }
+
+      params.push(String(idcontapagar));
+      const result = await client.query<Row>(
+        `UPDATE "${table.tableName}"
+            SET ${assignments.join(", ")}
+          WHERE CAST("${idColumn}" AS TEXT) = $${params.length}
+          RETURNING *`,
+        params,
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException("Conta a pagar nao encontrada no Athos");
+      }
+
+      const contaAtualizada = mapContaPagarRow(result.rows[0]);
+      const statusAtualizado = String(contaAtualizada.statusconta ?? "").toUpperCase();
+
+      if (statusAtualizado === "PAG") {
+        const idFuncionario = pickIntFromUnknown(dto.idfuncionario ?? contaAtualizada.idfuncionario);
+        const valorSaida = pickNumberFromUnknown(dto.valorpago ?? contaAtualizada.valorpago ?? contaAtualizada.valorconta);
+
+        if (!idFuncionario || idFuncionario <= 0) {
+          throw new BadRequestException("idfuncionario obrigatorio para liquidacao de pagamento");
+        }
+
+        if (valorSaida === null || valorSaida <= 0) {
+          throw new BadRequestException("valorpago ou valorconta obrigatorio para liquidacao de pagamento");
+        }
+
+        const livroTable = await findExistingTable(client, ["livro_registro_io", "livroregistroio"]);
+        if (!livroTable || !isSafeIdentifier(livroTable.tableName)) {
+          throw new NotFoundException("Tabela livro_registro_io nao encontrada");
+        }
+
+        const livroIdContaPagarColumn = ["idcontapagar", "id_contapagar"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroIdLivroRegistroColumn = ["idlivroregistro", "id_livro_registro"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroIdFuncionarioColumn = ["idfuncionario", "id_funcionario"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroValorSaidaColumn = ["valorsaida", "valor_saida"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroDataDocumentoColumn = ["datadocumento", "data_documento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroDataLancamentoColumn = ["datalancamento", "data_lancamento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroHoraLancamentoColumn = ["horalancamento", "hora_lancamento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroDescricaoColumn = ["descricao"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroNumeroDocumentoColumn = ["numerodocumento", "numero_documento", "numerodoc"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroTipoPagamentoColumn = ["tipopagamento", "tipo_pagamento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroObservacaoColumn = ["observacao"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroIdOrigemLancamentoColumn = ["idorigemlancamento", "id_origem_lancamento"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroIdRevendaColumn = ["idrevenda", "id_revenda"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroSincronizadoColumn = ["sincronizado"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroTransferenciaColumn = ["transferencia"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroHistoryCodeColumn = ["history_code"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+        const livroTransactionIdColumn = ["transaction_id"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
+
+        if (!livroIdContaPagarColumn || !livroIdFuncionarioColumn || !livroValorSaidaColumn) {
+          throw new InternalServerErrorException("Tabela livro_registro_io sem colunas obrigatorias para liquidacao");
+        }
+
+        const livroColumns = [`"${livroIdContaPagarColumn}"`, `"${livroIdFuncionarioColumn}"`, `"${livroValorSaidaColumn}"`];
+        const livroValues = [`$1`, `$2`, `$3`];
+        const livroParams: unknown[] = [idcontapagar, idFuncionario, valorSaida];
+
+        if (livroIdLivroRegistroColumn) {
+          livroColumns.push(`"${livroIdLivroRegistroColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(1);
+        }
+
+        const dataPagamento = String(contaAtualizada.datapagamento ?? "").trim();
+        if (livroDataDocumentoColumn && dataPagamento) {
+          livroColumns.push(`"${livroDataDocumentoColumn}"`);
+          livroValues.push(`CAST($${livroParams.length + 1} AS date)`);
+          livroParams.push(dataPagamento);
+        }
+
+        if (livroDataLancamentoColumn && dataPagamento) {
+          livroColumns.push(`"${livroDataLancamentoColumn}"`);
+          livroValues.push(`CAST($${livroParams.length + 1} AS date)`);
+          livroParams.push(dataPagamento);
+        }
+
+        if (livroHoraLancamentoColumn) {
+          const horaAtual = new Date().toTimeString().slice(0, 8);
+          livroColumns.push(`"${livroHoraLancamentoColumn}"`);
+          livroValues.push(`CAST($${livroParams.length + 1} AS time)`);
+          livroParams.push(horaAtual);
+        }
+
+        if (livroDescricaoColumn) {
+          livroColumns.push(`"${livroDescricaoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push("Baixa automatica via PATCH Athos");
+        }
+
+        if (livroObservacaoColumn) {
+          livroColumns.push(`"${livroObservacaoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(String(contaAtualizada.observacao ?? "").trim() || "Pagamento liquidado automaticamente");
+        }
+
+        if (livroNumeroDocumentoColumn) {
+          livroColumns.push(`"${livroNumeroDocumentoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push("DINHEIRO");
+        }
+
+        if (livroTipoPagamentoColumn) {
+          livroColumns.push(`"${livroTipoPagamentoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push("Dinheiro");
+        }
+
+        if (livroIdOrigemLancamentoColumn) {
+          livroColumns.push(`"${livroIdOrigemLancamentoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(11305);
+        }
+
+        if (livroIdRevendaColumn) {
+          livroColumns.push(`"${livroIdRevendaColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(null);
+        }
+
+        if (livroSincronizadoColumn) {
+          livroColumns.push(`"${livroSincronizadoColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(false);
+        }
+
+        if (livroTransferenciaColumn) {
+          livroColumns.push(`"${livroTransferenciaColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(false);
+        }
+
+        if (livroHistoryCodeColumn) {
+          livroColumns.push(`"${livroHistoryCodeColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(null);
+        }
+
+        if (livroTransactionIdColumn) {
+          livroColumns.push(`"${livroTransactionIdColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(null);
+        }
+
+        await client.query(
+          `INSERT INTO "${livroTable.tableName}" (${livroColumns.join(", ")}) VALUES (${livroValues.join(", ")})`,
+          livroParams,
+        );
+      }
+
+      await client.query("COMMIT");
+
+      return contaAtualizada;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // noop
+      }
+      this.logger.error(`Erro ao atualizar conta a pagar no Athos: ${error}`);
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException || error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException("Erro ao atualizar conta a pagar no Athos");
+    } finally {
+      client.release();
+    }
+  }
+
+  async anexarContaPagar(input: {
+    idcontapagar: number;
+    file: AthosAttachmentFile;
+    idfuncionario?: number;
+  }): Promise<{ idanexo: number; idcontapagar: number; arquivo: string; caminhoanexo: string }> {
+    const { idcontapagar, file, idfuncionario } = input;
+
+    if (!Number.isInteger(idcontapagar) || idcontapagar <= 0) {
+      throw new BadRequestException("idcontapagar invalido");
+    }
+
+    if (!file?.buffer || !file.originalname) {
+      throw new BadRequestException("Arquivo obrigatorio");
+    }
+
+    const pool = this.getPool();
+    let client: PoolClient | null = null;
+    let writtenFilePath: string | null = null;
+
+    try {
+      client = await pool.connect();
+
+      const contaPagarTable = await findExistingTable(client, [
+        "conta_pagar",
+        "contaspagar",
+        "contas_pagar",
+        "contasapagar",
+        "conta_pagar_fornecedor",
+      ]);
+
+      if (!contaPagarTable || !isSafeIdentifier(contaPagarTable.tableName)) {
+        throw new NotFoundException("Tabela de contas a pagar nao encontrada");
+      }
+
+      const contaPagarIdColumn = ["idcontapagar", "id_contapagar", "id"].find(
+        (column) => contaPagarTable.columns.has(column) && isSafeIdentifier(column),
+      );
+
+      if (!contaPagarIdColumn) {
+        throw new InternalServerErrorException("Tabela de contas a pagar sem coluna identificadora reconhecida");
+      }
+
+      const contaPagarResult = await client.query(
+        `SELECT 1 FROM "${contaPagarTable.tableName}" WHERE CAST("${contaPagarIdColumn}" AS TEXT) = $1 LIMIT 1`,
+        [String(idcontapagar)],
+      );
+
+      if (contaPagarResult.rows.length === 0) {
+        throw new NotFoundException("Conta a pagar nao encontrada no Athos");
+      }
+
+      const anexoTable = await findExistingTable(client, ["anexo", "anexos"]);
+      if (!anexoTable || !isSafeIdentifier(anexoTable.tableName)) {
+        throw new NotFoundException("Tabela de anexos nao encontrada no Athos");
+      }
+
+      const idAnexoColumn = ["idanexo", "id_anexo", "id"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const caminhoColumn = ["caminhoanexo", "caminho_anexo", "caminho"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const arquivoColumn = ["arquivo", "nomearquivo", "nome_arquivo"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const funcionarioColumn = ["idfuncionario", "id_funcionario"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const clienteHistoricoColumn = ["idclientehistorico", "id_clientehistorico", "idcliente_historico"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+      const contaPagarColumn = ["idcontapagar", "id_contapagar"].find(
+        (column) => anexoTable.columns.has(column) && isSafeIdentifier(column),
+      );
+
+      if (!idAnexoColumn || !caminhoColumn || !arquivoColumn || !funcionarioColumn || !clienteHistoricoColumn || !contaPagarColumn) {
+        throw new InternalServerErrorException("Tabela de anexos sem colunas obrigatorias para upload");
+      }
+
+      const { directoryPath, fullPath, fileName } = buildContaPagarAnexoPaths(idcontapagar, file.originalname);
+
+      await mkdir(directoryPath, { recursive: true });
+      await writeFile(fullPath, file.buffer);
+      writtenFilePath = fullPath;
+
+      this.logger.log(
+        `[Athos] anexarContaPagar: idcontapagar=${idcontapagar} idclientehistorico=${DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO}`,
+      );
+
+      const result = await client.query<{ idanexo: number }>(
+        `INSERT INTO "${anexoTable.tableName}"
+           ("${funcionarioColumn}", "${caminhoColumn}", "${arquivoColumn}", "${clienteHistoricoColumn}", "${contaPagarColumn}")
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING "${idAnexoColumn}" as "idanexo"`,
+        [
+          idfuncionario ?? 1,
+          fullPath,
+          fileName,
+          DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO,
+          idcontapagar,
+        ],
+      );
+
+      return {
+        idanexo: Number(result.rows[0].idanexo),
+        idcontapagar,
+        arquivo: fileName,
+        caminhoanexo: fullPath,
+      };
+    } catch (error) {
+      if (writtenFilePath) {
+        await unlink(writtenFilePath).catch(() => undefined);
+      }
+
+      this.logger.error(`Erro ao anexar conta a pagar no Athos: ${error}`);
+      if (
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException("Erro ao anexar conta a pagar no Athos");
+    } finally {
+      client?.release();
     }
   }
 

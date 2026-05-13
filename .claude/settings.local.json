@@ -8,7 +8,9 @@
       "Bash(npx prisma *)",
       "Bash(npx dotenv *)",
       "Bash(npx tsc *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Skill(gsd-ns-context)",
+      "PowerShell(New-Item *)"
     ]
   }
 }

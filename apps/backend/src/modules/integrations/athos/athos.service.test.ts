@@ -15,8 +15,16 @@ jest.mock("pg", () => {
   return { Pool: jest.fn(() => mPool), Client: jest.fn(() => mClient) };
 });
 
+jest.mock("node:fs/promises", () => ({
+  mkdir: jest.fn(),
+  writeFile: jest.fn(),
+  unlink: jest.fn(),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pgMock = require("pg");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fsMock = require("node:fs/promises");
 
 function getMockClient() {
   return pgMock.Pool.mock.results[0]?.value?.connect.mock.results[0]?.value ?? pgMock.Pool.mock.results[0]?.value?.connect();
@@ -354,6 +362,648 @@ describe("AthosService - buscarClientes", () => {
     const result = await service.buscarClientes({ idcliente: 1, take: 999 });
 
     expect(result.take).toBe(50);
+    expect(client.release).toHaveBeenCalled();
+  });
+});
+
+describe("AthosService - criarContaPagar", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve criar conta a pagar com INSERT bem-sucedido e retornar idcontapagar", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+
+      if (text.includes("information_schema.columns")) {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "descricaoconta" },
+            { column_name: "datavencimento" },
+            { column_name: "valorconta" },
+          ],
+        };
+      }
+
+      if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) {
+        return { rows: [] };
+      }
+
+      if (text.includes("SELECT COALESCE(MAX(CAST(\"idcontapagar\" AS INTEGER))")) {
+        return { rows: [{ next_id: 42 }] };
+      }
+
+      if (text.includes("INSERT INTO \"conta_pagar\"")) {
+        return { rows: [{ idcontapagar: 42 }] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await service.criarContaPagar({
+      descricaoconta: "Conta fornecedor ABC",
+      datavencimento: "2026-06-30",
+      valorconta: 1500.5,
+      dataemissao: "2026-05-01",
+      observacao: "Pagamento após aprovação",
+      idfornecedor: 10,
+      numerodocumento: "NF-001",
+    });
+
+    expect(result.idcontapagar).toBe(42);
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve lançar erro quando tabela de contas a pagar não encontrada", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock client.query to return empty rows for all table candidates
+    // findExistingTable will call getTableColumns for each candidate table
+    client.query.mockResolvedValue({ rows: [] });
+
+    await expect(
+      service.criarContaPagar({
+        descricaoconta: "Conta teste",
+        datavencimento: "2026-06-30",
+        valorconta: 100,
+      }),
+    ).rejects.toThrow();
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve lançar erro quando pool.connect falha", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    pool.connect = jest.fn().mockRejectedValue(new Error("connection refused"));
+
+    await expect(
+      service.criarContaPagar({
+        descricaoconta: "Conta teste",
+        datavencimento: "2026-06-30",
+        valorconta: 100,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("deve chamar client.release() mesmo quando query falha", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+
+      if (text.includes("information_schema.columns")) {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "descricaoconta" },
+            { column_name: "datavencimento" },
+            { column_name: "valorconta" },
+          ],
+        };
+      }
+
+      if (text === "BEGIN" || text === "ROLLBACK" || text.startsWith("LOCK TABLE")) {
+        return { rows: [] };
+      }
+
+      if (text.includes("SELECT COALESCE(MAX(CAST(\"idcontapagar\" AS INTEGER))")) {
+        return { rows: [{ next_id: 42 }] };
+      }
+
+      if (text.includes("INSERT INTO \"conta_pagar\"")) {
+        throw new Error("database error");
+      }
+
+      return { rows: [] };
+    });
+
+    await expect(
+      service.criarContaPagar({
+        descricaoconta: "Conta teste",
+        datavencimento: "2026-06-30",
+        valorconta: 100,
+      }),
+    ).rejects.toThrow("Erro ao criar conta a pagar no Athos");
+    expect(client.release).toHaveBeenCalled();
+  });
+});
+
+describe("AthosService - listarContasPagar com statusconta filter", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve aplicar filtro statusconta corretamente no WHERE", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock para findExistingTable
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "datavencimento" },
+          { column_name: "statusconta" },
+          { column_name: "descricaoconta" },
+        ],
+      })
+      // Mock para SELECT com filtro statusconta
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            idcontapagar: 15,
+            descricaoconta: "Conta ABERTA",
+            dataemissao: "2026-05-01",
+            datavencimento: "2026-06-30",
+            valorconta: 500,
+            statusconta: "ABERTO",
+            observacao: "Pagamento pendente",
+            jurosconta: 12.5,
+            multaconta: 8.75,
+            competenciames: "05",
+            competenciaano: "2026",
+            enviaalerta: true,
+            recorrenciafornecedor: false,
+          },
+        ],
+      });
+
+    const result = await service.listarContasPagar(undefined, undefined, "ABERTO");
+
+    expect(result).toHaveLength(1);
+    expect(result[0].idcontapagar).toBe(15);
+    expect(result[0].statusconta).toBe("ABERTO");
+    expect(result[0].jurosconta).toBe(12.5);
+    expect(result[0].multaconta).toBe(8.75);
+    expect(result[0].competenciames).toBe("05");
+    expect(result[0].competenciaano).toBe("2026");
+    expect(result[0].enviaalerta).toBe(true);
+    expect(result[0].recorrenciafornecedor).toBe(false);
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve converter statusconta para UPPERCASE mesmo se fornecido em minúsculas", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock para findExistingTable
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "datavencimento" },
+          { column_name: "statusconta" },
+        ],
+      })
+      // Mock para SELECT
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            descricaoconta: "Conta PAGO",
+            datavencimento: "2026-05-30",
+            valorconta: 1000,
+            statusconta: "PAGO",
+          },
+        ],
+      });
+
+    const result = await service.listarContasPagar(undefined, undefined, "pago");
+
+    expect(result).toHaveLength(1);
+    expect(result[0].statusconta).toBe("PAGO");
+    expect(client.release).toHaveBeenCalled();
+
+    // Verificar que statusconta foi convertido para UPPERCASE na query
+    const queryCall = client.query.mock.calls[1];
+    expect(queryCall[1]).toContain("PAGO");
+  });
+
+  it("deve retornar lista vazia quando nenhuma conta tem o statusconta especificado", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    // Mock para findExistingTable
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "datavencimento" },
+          { column_name: "statusconta" },
+        ],
+      })
+      // Mock para SELECT retornando vazio
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await service.listarContasPagar(undefined, undefined, "CANCELADO");
+
+    expect(result).toHaveLength(0);
+    expect(client.release).toHaveBeenCalled();
+  });
+});
+
+describe("AthosService - updateContaPagar", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve atualizar conta a pagar com payload parcial e retornar registro completo", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+
+      if (text === "BEGIN" || text === "COMMIT") {
+        return { rows: [] };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "conta_pagar") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "statusconta" },
+            { column_name: "valorpago" },
+            { column_name: "datapagamento" },
+            { column_name: "idfuncionario" },
+            { column_name: "valorconta" },
+            { column_name: "observacao" },
+          ],
+        };
+      }
+
+      if (text.includes('UPDATE "conta_pagar"')) {
+        return {
+          rows: [
+            {
+              idcontapagar: 42,
+              statusconta: "PAG",
+              valorpago: 600,
+              valorconta: 600,
+              datapagamento: "2026-05-11",
+              idfuncionario: 3,
+              observacao: "Pagamento efetuado",
+            },
+          ],
+        };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro_io") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "idlivroregistro" },
+            { column_name: "idfuncionario" },
+            { column_name: "valorsaida" },
+            { column_name: "datadocumento" },
+            { column_name: "datalancamento" },
+            { column_name: "horalancamento" },
+            { column_name: "descricao" },
+            { column_name: "numerodocumento" },
+            { column_name: "tipopagamento" },
+            { column_name: "observacao" },
+            { column_name: "idorigemlancamento" },
+            { column_name: "idrevenda" },
+            { column_name: "sincronizado" },
+            { column_name: "transferencia" },
+            { column_name: "history_code" },
+            { column_name: "transaction_id" },
+          ],
+        };
+      }
+
+      if (text.includes('INSERT INTO "livro_registro_io"')) {
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await service.updateContaPagar(42, {
+      statusconta: "PAG",
+      valorpago: 600,
+      datapagamento: "2026-05-11",
+      idfuncionario: 3,
+    });
+
+    expect(result).toMatchObject({
+      idcontapagar: 42,
+      statusconta: "PAG",
+      valorpago: 600,
+      datapagamento: "2026-05-11",
+    });
+    const queries = client.query.mock.calls.map((call) => String(call[0]));
+    expect(queries.some((query) => query.includes('INSERT INTO "livro_registro_io"'))).toBe(true);
+    expect(queries.some((query) => query.includes('INSERT INTO "caixa_saida"'))).toBe(false);
+
+    const livroInsertCall = client.query.mock.calls.find((call) => String(call[0]).includes('INSERT INTO "livro_registro_io"'));
+    const livroInsertParams = (livroInsertCall?.[1] ?? []) as unknown[];
+    expect(livroInsertParams).toContain("DINHEIRO");
+    expect(livroInsertParams).toContain("Dinheiro");
+    expect(livroInsertParams).toContain(11305);
+    expect(livroInsertParams).toContain(1);
+    expect(livroInsertParams).toContain(false);
+
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve permitir liquidacao PAG sem idcaixacentral", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+
+      if (text === "BEGIN" || text === "ROLLBACK") {
+        return { rows: [] };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "conta_pagar") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "statusconta" },
+            { column_name: "valorpago" },
+            { column_name: "idfuncionario" },
+          ],
+        };
+      }
+
+      if (text.includes('UPDATE "conta_pagar"')) {
+        return {
+          rows: [
+            {
+              idcontapagar: 42,
+              statusconta: "PAG",
+              valorpago: 600,
+              valorconta: 600,
+              datapagamento: "2026-05-11",
+              idfuncionario: 3,
+            },
+          ],
+        };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro_io") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "idfuncionario" },
+            { column_name: "valorsaida" },
+          ],
+        };
+      }
+
+      if (text.includes('INSERT INTO "livro_registro_io"')) {
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    await expect(
+      service.updateContaPagar(42, {
+        statusconta: "PAG",
+        valorpago: 600,
+        idfuncionario: 3,
+      }),
+    ).resolves.toMatchObject({
+      idcontapagar: 42,
+      statusconta: "PAG",
+      valorpago: 600,
+    });
+
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve rejeitar PATCH sem nenhum campo valido para atualizar", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text === "BEGIN" || text === "ROLLBACK") {
+        return { rows: [] };
+      }
+
+      if (text.includes("information_schema.columns")) {
+        return { rows: [{ column_name: "idcontapagar" }] };
+      }
+
+      return { rows: [] };
+    });
+
+    await expect(service.updateContaPagar(42, {})).rejects.toThrow("Nenhum campo valido informado para atualizacao");
+    expect(client.release).toHaveBeenCalled();
+  });
+});
+
+describe("AthosService - anexarContaPagar", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    fsMock.mkdir.mockResolvedValue(undefined);
+    fsMock.writeFile.mockResolvedValue(undefined);
+    fsMock.unlink.mockResolvedValue(undefined);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve gravar arquivo, inserir em anexo e retornar metadados", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      .mockResolvedValueOnce({ rows: [{ column_name: "idcontapagar" }] })
+      .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "idanexo" },
+          { column_name: "idfuncionario" },
+          { column_name: "caminhoanexo" },
+          { column_name: "arquivo" },
+          { column_name: "idclientehistorico" },
+          { column_name: "idcontapagar" },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ idanexo: 77 }] });
+
+    const result = await service.anexarContaPagar({
+      idcontapagar: 55,
+      file: {
+        originalname: "boleto final.pdf",
+        buffer: Buffer.from("pdf"),
+        mimetype: "application/pdf",
+        size: 3,
+      },
+    });
+
+    expect(fsMock.mkdir).toHaveBeenCalledWith("\\\\192.168.3.203\\html\\Anexo\\contapagar\\55", { recursive: true });
+    const writtenFilePath = String(fsMock.writeFile.mock.calls[0][0]);
+    expect(writtenFilePath).toMatch(/^\\\\192\.168\.3\.203\\html\\Anexo\\contapagar\\55\\[a-f0-9]{32}\.pdf$/);
+
+    const insertParams = client.query.mock.calls[3][1] as unknown[];
+    expect(insertParams[0]).toBe(1);
+    expect(String(insertParams[1])).toMatch(/^\\\\192\.168\.3\.203\\html\\Anexo\\contapagar\\55\\[a-f0-9]{32}\.pdf$/);
+    expect(String(insertParams[2])).toMatch(/^[a-f0-9]{32}\.pdf$/);
+    expect(insertParams[3]).toBe(0);
+    expect(insertParams[4]).toBe(55);
+
+    expect(result).toEqual({
+      idanexo: 77,
+      idcontapagar: 55,
+      arquivo: expect.stringMatching(/^[a-f0-9]{32}\.pdf$/),
+      caminhoanexo: expect.stringMatching(/^\\\\192\.168\.3\.203\\html\\Anexo\\contapagar\\55\\[a-f0-9]{32}\.pdf$/),
+    });
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve abortar antes do INSERT quando a escrita SMB falha", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+    fsMock.writeFile.mockRejectedValue(new Error("share unavailable"));
+
+    client.query
+      .mockResolvedValueOnce({ rows: [{ column_name: "idcontapagar" }] })
+      .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "idanexo" },
+          { column_name: "idfuncionario" },
+          { column_name: "caminhoanexo" },
+          { column_name: "arquivo" },
+          { column_name: "idclientehistorico" },
+          { column_name: "idcontapagar" },
+        ],
+      });
+
+    await expect(
+      service.anexarContaPagar({
+        idcontapagar: 55,
+        file: {
+          originalname: "boleto.pdf",
+          buffer: Buffer.from("pdf"),
+          mimetype: "application/pdf",
+          size: 3,
+        },
+      }),
+    ).rejects.toThrow("Erro ao anexar conta a pagar no Athos");
+
+    expect(client.query).toHaveBeenCalledTimes(3);
+    expect(fsMock.unlink).not.toHaveBeenCalled();
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve fazer cleanup do arquivo quando o INSERT em anexo falha", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      .mockResolvedValueOnce({ rows: [{ column_name: "idcontapagar" }] })
+      .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+      .mockResolvedValueOnce({
+        rows: [
+          { column_name: "idanexo" },
+          { column_name: "idfuncionario" },
+          { column_name: "caminhoanexo" },
+          { column_name: "arquivo" },
+          { column_name: "idclientehistorico" },
+          { column_name: "idcontapagar" },
+        ],
+      })
+      .mockRejectedValueOnce(new Error("insert failed"));
+
+    await expect(
+      service.anexarContaPagar({
+        idcontapagar: 88,
+        file: {
+          originalname: "comprovante.jpg",
+          buffer: Buffer.from("img"),
+          mimetype: "image/jpeg",
+          size: 3,
+        },
+        idfuncionario: 7,
+      }),
+    ).rejects.toThrow("Erro ao anexar conta a pagar no Athos");
+
+    expect(String(fsMock.unlink.mock.calls[0][0])).toMatch(
+      /^\\\\192\.168\.3\.203\\html\\Anexo\\contapagar\\88\\[a-f0-9]{32}\.jpg$/,
+    );
     expect(client.release).toHaveBeenCalled();
   });
 });
