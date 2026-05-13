@@ -708,6 +708,7 @@ describe("AthosService - updateContaPagar", () => {
         return {
           rows: [
             { column_name: "idcontapagar" },
+            { column_name: "idlivroregistro" },
             { column_name: "idfuncionario" },
             { column_name: "valorsaida" },
             { column_name: "datadocumento" },
@@ -756,6 +757,7 @@ describe("AthosService - updateContaPagar", () => {
     expect(livroInsertParams).toContain("DINHEIRO");
     expect(livroInsertParams).toContain("Dinheiro");
     expect(livroInsertParams).toContain(11305);
+    expect(livroInsertParams).toContain(1);
     expect(livroInsertParams).toContain(false);
 
     expect(client.release).toHaveBeenCalled();

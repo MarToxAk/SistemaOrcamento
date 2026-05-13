@@ -1119,6 +1119,9 @@ export class AthosService {
         const livroIdContaPagarColumn = ["idcontapagar", "id_contapagar"].find(
           (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
         );
+        const livroIdLivroRegistroColumn = ["idlivroregistro", "id_livro_registro"].find(
+          (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
+        );
         const livroIdFuncionarioColumn = ["idfuncionario", "id_funcionario"].find(
           (column) => livroTable.columns.has(column) && isSafeIdentifier(column),
         );
@@ -1172,6 +1175,12 @@ export class AthosService {
         const livroColumns = [`"${livroIdContaPagarColumn}"`, `"${livroIdFuncionarioColumn}"`, `"${livroValorSaidaColumn}"`];
         const livroValues = [`$1`, `$2`, `$3`];
         const livroParams: unknown[] = [idcontapagar, idFuncionario, valorSaida];
+
+        if (livroIdLivroRegistroColumn) {
+          livroColumns.push(`"${livroIdLivroRegistroColumn}"`);
+          livroValues.push(`$${livroParams.length + 1}`);
+          livroParams.push(1);
+        }
 
         const dataPagamento = String(contaAtualizada.datapagamento ?? "").trim();
         if (livroDataDocumentoColumn && dataPagamento) {
