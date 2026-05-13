@@ -1,7 +1,8 @@
 import { backendFetch } from "@/lib/backend-client";
 
-export async function GET(_req: Request, { params }: { params: { numero: string } }) {
-  const numero = params.numero?.trim();
+export async function GET(_req: Request, { params }: { params: Promise<{ numero: string }> }) {
+  const { numero: rawNumero } = await params;
+  const numero = rawNumero?.trim();
   if (!numero) {
     return Response.json({ error: "Numero do orçamento não informado." }, { status: 400 });
   }

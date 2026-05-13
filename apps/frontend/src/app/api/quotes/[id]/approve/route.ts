@@ -1,7 +1,8 @@
 import { backendFetch } from "@/lib/backend-client";
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const id = params.id?.trim();
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await params;
+  const id = rawId?.trim();
   if (!id) {
     return Response.json({ error: "Id do orçamento não informado." }, { status: 400 });
   }

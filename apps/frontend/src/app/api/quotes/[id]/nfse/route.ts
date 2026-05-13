@@ -1,7 +1,8 @@
 import { backendFetch } from "@/lib/backend-client";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const id = params.id?.trim();
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await params;
+  const id = rawId?.trim();
   if (!id) return Response.json({ error: "Id do orcamento nao informado." }, { status: 400 });
 
   try {
@@ -14,8 +15,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
 }
 
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const id = params.id?.trim();
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await params;
+  const id = rawId?.trim();
   if (!id) return Response.json({ error: "Id do orcamento nao informado." }, { status: 400 });
 
   try {
