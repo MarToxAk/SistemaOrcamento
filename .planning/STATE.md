@@ -95,6 +95,7 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 260511-kvy | Implementar Fluxo Completo de Pagamento e GED (Patch Athos V2) com liquidacao transacional | 2026-05-11 | ba57544 | [260511-kvy-para-aplicar-este-patch-de-fluxo-complet](./quick/260511-kvy-para-aplicar-este-patch-de-fluxo-complet/) |
 | 260514-001 | Correcao link de aprovacao no envio — approval link nunca gerado por guarda isAssociatedCustomer | 2026-05-14 | fabc37e | [260514-001-approval-link-correcao-envio](./quick/260514-001-approval-link-correcao-envio/) |
 | 260514-002 | Notificar cliente via Chatwoot ao confirmar pagamento no caixa + simplificar mensagem PIX | 2026-05-14 | 61354fd | [260514-002-notificacao-caixa-pix-chatwoot](./quick/260514-002-notificacao-caixa-pix-chatwoot/) |
+| 260514-003 | Status page: SSE tempo real, banner persistente, badge pago no caixa, botao novo orcamento | 2026-05-14 | 2369502 | [260514-003-status-page-realtime-dashboard](./quick/260514-003-status-page-realtime-dashboard/) |
 
 
 
