@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
 
 type StatusOption = {
@@ -14,6 +14,8 @@ type QuoteRow = {
   updatedAt: string;
   statusKey: string;
   statusLabel: string;
+  orderNumber?: string | null;
+  paidInCashier?: boolean;
   saleExternalId?: number | string | null;
   paymentConfirmedAt?: string | null;
   latestPdfUrl: string | null;
@@ -35,6 +37,8 @@ type QuoteRow = {
 };
 
 const PRODUCTION_STATUSES = ["APROVADO", "EM_PRODUCAO", "PRONTO_PARA_ENTREGA"];
+const LS_LAST_PAYMENT = "bomcusto_last_caixa_payment";
+const LS_DISMISSED = "bomcusto_last_caixa_dismissed";
 
 function getOptionalNumberParam(params: URLSearchParams, ...keys: string[]) {
   for (const key of keys) {
@@ -57,7 +61,6 @@ function parseIncomingMessagePayload(data: unknown): Record<string, any> | null 
   if (!data) return null;
   if (typeof data === "object") return data as Record<string, any>;
   if (typeof data !== "string") return null;
-
   try {
     const parsed = JSON.parse(data) as unknown;
     return typeof parsed === "object" && parsed ? (parsed as Record<string, any>) : null;
@@ -70,7 +73,6 @@ function parseObjectMaybe(value: unknown): Record<string, any> | null {
   if (!value) return null;
   if (typeof value === "object") return value as Record<string, any>;
   if (typeof value !== "string") return null;
-
   try {
     const parsed = JSON.parse(value) as unknown;
     return typeof parsed === "object" && parsed ? (parsed as Record<string, any>) : null;
@@ -82,14 +84,12 @@ function parseObjectMaybe(value: unknown): Record<string, any> | null {
 function normalizeChatwootPayload(raw: Record<string, any>) {
   const dataObj = parseObjectMaybe(raw.data) ?? parseObjectMaybe(raw.payload) ?? raw;
   const nestedDataObj = parseObjectMaybe(dataObj?.data) ?? dataObj;
-
   const conversation =
     nestedDataObj?.conversation ??
     dataObj?.conversation ??
     nestedDataObj?.meta?.conversation ??
     raw?.conversation ??
     {};
-
   return { conversation };
 }
 
@@ -103,6 +103,29 @@ function getQuoteIdentifier(quote: QuoteRow): string {
   return quote.id;
 }
 
+function showToast(message: string, type: "success" | "danger") {
+  if (typeof window === "undefined") return;
+  const bs = (window as any).bootstrap;
+  if (!bs?.Toast) return;
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+  const wrapper = document.createElement("div");
+  wrapper.className = `toast align-items-center text-bg-${type} border-0`;
+  wrapper.setAttribute("role", "alert");
+  wrapper.setAttribute("aria-live", "assertive");
+  wrapper.setAttribute("aria-atomic", "true");
+  wrapper.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+    </div>
+  `;
+  container.appendChild(wrapper);
+  const toast = new bs.Toast(wrapper, { delay: 4000 });
+  toast.show();
+  wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
+}
+
 export default function StatusPage() {
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,7 +135,26 @@ export default function StatusPage() {
   const [validationState, setValidationState] = useState<"checking" | "valid" | "invalid">("checking");
   const [validationMessage, setValidationMessage] = useState("");
   const [efiStatus, setEfiStatus] = useState<{ enabled: boolean; message?: string } | null>(null);
+  const [lastPayment, setLastPayment] = useState<string | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const fetchRef = useRef<(() => Promise<void>) | null>(null);
 
+  // Carregar banner persistente do localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(LS_LAST_PAYMENT);
+      const dismissed = localStorage.getItem(LS_DISMISSED);
+      if (stored) {
+        setLastPayment(stored);
+        if (dismissed === stored) setBannerDismissed(true);
+      }
+    } catch {
+      // noop
+    }
+  }, []);
+
+  // Validação Chatwoot
   useEffect(() => {
     const isDevBypass =
       (typeof process !== "undefined" && process.env.NODE_ENV === "development") ||
@@ -131,7 +173,6 @@ export default function StatusPage() {
     const handleMessage = (event: MessageEvent) => {
       const payload = parseIncomingMessagePayload(event.data);
       if (!payload) return;
-
       const { conversation } = normalizeChatwootPayload(payload);
       if (parseMaybeNumber(conversation?.id) !== undefined) {
         validated = true;
@@ -151,7 +192,6 @@ export default function StatusPage() {
 
     window.addEventListener("message", handleMessage);
     requestChatwootInfo();
-
     const retryId = window.setTimeout(() => requestChatwootInfo(), 1200);
     const validationTimeout = window.setTimeout(() => {
       const isInIframe = window.parent !== window;
@@ -173,6 +213,7 @@ export default function StatusPage() {
     };
   }, []);
 
+  // Carregar dados e status EFI
   useEffect(() => {
     if (validationState === "valid") {
       void fetchQuotes();
@@ -181,41 +222,65 @@ export default function StatusPage() {
         .then((d) => setEfiStatus(d as { enabled: boolean; message?: string }))
         .catch(() => setEfiStatus({ enabled: false, message: "Falha ao verificar EFI" }));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validationState]);
+
+  // SSE — pagamentos em tempo real
+  useEffect(() => {
+    if (validationState !== "valid") return;
+    const es = new EventSource("/api/events/pagamentos");
+    es.onmessage = (event: MessageEvent<string>) => {
+      try {
+        const data = JSON.parse(event.data) as { numeroordem?: string };
+        const ordem = data?.numeroordem ?? "—";
+        const label = `Pedido #${ordem} — ${new Date().toLocaleTimeString("pt-BR")}`;
+        showToast(`✅ Pagamento do Pedido #${ordem} confirmado no caixa!`, "success");
+        // Persiste banner
+        try {
+          localStorage.setItem(LS_LAST_PAYMENT, label);
+          localStorage.removeItem(LS_DISMISSED);
+        } catch { /* noop */ }
+        setLastPayment(label);
+        setBannerDismissed(false);
+        // Atualiza lista
+        void fetchRef.current?.();
+      } catch {
+        // noop
+      }
+    };
+    es.onerror = () => es.close();
+    return () => es.close();
   }, [validationState]);
 
   async function fetchQuotes() {
     setLoading(true);
     setErro("");
-
     try {
       const params = new URLSearchParams(window.location.search);
-      const query = new URLSearchParams({
-        status: PRODUCTION_STATUSES.join(","),
-      });
-
+      const query = new URLSearchParams({ status: PRODUCTION_STATUSES.join(",") });
       const conversationId = getOptionalNumberParam(params, "chatid", "conversationId", "conversation_id");
-      const chatwootContactId = getOptionalNumberParam(
-        params,
-        "chatwootContactId",
-        "chatwoot_contact_id",
-        "contact_id",
-      );
-
-      if (conversationId) {
-        query.set("conversationId", String(conversationId));
-      }
-      if (chatwootContactId) {
-        query.set("chatwootContactId", String(chatwootContactId));
-      }
-
+      const chatwootContactId = getOptionalNumberParam(params, "chatwootContactId", "chatwoot_contact_id", "contact_id");
+      if (conversationId) query.set("conversationId", String(conversationId));
+      if (chatwootContactId) query.set("chatwootContactId", String(chatwootContactId));
       const response = await fetch(`/api/quotes?${query.toString()}`, { cache: "no-store" });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data?.error || "Erro ao buscar produção.");
       }
-
       const data = (await response.json()) as unknown;
-      setQuotes(Array.isArray(data) ? (data as QuoteRow[]) : []);
+      const newQuotes = Array.isArray(data) ? (data as QuoteRow[]) : [];
+      setQuotes((prev) => {
+        // Destaca orçamentos que mudaram de status
+        const changedId = newQuotes.find((nq) => {
+          const old = prev.find((oq) => oq.id === nq.id);
+          return old && old.statusKey !== nq.statusKey;
+        })?.id ?? null;
+        if (changedId) {
+          setHighlightedId(changedId);
+          setTimeout(() => setHighlightedId(null), 3000);
+        }
+        return newQuotes;
+      });
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível carregar a produção.");
     } finally {
@@ -223,33 +288,31 @@ export default function StatusPage() {
     }
   }
 
+  // Mantém ref sempre atualizada para o SSE usar
+  useEffect(() => {
+    fetchRef.current = fetchQuotes;
+  });
+
   async function handleStatusChange(quote: QuoteRow, nextStatus: string) {
     setStatusSavingId(quote.id);
     setErro("");
-
     try {
       const identifier = getQuoteIdentifier(quote);
       const response = await fetch(`/api/quotes/${encodeURIComponent(identifier)}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          newStatus: nextStatus,
-          changedBy: "Painel de producao",
-        }),
+        body: JSON.stringify({ newStatus: nextStatus, changedBy: "Painel de producao" }),
       });
-
       const data = (await response.json().catch(() => ({}))) as Partial<QuoteRow> & { error?: string; message?: string };
       if (!response.ok) {
         throw new Error(data?.message || data?.error || "Não foi possível atualizar o status.");
       }
-
       const updated = data as QuoteRow;
       setQuotes((current) => {
         if (!PRODUCTION_STATUSES.includes(updated.statusKey)) {
-          return current.filter((currentQuote) => currentQuote.id !== quote.id);
+          return current.filter((q) => q.id !== quote.id);
         }
-
-        return current.map((currentQuote) => (currentQuote.id === quote.id ? updated : currentQuote));
+        return current.map((q) => (q.id === quote.id ? updated : q));
       });
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Falha ao atualizar status.");
@@ -261,25 +324,16 @@ export default function StatusPage() {
   async function handlePdf(quote: QuoteRow) {
     setPdfLoadingId(quote.id);
     setErro("");
-
     try {
       const identifier = getQuoteIdentifier(quote);
       const response = await fetch(`/api/quotes/${encodeURIComponent(identifier)}/pdf`, { method: "POST" });
       const data = (await response.json().catch(() => ({}))) as { publicUrl?: string; error?: string };
-      if (!response.ok) {
-        throw new Error(data?.error || "Falha ao gerar PDF.");
-      }
-
+      if (!response.ok) throw new Error(data?.error || "Falha ao gerar PDF.");
       if (data.publicUrl) {
         setQuotes((current) =>
-          current.map((currentQuote) =>
-            currentQuote.id === quote.id
-              ? {
-                  ...currentQuote,
-                  latestPdfUrl: data.publicUrl ?? currentQuote.latestPdfUrl,
-                }
-              : currentQuote,
-          ),
+          current.map((q) =>
+            q.id === quote.id ? { ...q, latestPdfUrl: data.publicUrl ?? q.latestPdfUrl } : q
+          )
         );
         window.open(data.publicUrl, "_blank", "noopener,noreferrer");
       }
@@ -290,12 +344,34 @@ export default function StatusPage() {
     }
   }
 
+  function dismissBanner() {
+    try {
+      if (lastPayment) localStorage.setItem(LS_DISMISSED, lastPayment);
+    } catch { /* noop */ }
+    setBannerDismissed(true);
+  }
+
+  const newQuoteHref = (() => {
+    if (typeof window === "undefined") return "/orcamento/novo#condPagamento";
+    const q = window.location.search.replace(/^\?/, "");
+    return q ? `/orcamento/novo?${q}#condPagamento` : "/orcamento/novo#condPagamento";
+  })();
+
   return (
     <>
       <Script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" strategy="beforeInteractive" />
       <Script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.js" strategy="beforeInteractive" />
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
       <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+
+      {/* Banner persistente de último pagamento no caixa */}
+      {lastPayment && !bannerDismissed && (
+        <div className="alert alert-success alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0 py-2 px-3" role="alert" style={{ borderRadius: 0 }}>
+          <i className="bi bi-cash-coin fs-5" />
+          <span><strong>Último pagamento no caixa:</strong> {lastPayment}</span>
+          <button type="button" className="btn-close ms-auto" aria-label="Fechar" onClick={dismissBanner} />
+        </div>
+      )}
 
       {validationState === "checking" && (
         <div className="container my-5">
@@ -336,22 +412,34 @@ export default function StatusPage() {
               <img src="/media/logo_new.svg" alt="Logo Bom Custo" className="logo-img" />
               <div>
                 <h3 className="mb-1">Produção de Orçamentos</h3>
-                <div className="small">Acompanhe itens aprovados, em produção e prontos para entrega.</div>
+                <div className="small d-flex align-items-center gap-2">
+                  <span className="badge bg-success-subtle text-success-emphasis">
+                    <i className="bi bi-broadcast me-1" />Tempo real
+                  </span>
+                  <span>Aprovados, em produção e prontos para entrega.</span>
+                </div>
               </div>
             </div>
-            <div className="text-end">
-              <div className="small">Fluxo operacional</div>
-              <strong>{quotes.length} orçamento(s)</strong>
-              {efiStatus !== null && (
-                <div className="mt-1">
-                  <span
-                    className={`badge ${efiStatus.enabled ? "bg-success" : "bg-danger"}`}
-                    title={efiStatus.message ?? ""}
-                  >
-                    EFI: {efiStatus.enabled ? "Configurado ✓" : "Não configurado ✗"}
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => void fetchQuotes()}
+                title="Atualizar lista"
+              >
+                <i className="bi bi-arrow-clockwise me-1" />Atualizar
+              </button>
+              <a href={newQuoteHref} className="btn btn-sm btn-success">
+                <i className="bi bi-plus-circle me-1" />Novo Orçamento
+              </a>
+              <div className="text-end">
+                <div className="small">{quotes.length} orçamento(s)</div>
+                {efiStatus !== null && (
+                  <span className={`badge ${efiStatus.enabled ? "bg-success" : "bg-danger"}`} title={efiStatus.message ?? ""}>
+                    EFI: {efiStatus.enabled ? "✓" : "✗"}
                   </span>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
@@ -359,9 +447,12 @@ export default function StatusPage() {
             {erro ? <div className="alert alert-danger mb-4">{erro}</div> : null}
 
             {loading ? (
-              <div className="text-center py-5 text-muted">Carregando produção...</div>
+              <div className="text-center py-5 text-muted">
+                <div className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+                Carregando produção...
+              </div>
             ) : quotes.length === 0 ? (
-              <div className="alert alert-info mb-0">Nenhum orçamento encontrado para este cliente no fluxo de produção.</div>
+              <div className="alert alert-info mb-0">Nenhum orçamento no fluxo de produção.</div>
             ) : (
               <div className="table-responsive">
                 <table className="table table-hover align-middle production-table">
@@ -381,58 +472,58 @@ export default function StatusPage() {
                       const customerName = quote.body.cliente?.nome || "Cliente não informado";
                       const total = quote.body.totais?.valor ?? 0;
                       const quoteNumber = quote.body.idorcamento ?? quote.internalNumber;
-                      const orderNumber = quote.saleExternalId != null ? String(quote.saleExternalId) : null;
+                      const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
+                      const paidInCashier = quote.paidInCashier ?? Boolean(orderNumber);
                       const canOpenPdf = Boolean(quote.latestPdfUrl);
                       const statusBusy = statusSavingId === quote.id;
                       const pdfBusy = pdfLoadingId === quote.id;
+                      const isHighlighted = highlightedId === quote.id;
 
                       return (
-                        <tr key={quote.id}>
+                        <tr key={quote.id} className={isHighlighted ? "row-highlighted" : ""}>
                           <td>
                             <div className="fw-semibold">#{quoteNumber}</div>
-                            <div className="text-muted small">{quote.id}</div>
-                            <div className="mt-1">
-                              <span className={`badge ${orderNumber ? "bg-info text-dark" : "bg-secondary"}`}>
-                                Pedido: {orderNumber ? `#${orderNumber}` : "não gerado"}
-                              </span>
-                            </div>
-                            <div className="mt-1">
-                              <span className={`badge ${quote.paymentConfirmedAt ? "bg-primary" : "bg-warning text-dark"}`}>
-                                {quote.paymentConfirmedAt
-                                  ? `Pagamento confirmado ${new Date(quote.paymentConfirmedAt).toLocaleDateString("pt-BR")}`
-                                  : "Pagamento pendente"}
-                              </span>
-                            </div>
+                            {paidInCashier ? (
+                              <div className="mt-1">
+                                <span className="badge bg-success">
+                                  <i className="bi bi-cash-coin me-1" />Pago no Caixa {orderNumber ? `#${orderNumber}` : ""}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="mt-1">
+                                <span className={`badge ${quote.paymentConfirmedAt ? "bg-primary" : "bg-warning text-dark"}`}>
+                                  {quote.paymentConfirmedAt ? "PIX Confirmado" : "Aguardando pagamento"}
+                                </span>
+                              </div>
+                            )}
                           </td>
                           <td>
                             <div className="fw-semibold">{customerName}</div>
                             <div className="text-muted small">{quote.body.cliente?.telefone || "Sem telefone"}</div>
                           </td>
-                          <td>{quote.body.vendedorNome || "Sem vendedor"}</td>
+                          <td>{quote.body.vendedorNome || "—"}</td>
                           <td>{total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                          <td>{new Date(quote.updatedAt).toLocaleString("pt-BR")}</td>
+                          <td><span className="small">{new Date(quote.updatedAt).toLocaleString("pt-BR")}</span></td>
                           <td>
                             <div className="d-flex flex-column gap-2">
                               <span className={`status-pill status-${quote.statusKey.toLowerCase()}`}>{quote.statusLabel}</span>
-                              <select
-                                className="form-select form-select-sm"
-                                value=""
-                                disabled={statusBusy || quote.availableNextStatuses.length === 0}
-                                onChange={(event) => {
-                                  const selectedStatus = event.target.value;
-                                  event.target.value = "";
-                                  if (selectedStatus) {
-                                    void handleStatusChange(quote, selectedStatus);
-                                  }
-                                }}
-                              >
-                                <option value="">{statusBusy ? "Salvando..." : "Alterar status"}</option>
-                                {quote.availableNextStatuses.map((status) => (
-                                  <option key={status.value} value={status.value}>
-                                    {status.label}
-                                  </option>
-                                ))}
-                              </select>
+                              {quote.availableNextStatuses.length > 0 && (
+                                <select
+                                  className="form-select form-select-sm"
+                                  value=""
+                                  disabled={statusBusy}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    e.target.value = "";
+                                    if (v) void handleStatusChange(quote, v);
+                                  }}
+                                >
+                                  <option value="">{statusBusy ? "Salvando..." : "Alterar status"}</option>
+                                  {quote.availableNextStatuses.map((s) => (
+                                    <option key={s.value} value={s.value}>{s.label}</option>
+                                  ))}
+                                </select>
+                              )}
                             </div>
                           </td>
                           <td>
@@ -445,27 +536,17 @@ export default function StatusPage() {
                               >
                                 {pdfBusy ? "Gerando..." : canOpenPdf ? "Atualizar PDF" : "Gerar PDF"}
                               </button>
-                              {quote.latestPdfUrl ? (
-                                <a
-                                  className="btn btn-sm btn-outline-dark"
-                                  href={quote.latestPdfUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
+                              {quote.latestPdfUrl && (
+                                <a className="btn btn-sm btn-outline-dark" href={quote.latestPdfUrl} target="_blank" rel="noreferrer">
                                   Abrir PDF
                                 </a>
-                              ) : null}
+                              )}
                               {quote.chatwootConversationUrl ? (
-                                <a
-                                  className="btn btn-sm btn-success"
-                                  href={quote.chatwootConversationUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  Abrir Chatwoot
+                                <a className="btn btn-sm btn-success" href={quote.chatwootConversationUrl} target="_blank" rel="noreferrer">
+                                  <i className="bi bi-chat me-1" />Chatwoot
                                 </a>
                               ) : (
-                                <span className="text-muted small">Sem conversa vinculada</span>
+                                <span className="text-muted small">Sem conversa</span>
                               )}
                             </div>
                           </td>
@@ -480,25 +561,19 @@ export default function StatusPage() {
         </div>
       )}
 
+      {/* Toast container */}
+      <div id="toast-container" className="toast-container position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1100 }} />
+
       <style>{`
         body { background: #f7f1e3; font-size: 1.02rem; }
         .orcamento-header {
           background: linear-gradient(135deg, #c5f2e8 0%, #cbe1f9 25%, #e7d8f9 50%, #f9e7f5 75%, #f0cacb 100%);
           color: #222;
+          border-radius: 8px 8px 0 0;
         }
-        .orcamento-section { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-        .logo-img {
-          max-width: 140px;
-          max-height: 88px;
-          background: #fff;
-          border-radius: 8px;
-          padding: 6px;
-        }
-        .production-table th {
-          background: #f9e7f5;
-          color: #222;
-          white-space: nowrap;
-        }
+        .orcamento-section { box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-radius: 0 0 8px 8px; }
+        .logo-img { max-width: 140px; max-height: 88px; background: #fff; border-radius: 8px; padding: 6px; }
+        .production-table th { background: #f9e7f5; color: #222; white-space: nowrap; }
         .status-pill {
           display: inline-flex;
           width: fit-content;
@@ -512,16 +587,16 @@ export default function StatusPage() {
         .status-pronto_para_entrega { background: #fff5e8; color: #a65b12; }
         .status-entregue { background: #ececec; color: #444; }
         .status-cancelado { background: #fdecec; color: #b42318; }
-        .action-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-          align-items: center;
+        .action-list { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+        .row-highlighted { animation: highlight-pulse 3s ease-out; }
+        @keyframes highlight-pulse {
+          0%   { background-color: #d1fae5; }
+          60%  { background-color: #d1fae5; }
+          100% { background-color: transparent; }
         }
         @media (max-width: 768px) {
           .container { padding-inline: 1rem; }
-          .production-table th,
-          .production-table td { font-size: 0.92rem; }
+          .production-table th, .production-table td { font-size: 0.92rem; }
         }
       `}</style>
     </>
