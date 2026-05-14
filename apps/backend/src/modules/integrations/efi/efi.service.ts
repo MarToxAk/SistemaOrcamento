@@ -609,46 +609,21 @@ export class EfiService {
           const clienteNome = (body.cliente as any)?.nome ?? (quote as any).customer?.fullName ?? "Cliente";
           const numero = (body as any).idorcamento ?? (body as any).idorcamento_interno ?? (quote as any).internalNumber ?? "-";
           const total = Number((body as any).totais?.valor ?? (quote as any).total ?? 0);
-          const itensList = ((body as any).itens ?? []).slice(0, 10).map((it: any) => `- ${it.produto?.descricaoproduto ?? it.produto?.descricaocurta ?? "Item"} (${it.quantidadeitem}x) - ${Number(it.orcamentovalorfinalitem ?? it.orcamentovalorfinalitem ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`);
-          const itensText = itensList.length > 0 ? itensList.join("\n") : "(sem itens listados)";
-          const temArte = ((body as any).carimbos?.quantidade_total ?? (body as any).carimbos?.itens?.length ?? 0) > 0;
-          const pdfUrl = (mapped as any).latestPdfUrl ?? (body as any).latestPdfUrl ?? ((body as any).documentoPdf ? (body as any).documentoPdf.publicUrl : null);
-          const safePdfUrl = pdfUrl ? encodeURI(String(pdfUrl)) : null;
-
           const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-          let mensagem = `Ola, ${clienteNome}. `;
-          // Detecta se o pagamento recebido corresponde a metade do total (entrada 50%)
           const halfAmount = Number((Number(total) / 2).toFixed(2));
           const isHalf = Math.abs(payment.amount - halfAmount) < 0.01 || Number((quote as any).firstInstallmentAmount ?? 0) === payment.amount;
 
+          let mensagem: string;
           if (fullyPaid) {
-            mensagem += `Pagamento recebido com sucesso.`;
+            mensagem = `✅ Pagamento PIX recebido, ${clienteNome}!\n\nOrçamento #${numero} — ${fmt(total)}\nComprovante gerado. Pedido confirmado! 😊`;
           } else {
             const remaining = Number(Math.max(Number(total) - Number(payment.amount), 0).toFixed(2));
             if (isHalf) {
-              mensagem += `Recebemos a entrada de ${fmt(payment.amount)}. Restam ${fmt(remaining)} para pagar na loja.`;
+              mensagem = `✅ ${clienteNome}, recebemos sua entrada PIX!\n\nOrçamento #${numero}\nEntrada: ${fmt(payment.amount)} — Restante: ${fmt(remaining)} a pagar na loja.\n\nSeu pedido entrará em produção em breve! 😊`;
             } else {
-              mensagem += `Recebemos um pagamento parcial de ${fmt(payment.amount)}. Restam ${fmt(remaining)} para pagar.`;
+              mensagem = `⚠️ ${clienteNome}, recebemos um pagamento parcial PIX.\n\nOrçamento #${numero}\nPago: ${fmt(payment.amount)} de ${fmt(total)} — Restam: ${fmt(remaining)}.\n\nAguardamos o pagamento restante.`;
             }
           }
-
-          mensagem += `\n\nOrcamento #${numero}`;
-          mensagem += `\n${itensText}`;
-          mensagem += `\n\nTotal: ${fmt(total)}`;
-          mensagem += "\n\n";
-          if (temArte) {
-            mensagem += "Sua arte sera enviada para aprovacao. Assim que aprovada, daremos continuidade a producao.";
-          } else if (isHalf) {
-            mensagem += "Seu pedido sera enviado para producao. O restante do pagamento devera ser realizado na loja no momento da retirada.";
-          } else if (fullyPaid) {
-            mensagem += "Seu pedido sera enviado para producao.";
-          } else {
-            mensagem += "Aguardaremos a confirmacao do restante do pagamento para prosseguir.";
-          }
-          if (safePdfUrl) {
-            mensagem += `\n\nPDF: ${safePdfUrl}`;
-          }
-          mensagem += "\n\nPrecisa de CNPJ ou CPF na nota? Precisa de nota fiscal?";
 
           await this.chatwootService.sendOutgoingMessage(convId, mensagem);
         }

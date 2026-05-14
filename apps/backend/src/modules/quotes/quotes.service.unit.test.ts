@@ -482,7 +482,7 @@ describe("QuotesService - enviarParaCliente — regra de approvalLink por associ
     expect(result.approvalLink).toEqual(expect.stringContaining('/orcamento/quote-001/approve?token='));
   });
 
-  it("nao deve retornar approvalLink quando cliente NAO e associado mesmo com idcliente", async () => {
+  it("deve retornar approvalLink quando idcliente existe mesmo sem isAssociated", async () => {
     mockPrisma.quote.findFirst.mockResolvedValue(
       makeQuote({
         status: "APROVADO",
@@ -494,6 +494,6 @@ describe("QuotesService - enviarParaCliente — regra de approvalLink por associ
 
     const result = await service.enviarParaCliente("quote-001");
 
-    expect(result.approvalLink).toBeNull();
+    expect(result.approvalLink).toEqual(expect.stringContaining('/orcamento/quote-001/approve?token='));
   });
 });

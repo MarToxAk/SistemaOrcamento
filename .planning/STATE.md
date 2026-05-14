@@ -11,7 +11,7 @@ Milestone: v1.9 (planning)
 Phase: 20 - relatorios-exportacao-csv (planning)
 Plan: -
 Status: Defining requirements
-Last activity: 2026-05-05 - Milestone v1.9 started (phase 20 planning)
+Last activity: 2026-05-14 - Completed quick task 260514-002: Notificar cliente via Chatwoot ao confirmar pagamento no caixa + PIX simplificado
 
 ## Project Status
 
@@ -93,6 +93,8 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 260511-swg | Gere a documentação OpenAPI (Swagger) para os novos endpoints de Contas a Pagar e Anexos | 2026-05-11 | 271b9c9 | [260511-swg-swagger-contas-pagar-anexos](./quick/260511-swg-swagger-contas-pagar-anexos/) |
 | 260511-athos | Implementar Schema Completo Athos para GET, POST e PATCH de conta_pagar | 2026-05-11 | 6aabae0, 54597d2 | [260511-athos-schema-completo](./quick/260511-athos-schema-completo/) |
 | 260511-kvy | Implementar Fluxo Completo de Pagamento e GED (Patch Athos V2) com liquidacao transacional | 2026-05-11 | ba57544 | [260511-kvy-para-aplicar-este-patch-de-fluxo-complet](./quick/260511-kvy-para-aplicar-este-patch-de-fluxo-complet/) |
+| 260514-001 | Correcao link de aprovacao no envio — approval link nunca gerado por guarda isAssociatedCustomer | 2026-05-14 | fabc37e | [260514-001-approval-link-correcao-envio](./quick/260514-001-approval-link-correcao-envio/) |
+| 260514-002 | Notificar cliente via Chatwoot ao confirmar pagamento no caixa + simplificar mensagem PIX | 2026-05-14 | 61354fd | [260514-002-notificacao-caixa-pix-chatwoot](./quick/260514-002-notificacao-caixa-pix-chatwoot/) |
 
 
 
