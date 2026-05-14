@@ -1798,7 +1798,7 @@ export class QuotesService {
     // Se houver idcliente, garantir token de aprovacao e montar link de aprovacao
     let approvalToken: string | undefined = undefined;
     let approvalLink: string | undefined = undefined;
-    if (clienteId && isAssociatedCustomer) {
+    if (clienteId) {
       if (quote.approvalToken && quote.approvalExpiresAt && new Date(quote.approvalExpiresAt) > new Date()) {
         approvalToken = quote.approvalToken;
       } else {
@@ -1839,7 +1839,7 @@ export class QuotesService {
 
     // Observacao sobre orcamento associado ao cliente Athos (quando idcliente identificado)
     let observacao = "";
-    if (clienteId && isAssociatedCustomer) {
+    if (clienteId) {
       let associatedName: string | undefined = undefined;
       try {
         const clientInfo = await this.athosService.buscarClientePorId(clienteId);
