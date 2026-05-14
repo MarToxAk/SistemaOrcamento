@@ -483,15 +483,23 @@ export class QuotesService {
 
     const calculatedItems = itemsInput.map((item) => {
       const itemDiscount = Number(item.valordesconto ?? 0);
-      const finalPrice = Number(
-        (item.orcamentovalorfinalitem ?? item.quantidadeitem * item.valoritem - itemDiscount).toFixed(2),
-      );
+      const finalPrice = this.computeAndValidateFinalItemPrice({
+        quantity: Number(item.quantidadeitem),
+        unitPrice: Number(item.valoritem),
+        discount: itemDiscount,
+        providedFinalPrice: item.orcamentovalorfinalitem,
+        context: `item seq=${item.sequenciaitem ?? 0}`,
+      });
 
       const children = (item.filhos ?? []).map((child) => {
         const childDiscount = Number(child.valordesconto ?? 0);
-        const childFinalPrice = Number(
-          (child.orcamentovalorfinalitem ?? child.quantidadeitem * child.valoritem - childDiscount).toFixed(2),
-        );
+        const childFinalPrice = this.computeAndValidateFinalItemPrice({
+          quantity: Number(child.quantidadeitem),
+          unitPrice: Number(child.valoritem),
+          discount: childDiscount,
+          providedFinalPrice: child.orcamentovalorfinalitem,
+          context: `item seq=${item.sequenciaitem ?? 0}/filho seq=${child.sequenciaitem ?? 0}`,
+        });
 
         const childPriceSource: PriceSource = child.produto.idproduto ? "PDV" : "MANUAL";
 
@@ -536,7 +544,14 @@ export class QuotesService {
 
     const discount = Number(payload.totais?.desconto ?? 0);
     const surcharge = Number(payload.totais?.valoracrescimo ?? 0);
-    const total = Number(payload.totais?.valor ?? computedSubtotal - discount + surcharge);
+    const headerTotalRaw = Number(payload.totais?.valor ?? (payload as unknown as { valor?: number }).valor ?? NaN);
+    const total = Number(Number.isFinite(headerTotalRaw) ? headerTotalRaw : computedSubtotal - discount + surcharge);
+
+    this.logHeaderTotalMismatchIfAny({
+      externalQuoteId: payload.idorcamento,
+      headerTotal: headerTotalRaw,
+      itemsTotal: computedSubtotal,
+    });
 
     const customer = await this.resolveCustomer(payload, customerInput);
 
@@ -1101,6 +1116,51 @@ export class QuotesService {
 
   private toDecimal(value: number): Prisma.Decimal {
     return new Prisma.Decimal(Number(value.toFixed(2)));
+  }
+
+  private computeAndValidateFinalItemPrice(params: {
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    providedFinalPrice?: number;
+    context: string;
+  }): number {
+    const baseTotal = Number((params.unitPrice * params.quantity).toFixed(2));
+    const formulaFinal = Number((baseTotal - params.discount).toFixed(2));
+
+    if (params.providedFinalPrice !== undefined && params.providedFinalPrice !== null) {
+      const provided = Number(params.providedFinalPrice);
+      if (Number.isFinite(provided) && Math.abs(provided - formulaFinal) > 0.01) {
+        this.logger.warn(
+          `[Quotes] orcamentovalorfinalitem recebido divergente em ${params.context}. ` +
+            `Recebido=${provided.toFixed(2)} | Recalculado=${formulaFinal.toFixed(2)}`,
+        );
+      }
+    }
+
+    if (params.unitPrice > 0 && params.quantity > 0 && formulaFinal <= 0) {
+      this.logger.error(
+        `[Quotes] orcamentovalorfinalitem recalculado <= 0 em ${params.context} com unitPrice > 0. ` +
+          `Aplicando valor bruto=${baseTotal.toFixed(2)} para evitar persistencia zerada.`,
+      );
+      return baseTotal;
+    }
+
+    return formulaFinal;
+  }
+
+  private logHeaderTotalMismatchIfAny(params: { externalQuoteId?: number; headerTotal: number; itemsTotal: number }): void {
+    if (!Number.isFinite(params.headerTotal)) {
+      return;
+    }
+
+    const delta = Number((params.headerTotal - params.itemsTotal).toFixed(2));
+    if (Math.abs(delta) > 0.01) {
+      this.logger.error(
+        `[Quotes] Divergencia de total no salvamento do orcamento ${params.externalQuoteId ?? "(sem id externo)"}. ` +
+          `Cabecalho=${params.headerTotal.toFixed(2)} | SomaItens=${params.itemsTotal.toFixed(2)} | Delta=${delta.toFixed(2)}`,
+      );
+    }
   }
 
   private toBigInt(value?: number): bigint | undefined {
