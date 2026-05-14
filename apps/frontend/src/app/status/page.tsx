@@ -40,18 +40,6 @@ const PRODUCTION_STATUSES = ["APROVADO", "EM_PRODUCAO", "PRONTO_PARA_ENTREGA"];
 const LS_LAST_PAYMENT = "bomcusto_last_caixa_payment";
 const LS_DISMISSED = "bomcusto_last_caixa_dismissed";
 
-function getOptionalNumberParam(params: URLSearchParams, ...keys: string[]) {
-  for (const key of keys) {
-    const value = params.get(key);
-    if (!value) continue;
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed;
-    }
-  }
-  return undefined;
-}
-
 function parseMaybeNumber(value: unknown): number | undefined {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
@@ -256,12 +244,8 @@ export default function StatusPage() {
     setLoading(true);
     setErro("");
     try {
-      const params = new URLSearchParams(window.location.search);
+      // Dashboard global — sem filtro por conversa/contato
       const query = new URLSearchParams({ status: PRODUCTION_STATUSES.join(",") });
-      const conversationId = getOptionalNumberParam(params, "chatid", "conversationId", "conversation_id");
-      const chatwootContactId = getOptionalNumberParam(params, "chatwootContactId", "chatwoot_contact_id", "contact_id");
-      if (conversationId) query.set("conversationId", String(conversationId));
-      if (chatwootContactId) query.set("chatwootContactId", String(chatwootContactId));
       const response = await fetch(`/api/quotes?${query.toString()}`, { cache: "no-store" });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -269,15 +253,14 @@ export default function StatusPage() {
       }
       const data = (await response.json()) as unknown;
       const newQuotes = Array.isArray(data) ? (data as QuoteRow[]) : [];
+      // Detecta mudança de status para highlight (fora do updater para evitar side-effect)
       setQuotes((prev) => {
-        // Destaca orçamentos que mudaram de status
-        const changedId = newQuotes.find((nq) => {
-          const old = prev.find((oq) => oq.id === nq.id);
-          return old && old.statusKey !== nq.statusKey;
-        })?.id ?? null;
+        const changedId = newQuotes.find((nq) => prev.some((oq) => oq.id === nq.id && oq.statusKey !== nq.statusKey))?.id ?? null;
         if (changedId) {
-          setHighlightedId(changedId);
-          setTimeout(() => setHighlightedId(null), 3000);
+          window.setTimeout(() => {
+            setHighlightedId(changedId);
+            window.setTimeout(() => setHighlightedId(null), 3000);
+          }, 0);
         }
         return newQuotes;
       });
