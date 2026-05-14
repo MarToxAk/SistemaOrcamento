@@ -1,9 +1,12 @@
+import { NextRequest, NextResponse } from "next/server";
+
 import { backendFetch } from "@/lib/backend-client";
 
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const id = params.id?.trim();
+export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await params;
+  const id = rawId?.trim();
   if (!id) {
-    return Response.json({ error: "Id do orcamento nao informado." }, { status: 400 });
+    return NextResponse.json({ error: "Id do orcamento nao informado." }, { status: 400 });
   }
 
   try {
@@ -21,9 +24,9 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     });
 
     const data = await res.json().catch(() => ({ error: "Resposta invalida do backend." }));
-    if (!res.ok) return Response.json(data, { status: res.status });
-    return Response.json(data, { status: 200 });
+    if (!res.ok) return NextResponse.json(data, { status: res.status });
+    return NextResponse.json(data, { status: 200 });
   } catch {
-    return Response.json({ error: "Falha ao conectar no backend." }, { status: 500 });
+    return NextResponse.json({ error: "Falha ao conectar no backend." }, { status: 500 });
   }
 }

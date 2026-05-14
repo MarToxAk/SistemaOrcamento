@@ -1,6 +1,8 @@
+import { NextRequest, NextResponse } from "next/server";
+
 import { backendFetch } from "@/lib/backend-client";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const qs = searchParams.toString();
 
@@ -15,9 +17,9 @@ export async function GET(req: Request) {
       headers: extraHeaders,
     });
     const data = await res.json().catch(() => ({ error: "Resposta inválida do backend." }));
-    if (!res.ok) return Response.json(data, { status: res.status });
-    return Response.json(data);
+    if (!res.ok) return NextResponse.json(data, { status: res.status });
+    return NextResponse.json(data);
   } catch {
-    return Response.json({ error: "Falha ao conectar no backend." }, { status: 500 });
+    return NextResponse.json({ error: "Falha ao conectar no backend." }, { status: 500 });
   }
 }
