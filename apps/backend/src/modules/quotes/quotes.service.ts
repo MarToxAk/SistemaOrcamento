@@ -2035,7 +2035,15 @@ export class QuotesService {
       const quantidade = Number(it?.quantidadeitem ?? it?.quantidade ?? 0);
       const valor = Number(it?.valoritem ?? it?.valor ?? 0);
       const desconto = Number(it?.valordesconto ?? it?.desconto ?? 0);
-      const total = Number(it?.orcamentovalorfinalitem ?? it?.total ?? (quantidade * valor - desconto));
+      const providedTotal = Number(it?.orcamentovalorfinalitem ?? it?.total ?? NaN);
+      const computedTotal = Number((quantidade * valor - desconto).toFixed(2));
+      const total = Number.isFinite(providedTotal)
+        ? providedTotal > 0 || valor <= 0 || quantidade <= 0
+          ? providedTotal
+          : computedTotal > 0
+            ? computedTotal
+            : Number((valor * quantidade).toFixed(2))
+        : computedTotal;
 
       return {
         ...it,
