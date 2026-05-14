@@ -606,6 +606,7 @@ export class EfiService {
           : (quote as any).conversationId?.toString?.();
 
         if (convId) {
+          const clienteNome = (body.cliente as any)?.nome ?? (quote as any).customer?.fullName ?? "Cliente";
           const numero = (body as any).idorcamento ?? (body as any).idorcamento_interno ?? (quote as any).internalNumber ?? "-";
           const total = Number((body as any).totais?.valor ?? (quote as any).total ?? 0);
           const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -614,13 +615,13 @@ export class EfiService {
 
           let mensagem: string;
           if (fullyPaid) {
-            mensagem = `✅ *Pagamento PIX recebido!*\n\nOrçamento #${numero} — ${fmt(total)}\nComprovante gerado. Pedido confirmado!\n\nObrigado pela preferência! 😊`;
+            mensagem = `✅ Pagamento PIX recebido, ${clienteNome}!\n\nOrçamento #${numero} — ${fmt(total)}\nComprovante gerado. Pedido confirmado! 😊`;
           } else {
             const remaining = Number(Math.max(Number(total) - Number(payment.amount), 0).toFixed(2));
             if (isHalf) {
-              mensagem = `✅ *Entrada PIX recebida!*\n\nOrçamento #${numero}\nEntrada: ${fmt(payment.amount)} — Restante: ${fmt(remaining)} a pagar na loja.\n\nSeu pedido entrará em produção em breve! 😊`;
+              mensagem = `✅ ${clienteNome}, recebemos sua entrada PIX!\n\nOrçamento #${numero}\nEntrada: ${fmt(payment.amount)} — Restante: ${fmt(remaining)} a pagar na loja.\n\nSeu pedido entrará em produção em breve! 😊`;
             } else {
-              mensagem = `⚠️ Pagamento parcial PIX recebido.\n\nOrçamento #${numero}\nPago: ${fmt(payment.amount)} de ${fmt(total)} — Restam: ${fmt(remaining)}\n\nAguardamos o pagamento restante.`;
+              mensagem = `⚠️ ${clienteNome}, recebemos um pagamento parcial PIX.\n\nOrçamento #${numero}\nPago: ${fmt(payment.amount)} de ${fmt(total)} — Restam: ${fmt(remaining)}.\n\nAguardamos o pagamento restante.`;
             }
           }
 
