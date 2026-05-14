@@ -1,8 +1,9 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from "@nestjs/common";
+import { Injectable, Inject, Logger, OnApplicationBootstrap, OnApplicationShutdown, forwardRef } from "@nestjs/common";
 import { Client } from "pg";
 
 import { PrismaService } from "../../database/prisma.service";
 import { EventsService } from "../../events/events.service";
+import { QuotesService } from "../../quotes/quotes.service";
 
 const LISTEN_CHANNEL = "n8n_channel";
 const KEEP_ALIVE_MS = 55_000;
@@ -17,6 +18,8 @@ export class AthosListenerService implements OnApplicationBootstrap, OnApplicati
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventsService: EventsService,
+    @Inject(forwardRef(() => QuotesService))
+    private readonly quotesService: QuotesService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -110,6 +113,11 @@ export class AthosListenerService implements OnApplicationBootstrap, OnApplicati
         numeroordem,
         idVenda: idvenda,
         timestamp: new Date().toISOString(),
+      });
+
+      // Atualiza status e notifica cliente via Chatwoot
+      void this.quotesService.confirmarPagamentoCaixa(idvenda, idorcamento, numeroordem).catch((err: unknown) => {
+        this.logger.warn(`confirmarPagamentoCaixa falhou idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`);
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -469,6 +469,58 @@ export class QuotesService {
     // Evento SSE removido nesta branch por ausencia do modulo de events.
   }
 
+  async confirmarPagamentoCaixa(idvenda: number, idorcamento: number, numeroordem: string): Promise<void> {
+    const quote = await this.prisma.quote.findFirst({
+      where: {
+        OR: [
+          { saleExternalId: BigInt(idvenda) },
+          { externalQuoteId: BigInt(idorcamento) },
+        ],
+      },
+    });
+
+    if (!quote) {
+      this.logger.warn(`confirmarPagamentoCaixa: orcamento nao encontrado idvenda=${idvenda} idorcamento=${idorcamento}`);
+      return;
+    }
+
+    const needsUpdate = ["PENDENTE", "ENVIADO"].includes(quote.status);
+    const alreadyNoted = quote.paymentNote != null;
+
+    if (!needsUpdate && alreadyNoted) return;
+
+    const updates: Record<string, unknown> = {};
+    if (!quote.saleExternalId) updates.saleExternalId = BigInt(idvenda);
+    if (!alreadyNoted) updates.paymentNote = "Pagamento feito no caixa";
+    if (needsUpdate && !quote.paymentConfirmedAt) updates.paymentConfirmedAt = new Date();
+
+    if (Object.keys(updates).length > 0) {
+      try {
+        await this.prisma.quote.update({ where: { id: quote.id }, data: updates });
+      } catch (err) {
+        this.logger.warn(`confirmarPagamentoCaixa: falha ao atualizar ${quote.id}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
+    if (needsUpdate) {
+      try {
+        await this.changeStatus(quote.id, "APROVADO", "Pagamento confirmado no caixa");
+      } catch (err) {
+        this.logger.warn(`confirmarPagamentoCaixa: falha ao mudar status APROVADO ${quote.id}: ${err instanceof Error ? err.message : err}`);
+      }
+
+      if (quote.conversationId) {
+        try {
+          const quoteNum = quote.externalQuoteId ? Number(quote.externalQuoteId) : quote.internalNumber;
+          const msg = `✅ *Pagamento confirmado no caixa!*\n\nPedido #${numeroordem} — Orçamento #${quoteNum}\n\nObrigado pela preferência! 😊`;
+          await this.chatwootService.sendOutgoingMessage(String(quote.conversationId), msg);
+        } catch (err) {
+          this.logger.warn(`confirmarPagamentoCaixa: falha ao notificar Chatwoot ${quote.id}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+    }
+  }
+
   async create(payload: CreateQuoteDto) {
     // Validação Chatwoot: se informado, deve ser válido
     this.validateChatwootContext(payload);
