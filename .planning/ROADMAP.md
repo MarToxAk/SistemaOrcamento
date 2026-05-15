@@ -243,7 +243,7 @@ Success criteria:
 **Plans:** 3 plans
 
 - [x] 26-01-PLAN.md — Kanban 3-colunas + tabs mobile (estrutura base) — complete
-- [ ] 26-02-PLAN.md — Cards reais com conteúdo completo
+- [x] 26-02-PLAN.md — Cards reais com conteúdo completo — complete
 - [ ] 26-03-PLAN.md — Filtro de carimbo funcional
 
 ---

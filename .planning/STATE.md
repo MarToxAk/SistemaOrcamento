@@ -4,14 +4,14 @@ milestone: v1.4
 milestone_name: Pagamento EFI/Athos + Desconto NFS-e
 current_phase: 26
 status: executing
-last_updated: "2026-05-15T15:51:38Z"
-last_activity: 2026-05-15 -- Phase 26 Plan 01 complete (kanban layout base)
+last_updated: "2026-05-15T16:13:00Z"
+last_activity: 2026-05-15 -- Phase 26 Plan 02 complete (kanban cards completos com badge, BRL, acoes)
 progress:
   total_phases: 26
   completed_phases: 18
   total_plans: 44
-  completed_plans: 38
-  percent: 86
+  completed_plans: 39
+  percent: 89
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -25,9 +25,9 @@ Milestone: v1.9 (planning)
 ## Current Position
 
 Phase: 26 (status-producao-kanban) — EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 26 — Plan 01 complete
-Last activity: 2026-05-15 -- Phase 26 Plan 01 complete (kanban layout base)
+Plan: 3 of 3
+Status: Executing Phase 26 — Plan 02 complete
+Last activity: 2026-05-15 -- Phase 26 Plan 02 complete (kanban cards completos com badge, BRL, acoes)
 
 ## Project Status
 
@@ -96,6 +96,9 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 2026-05-15 | Kanban 3-colunas com PRODUCTION_STATUSES.map substituindo tabela em /status | Estrutura visual base para Plan 02 (cards) e Plan 03 (filtro carimbo) |
 | 2026-05-15 | Mobile tabs via activeMobileTab state — nao scroll horizontal nem accordion | Decisao D-03 do CONTEXT: uma coluna visivel por vez com Bootstrap nav-tabs |
 | 2026-05-15 | Cards placeholder #numero em Plan 01 — Plan 02 expande para card completo | Separacao de concerns: estrutura primeiro, conteudo depois |
+| 2026-05-15 | renderQuoteCard como funcao interna (closure) — captura pdfLoadingId e highlightedId sem prop drilling | Funcao interna permite reuso desktop+mobile sem passar props adicionais |
+| 2026-05-15 | Badge PAGO_CAIXA=bg-success, PIX_CONFIRMADO=bg-primary, AGUARDANDO=bg-warning | Mapeamento badge->cor Bootstrap definido em D-05 e interfaces do plan |
+| 2026-05-15 | borda superior do card via .status-border-{statusKey} — identidade visual por coluna | Cada card identifica sua coluna kanban pela cor da borda superior (verde/azul/laranja) |
 
 ## Notes
 
