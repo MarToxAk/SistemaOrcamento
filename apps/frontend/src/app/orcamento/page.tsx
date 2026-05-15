@@ -383,6 +383,9 @@ export default function OrcamentoListaPage() {
                   <p className="mb-0">Esta página só pode ser acessada através do <strong>Chatwoot Dashboard</strong>.</p>
                   <hr className="my-2" />
                   <p className="mb-0 small text-muted">{validationMessage || "Por favor, volte ao Chatwoot."}</p>
+                  <a href="/status" className="btn btn-sm btn-outline-primary mt-3">
+                    Abrir painel publico de producao (/status)
+                  </a>
                 </div>
               </div>
             </div>
