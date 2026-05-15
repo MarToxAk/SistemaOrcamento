@@ -75,13 +75,29 @@ export default function StatusPage() {
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
-  const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("TODOS");
+  const [selectedBadgeFilter, setSelectedBadgeFilter] = useState<string>("TODOS");
+  const [onlyWithBadge, setOnlyWithBadge] = useState<boolean>(false);
   const [efiStatus, setEfiStatus] = useState<{ enabled: boolean; message?: string } | null>(null);
   const [lastPayment, setLastPayment] = useState<string | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const fetchRef = useRef<(() => Promise<void>) | null>(null);
+
+  function getBadgeType(quote: QuoteRow): string {
+    const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
+    const paidInCashier = quote.paidInCashier ?? Boolean(orderNumber);
+    if (paidInCashier) return "PAGO_CAIXA";
+    if (quote.paymentConfirmedAt) return "PIX_CONFIRMADO";
+    return "AGUARDANDO";
+  }
+
+  function hasBadge(quote: QuoteRow): boolean {
+    const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
+    const paidInCashier = quote.paidInCashier ?? Boolean(orderNumber);
+    return paidInCashier || Boolean(quote.paymentConfirmedAt);
+  }
 
   // Banner persistente do localStorage
   useEffect(() => {
@@ -164,31 +180,6 @@ export default function StatusPage() {
 
   const visibleQuotes = quotes;
 
-  async function handleStatusChange(quote: QuoteRow, nextStatus: string) {
-    setStatusSavingId(quote.id);
-    setErro("");
-    try {
-      const identifier = getQuoteIdentifier(quote);
-      const response = await fetch(`/api/quotes/${encodeURIComponent(identifier)}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newStatus: nextStatus, changedBy: "Painel de producao" }),
-      });
-      const data = (await response.json().catch(() => ({}))) as Partial<QuoteRow> & { error?: string; message?: string };
-      if (!response.ok) throw new Error(data?.message || data?.error || "Não foi possível atualizar o status.");
-      const updated = data as QuoteRow;
-      setQuotes((current) => {
-        if (!PRODUCTION_STATUSES.includes(updated.statusKey)) {
-          return current.filter((q) => q.id !== quote.id);
-        }
-        return current.map((q) => (q.id === quote.id ? updated : q));
-      });
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Falha ao atualizar status.");
-    } finally {
-      setStatusSavingId(null);
-    }
-  }
 
   async function handlePdf(quote: QuoteRow) {
     setPdfLoadingId(quote.id);
@@ -278,109 +269,36 @@ export default function StatusPage() {
               {"Nenhum orçamento no fluxo de produção no momento."}
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="table table-hover align-middle production-table">
-                <thead>
-                  <tr>
-                    <th>Orçamento</th>
-                    <th>Cliente</th>
-                    <th>Vendedor</th>
-                    <th>Total</th>
-                    <th>Atualizado</th>
-                    <th>Status</th>
-                    <th>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleQuotes.map((quote) => {
-                    const customerName = quote.body.cliente?.nome || "Cliente não informado";
-                    const total = quote.body.totais?.valor ?? 0;
-                    const quoteNumber = quote.body.idorcamento ?? quote.internalNumber;
-                    const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
-                    const paidInCashier = quote.paidInCashier ?? Boolean(orderNumber);
-                    const canOpenPdf = Boolean(quote.latestPdfUrl);
-                    const statusBusy = statusSavingId === quote.id;
-                    const pdfBusy = pdfLoadingId === quote.id;
-                    const isHighlighted = highlightedId === quote.id;
-
-                    return (
-                      <tr key={quote.id} className={isHighlighted ? "row-highlighted" : ""}>
-                        <td>
-                          <div className="fw-semibold">#{quoteNumber}</div>
-                          {paidInCashier ? (
-                            <div className="mt-1">
-                              <span className="badge bg-success">
-                                <i className="bi bi-cash-coin me-1" />Pago no Caixa {orderNumber ? `#${orderNumber}` : ""}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="mt-1">
-                              <span className={`badge ${quote.paymentConfirmedAt ? "bg-primary" : "bg-warning text-dark"}`}>
-                                {quote.paymentConfirmedAt ? "PIX Confirmado" : "Aguardando pagamento"}
-                              </span>
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          <div className="fw-semibold">{customerName}</div>
-                          <div className="text-muted small">{quote.body.cliente?.telefone || "Sem telefone"}</div>
-                        </td>
-                        <td>{quote.body.vendedorNome || "—"}</td>
-                        <td>{total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                        <td><span className="small">{new Date(quote.updatedAt).toLocaleString("pt-BR")}</span></td>
-                        <td>
-                          <div className="d-flex flex-column gap-2">
-                            <span className={`status-pill status-${quote.statusKey.toLowerCase()}`}>{quote.statusLabel}</span>
-                            {quote.availableNextStatuses.length > 0 && (
-                              <select
-                                className="form-select form-select-sm"
-                                value=""
-                                disabled={statusBusy}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  e.target.value = "";
-                                  if (v) void handleStatusChange(quote, v);
-                                }}
-                              >
-                                <option value="">{statusBusy ? "Salvando..." : "Alterar status"}</option>
-                                {quote.availableNextStatuses.map((s) => (
-                                  <option key={s.value} value={s.value}>{s.label}</option>
-                                ))}
-                              </select>
-                            )}
+            <div className="kanban-board d-none d-md-flex gap-3">
+              {PRODUCTION_STATUSES.map((statusKey) => {
+                const columnQuotes = visibleQuotes.filter((q) => q.statusKey === statusKey);
+                const columnLabel =
+                  statusKey === "APROVADO" ? "APROVADO" :
+                  statusKey === "EM_PRODUCAO" ? "EM PRODUÇÃO" :
+                  "PRONTO PARA ENTREGA";
+                return (
+                  <div key={statusKey} className={`kanban-column kanban-column-${statusKey.toLowerCase()}`}>
+                    <div className={`kanban-column-header status-${statusKey.toLowerCase()}`}>
+                      <span className="kanban-column-title">{columnLabel}</span>
+                      <span className="kanban-column-count">{columnQuotes.length}</span>
+                    </div>
+                    <div className="kanban-column-body">
+                      {columnQuotes.length === 0 ? (
+                        <div className="kanban-column-empty text-muted small">Sem orçamentos</div>
+                      ) : (
+                        columnQuotes.map((quote) => (
+                          <div
+                            key={quote.id}
+                            className={`kanban-card-placeholder ${highlightedId === quote.id ? "card-highlighted" : ""}`}
+                          >
+                            #{quote.body.idorcamento ?? quote.internalNumber}
                           </div>
-                        </td>
-                        <td>
-                          <div className="action-list">
-                            {!canOpenPdf && (
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-primary"
-                                onClick={() => void handlePdf(quote)}
-                                disabled={pdfBusy}
-                              >
-                                {pdfBusy ? "Gerando..." : "Gerar PDF"}
-                              </button>
-                            )}
-                            {quote.latestPdfUrl && (
-                              <a className="btn btn-sm btn-outline-dark" href={quote.latestPdfUrl} target="_blank" rel="noreferrer">
-                                <i className="bi bi-file-earmark-pdf me-1" />Abrir PDF
-                              </a>
-                            )}
-                            {quote.chatwootConversationUrl ? (
-                              <a className="btn btn-sm btn-success" href={quote.chatwootConversationUrl} target="_blank" rel="noreferrer">
-                                <i className="bi bi-chat me-1" />Chatwoot
-                              </a>
-                            ) : (
-                              <span className="text-muted small">Sem conversa</span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -397,7 +315,6 @@ export default function StatusPage() {
         }
         .orcamento-section { border-radius: 0 0 8px 8px; }
         .logo-img { max-width: 140px; max-height: 88px; background: #fff; border-radius: 8px; padding: 6px; }
-        .production-table th { background: #f9e7f5; color: #222; white-space: nowrap; }
         .status-pill {
           display: inline-flex; width: fit-content;
           border-radius: 999px; padding: 0.3rem 0.75rem;
@@ -409,7 +326,7 @@ export default function StatusPage() {
         .status-entregue { background: #ececec; color: #444; }
         .status-cancelado { background: #fdecec; color: #b42318; }
         .action-list { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-        .row-highlighted { animation: highlight-pulse 3s ease-out; }
+        .card-highlighted { animation: highlight-pulse 3s ease-out; }
         @keyframes highlight-pulse {
           0%   { background-color: #d1fae5; }
           60%  { background-color: #d1fae5; }
@@ -417,7 +334,6 @@ export default function StatusPage() {
         }
         @media (max-width: 768px) {
           .container { padding-inline: 1rem; }
-          .production-table th, .production-table td { font-size: 0.92rem; }
         }
       `}</style>
     </>
