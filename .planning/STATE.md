@@ -1,17 +1,33 @@
-﻿# STATE.md - Sistema de Orcamento BomCusto
+---
+gsd_state_version: 1.0
+milestone: v1.4
+milestone_name: Pagamento EFI/Athos + Desconto NFS-e
+current_phase: 26
+status: completed
+last_updated: "2026-05-15T16:28:08.516Z"
+last_activity: 2026-05-15
+progress:
+  total_phases: 26
+  completed_phases: 19
+  total_plans: 44
+  completed_plans: 40
+  percent: 91
+---
 
-Last updated: 2026-05-05
-Current phase: 20 (planning)
+# STATE.md - Sistema de Orcamento BomCusto
+
+Last updated: 2026-05-15
+Current phase: 26
 Milestone: v1.9 (planning)
 
 ---
 
 ## Current Position
 
-Phase: 20 - relatorios-exportacao-csv (planning)
-Plan: -
-Status: Defining requirements
-Last activity: 2026-05-14 - Completed quick task 260514-002: Notificar cliente via Chatwoot ao confirmar pagamento no caixa + PIX simplificado
+Phase: 26 (status-producao-kanban) — COMPLETE
+Plan: Not started
+Status: Phase 26 complete — all 3 plans executed
+Last activity: 2026-05-15
 
 ## Project Status
 
@@ -77,6 +93,14 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 2026-05-04 | v1.6 foca no path errado de quote?.totais?.valor no frontend | Base de calculo era sempre 0, quebrando todos os calculos de desconto no modal NFS-e |
 | 2026-05-04 | Corrigir quote?.totais?.valor para quote?.body?.totais?.valor em 6 pontos do modal NFS-e | totais existe somente dentro de body no tipo QuoteDetail; acesso direto retornava undefined |
 | 2026-05-04 | Usar Record<string, string | number | boolean> no body do POST NFS-e | descontoAtivo precisava ser boolean true para satisfazer igualdade estrita do backend |
+| 2026-05-15 | Kanban 3-colunas com PRODUCTION_STATUSES.map substituindo tabela em /status | Estrutura visual base para Plan 02 (cards) e Plan 03 (filtro carimbo) |
+| 2026-05-15 | Mobile tabs via activeMobileTab state — nao scroll horizontal nem accordion | Decisao D-03 do CONTEXT: uma coluna visivel por vez com Bootstrap nav-tabs |
+| 2026-05-15 | Cards placeholder #numero em Plan 01 — Plan 02 expande para card completo | Separacao de concerns: estrutura primeiro, conteudo depois |
+| 2026-05-15 | renderQuoteCard como funcao interna (closure) — captura pdfLoadingId e highlightedId sem prop drilling | Funcao interna permite reuso desktop+mobile sem passar props adicionais |
+| 2026-05-15 | Badge PAGO_CAIXA=bg-success, PIX_CONFIRMADO=bg-primary, AGUARDANDO=bg-warning | Mapeamento badge->cor Bootstrap definido em D-05 e interfaces do plan |
+| 2026-05-15 | borda superior do card via .status-border-{statusKey} — identidade visual por coluna | Cada card identifica sua coluna kanban pela cor da borda superior (verde/azul/laranja) |
+| 2026-05-15 | Contagem nos botoes do filtro usa quotes (total), nao visibleQuotes | Cada botao mostra quantos cards entrariam se selecionado, independente do filtro ativo (D-12) |
+| 2026-05-15 | badgeFilter nao persiste — reseta para TODOS a cada carregamento | D-14 exige nao persistir filtro; sem localStorage.setItem para badgeFilter |
 
 ## Notes
 
@@ -95,7 +119,5 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 260511-kvy | Implementar Fluxo Completo de Pagamento e GED (Patch Athos V2) com liquidacao transacional | 2026-05-11 | ba57544 | [260511-kvy-para-aplicar-este-patch-de-fluxo-complet](./quick/260511-kvy-para-aplicar-este-patch-de-fluxo-complet/) |
 | 260514-001 | Correcao link de aprovacao no envio — approval link nunca gerado por guarda isAssociatedCustomer | 2026-05-14 | fabc37e | [260514-001-approval-link-correcao-envio](./quick/260514-001-approval-link-correcao-envio/) |
 | 260514-002 | Notificar cliente via Chatwoot ao confirmar pagamento no caixa + simplificar mensagem PIX | 2026-05-14 | 61354fd | [260514-002-notificacao-caixa-pix-chatwoot](./quick/260514-002-notificacao-caixa-pix-chatwoot/) |
-
-
-
-
+| 260514-003 | Status page: SSE tempo real, banner persistente, badge pago no caixa, botao novo orcamento | 2026-05-14 | 2369502 | [260514-003-status-page-realtime-dashboard](./quick/260514-003-status-page-realtime-dashboard/) |
+| 260515-001 | Remover controle de edicao de status (Alterar status) da pagina publica | 2026-05-15 | n/a | [260515-001-remover-edicao-status-pagina-publica](./quick/260515-001-remover-edicao-status-pagina-publica/) |

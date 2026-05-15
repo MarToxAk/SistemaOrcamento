@@ -13,6 +13,9 @@ type QuoteRow = {
   saleExternalId?: number | string | null;
   paymentConfirmedAt?: string | null;
   orderNumber?: string | null;
+  approved?: boolean;
+  approvedAt?: string | null;
+  isAssociated?: boolean;
   availableNextStatuses?: Array<{ value: string; label: string }>;
   body?: {
     idorcamento?: number;
@@ -163,6 +166,7 @@ export default function OrcamentoListaPage() {
   const [conversationId, setConversationId] = useState<number | undefined>(undefined);
   const [chatwootContactId, setChatwootContactId] = useState<number | undefined>(undefined);
   const [activeFilter, setActiveFilter] = useState<string>("");
+  const [linkSendingId, setLinkSendingId] = useState<string | null>(null);
   const createQuoteHref = getCreateQuoteHref();
 
   useEffect(() => {
@@ -306,6 +310,25 @@ export default function OrcamentoListaPage() {
     void fetchQuotes();
   }, [validationState, chatwootContactId, conversationId, activeFilter]);
 
+  async function handleEnviarLink(quote: QuoteRow) {
+    setLinkSendingId(quote.id);
+    try {
+      const identifier = getQuoteIdentifier(quote);
+      const response = await fetch(`/api/quotes/${encodeURIComponent(identifier)}/enviar`, { method: "POST" });
+      const data = (await response.json().catch(() => ({}))) as { message?: string; approvalLink?: string | null; error?: string };
+      if (!response.ok) throw new Error(data?.error || "Falha ao enviar link de aprovação.");
+      const linkMsg = data.approvalLink
+        ? ` Link: ${data.approvalLink}`
+        : " Mensagem enviada via Chatwoot.";
+      showToast(`Link de aprovação enviado!${linkMsg}`, "success");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Falha ao enviar link.";
+      showToast(msg, "danger");
+    } finally {
+      setLinkSendingId(null);
+    }
+  }
+
   async function handleStatusChange(quote: QuoteRow, nextStatus: string) {
     setStatusSavingId(quote.id);
     setQuotesError("");
@@ -440,6 +463,10 @@ export default function OrcamentoListaPage() {
                     const statusClass = STATUS_CLASS[(quote.statusKey ?? "").toLowerCase()] ?? "";
                     const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
                     const isPaid = Boolean(orderNumber || quote.paymentConfirmedAt);
+                    const isAssociated = Boolean(quote.isAssociated);
+                    const approved = Boolean(quote.approved);
+                    const needsApproval = isAssociated && !approved;
+                    const linkBusy = linkSendingId === quote.id;
 
                     return (
                       <tr key={quote.id} className={isPaid ? "row-paid" : ""}>
@@ -458,10 +485,37 @@ export default function OrcamentoListaPage() {
                         <td>{quote.updatedAt ? new Date(quote.updatedAt).toLocaleDateString("pt-BR") : "-"}</td>
                         <td>{quote.body?.vendedorNome || "-"}</td>
                         <td>{(quote.body?.totais?.valor ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                        <td><span className={statusClass}>{status}</span></td>
+                        <td>
+                          <span className={statusClass}>{status}</span>
+                          {isAssociated && (
+                            <div className="mt-1">
+                              {approved ? (
+                                <span className="badge bg-success" title={quote.approvedAt ? `Aprovado em ${new Date(quote.approvedAt).toLocaleString("pt-BR")}` : ""}>
+                                  <i className="bi bi-check-circle me-1" />Cliente aprovou
+                                </span>
+                              ) : (
+                                <span className="badge bg-warning text-dark">
+                                  <i className="bi bi-hourglass-split me-1" />Aguardando aprovação
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
                         <td>
                           <div className="acoes-lista">
                             <a href={getQuoteDetailHref(quoteIdentifier)} className="btn btn-sm btn-outline-primary" title="Visualizar orçamento"><i className="bi bi-eye"></i></a>
+                            {needsApproval && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-warning"
+                                onClick={() => void handleEnviarLink(quote)}
+                                disabled={linkBusy}
+                                title="Enviar link de aprovação para o cliente"
+                              >
+                                <i className="bi bi-send me-1" />
+                                {linkBusy ? "Enviando..." : "Enviar Link"}
+                              </button>
+                            )}
                             {quote.availableNextStatuses && quote.availableNextStatuses.length > 0 && (
                               <select
                                 className="form-select form-select-sm"

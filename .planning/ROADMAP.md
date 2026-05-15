@@ -238,6 +238,14 @@ Success criteria:
 2. Registro inserido em tabela `anexo` com path UNC e nome do arquivo.
 3. Extensões validadas (pdf/png/jpg/jpeg), tamanho máx 10MB, sem path traversal.
 
+## Phase 26: Status Página Produção — Layout Kanban (COMPLETE)
+
+**Plans:** 3/3 plans complete
+
+- [x] 26-01-PLAN.md — Kanban 3-colunas + tabs mobile (estrutura base) — complete
+- [x] 26-02-PLAN.md — Cards reais com conteúdo completo — complete
+- [x] 26-03-PLAN.md — Filtro de carimbo funcional — complete
+
 ---
 ## Backlog (Future)
 ## v2.0 Gestão Integrada Financeira e Caixa (Phases 23-25) - IN PROGRESS

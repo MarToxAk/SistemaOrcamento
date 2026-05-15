@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
 
 type StatusOption = {
@@ -14,6 +14,8 @@ type QuoteRow = {
   updatedAt: string;
   statusKey: string;
   statusLabel: string;
+  orderNumber?: string | null;
+  paidInCashier?: boolean;
   saleExternalId?: number | string | null;
   paymentConfirmedAt?: string | null;
   latestPdfUrl: string | null;
@@ -29,69 +31,12 @@ type QuoteRow = {
     totais?: {
       valor?: number;
     };
-    conversationId?: number;
-    chatwootContactId?: number;
   };
 };
 
 const PRODUCTION_STATUSES = ["APROVADO", "EM_PRODUCAO", "PRONTO_PARA_ENTREGA"];
-
-function getOptionalNumberParam(params: URLSearchParams, ...keys: string[]) {
-  for (const key of keys) {
-    const value = params.get(key);
-    if (!value) continue;
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed;
-    }
-  }
-  return undefined;
-}
-
-function parseMaybeNumber(value: unknown): number | undefined {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function parseIncomingMessagePayload(data: unknown): Record<string, any> | null {
-  if (!data) return null;
-  if (typeof data === "object") return data as Record<string, any>;
-  if (typeof data !== "string") return null;
-
-  try {
-    const parsed = JSON.parse(data) as unknown;
-    return typeof parsed === "object" && parsed ? (parsed as Record<string, any>) : null;
-  } catch {
-    return null;
-  }
-}
-
-function parseObjectMaybe(value: unknown): Record<string, any> | null {
-  if (!value) return null;
-  if (typeof value === "object") return value as Record<string, any>;
-  if (typeof value !== "string") return null;
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return typeof parsed === "object" && parsed ? (parsed as Record<string, any>) : null;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeChatwootPayload(raw: Record<string, any>) {
-  const dataObj = parseObjectMaybe(raw.data) ?? parseObjectMaybe(raw.payload) ?? raw;
-  const nestedDataObj = parseObjectMaybe(dataObj?.data) ?? dataObj;
-
-  const conversation =
-    nestedDataObj?.conversation ??
-    dataObj?.conversation ??
-    nestedDataObj?.meta?.conversation ??
-    raw?.conversation ??
-    {};
-
-  return { conversation };
-}
+const LS_LAST_PAYMENT = "bomcusto_last_caixa_payment";
+const LS_DISMISSED = "bomcusto_last_caixa_dismissed";
 
 function getQuoteIdentifier(quote: QuoteRow): string {
   if (quote.body.idorcamento && Number.isFinite(quote.body.idorcamento)) {
@@ -103,119 +48,126 @@ function getQuoteIdentifier(quote: QuoteRow): string {
   return quote.id;
 }
 
+function showToast(message: string, type: "success" | "danger") {
+  if (typeof window === "undefined") return;
+  const bs = (window as any).bootstrap;
+  if (!bs?.Toast) return;
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+  const wrapper = document.createElement("div");
+  wrapper.className = `toast align-items-center text-bg-${type} border-0`;
+  wrapper.setAttribute("role", "alert");
+  wrapper.setAttribute("aria-live", "assertive");
+  wrapper.setAttribute("aria-atomic", "true");
+  wrapper.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+    </div>
+  `;
+  container.appendChild(wrapper);
+  const toast = new bs.Toast(wrapper, { delay: 4000 });
+  toast.show();
+  wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
+}
+
 export default function StatusPage() {
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
-  const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
-  const [validationState, setValidationState] = useState<"checking" | "valid" | "invalid">("checking");
-  const [validationMessage, setValidationMessage] = useState("");
+  const [badgeFilter, setBadgeFilter] = useState<"TODOS" | "PAGO_CAIXA" | "PIX" | "AGUARDANDO">("TODOS");
   const [efiStatus, setEfiStatus] = useState<{ enabled: boolean; message?: string } | null>(null);
+  const [lastPayment, setLastPayment] = useState<string | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [activeMobileTab, setActiveMobileTab] = useState<string>("APROVADO");
+  const fetchRef = useRef<(() => Promise<void>) | null>(null);
 
+  function getBadgeType(quote: QuoteRow): string {
+    const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
+    const paidInCashier = quote.paidInCashier ?? Boolean(orderNumber);
+    if (paidInCashier) return "PAGO_CAIXA";
+    if (quote.paymentConfirmedAt) return "PIX_CONFIRMADO";
+    return "AGUARDANDO";
+  }
+
+  function hasBadge(quote: QuoteRow): boolean {
+    const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
+    const paidInCashier = quote.paidInCashier ?? Boolean(orderNumber);
+    return paidInCashier || Boolean(quote.paymentConfirmedAt);
+  }
+
+  // Banner persistente do localStorage
   useEffect(() => {
-    const isDevBypass =
-      (typeof process !== "undefined" && process.env.NODE_ENV === "development") ||
-      (typeof window !== "undefined" &&
-        (window.location.hostname === "localhost" ||
-          window.location.hostname === "127.0.0.1" ||
-          window.location.hostname === "0.0.0.0"));
-    if (isDevBypass) {
-      setValidationState("valid");
-      setValidationMessage("");
-      return;
-    }
-
-    let validated = false;
-
-    const handleMessage = (event: MessageEvent) => {
-      const payload = parseIncomingMessagePayload(event.data);
-      if (!payload) return;
-
-      const { conversation } = normalizeChatwootPayload(payload);
-      if (parseMaybeNumber(conversation?.id) !== undefined) {
-        validated = true;
-        setValidationState("valid");
-        setValidationMessage("");
+    try {
+      const stored = localStorage.getItem(LS_LAST_PAYMENT);
+      const dismissed = localStorage.getItem(LS_DISMISSED);
+      if (stored) {
+        setLastPayment(stored);
+        if (dismissed === stored) setBannerDismissed(true);
       }
-    };
-
-    const requestChatwootInfo = () => {
-      try {
-        window.parent?.postMessage("chatwoot-dashboard-app:fetch-info", "*");
-        window.parent?.postMessage({ event: "chatwoot-dashboard-app:fetch-info" }, "*");
-      } catch {
-        // noop
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    requestChatwootInfo();
-
-    const retryId = window.setTimeout(() => requestChatwootInfo(), 1200);
-    const validationTimeout = window.setTimeout(() => {
-      const isInIframe = window.parent !== window;
-      if (!isInIframe) {
-        setValidationMessage("Esta página deve ser acessada através do Chatwoot");
-        setValidationState("invalid");
-        return;
-      }
-      if (!validated) {
-        setValidationMessage("Não foi possível validar o contexto da conversa no Chatwoot");
-        setValidationState("invalid");
-      }
-    }, 3500);
-
-    return () => {
-      window.removeEventListener("message", handleMessage);
-      window.clearTimeout(retryId);
-      window.clearTimeout(validationTimeout);
-    };
+    } catch { /* noop */ }
   }, []);
 
+  // Carga inicial
   useEffect(() => {
-    if (validationState === "valid") {
-      void fetchQuotes();
-      void fetch("/api/efi/status")
-        .then((r) => r.json())
-        .then((d) => setEfiStatus(d as { enabled: boolean; message?: string }))
-        .catch(() => setEfiStatus({ enabled: false, message: "Falha ao verificar EFI" }));
-    }
-  }, [validationState]);
+    void fetchQuotes();
+    void fetch("/api/efi/status")
+      .then((r) => r.json())
+      .then((d) => setEfiStatus(d as { enabled: boolean; message?: string }))
+      .catch(() => setEfiStatus({ enabled: false, message: "Falha ao verificar EFI" }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // SSE — pagamentos em tempo real
+  useEffect(() => {
+    const es = new EventSource("/api/events/pagamentos");
+    es.onmessage = (event: MessageEvent<string>) => {
+      try {
+        const data = JSON.parse(event.data) as { numeroordem?: string };
+        const ordem = data?.numeroordem ?? "—";
+        const label = `Pedido #${ordem} — ${new Date().toLocaleTimeString("pt-BR")}`;
+        showToast(`✅ Pagamento do Pedido #${ordem} confirmado no caixa!`, "success");
+        try {
+          localStorage.setItem(LS_LAST_PAYMENT, label);
+          localStorage.removeItem(LS_DISMISSED);
+        } catch { /* noop */ }
+        setLastPayment(label);
+        setBannerDismissed(false);
+        void fetchRef.current?.();
+      } catch { /* noop */ }
+    };
+    es.onerror = () => es.close();
+    return () => es.close();
+  }, []);
 
   async function fetchQuotes() {
     setLoading(true);
     setErro("");
-
     try {
-      const params = new URLSearchParams(window.location.search);
-      const query = new URLSearchParams({
-        status: PRODUCTION_STATUSES.join(","),
-      });
-
-      const conversationId = getOptionalNumberParam(params, "chatid", "conversationId", "conversation_id");
-      const chatwootContactId = getOptionalNumberParam(
-        params,
-        "chatwootContactId",
-        "chatwoot_contact_id",
-        "contact_id",
-      );
-
-      if (conversationId) {
-        query.set("conversationId", String(conversationId));
-      }
-      if (chatwootContactId) {
-        query.set("chatwootContactId", String(chatwootContactId));
-      }
-
+      const query = new URLSearchParams({ status: PRODUCTION_STATUSES.join(",") });
       const response = await fetch(`/api/quotes?${query.toString()}`, { cache: "no-store" });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error || "Erro ao buscar produção.");
+        throw new Error((data as any)?.error || "Erro ao buscar produção.");
       }
-
       const data = (await response.json()) as unknown;
-      setQuotes(Array.isArray(data) ? (data as QuoteRow[]) : []);
+      const newQuotes = Array.isArray(data)
+        ? (data as QuoteRow[])
+        : Array.isArray((data as any)?.data)
+          ? ((data as any).data as QuoteRow[])
+          : [];
+      setQuotes((prev) => {
+        const changedId = newQuotes.find((nq) => prev.some((oq) => oq.id === nq.id && oq.statusKey !== nq.statusKey))?.id ?? null;
+        if (changedId) {
+          window.setTimeout(() => {
+            setHighlightedId(changedId);
+            window.setTimeout(() => setHighlightedId(null), 3000);
+          }, 0);
+        }
+        return newQuotes;
+      });
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível carregar a produção.");
     } finally {
@@ -223,63 +175,30 @@ export default function StatusPage() {
     }
   }
 
-  async function handleStatusChange(quote: QuoteRow, nextStatus: string) {
-    setStatusSavingId(quote.id);
-    setErro("");
+  useEffect(() => { fetchRef.current = fetchQuotes; });
 
-    try {
-      const identifier = getQuoteIdentifier(quote);
-      const response = await fetch(`/api/quotes/${encodeURIComponent(identifier)}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          newStatus: nextStatus,
-          changedBy: "Painel de producao",
-        }),
+  const visibleQuotes = badgeFilter === "TODOS"
+    ? quotes
+    : quotes.filter((q) => {
+        const type = getBadgeType(q);
+        if (badgeFilter === "PAGO_CAIXA") return type === "PAGO_CAIXA";
+        if (badgeFilter === "PIX") return type === "PIX_CONFIRMADO";
+        if (badgeFilter === "AGUARDANDO") return type === "AGUARDANDO";
+        return true;
       });
 
-      const data = (await response.json().catch(() => ({}))) as Partial<QuoteRow> & { error?: string; message?: string };
-      if (!response.ok) {
-        throw new Error(data?.message || data?.error || "Não foi possível atualizar o status.");
-      }
-
-      const updated = data as QuoteRow;
-      setQuotes((current) => {
-        if (!PRODUCTION_STATUSES.includes(updated.statusKey)) {
-          return current.filter((currentQuote) => currentQuote.id !== quote.id);
-        }
-
-        return current.map((currentQuote) => (currentQuote.id === quote.id ? updated : currentQuote));
-      });
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Falha ao atualizar status.");
-    } finally {
-      setStatusSavingId(null);
-    }
-  }
 
   async function handlePdf(quote: QuoteRow) {
     setPdfLoadingId(quote.id);
     setErro("");
-
     try {
       const identifier = getQuoteIdentifier(quote);
       const response = await fetch(`/api/quotes/${encodeURIComponent(identifier)}/pdf`, { method: "POST" });
       const data = (await response.json().catch(() => ({}))) as { publicUrl?: string; error?: string };
-      if (!response.ok) {
-        throw new Error(data?.error || "Falha ao gerar PDF.");
-      }
-
+      if (!response.ok) throw new Error(data?.error || "Falha ao gerar PDF.");
       if (data.publicUrl) {
         setQuotes((current) =>
-          current.map((currentQuote) =>
-            currentQuote.id === quote.id
-              ? {
-                  ...currentQuote,
-                  latestPdfUrl: data.publicUrl ?? currentQuote.latestPdfUrl,
-                }
-              : currentQuote,
-          ),
+          current.map((q) => q.id === quote.id ? { ...q, latestPdfUrl: data.publicUrl ?? q.latestPdfUrl } : q)
         );
         window.open(data.publicUrl, "_blank", "noopener,noreferrer");
       }
@@ -290,6 +209,79 @@ export default function StatusPage() {
     }
   }
 
+  function dismissBanner() {
+    try { if (lastPayment) localStorage.setItem(LS_DISMISSED, lastPayment); } catch { /* noop */ }
+    setBannerDismissed(true);
+  }
+
+  function renderQuoteCard(quote: QuoteRow) {
+    const customerName = quote.body.cliente?.nome || "Cliente não informado";
+    const phone = quote.body.cliente?.telefone || "Sem telefone";
+    const total = quote.body.totais?.valor ?? 0;
+    const totalBRL = total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const quoteNumber = quote.body.idorcamento ?? quote.internalNumber;
+    const badgeType = getBadgeType(quote);
+    const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
+    const canOpenPdf = Boolean(quote.latestPdfUrl);
+    const pdfBusy = pdfLoadingId === quote.id;
+    const isHighlighted = highlightedId === quote.id;
+    const detailsHref = `/orcamento/${getQuoteIdentifier(quote)}`;
+
+    const badgeClass =
+      badgeType === "PAGO_CAIXA" ? "bg-success" :
+      badgeType === "PIX_CONFIRMADO" ? "bg-primary" :
+      "bg-warning text-dark";
+    const badgeLabel =
+      badgeType === "PAGO_CAIXA" ? `Pago no Caixa${orderNumber ? ` #${orderNumber}` : ""}` :
+      badgeType === "PIX_CONFIRMADO" ? "PIX Confirmado" :
+      "Aguardando pagamento";
+    const badgeIcon = badgeType === "PAGO_CAIXA" ? "bi-cash-coin" : badgeType === "PIX_CONFIRMADO" ? "bi-check-circle" : "bi-hourglass-split";
+
+    return (
+      <div
+        key={quote.id}
+        className={`kanban-card status-border-${quote.statusKey.toLowerCase()} ${isHighlighted ? "card-highlighted" : ""}`}
+      >
+        <div className="kanban-card-header d-flex align-items-center justify-content-between">
+          <span className="kanban-card-number">#{quoteNumber}</span>
+          <span className={`badge ${badgeClass}`}>
+            <i className={`bi ${badgeIcon} me-1`} />{badgeLabel}
+          </span>
+        </div>
+        <div className="kanban-card-client">{customerName}</div>
+        <div className="kanban-card-meta d-flex align-items-center justify-content-between">
+          <span className="kanban-card-total">{totalBRL}</span>
+          <span className="kanban-card-phone text-muted small">{phone}</span>
+        </div>
+        <div className="kanban-card-actions d-flex flex-wrap gap-2 mt-2">
+          {!canOpenPdf && (
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-primary"
+              onClick={() => void handlePdf(quote)}
+              disabled={pdfBusy}
+            >
+              {pdfBusy ? "Gerando..." : "Gerar PDF"}
+            </button>
+          )}
+          {quote.latestPdfUrl && (
+            <a className="btn btn-sm btn-outline-dark" href={quote.latestPdfUrl} target="_blank" rel="noreferrer">
+              <i className="bi bi-file-earmark-pdf me-1" />PDF
+            </a>
+          )}
+          {quote.chatwootConversationUrl && (
+            <a className="btn btn-sm btn-success" href={quote.chatwootConversationUrl} target="_blank" rel="noreferrer">
+              <i className="bi bi-chat me-1" />Chatwoot
+            </a>
+          )}
+          <a className="btn btn-sm btn-outline-secondary" href={detailsHref}>
+            <i className="bi bi-box-arrow-up-right me-1" />Detalhes
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <Script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" strategy="beforeInteractive" />
@@ -297,231 +289,243 @@ export default function StatusPage() {
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
       <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
 
-      {validationState === "checking" && (
-        <div className="container my-5">
-          <div className="row justify-content-center">
-            <div className="col-md-6 text-center">
-              <div className="spinner-border text-primary mb-3" role="status">
-                <span className="visually-hidden">Carregando...</span>
-              </div>
-              <h5 className="text-muted">Autenticando com Chatwoot...</h5>
-              <p className="text-secondary small">Por favor, aguarde...</p>
-            </div>
-          </div>
+      {/* Banner persistente */}
+      {lastPayment && !bannerDismissed && (
+        <div className="alert alert-success alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0 py-2 px-3" role="alert">
+          <i className="bi bi-cash-coin fs-5" />
+          <span><strong>Último pagamento no caixa:</strong> {lastPayment}</span>
+          <button type="button" className="btn-close ms-auto" aria-label="Fechar" onClick={dismissBanner} />
         </div>
       )}
 
-      {validationState === "invalid" && (
-        <div className="container my-5">
-          <div className="row justify-content-center">
-            <div className="col-md-6">
-              <div className="alert alert-danger d-flex gap-2 align-items-start" role="alert">
-                <i className="bi bi-exclamation-triangle-fill mt-1" style={{fontSize: "1.25rem"}}></i>
-                <div>
-                  <h5 className="alert-heading mb-2">Acesso Restrito</h5>
-                  <p className="mb-0">Esta página só pode ser acessada através do <strong>Chatwoot Dashboard</strong>.</p>
-                  <hr className="my-2" />
-                  <p className="mb-0 small text-muted">{validationMessage || "Por favor, volte ao Chatwoot e clique na opção de produção novamente."}</p>
-                </div>
+      <div className="container my-4">
+        <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top">
+          <div className="d-flex align-items-center gap-3 flex-wrap">
+            <img src="/media/logo_new.svg" alt="Logo Bom Custo" className="logo-img" />
+            <div>
+              <h3 className="mb-1">Produção de Orçamentos</h3>
+              <div className="small d-flex align-items-center gap-2">
+                <span className="badge bg-success-subtle text-success-emphasis">
+                  <i className="bi bi-broadcast me-1" />Tempo real
+                </span>
+                <span>Aprovados, em produção e prontos para entrega.</span>
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {validationState === "valid" && (
-        <div className="container my-5">
-          <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top">
-            <div className="d-flex align-items-center gap-3 flex-wrap">
-              <img src="/media/logo_new.svg" alt="Logo Bom Custo" className="logo-img" />
-              <div>
-                <h3 className="mb-1">Produção de Orçamentos</h3>
-                <div className="small">Acompanhe itens aprovados, em produção e prontos para entrega.</div>
-              </div>
-            </div>
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => void fetchQuotes()} title="Atualizar lista">
+              <i className="bi bi-arrow-clockwise me-1" />Atualizar
+            </button>
+            <a href="/orcamento/novo#condPagamento" className="btn btn-sm btn-success">
+              <i className="bi bi-plus-circle me-1" />Novo Orçamento
+            </a>
             <div className="text-end">
-              <div className="small">Fluxo operacional</div>
-              <strong>{quotes.length} orçamento(s)</strong>
+              <div className="small">{visibleQuotes.length}/{quotes.length} orçamento(s)</div>
               {efiStatus !== null && (
-                <div className="mt-1">
-                  <span
-                    className={`badge ${efiStatus.enabled ? "bg-success" : "bg-danger"}`}
-                    title={efiStatus.message ?? ""}
-                  >
-                    EFI: {efiStatus.enabled ? "Configurado ✓" : "Não configurado ✗"}
-                  </span>
-                </div>
+                <span className={`badge ${efiStatus.enabled ? "bg-success" : "bg-danger"}`} title={efiStatus.message ?? ""}>
+                  EFI: {efiStatus.enabled ? "✓" : "✗"}
+                </span>
               )}
             </div>
           </div>
-
-          <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
-            {erro ? <div className="alert alert-danger mb-4">{erro}</div> : null}
-
-            {loading ? (
-              <div className="text-center py-5 text-muted">Carregando produção...</div>
-            ) : quotes.length === 0 ? (
-              <div className="alert alert-info mb-0">Nenhum orçamento encontrado para este cliente no fluxo de produção.</div>
-            ) : (
-              <div className="table-responsive">
-                <table className="table table-hover align-middle production-table">
-                  <thead>
-                    <tr>
-                      <th>Orçamento</th>
-                      <th>Cliente</th>
-                      <th>Vendedor</th>
-                      <th>Total</th>
-                      <th>Atualizado</th>
-                      <th>Status</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {quotes.map((quote) => {
-                      const customerName = quote.body.cliente?.nome || "Cliente não informado";
-                      const total = quote.body.totais?.valor ?? 0;
-                      const quoteNumber = quote.body.idorcamento ?? quote.internalNumber;
-                      const orderNumber = quote.saleExternalId != null ? String(quote.saleExternalId) : null;
-                      const canOpenPdf = Boolean(quote.latestPdfUrl);
-                      const statusBusy = statusSavingId === quote.id;
-                      const pdfBusy = pdfLoadingId === quote.id;
-
-                      return (
-                        <tr key={quote.id}>
-                          <td>
-                            <div className="fw-semibold">#{quoteNumber}</div>
-                            <div className="text-muted small">{quote.id}</div>
-                            <div className="mt-1">
-                              <span className={`badge ${orderNumber ? "bg-info text-dark" : "bg-secondary"}`}>
-                                Pedido: {orderNumber ? `#${orderNumber}` : "não gerado"}
-                              </span>
-                            </div>
-                            <div className="mt-1">
-                              <span className={`badge ${quote.paymentConfirmedAt ? "bg-primary" : "bg-warning text-dark"}`}>
-                                {quote.paymentConfirmedAt
-                                  ? `Pagamento confirmado ${new Date(quote.paymentConfirmedAt).toLocaleDateString("pt-BR")}`
-                                  : "Pagamento pendente"}
-                              </span>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="fw-semibold">{customerName}</div>
-                            <div className="text-muted small">{quote.body.cliente?.telefone || "Sem telefone"}</div>
-                          </td>
-                          <td>{quote.body.vendedorNome || "Sem vendedor"}</td>
-                          <td>{total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                          <td>{new Date(quote.updatedAt).toLocaleString("pt-BR")}</td>
-                          <td>
-                            <div className="d-flex flex-column gap-2">
-                              <span className={`status-pill status-${quote.statusKey.toLowerCase()}`}>{quote.statusLabel}</span>
-                              <select
-                                className="form-select form-select-sm"
-                                value=""
-                                disabled={statusBusy || quote.availableNextStatuses.length === 0}
-                                onChange={(event) => {
-                                  const selectedStatus = event.target.value;
-                                  event.target.value = "";
-                                  if (selectedStatus) {
-                                    void handleStatusChange(quote, selectedStatus);
-                                  }
-                                }}
-                              >
-                                <option value="">{statusBusy ? "Salvando..." : "Alterar status"}</option>
-                                {quote.availableNextStatuses.map((status) => (
-                                  <option key={status.value} value={status.value}>
-                                    {status.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="action-list">
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-primary"
-                                onClick={() => void handlePdf(quote)}
-                                disabled={pdfBusy}
-                              >
-                                {pdfBusy ? "Gerando..." : canOpenPdf ? "Atualizar PDF" : "Gerar PDF"}
-                              </button>
-                              {quote.latestPdfUrl ? (
-                                <a
-                                  className="btn btn-sm btn-outline-dark"
-                                  href={quote.latestPdfUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  Abrir PDF
-                                </a>
-                              ) : null}
-                              {quote.chatwootConversationUrl ? (
-                                <a
-                                  className="btn btn-sm btn-success"
-                                  href={quote.chatwootConversationUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  Abrir Chatwoot
-                                </a>
-                              ) : (
-                                <span className="text-muted small">Sem conversa vinculada</span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
         </div>
-      )}
+
+        <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
+          {erro ? <div className="alert alert-danger mb-4">{erro}</div> : null}
+
+          <div className="badge-filter-bar d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Filtrar por tipo de pagamento">
+            {([
+              { value: "TODOS", label: "Todos", icon: "bi-funnel" },
+              { value: "PAGO_CAIXA", label: "Pago Caixa", icon: "bi-cash-coin" },
+              { value: "PIX", label: "PIX", icon: "bi-lightning-charge" },
+              { value: "AGUARDANDO", label: "Aguardando", icon: "bi-hourglass-split" },
+            ] as const).map((opt) => {
+              const count = opt.value === "TODOS"
+                ? quotes.length
+                : quotes.filter((q) => {
+                    const type = getBadgeType(q);
+                    if (opt.value === "PAGO_CAIXA") return type === "PAGO_CAIXA";
+                    if (opt.value === "PIX") return type === "PIX_CONFIRMADO";
+                    return type === "AGUARDANDO";
+                  }).length;
+              const active = badgeFilter === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`btn btn-sm ${active ? "btn-primary" : "btn-outline-secondary"}`}
+                  onClick={() => setBadgeFilter(opt.value)}
+                  aria-pressed={active}
+                >
+                  <i className={`bi ${opt.icon} me-1`} />{opt.label}
+                  <span className={`badge ms-2 ${active ? "bg-light text-primary" : "bg-secondary"}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {loading ? (
+            <div className="text-center py-5 text-muted">
+              <div className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+              Carregando produção...
+            </div>
+          ) : visibleQuotes.length === 0 ? (
+            <div className="alert alert-info mb-0">
+              <i className="bi bi-info-circle me-2" />
+              {"Nenhum orçamento no fluxo de produção no momento."}
+            </div>
+          ) : (
+            <>
+            <div className="kanban-mobile d-md-none">
+              <ul className="nav nav-tabs nav-fill mb-3" role="tablist">
+                {PRODUCTION_STATUSES.map((statusKey) => {
+                  const count = visibleQuotes.filter((q) => q.statusKey === statusKey).length;
+                  const label =
+                    statusKey === "APROVADO" ? "APROVADO" :
+                    statusKey === "EM_PRODUCAO" ? "EM PRODUÇÃO" :
+                    "PRONTO";
+                  return (
+                    <li className="nav-item" key={statusKey} role="presentation">
+                      <button
+                        type="button"
+                        className={`nav-link ${activeMobileTab === statusKey ? "active" : ""}`}
+                        onClick={() => setActiveMobileTab(statusKey)}
+                        role="tab"
+                        aria-selected={activeMobileTab === statusKey}
+                      >
+                        {label} <span className="badge bg-secondary ms-1">{count}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className={`kanban-column kanban-column-${activeMobileTab.toLowerCase()}`}>
+                <div className="kanban-column-body">
+                  {visibleQuotes.filter((q) => q.statusKey === activeMobileTab).length === 0 ? (
+                    <div className="kanban-column-empty text-muted small">Sem orçamentos</div>
+                  ) : (
+                    visibleQuotes
+                      .filter((q) => q.statusKey === activeMobileTab)
+                      .map((quote) => renderQuoteCard(quote))
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="kanban-board d-none d-md-flex gap-3">
+              {PRODUCTION_STATUSES.map((statusKey) => {
+                const columnQuotes = visibleQuotes.filter((q) => q.statusKey === statusKey);
+                const columnLabel =
+                  statusKey === "APROVADO" ? "APROVADO" :
+                  statusKey === "EM_PRODUCAO" ? "EM PRODUÇÃO" :
+                  "PRONTO PARA ENTREGA";
+                return (
+                  <div key={statusKey} className={`kanban-column kanban-column-${statusKey.toLowerCase()}`}>
+                    <div className={`kanban-column-header status-${statusKey.toLowerCase()}`}>
+                      <span className="kanban-column-title">{columnLabel}</span>
+                      <span className="kanban-column-count">{columnQuotes.length}</span>
+                    </div>
+                    <div className="kanban-column-body">
+                      {columnQuotes.length === 0 ? (
+                        <div className="kanban-column-empty text-muted small">Sem orçamentos</div>
+                      ) : (
+                        columnQuotes.map((quote) => renderQuoteCard(quote))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div id="toast-container" className="toast-container position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1100 }} />
 
       <style>{`
         body { background: #f7f1e3; font-size: 1.02rem; }
         .orcamento-header {
           background: linear-gradient(135deg, #c5f2e8 0%, #cbe1f9 25%, #e7d8f9 50%, #f9e7f5 75%, #f0cacb 100%);
           color: #222;
+          border-radius: 8px 8px 0 0;
         }
-        .orcamento-section { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-        .logo-img {
-          max-width: 140px;
-          max-height: 88px;
-          background: #fff;
-          border-radius: 8px;
-          padding: 6px;
-        }
-        .production-table th {
-          background: #f9e7f5;
-          color: #222;
-          white-space: nowrap;
-        }
+        .orcamento-section { border-radius: 0 0 8px 8px; }
+        .logo-img { max-width: 140px; max-height: 88px; background: #fff; border-radius: 8px; padding: 6px; }
         .status-pill {
-          display: inline-flex;
-          width: fit-content;
-          border-radius: 999px;
-          padding: 0.3rem 0.75rem;
-          font-weight: 600;
-          font-size: 0.88rem;
+          display: inline-flex; width: fit-content;
+          border-radius: 999px; padding: 0.3rem 0.75rem;
+          font-weight: 600; font-size: 0.88rem;
         }
         .status-aprovado { background: #e9f8ef; color: #1f7a44; }
         .status-em_producao { background: #eef4ff; color: #2457a6; }
         .status-pronto_para_entrega { background: #fff5e8; color: #a65b12; }
         .status-entregue { background: #ececec; color: #444; }
         .status-cancelado { background: #fdecec; color: #b42318; }
-        .action-list {
+        .action-list { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+        .kanban-board { align-items: flex-start; }
+        .kanban-column {
+          flex: 1 1 0;
+          min-width: 0;
+          background: #f8f9fa;
+          border-radius: 8px;
+          padding: 0.75rem;
           display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .kanban-column-header {
+          display: flex;
           align-items: center;
+          justify-content: space-between;
+          padding: 0.5rem 0.75rem;
+          border-radius: 6px;
+          font-weight: 700;
+          font-size: 0.95rem;
+        }
+        .kanban-column-title { letter-spacing: 0.02em; }
+        .kanban-column-count {
+          background: rgba(0,0,0,0.08);
+          border-radius: 999px;
+          padding: 0.1rem 0.6rem;
+          font-size: 0.85rem;
+          font-weight: 600;
+        }
+        .kanban-column-body { display: flex; flex-direction: column; gap: 0.5rem; }
+        .kanban-column-empty { padding: 1rem 0.5rem; text-align: center; font-style: italic; }
+        .kanban-card {
+          background: #fff;
+          border-radius: 6px;
+          padding: 0.75rem;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+          border-top: 3px solid #ccc;
+          display: flex;
+          flex-direction: column;
+          gap: 0.4rem;
+        }
+        .status-border-aprovado { border-top-color: #1f7a44; }
+        .status-border-em_producao { border-top-color: #2457a6; }
+        .status-border-pronto_para_entrega { border-top-color: #a65b12; }
+        .kanban-card-header { gap: 0.5rem; }
+        .kanban-card-number { font-weight: 700; font-size: 1rem; }
+        .kanban-card-client { font-weight: 600; font-size: 0.95rem; }
+        .kanban-card-meta { font-size: 0.9rem; }
+        .kanban-card-total { font-weight: 600; color: #1f7a44; }
+        .kanban-card-actions .btn { font-size: 0.82rem; padding: 0.25rem 0.55rem; }
+        .card-highlighted { animation: highlight-pulse 3s ease-out; }
+        @keyframes highlight-pulse {
+          0%   { box-shadow: 0 0 0 4px #34d399, 0 1px 4px rgba(0,0,0,0.08); background: #d1fae5; }
+          60%  { box-shadow: 0 0 0 4px #34d399, 0 1px 4px rgba(0,0,0,0.08); background: #d1fae5; }
+          100% { box-shadow: 0 1px 4px rgba(0,0,0,0.08); background: #fff; }
         }
         @media (max-width: 768px) {
           .container { padding-inline: 1rem; }
-          .production-table th,
-          .production-table td { font-size: 0.92rem; }
+          .kanban-column { padding: 0.5rem; }
+        }
+        .badge-filter-bar { align-items: center; }
+        .badge-filter-bar .btn { display: inline-flex; align-items: center; }
+        .badge-filter-bar .btn .badge { font-weight: 600; }
+        @media (max-width: 768px) {
+          .badge-filter-bar .btn { flex: 1 1 calc(50% - 0.5rem); justify-content: center; }
         }
       `}</style>
     </>
