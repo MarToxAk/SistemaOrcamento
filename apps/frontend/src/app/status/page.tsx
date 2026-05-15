@@ -392,17 +392,19 @@ export default function StatusPage() {
                         </td>
                         <td>
                           <div className="action-list">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-primary"
-                              onClick={() => void handlePdf(quote)}
-                              disabled={pdfBusy}
-                            >
-                              {pdfBusy ? "Gerando..." : canOpenPdf ? "Atualizar PDF" : "Gerar PDF"}
-                            </button>
+                            {!canOpenPdf && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={() => void handlePdf(quote)}
+                                disabled={pdfBusy}
+                              >
+                                {pdfBusy ? "Gerando..." : "Gerar PDF"}
+                              </button>
+                            )}
                             {quote.latestPdfUrl && (
                               <a className="btn btn-sm btn-outline-dark" href={quote.latestPdfUrl} target="_blank" rel="noreferrer">
-                                Abrir PDF
+                                <i className="bi bi-file-earmark-pdf me-1" />Abrir PDF
                               </a>
                             )}
                             {quote.chatwootConversationUrl ? (
