@@ -1,6 +1,22 @@
+---
+gsd_state_version: 1.0
+milestone: v1.4
+milestone_name: Pagamento EFI/Athos + Desconto NFS-e
+current_phase: 20 (planning)
+status: executing
+last_updated: "2026-05-15T15:46:03.363Z"
+last_activity: 2026-05-15 -- Phase 26 planning complete
+progress:
+  total_phases: 1
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 100
+---
+
 ﻿# STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-05
+Last updated: 2026-05-15
 Current phase: 20 (planning)
 Milestone: v1.9 (planning)
 
@@ -10,8 +26,8 @@ Milestone: v1.9 (planning)
 
 Phase: 20 - relatorios-exportacao-csv (planning)
 Plan: -
-Status: Defining requirements
-Last activity: 2026-05-14 - Completed quick task 260514-002: Notificar cliente via Chatwoot ao confirmar pagamento no caixa + PIX simplificado
+Status: Ready to execute
+Last activity: 2026-05-15 -- Phase 26 planning complete
 
 ## Project Status
 
@@ -96,7 +112,4 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 260514-001 | Correcao link de aprovacao no envio — approval link nunca gerado por guarda isAssociatedCustomer | 2026-05-14 | fabc37e | [260514-001-approval-link-correcao-envio](./quick/260514-001-approval-link-correcao-envio/) |
 | 260514-002 | Notificar cliente via Chatwoot ao confirmar pagamento no caixa + simplificar mensagem PIX | 2026-05-14 | 61354fd | [260514-002-notificacao-caixa-pix-chatwoot](./quick/260514-002-notificacao-caixa-pix-chatwoot/) |
 | 260514-003 | Status page: SSE tempo real, banner persistente, badge pago no caixa, botao novo orcamento | 2026-05-14 | 2369502 | [260514-003-status-page-realtime-dashboard](./quick/260514-003-status-page-realtime-dashboard/) |
-
-
-
-
+| 260515-001 | Remover controle de edicao de status (Alterar status) da pagina publica | 2026-05-15 | n/a | [260515-001-remover-edicao-status-pagina-publica](./quick/260515-001-remover-edicao-status-pagina-publica/) |
