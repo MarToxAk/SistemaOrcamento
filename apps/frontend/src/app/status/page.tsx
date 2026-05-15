@@ -76,9 +76,7 @@ export default function StatusPage() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("TODOS");
-  const [selectedBadgeFilter, setSelectedBadgeFilter] = useState<string>("TODOS");
-  const [onlyWithBadge, setOnlyWithBadge] = useState<boolean>(false);
+  const [badgeFilter, setBadgeFilter] = useState<"TODOS" | "PAGO_CAIXA" | "PIX" | "AGUARDANDO">("TODOS");
   const [efiStatus, setEfiStatus] = useState<{ enabled: boolean; message?: string } | null>(null);
   const [lastPayment, setLastPayment] = useState<string | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -179,7 +177,15 @@ export default function StatusPage() {
 
   useEffect(() => { fetchRef.current = fetchQuotes; });
 
-  const visibleQuotes = quotes;
+  const visibleQuotes = badgeFilter === "TODOS"
+    ? quotes
+    : quotes.filter((q) => {
+        const type = getBadgeType(q);
+        if (badgeFilter === "PAGO_CAIXA") return type === "PAGO_CAIXA";
+        if (badgeFilter === "PIX") return type === "PIX_CONFIRMADO";
+        if (badgeFilter === "AGUARDANDO") return type === "AGUARDANDO";
+        return true;
+      });
 
 
   async function handlePdf(quote: QuoteRow) {
