@@ -333,6 +333,37 @@ export default function StatusPage() {
         <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
           {erro ? <div className="alert alert-danger mb-4">{erro}</div> : null}
 
+          <div className="badge-filter-bar d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Filtrar por tipo de pagamento">
+            {([
+              { value: "TODOS", label: "Todos", icon: "bi-funnel" },
+              { value: "PAGO_CAIXA", label: "Pago Caixa", icon: "bi-cash-coin" },
+              { value: "PIX", label: "PIX", icon: "bi-lightning-charge" },
+              { value: "AGUARDANDO", label: "Aguardando", icon: "bi-hourglass-split" },
+            ] as const).map((opt) => {
+              const count = opt.value === "TODOS"
+                ? quotes.length
+                : quotes.filter((q) => {
+                    const type = getBadgeType(q);
+                    if (opt.value === "PAGO_CAIXA") return type === "PAGO_CAIXA";
+                    if (opt.value === "PIX") return type === "PIX_CONFIRMADO";
+                    return type === "AGUARDANDO";
+                  }).length;
+              const active = badgeFilter === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`btn btn-sm ${active ? "btn-primary" : "btn-outline-secondary"}`}
+                  onClick={() => setBadgeFilter(opt.value)}
+                  aria-pressed={active}
+                >
+                  <i className={`bi ${opt.icon} me-1`} />{opt.label}
+                  <span className={`badge ms-2 ${active ? "bg-light text-primary" : "bg-secondary"}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
           {loading ? (
             <div className="text-center py-5 text-muted">
               <div className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
