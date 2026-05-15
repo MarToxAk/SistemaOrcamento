@@ -138,7 +138,11 @@ export default function StatusPage() {
         throw new Error((data as any)?.error || "Erro ao buscar produção.");
       }
       const data = (await response.json()) as unknown;
-      const newQuotes = Array.isArray(data) ? (data as QuoteRow[]) : [];
+      const newQuotes = Array.isArray(data)
+        ? (data as QuoteRow[])
+        : Array.isArray((data as any)?.data)
+          ? ((data as any).data as QuoteRow[])
+          : [];
       setQuotes((prev) => {
         const changedId = newQuotes.find((nq) => prev.some((oq) => oq.id === nq.id && oq.statusKey !== nq.statusKey))?.id ?? null;
         if (changedId) {
