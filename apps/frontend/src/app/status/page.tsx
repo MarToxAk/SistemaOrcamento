@@ -369,14 +369,7 @@ export default function StatusPage() {
                   ) : (
                     visibleQuotes
                       .filter((q) => q.statusKey === activeMobileTab)
-                      .map((quote) => (
-                        <div
-                          key={quote.id}
-                          className={`kanban-card-placeholder ${highlightedId === quote.id ? "card-highlighted" : ""}`}
-                        >
-                          #{quote.body.idorcamento ?? quote.internalNumber}
-                        </div>
-                      ))
+                      .map((quote) => renderQuoteCard(quote))
                   )}
                 </div>
               </div>
@@ -398,14 +391,7 @@ export default function StatusPage() {
                       {columnQuotes.length === 0 ? (
                         <div className="kanban-column-empty text-muted small">Sem orçamentos</div>
                       ) : (
-                        columnQuotes.map((quote) => (
-                          <div
-                            key={quote.id}
-                            className={`kanban-card-placeholder ${highlightedId === quote.id ? "card-highlighted" : ""}`}
-                          >
-                            #{quote.body.idorcamento ?? quote.internalNumber}
-                          </div>
-                        ))
+                        columnQuotes.map((quote) => renderQuoteCard(quote))
                       )}
                     </div>
                   </div>
