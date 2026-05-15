@@ -208,6 +208,74 @@ export default function StatusPage() {
     setBannerDismissed(true);
   }
 
+  function renderQuoteCard(quote: QuoteRow) {
+    const customerName = quote.body.cliente?.nome || "Cliente não informado";
+    const phone = quote.body.cliente?.telefone || "Sem telefone";
+    const total = quote.body.totais?.valor ?? 0;
+    const totalBRL = total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const quoteNumber = quote.body.idorcamento ?? quote.internalNumber;
+    const badgeType = getBadgeType(quote);
+    const orderNumber = quote.orderNumber ?? (quote.saleExternalId != null ? String(quote.saleExternalId) : null);
+    const canOpenPdf = Boolean(quote.latestPdfUrl);
+    const pdfBusy = pdfLoadingId === quote.id;
+    const isHighlighted = highlightedId === quote.id;
+    const detailsHref = `/orcamento/${getQuoteIdentifier(quote)}`;
+
+    const badgeClass =
+      badgeType === "PAGO_CAIXA" ? "bg-success" :
+      badgeType === "PIX_CONFIRMADO" ? "bg-primary" :
+      "bg-warning text-dark";
+    const badgeLabel =
+      badgeType === "PAGO_CAIXA" ? `Pago no Caixa${orderNumber ? ` #${orderNumber}` : ""}` :
+      badgeType === "PIX_CONFIRMADO" ? "PIX Confirmado" :
+      "Aguardando pagamento";
+    const badgeIcon = badgeType === "PAGO_CAIXA" ? "bi-cash-coin" : badgeType === "PIX_CONFIRMADO" ? "bi-check-circle" : "bi-hourglass-split";
+
+    return (
+      <div
+        key={quote.id}
+        className={`kanban-card status-border-${quote.statusKey.toLowerCase()} ${isHighlighted ? "card-highlighted" : ""}`}
+      >
+        <div className="kanban-card-header d-flex align-items-center justify-content-between">
+          <span className="kanban-card-number">#{quoteNumber}</span>
+          <span className={`badge ${badgeClass}`}>
+            <i className={`bi ${badgeIcon} me-1`} />{badgeLabel}
+          </span>
+        </div>
+        <div className="kanban-card-client">{customerName}</div>
+        <div className="kanban-card-meta d-flex align-items-center justify-content-between">
+          <span className="kanban-card-total">{totalBRL}</span>
+          <span className="kanban-card-phone text-muted small">{phone}</span>
+        </div>
+        <div className="kanban-card-actions d-flex flex-wrap gap-2 mt-2">
+          {!canOpenPdf && (
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-primary"
+              onClick={() => void handlePdf(quote)}
+              disabled={pdfBusy}
+            >
+              {pdfBusy ? "Gerando..." : "Gerar PDF"}
+            </button>
+          )}
+          {quote.latestPdfUrl && (
+            <a className="btn btn-sm btn-outline-dark" href={quote.latestPdfUrl} target="_blank" rel="noreferrer">
+              <i className="bi bi-file-earmark-pdf me-1" />PDF
+            </a>
+          )}
+          {quote.chatwootConversationUrl && (
+            <a className="btn btn-sm btn-success" href={quote.chatwootConversationUrl} target="_blank" rel="noreferrer">
+              <i className="bi bi-chat me-1" />Chatwoot
+            </a>
+          )}
+          <a className="btn btn-sm btn-outline-secondary" href={detailsHref}>
+            <i className="bi bi-box-arrow-up-right me-1" />Detalhes
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <Script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" strategy="beforeInteractive" />
