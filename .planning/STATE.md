@@ -4,7 +4,7 @@ milestone: v1.4
 milestone_name: Pagamento EFI/Athos + Desconto NFS-e
 current_phase: 26
 status: completed
-last_updated: "2026-05-15T16:17:54.409Z"
+last_updated: "2026-05-15T16:28:08.516Z"
 last_activity: 2026-05-15
 progress:
   total_phases: 26
