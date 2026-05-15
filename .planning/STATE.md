@@ -4,14 +4,14 @@ milestone: v1.4
 milestone_name: Pagamento EFI/Athos + Desconto NFS-e
 current_phase: 26
 status: executing
-last_updated: "2026-05-15T16:13:00Z"
-last_activity: 2026-05-15 -- Phase 26 Plan 02 complete (kanban cards completos com badge, BRL, acoes)
+last_updated: "2026-05-15T16:40:00Z"
+last_activity: 2026-05-15 -- Phase 26 Plan 03 complete (filtro badge funcional, dead state removido, build OK)
 progress:
   total_phases: 26
   completed_phases: 18
   total_plans: 44
-  completed_plans: 39
-  percent: 89
+  completed_plans: 40
+  percent: 91
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -24,10 +24,10 @@ Milestone: v1.9 (planning)
 
 ## Current Position
 
-Phase: 26 (status-producao-kanban) — EXECUTING
-Plan: 3 of 3
-Status: Executing Phase 26 — Plan 02 complete
-Last activity: 2026-05-15 -- Phase 26 Plan 02 complete (kanban cards completos com badge, BRL, acoes)
+Phase: 26 (status-producao-kanban) — COMPLETE
+Plan: 3 of 3 (all complete)
+Status: Phase 26 complete — all 3 plans executed
+Last activity: 2026-05-15 -- Phase 26 Plan 03 complete (filtro badge funcional, dead state removido, build OK)
 
 ## Project Status
 
@@ -99,6 +99,8 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 2026-05-15 | renderQuoteCard como funcao interna (closure) — captura pdfLoadingId e highlightedId sem prop drilling | Funcao interna permite reuso desktop+mobile sem passar props adicionais |
 | 2026-05-15 | Badge PAGO_CAIXA=bg-success, PIX_CONFIRMADO=bg-primary, AGUARDANDO=bg-warning | Mapeamento badge->cor Bootstrap definido em D-05 e interfaces do plan |
 | 2026-05-15 | borda superior do card via .status-border-{statusKey} — identidade visual por coluna | Cada card identifica sua coluna kanban pela cor da borda superior (verde/azul/laranja) |
+| 2026-05-15 | Contagem nos botoes do filtro usa quotes (total), nao visibleQuotes | Cada botao mostra quantos cards entrariam se selecionado, independente do filtro ativo (D-12) |
+| 2026-05-15 | badgeFilter nao persiste — reseta para TODOS a cada carregamento | D-14 exige nao persistir filtro; sem localStorage.setItem para badgeFilter |
 
 ## Notes
 
