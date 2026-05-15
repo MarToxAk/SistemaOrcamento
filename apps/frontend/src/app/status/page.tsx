@@ -521,6 +521,12 @@ export default function StatusPage() {
           .container { padding-inline: 1rem; }
           .kanban-column { padding: 0.5rem; }
         }
+        .badge-filter-bar { align-items: center; }
+        .badge-filter-bar .btn { display: inline-flex; align-items: center; }
+        .badge-filter-bar .btn .badge { font-weight: 600; }
+        @media (max-width: 768px) {
+          .badge-filter-bar .btn { flex: 1 1 calc(50% - 0.5rem); justify-content: center; }
+        }
       `}</style>
     </>
   );
