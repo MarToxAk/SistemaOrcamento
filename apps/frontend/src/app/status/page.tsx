@@ -38,6 +38,12 @@ const PRODUCTION_STATUSES = ["APROVADO", "EM_PRODUCAO", "PRONTO_PARA_ENTREGA"];
 const LS_LAST_PAYMENT = "bomcusto_last_caixa_payment";
 const LS_DISMISSED = "bomcusto_last_caixa_dismissed";
 
+const STATUS_META: Record<string, { label: string; badgeClass: string; pillClass: string }> = {
+  APROVADO:             { label: "Aprovado",             badgeClass: "btn-success",   pillClass: "status-aprovado" },
+  EM_PRODUCAO:          { label: "Em Produção",          badgeClass: "btn-primary",   pillClass: "status-em_producao" },
+  PRONTO_PARA_ENTREGA:  { label: "Pronto p/ Entrega",    badgeClass: "btn-warning",   pillClass: "status-pronto_para_entrega" },
+};
+
 function getQuoteIdentifier(quote: QuoteRow): string {
   if (quote.body.idorcamento && Number.isFinite(quote.body.idorcamento)) {
     return String(Math.trunc(quote.body.idorcamento));
@@ -81,6 +87,7 @@ export default function StatusPage() {
   const [lastPayment, setLastPayment] = useState<string | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const fetchRef = useRef<(() => Promise<void>) | null>(null);
 
   // Banner persistente do localStorage
@@ -161,6 +168,13 @@ export default function StatusPage() {
   }
 
   useEffect(() => { fetchRef.current = fetchQuotes; });
+
+  const visibleQuotes = activeFilter ? quotes.filter((q) => q.statusKey === activeFilter) : quotes;
+
+  const statusCounts = PRODUCTION_STATUSES.reduce<Record<string, number>>((acc, s) => {
+    acc[s] = quotes.filter((q) => q.statusKey === s).length;
+    return acc;
+  }, {});
 
   async function handleStatusChange(quote: QuoteRow, nextStatus: string) {
     setStatusSavingId(quote.id);
@@ -252,7 +266,7 @@ export default function StatusPage() {
               <i className="bi bi-plus-circle me-1" />Novo Orçamento
             </a>
             <div className="text-end">
-              <div className="small">{quotes.length} orçamento(s)</div>
+              <div className="small">{visibleQuotes.length}/{quotes.length} orçamento(s)</div>
               {efiStatus !== null && (
                 <span className={`badge ${efiStatus.enabled ? "bg-success" : "bg-danger"}`} title={efiStatus.message ?? ""}>
                   EFI: {efiStatus.enabled ? "✓" : "✗"}
@@ -260,6 +274,32 @@ export default function StatusPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Filtros de status */}
+        <div className="d-flex flex-wrap gap-2 px-4 py-3 bg-white border-bottom">
+          <button
+            type="button"
+            className={`btn btn-sm ${activeFilter === null ? "btn-dark" : "btn-outline-dark"}`}
+            onClick={() => setActiveFilter(null)}
+          >
+            Todos <span className="badge bg-secondary ms-1">{quotes.length}</span>
+          </button>
+          {PRODUCTION_STATUSES.map((s) => {
+            const meta = STATUS_META[s];
+            const active = activeFilter === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                className={`btn btn-sm ${active ? meta.badgeClass : `btn-outline-${meta.badgeClass.replace("btn-", "")}`}`}
+                onClick={() => setActiveFilter(active ? null : s)}
+              >
+                {meta.label}
+                <span className={`badge ms-1 ${active ? "bg-white text-dark" : "bg-secondary"}`}>{statusCounts[s] ?? 0}</span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
@@ -270,10 +310,12 @@ export default function StatusPage() {
               <div className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
               Carregando produção...
             </div>
-          ) : quotes.length === 0 ? (
+          ) : visibleQuotes.length === 0 ? (
             <div className="alert alert-info mb-0">
               <i className="bi bi-info-circle me-2" />
-              Nenhum orçamento no fluxo de produção no momento.
+              {activeFilter
+                ? `Nenhum orçamento com status "${STATUS_META[activeFilter]?.label ?? activeFilter}" no momento.`
+                : "Nenhum orçamento no fluxo de produção no momento."}
             </div>
           ) : (
             <div className="table-responsive">
@@ -290,7 +332,7 @@ export default function StatusPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {quotes.map((quote) => {
+                  {visibleQuotes.map((quote) => {
                     const customerName = quote.body.cliente?.nome || "Cliente não informado";
                     const total = quote.body.totais?.valor ?? 0;
                     const quoteNumber = quote.body.idorcamento ?? quote.internalNumber;
