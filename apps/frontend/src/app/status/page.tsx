@@ -455,13 +455,25 @@ export default function StatusPage() {
         }
         .kanban-column-body { display: flex; flex-direction: column; gap: 0.5rem; }
         .kanban-column-empty { padding: 1rem 0.5rem; text-align: center; font-style: italic; }
-        .kanban-card-placeholder {
+        .kanban-card {
           background: #fff;
           border-radius: 6px;
           padding: 0.75rem;
           box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-          font-weight: 600;
+          border-top: 3px solid #ccc;
+          display: flex;
+          flex-direction: column;
+          gap: 0.4rem;
         }
+        .status-border-aprovado { border-top-color: #1f7a44; }
+        .status-border-em_producao { border-top-color: #2457a6; }
+        .status-border-pronto_para_entrega { border-top-color: #a65b12; }
+        .kanban-card-header { gap: 0.5rem; }
+        .kanban-card-number { font-weight: 700; font-size: 1rem; }
+        .kanban-card-client { font-weight: 600; font-size: 0.95rem; }
+        .kanban-card-meta { font-size: 0.9rem; }
+        .kanban-card-total { font-weight: 600; color: #1f7a44; }
+        .kanban-card-actions .btn { font-size: 0.82rem; padding: 0.25rem 0.55rem; }
         .card-highlighted { animation: highlight-pulse 3s ease-out; }
         @keyframes highlight-pulse {
           0%   { box-shadow: 0 0 0 4px #34d399, 0 1px 4px rgba(0,0,0,0.08); background: #d1fae5; }
