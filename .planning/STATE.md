@@ -2,32 +2,32 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Pagamento EFI/Athos + Desconto NFS-e
-current_phase: 20 (planning)
+current_phase: 26
 status: executing
-last_updated: "2026-05-15T15:46:03.363Z"
-last_activity: 2026-05-15 -- Phase 26 planning complete
+last_updated: "2026-05-15T15:51:38Z"
+last_activity: 2026-05-15 -- Phase 26 Plan 01 complete (kanban layout base)
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 100
+  total_phases: 26
+  completed_phases: 18
+  total_plans: 44
+  completed_plans: 38
+  percent: 86
 ---
 
-﻿# STATE.md - Sistema de Orcamento BomCusto
+# STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-15
-Current phase: 20 (planning)
+Current phase: 26
 Milestone: v1.9 (planning)
 
 ---
 
 ## Current Position
 
-Phase: 20 - relatorios-exportacao-csv (planning)
-Plan: -
-Status: Ready to execute
-Last activity: 2026-05-15 -- Phase 26 planning complete
+Phase: 26 (status-producao-kanban) — EXECUTING
+Plan: 2 of 3
+Status: Executing Phase 26 — Plan 01 complete
+Last activity: 2026-05-15 -- Phase 26 Plan 01 complete (kanban layout base)
 
 ## Project Status
 
@@ -93,6 +93,9 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 2026-05-04 | v1.6 foca no path errado de quote?.totais?.valor no frontend | Base de calculo era sempre 0, quebrando todos os calculos de desconto no modal NFS-e |
 | 2026-05-04 | Corrigir quote?.totais?.valor para quote?.body?.totais?.valor em 6 pontos do modal NFS-e | totais existe somente dentro de body no tipo QuoteDetail; acesso direto retornava undefined |
 | 2026-05-04 | Usar Record<string, string | number | boolean> no body do POST NFS-e | descontoAtivo precisava ser boolean true para satisfazer igualdade estrita do backend |
+| 2026-05-15 | Kanban 3-colunas com PRODUCTION_STATUSES.map substituindo tabela em /status | Estrutura visual base para Plan 02 (cards) e Plan 03 (filtro carimbo) |
+| 2026-05-15 | Mobile tabs via activeMobileTab state — nao scroll horizontal nem accordion | Decisao D-03 do CONTEXT: uma coluna visivel por vez com Bootstrap nav-tabs |
+| 2026-05-15 | Cards placeholder #numero em Plan 01 — Plan 02 expande para card completo | Separacao de concerns: estrutura primeiro, conteudo depois |
 
 ## Notes
 
