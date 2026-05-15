@@ -371,14 +371,52 @@ export default function StatusPage() {
         .status-entregue { background: #ececec; color: #444; }
         .status-cancelado { background: #fdecec; color: #b42318; }
         .action-list { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+        .kanban-board { align-items: flex-start; }
+        .kanban-column {
+          flex: 1 1 0;
+          min-width: 0;
+          background: #f8f9fa;
+          border-radius: 8px;
+          padding: 0.75rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .kanban-column-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0.5rem 0.75rem;
+          border-radius: 6px;
+          font-weight: 700;
+          font-size: 0.95rem;
+        }
+        .kanban-column-title { letter-spacing: 0.02em; }
+        .kanban-column-count {
+          background: rgba(0,0,0,0.08);
+          border-radius: 999px;
+          padding: 0.1rem 0.6rem;
+          font-size: 0.85rem;
+          font-weight: 600;
+        }
+        .kanban-column-body { display: flex; flex-direction: column; gap: 0.5rem; }
+        .kanban-column-empty { padding: 1rem 0.5rem; text-align: center; font-style: italic; }
+        .kanban-card-placeholder {
+          background: #fff;
+          border-radius: 6px;
+          padding: 0.75rem;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+          font-weight: 600;
+        }
         .card-highlighted { animation: highlight-pulse 3s ease-out; }
         @keyframes highlight-pulse {
-          0%   { background-color: #d1fae5; }
-          60%  { background-color: #d1fae5; }
-          100% { background-color: transparent; }
+          0%   { box-shadow: 0 0 0 4px #34d399, 0 1px 4px rgba(0,0,0,0.08); background: #d1fae5; }
+          60%  { box-shadow: 0 0 0 4px #34d399, 0 1px 4px rgba(0,0,0,0.08); background: #d1fae5; }
+          100% { box-shadow: 0 1px 4px rgba(0,0,0,0.08); background: #fff; }
         }
         @media (max-width: 768px) {
           .container { padding-inline: 1rem; }
+          .kanban-column { padding: 0.5rem; }
         }
       `}</style>
     </>
