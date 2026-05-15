@@ -83,6 +83,7 @@ export default function StatusPage() {
   const [lastPayment, setLastPayment] = useState<string | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [activeMobileTab, setActiveMobileTab] = useState<string>("APROVADO");
   const fetchRef = useRef<(() => Promise<void>) | null>(null);
 
   function getBadgeType(quote: QuoteRow): string {
@@ -269,6 +270,49 @@ export default function StatusPage() {
               {"Nenhum orçamento no fluxo de produção no momento."}
             </div>
           ) : (
+            <>
+            <div className="kanban-mobile d-md-none">
+              <ul className="nav nav-tabs nav-fill mb-3" role="tablist">
+                {PRODUCTION_STATUSES.map((statusKey) => {
+                  const count = visibleQuotes.filter((q) => q.statusKey === statusKey).length;
+                  const label =
+                    statusKey === "APROVADO" ? "APROVADO" :
+                    statusKey === "EM_PRODUCAO" ? "EM PRODUÇÃO" :
+                    "PRONTO";
+                  return (
+                    <li className="nav-item" key={statusKey} role="presentation">
+                      <button
+                        type="button"
+                        className={`nav-link ${activeMobileTab === statusKey ? "active" : ""}`}
+                        onClick={() => setActiveMobileTab(statusKey)}
+                        role="tab"
+                        aria-selected={activeMobileTab === statusKey}
+                      >
+                        {label} <span className="badge bg-secondary ms-1">{count}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className={`kanban-column kanban-column-${activeMobileTab.toLowerCase()}`}>
+                <div className="kanban-column-body">
+                  {visibleQuotes.filter((q) => q.statusKey === activeMobileTab).length === 0 ? (
+                    <div className="kanban-column-empty text-muted small">Sem orçamentos</div>
+                  ) : (
+                    visibleQuotes
+                      .filter((q) => q.statusKey === activeMobileTab)
+                      .map((quote) => (
+                        <div
+                          key={quote.id}
+                          className={`kanban-card-placeholder ${highlightedId === quote.id ? "card-highlighted" : ""}`}
+                        >
+                          #{quote.body.idorcamento ?? quote.internalNumber}
+                        </div>
+                      ))
+                  )}
+                </div>
+              </div>
+            </div>
             <div className="kanban-board d-none d-md-flex gap-3">
               {PRODUCTION_STATUSES.map((statusKey) => {
                 const columnQuotes = visibleQuotes.filter((q) => q.statusKey === statusKey);
@@ -300,6 +344,7 @@ export default function StatusPage() {
                 );
               })}
             </div>
+            </>
           )}
         </div>
       </div>
