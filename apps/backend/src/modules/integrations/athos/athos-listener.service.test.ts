@@ -169,6 +169,9 @@ describe("AthosListenerService - handleNotification", () => {
 });
 
 describe("AthosListenerService - reconexão (CAIXA-01)", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
   it("deve chamar scheduleReconnect quando client emite error", async () => {
     const svc = await buildService();
     await svc.onApplicationBootstrap();
@@ -186,11 +189,16 @@ describe("AthosListenerService - reconexão (CAIXA-01)", () => {
   it("deve limpar reconnectTimer no shutdown para evitar reconexao pos-encerramento", async () => {
     const svc = await buildService();
     await svc.onApplicationBootstrap();
+
+    // Dispara reconexão pendente
+    const errorHandler = mockClientOn.mock.calls.find((c) => c[0] === "error")?.[1] as (err: Error) => void;
+    errorHandler?.(new Error("dropped"));
+
+    // Shutdown cancela o timer antes de disparar
     await svc.onApplicationShutdown();
 
-    // Após shutdown, enabled=false — connect() não deve ser chamado novamente
     const connectCallsBefore = mockClientConnect.mock.calls.length;
-    await new Promise((r) => setTimeout(r, 50));
+    jest.runAllTimers();
     expect(mockClientConnect.mock.calls.length).toBe(connectCallsBefore);
   });
 });
