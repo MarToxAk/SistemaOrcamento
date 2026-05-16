@@ -1,151 +1,189 @@
 # Technology Stack
+_Last updated: 2026-05-15 | Focus: tech_
 
-**Analysis Date:** 2026-05-06
+## Summary
+
+SistemaOrcamento is a TypeScript-only monorepo (npm workspaces) with a NestJS REST API backend and a Next.js frontend. Both apps run in Docker containers in production and share type definitions via a `@bomcusto/shared` workspace package. The database is PostgreSQL 16 accessed through Prisma ORM.
+
+---
 
 ## Languages
 
 **Primary:**
-- TypeScript 5.6.x — all backend and frontend source code
-- SQL — raw queries via Prisma `$queryRaw` (PostgreSQL dialect)
+- TypeScript 5.6 — all source code in `apps/backend/src/` and `apps/frontend/src/`
 
 **Secondary:**
-- XML/SOAP — NFS-e fiscal note emission via `soap` library
+- SQL — Prisma migrations in `apps/backend/prisma/migrations/`
+- Shell — bootstrap script at `apps/backend/scripts/bootstrap-runtime.sh`
+
+---
 
 ## Runtime
 
 **Environment:**
-- Node.js 20 (pinned in CI via `actions/setup-node@v4 node-version: '20'`)
+- Node.js 20 (image: `node:20-bookworm-slim` in all Dockerfiles)
 
 **Package Manager:**
-- npm workspaces (root `package.json` defines `apps/*` and `packages/*`)
-- Lockfile: present (`package-lock.json`)
+- npm (workspaces)
+- Lockfile: `package-lock.json` — present and committed
 
-## Monorepo Workspaces
+**Workspaces:**
+| Workspace | Name | Path |
+|-----------|------|------|
+| Backend | `@bomcusto/backend` | `apps/backend/` |
+| Frontend | `@bomcusto/frontend` | `apps/frontend/` |
+| Shared types | `@bomcusto/shared` | `packages/shared/` |
 
-| Workspace | Package Name | Port |
-|-----------|--------------|------|
-| `apps/backend` | `@bomcusto/backend` | 4000 |
-| `apps/frontend` | `@bomcusto/frontend` | 3000 |
-| `packages/shared` | `@bomcusto/shared` | — |
+Root-level `package.json`: `package.json`
+
+---
 
 ## Frameworks
 
 **Backend:**
-- NestJS 11.1.x — HTTP framework, DI container, module system
-  - `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express` ^11.1.19
-  - `@nestjs/config` ^4.0.4 — env var configuration with validation
-  - `@nestjs/throttler` ^6.5.0 — rate limiting (global guard)
+- NestJS 11 (`@nestjs/core`, `@nestjs/common`, `@nestjs/platform-express`) — modular REST API, port 4000
+- NestJS Swagger 11 (`@nestjs/swagger`) — API docs at `/api/docs` (non-production only)
+- NestJS Throttler 6 (`@nestjs/throttler`) — rate limiting; config at `apps/backend/src/modules/security/throttle.config.ts`
+- NestJS Config 4 (`@nestjs/config`) — environment variable injection
 
 **Frontend:**
-- Next.js 14.2.35 — React framework with App Router
-  - Server Components and API Route Handlers (not Pages Router)
-  - `react` 18.3.1, `react-dom` 18.3.1
+- Next.js 16 with App Router — port 3000
+- React 18.3 + React DOM 18.3
+- `reactStrictMode: true` — configured in `apps/frontend/next.config.mjs`
+- No UI component library detected (no Tailwind, shadcn, MUI, or Chakra in `package.json`)
 
-## Key Backend Dependencies
-
-**ORM / Database:**
-- `@prisma/client` ^5.22.0 — PostgreSQL ORM, generated client
-- `prisma` ^5.19.1 (dev) — CLI for migrations and schema management
-- `pg` ^8.20.0 — raw `node-postgres` client used directly by AthosService and PdvService for read-only access to legacy databases
-
-**HTTP / API:**
-- `axios` ^1.7.7 — outbound HTTP (Chatwoot API, EFI Pay API)
-- Express (via `@nestjs/platform-express`) — underlying HTTP server
-
-**PDF Generation:**
-- `puppeteer` ^24.40.0 — headless Chromium for HTML-to-PDF rendering
-- `handlebars` ^4.7.9 — HTML template engine for quote PDF layout
-- Bootstrap 5.3.2 (CDN, embedded in HTML template string) — PDF styling
-
-**Storage:**
-- `minio` ^8.0.7 — S3-compatible object storage client (PDF files)
-
-**SOAP / Fiscal:**
-- `soap` ^1.9.1 — WSDL/SOAP client for NFS-e emission (iiBrasil provider, Prefeitura de Ilhabela-SP)
-
-**Validation:**
-- `class-validator` ^0.14.1 — DTO validation decorators
-- `class-transformer` ^0.5.1 — request payload transformation
-- `reflect-metadata` ^0.2.2 — TypeScript decorator metadata
-
-**Runtime utilities:**
-- `rxjs` ^7.8.1 — required by NestJS core
-
-## Key Frontend Dependencies
-
-**Framework:**
-- `next` ^14.2.35 — App Router, API routes as proxies to backend
-- `react` 18.3.1, `react-dom` 18.3.1
-
-**No UI component library** — custom inline CSS; Bootstrap loaded via `<Script>` CDN tag in pages.
-**No client-side HTTP library** — native `fetch` in Client Components; `backendFetch` helper (`src/lib/backend-client.ts`) in Route Handlers.
-
-## Dev Dependencies (Backend)
-
-- `jest` ^30.3.0 — test runner
-- `ts-jest` ^29.4.9 — TypeScript transformer for Jest
-- `@nestjs/testing` ^11.1.19 — NestJS testing module
-- `ts-node` ^10.9.2 — TypeScript execution
-- `ts-node-dev` ^2.0.0 — dev server with hot reload (`--respawn --transpile-only`)
-- `dotenv-cli` ^11.0.0 — env file loading for test runs
-- `typescript` ^5.6.2
-
-## Build / Toolchain
-
-**Backend build:** `tsc -p tsconfig.build.json` → outputs to `apps/backend/dist/`
-**Backend dev:** `ts-node-dev --respawn --transpile-only src/main.ts`
-**Frontend build:** `next build`
-**Frontend dev:** `next dev -p 3000`
-**Monorepo dev (concurrent):** `concurrently` ^9.2.1 + `kill-port` ^2.0.1 (root `npm run dev`)
-
-## Database
-
-**Primary (application):**
-- PostgreSQL 16 (Docker image `postgres:16-alpine` in production)
-- ORM: Prisma with migrations in `apps/backend/prisma/`
-- Connection: `DATABASE_URL` env var
-
-**External read-only (Athos ERP):**
-- PostgreSQL (version managed by ERP vendor)
-- Direct `pg.Pool` connection — env vars: `ATHOS_PG_HOST`, `ATHOS_PG_DB`, `ATHOS_PG_USER`, `ATHOS_PG_PASS`, `ATHOS_PG_PORT`
-- No ORM — raw SQL only; schema discovered at runtime via `information_schema.columns`
-
-**External read-only (PDV):**
-- PostgreSQL
-- Env vars: `PDV_DB_URL`, `PDV_DB_SCHEMA`, `PDV_DB_READONLY_USER`, `PDV_DB_READONLY_PASSWORD`
-- Implementation is a stub (connector scaffolded, SQL queries not yet implemented)
-
-## Configuration
-
-**Environment loading (backend):**
-- `ConfigModule.forRoot` loads in order: `.env.{NODE_ENV}` → `.env` → `../../.env`
-- Boot-time validation: `DATABASE_URL`, `INTERNAL_API_KEY`, `CHATWOOT_BASE_URL`, `CHATWOOT_API_TOKEN`, `CHATWOOT_ACCOUNT_ID`, `NFSE_TOKEN` — process exits if any are missing
-
-**Environment loading (frontend):**
-- Next.js standard `.env` / `.env.local` loading
-- Two vars consumed: `BACKEND_URL`, `INTERNAL_API_KEY`
-
-## Platform Requirements
-
-**Development:**
-- Node.js 20, npm workspaces
-- Docker optional — for local Postgres (`npm run docker:up`)
-- Chromium installed automatically by Puppeteer on `npm install`
-
-**Production:**
-- Docker Compose stack (`deploy/docker-compose.vps.yml`)
-- Services: `postgres:16-alpine`, `backend`, `frontend`, `tailscale/tailscale` (VPN sidecar)
-- Images published to GHCR: `ghcr.io/martoxak/bomcusto-backend:latest` and `ghcr.io/martoxak/bomcusto-frontend:latest`
-- Nginx reverse proxy (`deploy/nginx.conf`) for TLS termination
-- Tailscale VPN — backend shares network namespace with Tailscale container for private access to Athos ERP database on Tailnet
-
-## CI/CD
-
-- `ci.yml` — build + test on push/PR to `main` and `dev`
-- `build-and-publish.yml` — Docker image build + push to GHCR
-- `deploy.yml` / `deploy-portainer.yml` — VPS deployment via Portainer webhook
-- `deploy-dev.yml` — dev environment deployment
+**Build/Dev:**
+- `ts-node-dev` 2 — backend hot-reload in dev: `npm run dev:backend`
+- `tsc` (TypeScript compiler) — production backend build; output to `apps/backend/dist/`
+- Next.js built-in bundler — frontend build
+- `concurrently` 9 + `kill-port` 2 — parallel dev runner (`npm run dev` at root)
 
 ---
 
-*Stack analysis: 2026-05-06*
+## Database & ORM
+
+**Database:**
+- PostgreSQL 16-alpine (Docker image)
+- Dev: port `5435:5432` (local Docker), defined in `docker-compose.yml`
+- Prod: port `5435:5432` in VPS stack, `deploy/docker-compose.vps.yml`
+
+**ORM:**
+- Prisma 5 (`@prisma/client` 5.22, `prisma` CLI 5.19)
+- Schema: `apps/backend/prisma/schema.prisma`
+- Migrations: `apps/backend/prisma/migrations/` (9 migrations, earliest Apr 2026)
+- Connection: `DATABASE_URL` env var
+
+**Secondary DB connections (read-only, raw `pg`):**
+- Athos Empresarial PostgreSQL — direct host connection via `ATHOS_PG_*` vars
+- PDV (Point-of-Sale) PostgreSQL — `PDV_DB_URL` connection string, read-only user
+- Both accessed without Prisma (raw `pg` client, package `pg` ^8.20.0 at root)
+
+---
+
+## PDF Generation
+
+- Puppeteer 24 (`puppeteer`) — headless Chromium renders HTML to PDF
+- Chromium installed system-level in Docker (`apt-get install chromium`); `PUPPETEER_SKIP_DOWNLOAD=true`, `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`
+- Handlebars 4 (`handlebars`) — HTML templating for PDF content
+- Generated PDFs stored in MinIO (see Integrations)
+- Service: `apps/backend/src/modules/quotes/quotes-pdf-storage.service.ts`
+
+---
+
+## HTTP Client
+
+- Axios 1.7 — used in all backend integration services (EFI, Chatwoot, NFS-e, Athos)
+- Node.js native `fetch` — used in frontend `apps/frontend/src/lib/backend-client.ts` (proxied API calls)
+
+---
+
+## Validation
+
+- `class-validator` 0.14 + `class-transformer` 0.5 — NestJS global `ValidationPipe` with `whitelist: true`, `transform: true`, `forbidNonWhitelisted: true`
+- DTOs in each module's `dto/` subdirectory
+
+---
+
+## SOAP Client
+
+- `soap` 1.9 — used by NFS-e service to call iiBrasil municipal invoice API
+- File: `apps/backend/src/modules/integrations/nfse/nfse.service.ts`
+
+---
+
+## Real-time / Server-Sent Events
+
+- RxJS 7.8 (`rxjs`) — `Subject`-based SSE stream in `apps/backend/src/modules/events/events.service.ts`
+- Frontend SSE consumer: `apps/frontend/src/app/api/events/pagamentos/route.ts`
+
+---
+
+## Testing
+
+**Framework:**
+- Jest 30 (`jest`, `@types/jest`)
+- ts-jest 29 (`ts-jest`) — TypeScript transform for Jest
+- Config: `apps/backend/jest.config.js`
+- `@nestjs/testing` 11 — NestJS test module builder
+
+**Run Commands:**
+```bash
+npm run test                # run all tests (root — delegates to backend workspace)
+npm --workspace @bomcusto/backend run test:watch     # watch mode
+npm --workspace @bomcusto/backend run test:coverage  # coverage report
+```
+
+**Test files:**
+- `apps/backend/src/modules/integrations/athos/athos.service.test.ts`
+- `apps/backend/src/modules/integrations/athos/athos.controller.test.ts`
+- `apps/backend/src/modules/integrations/athos/athos-anexo.util.test.ts`
+- `apps/backend/src/modules/integrations/efi/efi.service.test.ts`
+- `apps/backend/src/modules/integrations/efi/efi.webhook.test.ts`
+- `apps/backend/src/modules/integrations/nfse/nfse.service.test.ts`
+- `apps/backend/src/modules/integrations/nfse/nfse.discount.test.ts`
+- `apps/backend/src/modules/quotes/quotes.service.test.ts`
+- `apps/backend/src/modules/quotes/quotes.service.unit.test.ts`
+- `apps/backend/src/modules/quotes/quotes.service.chatwoot.test.ts`
+
+---
+
+## Dev Tooling
+
+| Tool | Purpose | Config |
+|------|---------|--------|
+| TypeScript 5.6 | Type checking & compilation | `apps/backend/tsconfig.json` |
+| ts-node-dev 2 | Dev hot-reload (backend) | `package.json` scripts |
+| dotenv-cli 11 | `.env` injection for CLI commands | devDependency in backend |
+| concurrently 9 | Parallel dev processes | root `package.json` |
+| kill-port 2 | Port cleanup before dev start | root `package.json` |
+
+**Linting/Formatting:** No ESLint, Prettier, or Biome config files detected in the repository. The only ESLint reference is a `// eslint-disable-next-line` comment in `apps/backend/src/main.ts`.
+
+---
+
+## Deployment & Hosting
+
+**Containerization:**
+- Docker multi-stage builds
+  - Backend: `apps/backend/Dockerfile` (base → deps → build → runtime)
+  - Frontend: `apps/frontend/Dockerfile` (deps → build → runtime)
+- Container images published to GitHub Container Registry: `ghcr.io/martoxak/bomcusto-backend:latest` and `ghcr.io/martoxak/bomcusto-frontend:latest`
+
+**VPS Stack:**
+- Compose file: `deploy/docker-compose.vps.yml`
+- Services: `postgres`, `backend`, `frontend`, `ts-webserver2` (Tailscale sidecar)
+- Backend shares Tailscale network namespace (`network_mode: service:ts-webserver2`) to reach the internal Tailnet
+- Nginx reverse proxy config: `deploy/nginx.conf`
+- Tailscale used for secure VPN tunnel between VPS and on-premise systems (Athos, PDV)
+
+**Ports (production):**
+- Frontend: `3001:3000`
+- Backend: `4001:4000` (via Tailscale container)
+- PostgreSQL: `5435:5432`
+
+**Environment file pattern:**
+- Dev: `.env.example` at repo root — copy to `.env` and fill values
+- Prod: `deploy/stack.env.example` — copy to `stack.env` and inject into VPS Docker stack
+
+**CI/CD:**
+- No `.github/workflows/` directory detected in this repo; images are expected to be pre-built and pushed to GHCR before deployment via `deploy/UPDATE_RUNBOOK.md`

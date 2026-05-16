@@ -1,169 +1,109 @@
-# Coding Conventions
+# CONVENTIONS.md
+_Last updated: 2026-05-15 | Focus: quality_
 
-**Analysis Date:** 2026-05-01
+## Summary
 
-## Naming Patterns
-
-**Files:**
-- Service files: `<feature>.service.ts` (e.g., `quotes.service.ts`, `chatwoot.service.ts`)
-- Controller files: `<feature>.controller.ts`
-- Module files: `<feature>.module.ts`
-- DTO files: `<action>-<noun>.dto.ts` (e.g., `create-quote.dto.ts`, `update-status.dto.ts`)
-- Test files: `<service>.test.ts` (e.g., `quotes.service.chatwoot.test.ts`)
-- Frontend pages: `page.tsx` inside route directory (Next.js App Router)
-
-**Classes:**
-- PascalCase for all class names: `QuotesService`, `CreateQuoteDto`, `PrismaService`
-- DTOs follow `<Action><Subject>Dto` pattern: `CreateQuoteDto`, `UpdateStatusDto`, `MergeDuplicatesDto`
-- Nested DTO helpers declared as non-exported classes in the same file: `QuoteProductDto`, `CreateQuoteItemDto`, `CreateCustomerDto`
-
-**Functions / Methods:**
-- camelCase: `create`, `list`, `getById`, `changeStatus`, `validateChatwootContext`
-- Frontend utility functions: camelCase prefixed with verb: `parseMaybeNumber`, `normalizePhone`, `descricaoTemCorValida`
-
-**Variables:**
-- camelCase throughout: `parsedTake`, `validConversationId`, `mockPrismaService`
-- Environment variable keys: SCREAMING_SNAKE_CASE: `CHATWOOT_BASE_URL`, `CHATWOOT_API_TOKEN`
-
-**Domain Fields:**
-- Legacy domain fields from external system use Portuguese snake_case to preserve compatibility: `idorcamento`, `idvenda`, `descricaoproduto`, `quantidadeitem`, `valoritem`, `dataorcamento`
-- New system fields use camelCase: `conversationId`, `chatwootContactId`, `vendedorNome`, `prazoEntrega`
-- Both naming styles coexist in `CreateQuoteDto` — do NOT normalize one to the other
-
-## Code Style
-
-**Formatting:**
-- No `.prettierrc` or `.eslintrc` files present in the repository
-- String literals use double quotes in TypeScript: `"use client"`, `import … from "…"`
-- Semicolons used at end of statements
-- Trailing commas in multi-line objects/arrays
-
-**TypeScript:**
-- `strict: true` in `apps/backend/tsconfig.json`
-- `target: es2021`, `module: Node16`, `moduleResolution: node16`
-- Definite assignment assertion `!` used for required DTO properties: `nome!: string`
-- Optional fields use `?`: `telefone?: string`
-- `allowSyntheticDefaultImports: true`, `esModuleInterop: true`
-- `skipLibCheck: true`
-- Node.js built-ins imported with `node:` prefix: `import path from "node:path"`
-
-**Linting:**
-- No ESLint config file; only inline suppression comment found: `// eslint-disable-next-line no-console`
-
-## DTO Patterns
-
-**Structure:**
-- All DTOs validated with `class-validator` decorators
-- Nested objects validated with `@ValidateNested()` + `@Type(() => NestedDto)` from `class-transformer`
-- Arrays validated with `@IsArray()` + `@ValidateNested({ each: true })` + `@Type(…)`
-- Optional fields always paired with `@IsOptional()` decorator before type decorators
-- Numeric minimums enforced with `@Min()`: quantity min 0.01, prices min 0
-- `@IsIn([…])` used for enum-style string validation: `"oldest" | "newest"`
-
-**Example Pattern (required field):**
-```typescript
-@IsString()
-nome!: string;
-```
-
-**Example Pattern (optional field):**
-```typescript
-@IsOptional()
-@IsEmail()
-email?: string;
-```
-
-**Example Pattern (nested with type):**
-```typescript
-@ValidateNested()
-@Type(() => QuoteProductDto)
-produto!: QuoteProductDto;
-```
-
-**Global Pipe (registered in `apps/backend/src/main.ts`):**
-```typescript
-app.useGlobalPipes(
-  new ValidationPipe({
-    whitelist: true,
-    transform: true,
-    forbidNonWhitelisted: true,
-  }),
-);
-```
-- `whitelist: true` — strips undeclared properties silently
-- `forbidNonWhitelisted: true` — throws 400 for unknown properties
-- `transform: true` — transforms plain objects to DTO class instances
-
-## Module Structure
-
-**NestJS Module Pattern** (one directory per feature under `apps/backend/src/modules/`):
-```
-<feature>/
-  <feature>.module.ts      # Module decorator, imports/exports
-  <feature>.controller.ts  # Route handlers, no business logic
-  <feature>.service.ts     # Business logic, Prisma operations
-  dto/                     # Request validation DTOs
-    create-<noun>.dto.ts
-    update-<noun>.dto.ts
-```
-
-**Module Registration:**
-- `forwardRef(() => Module)` used to resolve circular dependencies (e.g., `QuotesModule` ↔ `ChatwootModule`, `AthosModule`, `EfiModule`)
-- `ConfigModule.forRoot({ isGlobal: true })` registered once in `AppModule` — inject `ConfigService` directly in any service without re-importing
-
-**Service Dependencies:**
-- Inject `ConfigService` for all environment variable access — never use `process.env` directly inside services
-- `PrismaService` extends `PrismaClient` and implements `OnModuleInit`/`OnModuleDestroy`
-
-## Import Organization
-
-**Order (observed in backend files):**
-1. NestJS core imports (`@nestjs/common`, `@nestjs/config`)
-2. Third-party packages (`axios`, `class-validator`, `class-transformer`)
-3. Internal module imports (relative paths `./`, `../`)
-4. DTO imports last within a module
-
-**Path Aliases:** None configured — all internal imports use relative paths.
-
-## Error Handling
-
-**Patterns:**
-- Throw NestJS HTTP exceptions directly from service methods: `throw new BadRequestException("message")`, `throw new NotFoundException()`
-- Integration services (Chatwoot, EFI, PDV) return `{ enabled: false, message: "..." }` when env vars are missing — **never throw** when configuration is absent
-- Controller methods return service results directly — no try/catch wrappers at controller layer
-- Async/await throughout; no callback or Promise chain patterns
-
-**Fail-Safe Integration Pattern** (all external integration services):
-```typescript
-const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
-if (!baseUrl || !accountId || !token) {
-  return { enabled: false, message: "Configure ... no .env" };
-}
-// proceed with HTTP call
-```
-
-## Frontend Conventions
-
-**File Structure (`apps/frontend/src/app/`):**
-- Next.js App Router: each route is a `page.tsx` inside a named directory
-- Dynamic routes use `[id]` bracket syntax
-
-**Component Directives:**
-- `"use client"` at top of any file using browser APIs, React state, or `useEffect`
-- No `"use server"` directive observed
-
-**Utility Functions:**
-- Defined as plain functions (not classes) at the top of the file before the component
-- Parse helpers follow `parse<Type>Maybe` naming: `parseMaybeNumber`, `parseObjectMaybe`
-- Normalization helpers follow `normalize<Field>` naming: `normalizePhone`
-
-## Comments
-
-**When to Comment:**
-- Inline suppression comments for linter rules: `// eslint-disable-next-line no-console`
-- Test files use Portuguese for `describe`/`it` descriptions: `"deve aceitar payload sem Chatwoot IDs"`
-- Business logic comments rare — code is generally self-documenting through DTO field names
+The project follows NestJS and Next.js idiomatic conventions with TypeScript throughout. Portuguese names appear in domain types and Athos/Athos-legacy field names; everything else is English. No enforced linter config exists — conventions are maintained by code review and GSD phase standards.
 
 ---
 
-*Convention analysis: 2026-05-01*
+## Naming Conventions
+
+### Files
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| NestJS module | `<domain>.module.ts` | `quotes.module.ts` |
+| NestJS service | `<domain>.service.ts` | `quotes.service.ts` |
+| NestJS controller | `<domain>.controller.ts` | `athos.controller.ts` |
+| DTO | `<action>-<domain>.dto.ts` | `create-quote.dto.ts` |
+| Test | `<source>.test.ts` | `efi.webhook.test.ts` |
+| Utility | `<domain>-<purpose>.util.ts` | `athos-anexo.util.ts` |
+| Next.js page | `page.tsx` (inside route folder) | `app/orcamento/page.tsx` |
+| Next.js API route | `route.ts` (inside api/route folder) | `app/api/quotes/route.ts` |
+
+### Classes & Variables
+
+- Classes: `PascalCase` — `QuotesService`, `EfiWebhookGuard`
+- Functions/methods: `camelCase` — `processWebhook`, `enviarParaCliente`
+- Variables: `camelCase`
+- Constants: `UPPER_SNAKE_CASE` for env-derived values, `camelCase` for local consts
+- **Dual-naming rule**: Athos ERP legacy field names use Portuguese snake_case (e.g., `codigo_produto`, `valor_unitario`); all new application fields use camelCase English
+
+---
+
+## Code Style
+
+No `.eslintrc` or `.prettierrc` present — conventions are informal:
+
+- **Quotes**: double quotes in TypeScript source
+- **Semicolons**: always
+- **Trailing commas**: on multi-line objects and arrays
+- **Indentation**: 2 spaces
+- **TypeScript strict**: `strict: true` in tsconfig; `noImplicitAny` enforced
+- **No `any`**: avoided; use `unknown` + type guards when truly dynamic
+- **Decorators**: NestJS decorator pattern — `@Injectable()`, `@Controller()`, `@Get()`, etc.
+
+---
+
+## Import/Export Patterns
+
+Imports follow a 5-group ordering (blank line between groups):
+
+1. Node built-ins (`node:fs`, `node:crypto`)
+2. NestJS core (`@nestjs/common`, `@nestjs/config`)
+3. Third-party packages (`axios`, `prisma`)
+4. Internal shared (`packages/shared`)
+5. Local relative (`./quotes.service`, `../dto/create-quote.dto`)
+
+No path aliases configured — all imports use relative paths.
+
+**Exports**: services and controllers are exported from their module class only; DTOs are exported directly from their file (no barrel).
+
+---
+
+## Error Handling
+
+**Backend (NestJS):**
+- Throw NestJS exceptions directly from services: `throw new NotFoundException('...')`
+- Integration failures use a fail-safe pattern: return `{ enabled: false, message: '...' }` rather than throw, so the app stays functional when ERP/bank is down
+- Unknown errors: wrap in `new InternalServerErrorException(err.message)`
+
+**Frontend:**
+- API proxy routes use try/catch and return `{ error: message }` with appropriate HTTP status
+- React components catch errors locally; no global error boundary in place
+
+---
+
+## Logging
+
+- Use NestJS `Logger` class: `private readonly logger = new Logger(ClassName.name)`
+- Log levels: `log` for info, `warn` for recoverable issues, `error` for failures
+- `LoggingInterceptor` logs all incoming requests and response times automatically
+- Exception: `console.error` is used only in fire-and-forget async paths (e.g., `enviarParaCliente`) — this is a known inconsistency flagged in CONCERNS.md
+
+---
+
+## Git Commit Conventions
+
+Format: `type(scope): description` — scope is optional
+
+**Types observed:**
+`feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `style`, `perf`
+
+**Scopes observed:**
+`quotes`, `efi`, `athos`, `nfse`, `chatwoot`, `frontend`, `backend`, `db`, `auth`, `ci`, `deploy`
+
+**Language rule**: commit body may be Portuguese; subject line is English. GSD phase commits use GSD-generated messages.
+
+---
+
+## API Response Shapes
+
+| Pattern | Shape | Used for |
+|---------|-------|---------|
+| Paginated list | `{ total: number, data: T[] }` | Quote list, Athos item list |
+| Integration status | `{ enabled: boolean, message?: string }` | EFI, Athos, NFS-e health checks |
+| Quote detail | `QuoteRow` (from `packages/shared`) | Single quote fetch |
+| SSE event | `data: { type, payload }\n\n` | Real-time status updates |
+| Error | `{ statusCode, message, error }` | NestJS default exception format |
