@@ -14,6 +14,9 @@ export class AthosListenerService implements OnApplicationBootstrap, OnApplicati
   private readonly logger = new Logger(AthosListenerService.name);
   private client: Client | null = null;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private reconnectAttempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private enabled = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -27,18 +30,30 @@ export class AthosListenerService implements OnApplicationBootstrap, OnApplicati
     const database = process.env.ATHOS_PG_DB;
     const user = process.env.ATHOS_PG_USER;
     const password = process.env.ATHOS_PG_PASS;
-    const port = Number(process.env.ATHOS_PG_PORT ?? "5432");
 
     if (!host || !database || !user || !password) {
       this.logger.warn("Variaveis ATHOS_PG_* ausentes — listener desativado.");
       return;
     }
 
-    this.client = new Client({ host, database, user, password, port, connectionTimeoutMillis: 10_000 });
+    this.enabled = true;
+    await this.connect();
+  }
+
+  private async connect(): Promise<void> {
+    if (!this.enabled) return;
+
+    const host = process.env.ATHOS_PG_HOST!;
+    const database = process.env.ATHOS_PG_DB!;
+    const user = process.env.ATHOS_PG_USER!;
+    const password = process.env.ATHOS_PG_PASS!;
+    const port = Number(process.env.ATHOS_PG_PORT ?? "5432");
 
     try {
+      this.client = new Client({ host, database, user, password, port, connectionTimeoutMillis: 10_000 });
       await this.client.connect();
       await this.client.query(`LISTEN ${LISTEN_CHANNEL}`);
+      this.reconnectAttempt = 0;
       this.logger.log(`Athos listener conectado. Escutando canal: ${LISTEN_CHANNEL}`);
 
       this.client.on("notification", (msg) => {
@@ -48,8 +63,11 @@ export class AthosListenerService implements OnApplicationBootstrap, OnApplicati
 
       this.client.on("error", (err) => {
         this.logger.error(`Erro no client Athos listener: ${err.message}`);
+        this.client = null;
+        this.scheduleReconnect();
       });
 
+      if (this.keepAliveTimer) clearInterval(this.keepAliveTimer);
       this.keepAliveTimer = setInterval(() => {
         this.client?.query("SELECT 1").catch((err: Error) => {
           this.logger.warn(`Keep-alive falhou: ${err.message}`);
@@ -57,11 +75,22 @@ export class AthosListenerService implements OnApplicationBootstrap, OnApplicati
       }, KEEP_ALIVE_MS);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Falha ao iniciar Athos listener: ${msg}`);
+      this.logger.error(`Falha ao conectar Athos listener: ${msg}`);
+      this.scheduleReconnect();
     }
   }
 
+  private scheduleReconnect(): void {
+    if (!this.enabled) return;
+    const delay = Math.min(Math.pow(2, this.reconnectAttempt) * 1000, 30_000);
+    this.reconnectAttempt++;
+    this.logger.warn(`Reconectando em ${delay}ms (tentativa ${this.reconnectAttempt})`);
+    this.reconnectTimer = setTimeout(() => void this.connect(), delay);
+  }
+
   async onApplicationShutdown(): Promise<void> {
+    this.enabled = false;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.keepAliveTimer) clearInterval(this.keepAliveTimer);
     await this.client?.end().catch(() => undefined);
     this.logger.log("Athos listener encerrado.");
