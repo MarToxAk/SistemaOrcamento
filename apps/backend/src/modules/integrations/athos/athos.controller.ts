@@ -14,6 +14,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
+import { timingSafeEqual } from "crypto";
 import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiConsumes,
@@ -50,7 +51,13 @@ export class AthosController {
       xApiToken ||
       (authorization?.startsWith("Bearer ") ? authorization.slice(7) : authorization) ||
       undefined;
-    if (!provided || provided !== requiredToken) {
+    if (!provided) {
+      throw new UnauthorizedException("Token invalido ou ausente");
+    }
+    const providedBuf = Buffer.from(provided, "utf8");
+    const requiredBuf = Buffer.from(requiredToken, "utf8");
+    const isValid = providedBuf.length === requiredBuf.length && timingSafeEqual(providedBuf, requiredBuf);
+    if (!isValid) {
       throw new UnauthorizedException("Token invalido ou ausente");
     }
   }
