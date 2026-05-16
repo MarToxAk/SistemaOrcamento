@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
+import { CanActivate, ExecutionContext, Injectable, InternalServerErrorException, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHmac, timingSafeEqual } from "crypto";
 
@@ -25,7 +25,7 @@ export class EfiWebhookGuard implements CanActivate {
 
     const secret = this.configService.get<string>("EFI_WEBHOOK_SECRET")?.trim();
     if (!secret) {
-      return true;
+      throw new InternalServerErrorException("EFI_WEBHOOK_SECRET not configured — cannot validate webhook signature");
     }
 
     const raw = request.rawBody ?? Buffer.from(JSON.stringify(request.body ?? {}), "utf8");

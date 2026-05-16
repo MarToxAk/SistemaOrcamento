@@ -1,229 +1,126 @@
-# Testing Patterns
+# TESTING.md
+_Last updated: 2026-05-15 | Focus: quality_
 
-**Analysis Date:** 2026-05-01
+## Summary
 
-## Test Framework
+The backend uses Jest 30 with ts-jest for TypeScript transformation. There are 10 test files focused on service-layer unit tests and integration-boundary tests. No frontend tests exist. Coverage is growing but thin — core quote and EFI paths are well-covered; Athos, NFS-e, and the public status page have gaps.
 
-**Runner:**
-- Configured: `node --test` (Node.js built-in test runner, v18+)
-- **Critical mismatch:** The sole test file (`quotes.service.chatwoot.test.ts`) uses Jest API (`jest.fn()`, `jest.clearAllMocks()`, `expect(…).rejects.toThrow()`) — **not** Node.js built-in test API
-- **Jest is not listed in `devDependencies`** of `apps/backend/package.json` or the root `package.json`
-- Tests cannot be executed with the current `npm run test` command as configured
+---
 
-**Assertion Library:**
-- Jest expect API (used in test files, but Jest not installed)
+## Frameworks & Tooling
 
-**Run Commands:**
+| Tool | Version | Role |
+|------|---------|------|
+| Jest | ^30.3.0 | Test runner |
+| ts-jest | ^29.4.9 | TypeScript transformer for Jest |
+| @nestjs/testing | ^11.1.19 | NestJS test module builder |
+| @types/jest | ^30.0.0 | Type definitions |
+
+Config: `apps/backend/jest.config.js`
+- `rootDir: 'src'`
+- `testRegex: '.*\\.test\\.ts$'`
+- `testEnvironment: 'node'`
+- Coverage output: `apps/backend/coverage/`
+
+---
+
+## How to Run Tests
+
 ```bash
-npm run test                                      # Root: delegates to backend test
-npm --workspace @bomcusto/backend run test        # Runs: node --test dist/**/*.test.js
-```
+cd apps/backend
 
-**Compile step required before running:**
-```bash
-# Backend build excludes test files (tsconfig.build.json excludes **/*.test.ts)
-# Must use base tsconfig to compile tests:
-npx tsc -p apps/backend/tsconfig.json
-node --test apps/backend/dist/**/*.test.js
-```
+# Run all tests
+npm test
 
-> **Note:** Even with compilation, the Node.js built-in test runner does not support Jest globals (`jest.fn`, `jest.clearAllMocks`). Tests require Jest or a Jest-compatible shim to run.
+# Watch mode
+npm run test:watch
 
-## Test File Organization
-
-**Location:**
-- Co-located with source files in the same module directory
-- `apps/backend/src/modules/quotes/quotes.service.chatwoot.test.ts` (co-located with `quotes.service.ts`)
-
-**Naming:**
-- Pattern: `<module>.<subject>.test.ts`
-- Example: `quotes.service.chatwoot.test.ts` — scoped test for Chatwoot-specific behavior of `QuotesService`
-- No `*.spec.ts` files exist in the project
-
-**Total test files found:** 1 (`quotes.service.chatwoot.test.ts`)
-
-## Test Structure
-
-**Suite Organization:**
-```typescript
-import { Test, TestingModule } from "@nestjs/testing";
-import { BadRequestException } from "@nestjs/common";
-import { QuotesService } from "./quotes.service";
-
-describe("QuotesService - Chatwoot Validation", () => {
-  let service: QuotesService;
-
-  const mockPrismaService = { ... };  // inline mock object
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        QuotesService,
-        { provide: PrismaService, useValue: mockPrismaService },
-        ...
-      ],
-    }).compile();
-
-    service = module.get<QuotesService>(QuotesService);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe("<method group>", () => {
-    it("deve <expected behavior>", async () => { ... });
-  });
-});
-```
-
-**Patterns:**
-- Module setup via `Test.createTestingModule()` in `beforeEach`
-- `jest.clearAllMocks()` in `afterEach` to prevent state leakage
-- Nested `describe` blocks group behavior by method or context
-- Test descriptions in **Portuguese**: `"deve aceitar payload sem Chatwoot IDs"`
-- Async tests use `await expect(…).resolves/rejects`
-
-## Mocking
-
-**Framework:** `jest.fn()` (Jest mock API)
-
-**Patterns:**
-```typescript
-// Inline mock objects above beforeEach
-const mockPrismaService = {
-  $transaction: jest.fn(),
-  quote: {
-    create: jest.fn(),
-    findMany: jest.fn(),
-    findUnique: jest.fn(),
-    update: jest.fn(),
-  },
-  customer: {
-    findUnique: jest.fn(),
-    create: jest.fn(),
-  },
-};
-
-// Transaction mock with callback execution
-mockPrismaService.$transaction.mockImplementation(async (callback) => {
-  const mockTx = {
-    quote: { create: jest.fn().mockResolvedValue({ id: "1" }) },
-    quoteItem: { create: jest.fn() },
-    customer: { findUnique: jest.fn(), create: jest.fn().mockResolvedValue({ id: "cus1" }) },
-  };
-  return callback(mockTx);
-});
-```
-
-**What to Mock:**
-- All `PrismaService` methods (database operations)
-- External integration services: `AthosService`, `QuotesPdfStorageService`
-- `$transaction` must simulate callback pattern (pass `mockTx` to callback and return result)
-
-**What NOT to Mock:**
-- The service under test (`QuotesService`)
-- NestJS `@nestjs/testing` module infrastructure
-
-## Fixtures and Factories
-
-**Test Data:**
-```typescript
-// Inline payloads as typed objects inside each test case
-const payload: CreateQuoteDto = {
-  cliente: { nome: "João" },
-  itens: [
-    {
-      produto: { descricaoproduto: "Produto" },
-      quantidadeitem: 1,
-      valoritem: 100,
-    },
-  ],
-  conversationId: 12345,
-};
-```
-
-**Location:**
-- No shared fixture files or factory helpers — each test defines its own inline payload
-- Minimal payloads: only the fields required for the specific scenario under test
-
-## Coverage
-
-**Requirements:** Not enforced — no coverage configuration found
-
-**View Coverage:**
-```bash
-# No coverage script configured
-# Would require: npx jest --coverage (if Jest were installed)
-```
-
-## Test Types
-
-**Unit Tests:**
-- Service-level unit tests using `@nestjs/testing` module
-- Tests isolate a single service with all dependencies mocked
-- No HTTP-layer (controller) or end-to-end tests exist
-
-**Integration Tests:**
-- Not present
-
-**E2E Tests:**
-- Not present
-
-## Common Patterns
-
-**Async Testing (success):**
-```typescript
-it("deve aceitar payload sem Chatwoot IDs", async () => {
-  mockPrismaService.$transaction.mockImplementation(async (callback) => {
-    const mockTx = { ... };
-    return callback(mockTx);
-  });
-
-  await expect(service.create(payload)).resolves.toBeDefined();
-});
-```
-
-**Error Testing (exception):**
-```typescript
-it("deve rejeitar conversationId inválido (0)", async () => {
-  const payload: CreateQuoteDto = { ..., conversationId: 0 };
-
-  await expect(service.create(payload)).rejects.toThrow(BadRequestException);
-  await expect(service.create(payload)).rejects.toThrow("conversationId invalido");
-});
-```
-
-## Known Issues
-
-**Test runner / test API mismatch:**
-- `apps/backend/package.json` `test` script: `node --test dist/**/*.test.js`
-- Test file uses Jest API: `jest.fn()`, `jest.clearAllMocks()`, `expect().rejects.toThrow()`
-- `tsconfig.build.json` explicitly excludes `**/*.test.ts` from compilation output
-- Jest is absent from all `package.json` dependency lists
-- **Result:** `npm run test` will fail — tests cannot compile or execute with the current setup
-
-**Recommended fix to make tests runnable:**
-```json
-// apps/backend/package.json devDependencies
-"@nestjs/testing": "^10.x",
-"@types/jest": "^29.x",
-"jest": "^29.x",
-"ts-jest": "^29.x"
-```
-```bash
-# apps/backend/jest.config.js
-module.exports = {
-  preset: "ts-jest",
-  testEnvironment: "node",
-  testRegex: ".*\\.test\\.ts$",
-};
-```
-```json
-// apps/backend/package.json scripts
-"test": "jest"
+# Coverage report
+npm run test:coverage
 ```
 
 ---
 
-*Testing analysis: 2026-05-01*
+## Test File Locations
+
+All test files live co-located with the source they test:
+
+```
+apps/backend/src/
+  modules/
+    quotes/
+      quotes.service.test.ts              Quote URL regression + general service
+      quotes.service.chatwoot.test.ts     Chatwoot notification dispatch
+      quotes.service.unit.test.ts         Unit-level quote logic
+    integrations/
+      efi/
+        efi.service.test.ts               Webhook URL construction
+        efi.webhook.test.ts               ~14 processWebhook scenarios
+      nfse/
+        nfse.discount.test.ts             Discount XML field tests
+        nfse.service.test.ts              Tomador resolution + SOAP XML
+      athos/
+        athos-anexo.util.test.ts          Anexo utility functions
+        athos.controller.test.ts          Controller auth and routing
+        athos.service.test.ts             Athos service logic
+```
+
+---
+
+## Test Types
+
+| Type | Status | Notes |
+|------|--------|-------|
+| Unit (pure logic) | Present | `quotes.service.unit.test.ts`, utility tests |
+| Integration (module wiring) | Present | NestJS TestingModule pattern used in most tests |
+| E2E (HTTP) | Absent | No e2e or supertest tests exist |
+| Frontend | Absent | No tests in `apps/frontend/` |
+
+---
+
+## Mocking Patterns
+
+Tests use NestJS `TestingModule` with manual provider mocks:
+
+```typescript
+const module = await Test.createTestingModule({
+  providers: [
+    QuotesService,
+    { provide: PrismaService, useValue: mockPrisma },
+    { provide: EfiService, useValue: mockEfi },
+  ],
+}).compile();
+```
+
+No jest.mock() at module level — mocks are injected via the DI container.
+
+---
+
+## Coverage Assessment
+
+| Module | Coverage | Notes |
+|--------|----------|-------|
+| `quotes/` | Medium | Core paths covered; PDF and email paths not tested |
+| `integrations/efi/` | Good | Webhook scenarios well covered (14 cases) |
+| `integrations/nfse/` | Medium | Discount and tomador logic covered; SOAP error paths not |
+| `integrations/athos/` | Medium | Controller auth + service logic; schema discovery not tested |
+| `integrations/chatwoot/` | Low | Only via quotes.service.chatwoot.test.ts |
+| `integrations/pdv/` | None | Stub, no tests |
+| `common/`, `events/`, `security/` | None | No tests |
+| `apps/frontend/` | None | No tests |
+
+---
+
+## CI Integration
+
+No CI pipeline exists (no `.github/workflows/`, no `Dockerfile` test stage). Tests run manually in development only.
+
+---
+
+## Coverage Gaps (Priority Order)
+
+1. **Webhook guard** — the EFI webhook guard (critical security item) has no test for the missing-secret bypass case.
+2. **PDF generation** — `QuotesService` PDF path exercises Puppeteer but is entirely untested.
+3. **NFS-e SOAP error paths** — timeout, invalid XML response, and SOAP fault branches are not covered.
+4. **Security module** — JWT validation, IP allowlist guard, and the Athos timing-safe comparison have no tests.
+5. **Frontend** — zero test coverage; no framework configured.
