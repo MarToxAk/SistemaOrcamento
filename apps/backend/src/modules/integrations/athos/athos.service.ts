@@ -1364,14 +1364,14 @@ export class AthosService {
         throw new InternalServerErrorException("Tabela de anexos sem colunas obrigatorias para upload");
       }
 
-      const { directoryPath, fullPath, fileName } = buildContaPagarAnexoPaths(idcontapagar, file.originalname);
+      const { writeDirectoryPath, writeFullPath, dbFullPath, fileName } = buildContaPagarAnexoPaths(idcontapagar, file.originalname);
 
-      await mkdir(directoryPath, { recursive: true });
-      await writeFile(fullPath, file.buffer);
-      writtenFilePath = fullPath;
+      await mkdir(writeDirectoryPath, { recursive: true });
+      await writeFile(writeFullPath, file.buffer);
+      writtenFilePath = writeFullPath;
 
       this.logger.log(
-        `[Athos] anexarContaPagar: idcontapagar=${idcontapagar} idclientehistorico=${DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO}`,
+        `[Athos] anexarContaPagar: idcontapagar=${idcontapagar} idclientehistorico=${DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO} dbPath=${dbFullPath}`,
       );
 
       const result = await client.query<{ idanexo: number }>(
@@ -1381,7 +1381,7 @@ export class AthosService {
          RETURNING "${idAnexoColumn}" as "idanexo"`,
         [
           idfuncionario ?? 1,
-          fullPath,
+          dbFullPath,  // UNC path para o Athos ERP abrir no Windows
           fileName,
           DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO,
           idcontapagar,
@@ -1392,7 +1392,7 @@ export class AthosService {
         idanexo: Number(result.rows[0].idanexo),
         idcontapagar,
         arquivo: fileName,
-        caminhoanexo: fullPath,
+        caminhoanexo: dbFullPath,  // UNC retornado na resposta
       };
     } catch (error) {
       if (writtenFilePath) {

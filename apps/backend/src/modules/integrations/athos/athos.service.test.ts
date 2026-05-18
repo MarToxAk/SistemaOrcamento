@@ -865,7 +865,11 @@ describe("AthosService - anexarContaPagar", () => {
     process.env.ATHOS_PG_USER = "user";
     process.env.ATHOS_PG_PASS = "pass";
     process.env.ATHOS_PG_PORT = "5432";
+    // Garantir que o mount Linux não interfere — testes cobrem comportamento Windows/UNC
+    delete process.env.ATHOS_SMB_MOUNT_PATH;
   });
+
+  afterAll(() => { delete process.env.ATHOS_SMB_MOUNT_PATH; });
 
   beforeEach(async () => {
     jest.clearAllMocks();
