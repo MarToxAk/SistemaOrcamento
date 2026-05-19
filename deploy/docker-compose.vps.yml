@@ -97,9 +97,11 @@
       NFSE_SOAP_URL: ${NFSE_SOAP_URL}
       NFSE_AUX_URL: ${NFSE_AUX_URL}
       ATHOS_SMB_MOUNT_PATH: /mnt/samba/contapagar
+      SMB_USER: ${SMB_USER}
+      SMB_PASS: ${SMB_PASS}
 
-    volumes:
-      - samba_contapagar:/mnt/samba/contapagar
+    cap_add:
+      - SYS_ADMIN
 
     # Backend compartilha o namespace de rede do Tailscale para acessar a Tailnet.
 
@@ -120,12 +122,6 @@
 volumes:
   postgres_data:
   tailscale_data:
-  samba_contapagar:
-    driver: local
-    driver_opts:
-      type: cifs
-      o: "username=${SMB_USER},password=${SMB_PASS},uid=1000,gid=1000,vers=3.0,iocharset=utf8,file_mode=0664,dir_mode=0775"
-      device: "//192.168.3.203/html/Anexo/contapagar"
 
 networks:
   app_net:
