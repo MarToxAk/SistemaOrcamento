@@ -8,6 +8,7 @@ import {
   resolveContaPagarIdColumn,
 } from "./athos-conta-pagar.util";
 import { buildContaPagarAnexoPaths } from "./athos-anexo.util";
+import { isSmbEnabled, smbUnlinkContaPagarFile, smbWriteContaPagarFile } from "./athos-smb.util";
 import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
 import { UpdateContaPagarDto } from "./dto/update-conta-pagar.dto";
 
@@ -1481,6 +1482,7 @@ export class AthosService {
     const pool = this.getPool();
     let client: PoolClient | null = null;
     let writtenFilePath: string | null = null;
+    let writtenViaSMB = false;
 
     try {
       client = await pool.connect();
@@ -1544,9 +1546,15 @@ export class AthosService {
 
       const { writeDirectoryPath, writeFullPath, dbFullPath, fileName } = buildContaPagarAnexoPaths(idcontapagar, file.originalname);
 
-      await mkdir(writeDirectoryPath, { recursive: true });
-      await writeFile(writeFullPath, file.buffer);
-      writtenFilePath = writeFullPath;
+      if (isSmbEnabled()) {
+        await smbWriteContaPagarFile(idcontapagar, fileName, file.buffer);
+        writtenFilePath = fileName;
+        writtenViaSMB = true;
+      } else {
+        await mkdir(writeDirectoryPath, { recursive: true });
+        await writeFile(writeFullPath, file.buffer);
+        writtenFilePath = writeFullPath;
+      }
 
       this.logger.log(
         `[Athos] anexarContaPagar: idcontapagar=${idcontapagar} idclientehistorico=${DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO} dbPath=${dbFullPath}`,
@@ -1574,7 +1582,11 @@ export class AthosService {
       };
     } catch (error) {
       if (writtenFilePath) {
-        await unlink(writtenFilePath).catch(() => undefined);
+        if (writtenViaSMB) {
+          await smbUnlinkContaPagarFile(idcontapagar, writtenFilePath).catch(() => undefined);
+        } else {
+          await unlink(writtenFilePath).catch(() => undefined);
+        }
       }
 
       this.logger.error(`Erro ao anexar conta a pagar no Athos: ${error}`);
