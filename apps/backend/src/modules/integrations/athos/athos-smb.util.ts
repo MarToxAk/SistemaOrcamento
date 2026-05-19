@@ -1,6 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const SMB2 = require("@marsaud/smb2");
-
 type Smb2Client = {
   mkdir(path: string, cb: (err: Error | null) => void): void;
   writeFile(path: string, data: Buffer, cb: (err: Error | null) => void): void;
@@ -16,6 +13,9 @@ export function isSmbEnabled(): boolean {
 }
 
 function createClient(): Smb2Client {
+  // Lazy require — não carrega o módulo em tempo de importação (evita quebrar testes)
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const SMB2 = require("@marsaud/smb2");
   return new SMB2({
     share: SMB_SHARE,
     domain: process.env.SMB_DOMAIN ?? "WORKGROUP",
