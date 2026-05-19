@@ -120,6 +120,32 @@ export class AthosController {
   }
 
   @ApiOperation({
+    summary: "Listar bancos (livro_registro) do Athos",
+    description: "Retorna os registros de livro_registro disponiveis para escolher o banco na liquidacao de pagamento.",
+  })
+  @ApiQuery({ name: "idcontacorrente", required: false, example: "2", description: "Filtra por conta corrente" })
+  @ApiOkResponse({ description: "Lista de bancos para liquidacao" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("livros-registro")
+  async listarLivrosRegistro(
+    @Query("idcontacorrente") idcontacorrente?: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+
+    const parsedIdContaCorrente = typeof idcontacorrente === "string" && idcontacorrente.trim()
+      ? Number(idcontacorrente)
+      : undefined;
+
+    return this.athosService.listarLivrosRegistro(
+      Number.isInteger(parsedIdContaCorrente) && Number(parsedIdContaCorrente) > 0
+        ? Number(parsedIdContaCorrente)
+        : undefined,
+    );
+  }
+
+  @ApiOperation({
     summary: "Criar conta a pagar no Athos",
     description: "Insere novo registro na tabela conta_pagar do banco Athos e retorna o ID gerado.",
   })

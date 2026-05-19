@@ -728,6 +728,32 @@ describe("AthosService - updateContaPagar", () => {
         };
       }
 
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro") {
+        return {
+          rows: [
+            { column_name: "idlivroregistro" },
+            { column_name: "idcontacorrente" },
+            { column_name: "descricao" },
+            { column_name: "acesso" },
+            { column_name: "conciliacaobancaria" },
+          ],
+        };
+      }
+
+      if (text.includes('FROM "livro_registro"')) {
+        return {
+          rows: [
+            {
+              idlivroregistro: 1,
+              idcontacorrente: 2,
+              descricao: "Santander",
+              acesso: "BANCO",
+              conciliacaobancaria: true,
+            },
+          ],
+        };
+      }
+
       if (text.includes('INSERT INTO "livro_registro_io"')) {
         return { rows: [] };
       }
@@ -807,6 +833,33 @@ describe("AthosService - updateContaPagar", () => {
             { column_name: "idcontapagar" },
             { column_name: "idfuncionario" },
             { column_name: "valorsaida" },
+            { column_name: "idlivroregistro" },
+          ],
+        };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro") {
+        return {
+          rows: [
+            { column_name: "idlivroregistro" },
+            { column_name: "idcontacorrente" },
+            { column_name: "descricao" },
+            { column_name: "acesso" },
+            { column_name: "conciliacaobancaria" },
+          ],
+        };
+      }
+
+      if (text.includes('FROM "livro_registro"')) {
+        return {
+          rows: [
+            {
+              idlivroregistro: 1,
+              idcontacorrente: 2,
+              descricao: "Santander",
+              acesso: "BANCO",
+              conciliacaobancaria: true,
+            },
           ],
         };
       }
@@ -852,6 +905,92 @@ describe("AthosService - updateContaPagar", () => {
     });
 
     await expect(service.updateContaPagar(42, {})).rejects.toThrow("Nenhum campo valido informado para atualizacao");
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve exigir idlivroregistro quando houver mais de um banco disponivel", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+      if (text === "BEGIN" || text === "ROLLBACK") {
+        return { rows: [] };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "conta_pagar") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "statusconta" },
+            { column_name: "valorpago" },
+            { column_name: "idfuncionario" },
+            { column_name: "idorigempagamento" },
+          ],
+        };
+      }
+
+      if (text.includes('UPDATE "conta_pagar"')) {
+        return {
+          rows: [
+            {
+              idcontapagar: 42,
+              statusconta: "PAG",
+              valorpago: 600,
+              valorconta: 600,
+              datapagamento: "2026-05-11",
+              idfuncionario: 3,
+              idorigempagamento: 2,
+            },
+          ],
+        };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro_io") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "idfuncionario" },
+            { column_name: "valorsaida" },
+            { column_name: "idlivroregistro" },
+          ],
+        };
+      }
+
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro") {
+        return {
+          rows: [
+            { column_name: "idlivroregistro" },
+            { column_name: "idcontacorrente" },
+            { column_name: "descricao" },
+            { column_name: "acesso" },
+            { column_name: "conciliacaobancaria" },
+          ],
+        };
+      }
+
+      if (text.includes('FROM "livro_registro"')) {
+        return {
+          rows: [
+            { idlivroregistro: 1, idcontacorrente: 2, descricao: "Banco A", acesso: "BANCO", conciliacaobancaria: true },
+            { idlivroregistro: 2, idcontacorrente: 2, descricao: "Banco B", acesso: "BANCO", conciliacaobancaria: true },
+          ],
+        };
+      }
+
+      return { rows: [] };
+    });
+
+    await expect(
+      service.updateContaPagar(42, {
+        statusconta: "PAG",
+        valorpago: 600,
+        idfuncionario: 3,
+        idorigempagamento: 2,
+      }),
+    ).rejects.toThrow("Multiplos bancos encontrados");
+
     expect(client.release).toHaveBeenCalled();
   });
 });
@@ -1008,6 +1147,279 @@ describe("AthosService - anexarContaPagar", () => {
     expect(String(fsMock.unlink.mock.calls[0][0])).toMatch(
       /^\\\\192\.168\.3\.203\\html\\Anexo\\contapagar\\88\\[a-f0-9]{32}\.jpg$/,
     );
+    expect(client.release).toHaveBeenCalled();
+  });
+});
+
+describe("AthosService - criarContaPagar com novos campos do DTO", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module = await (await import("@nestjs/testing")).Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("deve incluir historicocontabil, idbudget e recorrenciafornecedor no INSERT quando presentes na tabela", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    const capturedInsertParams: unknown[] = [];
+
+    client.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+      if (text.includes("information_schema.columns")) {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "descricaoconta" },
+            { column_name: "datavencimento" },
+            { column_name: "valorconta" },
+            { column_name: "historicocontabil" },
+            { column_name: "idbudget" },
+            { column_name: "recorrenciafornecedor" },
+            { column_name: "numeronota" },
+          ],
+        };
+      }
+      if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) {
+        return { rows: [] };
+      }
+      if (text.includes("SELECT COALESCE(MAX(CAST")) {
+        return { rows: [{ next_id: 10 }] };
+      }
+      if (text.includes("INSERT INTO") && params) {
+        capturedInsertParams.push(...params);
+        return { rows: [{ idcontapagar: 10 }] };
+      }
+      return { rows: [] };
+    });
+
+    await service.criarContaPagar({
+      descricaoconta: "Suzano papel couche",
+      datavencimento: "2026-07-15",
+      valorconta: 8200,
+      historicocontabil: "Conta Suzano - papel couche",
+      idbudget: 2026,
+      recorrenciafornecedor: true,
+      numeronota: "NF-99887",
+    });
+
+    expect(capturedInsertParams).toContain("Conta Suzano - papel couche");
+    expect(capturedInsertParams).toContain(2026);
+    expect(capturedInsertParams).toContain(true);
+    expect(capturedInsertParams).toContain("NF-99887");
+  });
+
+  it("deve omitir campos novos do INSERT quando nao existem na tabela DB", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    const capturedSqls: string[] = [];
+
+    client.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      capturedSqls.push(text);
+      if (text.includes("information_schema.columns")) {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "descricaoconta" },
+            { column_name: "datavencimento" },
+            { column_name: "valorconta" },
+          ],
+        };
+      }
+      if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) {
+        return { rows: [] };
+      }
+      if (text.includes("SELECT COALESCE(MAX(CAST")) {
+        return { rows: [{ next_id: 11 }] };
+      }
+      if (text.includes("INSERT INTO")) {
+        return { rows: [{ idcontapagar: 11 }] };
+      }
+      return { rows: [] };
+    });
+
+    await service.criarContaPagar({
+      descricaoconta: "Aluguel",
+      datavencimento: "2026-07-01",
+      valorconta: 4500,
+      historicocontabil: "Conta aluguel",
+      idbudget: 2026,
+    });
+
+    const insertSql = capturedSqls.find((s) => s.includes("INSERT INTO"));
+    expect(insertSql).toBeDefined();
+    expect(insertSql).not.toContain("historicocontabil");
+    expect(insertSql).not.toContain("idbudget");
+  });
+});
+
+describe("AthosService - workflow: criar conta e liquidar pagamento", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module = await (await import("@nestjs/testing")).Test.createTestingModule({
+      providers: [AthosService],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("workflow completo: criarContaPagar retorna ID, updateContaPagar liquida com livro_registro_io", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+
+    // ---- FASE 1: criar ----
+    const createClient = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValueOnce(createClient);
+
+    createClient.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("information_schema.columns")) {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "descricaoconta" },
+            { column_name: "datavencimento" },
+            { column_name: "valorconta" },
+            { column_name: "statusconta" },
+            { column_name: "idfuncionario" },
+            { column_name: "valorpago" },
+            { column_name: "datapagamento" },
+          ],
+        };
+      }
+      if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) return { rows: [] };
+      if (text.includes("SELECT COALESCE(MAX(CAST")) return { rows: [{ next_id: 200 }] };
+      if (text.includes("INSERT INTO")) return { rows: [{ idcontapagar: 200 }] };
+      return { rows: [] };
+    });
+
+    const created = await service.criarContaPagar({
+      descricaoconta: "Fornecedor XYZ",
+      datavencimento: "2026-06-30",
+      valorconta: 1200,
+      statusconta: "ABE",
+    });
+
+    expect(created.idcontapagar).toBe(200);
+    expect(createClient.release).toHaveBeenCalled();
+
+    // ---- FASE 2: liquidar (PAG) ----
+    const updateClient = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValueOnce(updateClient);
+
+    updateClient.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+      if (text === "BEGIN" || text === "COMMIT") return { rows: [] };
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "conta_pagar") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "statusconta" },
+            { column_name: "valorpago" },
+            { column_name: "valorconta" },
+            { column_name: "datapagamento" },
+            { column_name: "idfuncionario" },
+            { column_name: "observacao" },
+          ],
+        };
+      }
+      if (text.includes('UPDATE "conta_pagar"')) {
+        return {
+          rows: [{
+            idcontapagar: 200,
+            statusconta: "PAG",
+            valorpago: 1200,
+            valorconta: 1200,
+            datapagamento: "2026-06-10",
+            idfuncionario: 5,
+          }],
+        };
+      }
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro_io") {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "idfuncionario" },
+            { column_name: "valorsaida" },
+            { column_name: "idlivroregistro" },
+            { column_name: "descricao" },
+          ],
+        };
+      }
+      if (text.includes("information_schema.columns") && Array.isArray(params) && params[0] === "livro_registro") {
+        return {
+          rows: [
+            { column_name: "idlivroregistro" },
+            { column_name: "idcontacorrente" },
+            { column_name: "descricao" },
+            { column_name: "acesso" },
+            { column_name: "conciliacaobancaria" },
+          ],
+        };
+      }
+      if (text.includes('FROM "livro_registro"')) {
+        return { rows: [{ idlivroregistro: 3, idcontacorrente: 1, descricao: "Santander", acesso: "BANCO", conciliacaobancaria: true }] };
+      }
+      if (text.includes('INSERT INTO "livro_registro_io"')) return { rows: [] };
+      return { rows: [] };
+    });
+
+    const updated = await service.updateContaPagar(200, {
+      statusconta: "PAG",
+      valorpago: 1200,
+      datapagamento: "2026-06-10",
+      idfuncionario: 5,
+    });
+
+    expect(updated.statusconta).toBe("PAG");
+    expect(updated.valorpago).toBe(1200);
+
+    const sqls = updateClient.query.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((s) => s.includes('INSERT INTO "livro_registro_io"'))).toBe(true);
+    expect(updateClient.release).toHaveBeenCalled();
+  });
+
+  it("workflow: dataInicio > dataFinal deve rejeitar antes de chamar DB", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query.mockResolvedValue({
+      rows: [{ column_name: "datavencimento" }, { column_name: "statusconta" }],
+    });
+
+    await expect(
+      service.listarContasPagar("2026-12-31", "2026-01-01"),
+    ).rejects.toThrow("dataInicio nao pode ser maior que dataFinal");
+
     expect(client.release).toHaveBeenCalled();
   });
 });
