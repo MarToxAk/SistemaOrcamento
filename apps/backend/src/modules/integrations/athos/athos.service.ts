@@ -149,6 +149,156 @@ function pickNumberFromUnknown(value: unknown) {
   return null;
 }
 
+function pickBooleanFromUnknown(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "t", "sim", "s", "yes", "y"].includes(normalized)) {
+      return true;
+    }
+    if (["0", "false", "f", "nao", "n", "no"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return null;
+}
+
+type LivroRegistroOption = {
+  idlivroregistro: number;
+  idcontacorrente: number | null;
+  descricao: string;
+  acesso: string;
+  conciliacaobancaria: boolean | null;
+};
+
+async function loadLivroRegistroOptions(client: Pick<Client, "query">, filterIdContaCorrente?: number) {
+  const livroRegistroTable = await findExistingTable(client, ["livro_registro", "livroregistro"]);
+
+  if (!livroRegistroTable || !isSafeIdentifier(livroRegistroTable.tableName)) {
+    return [] as LivroRegistroOption[];
+  }
+
+  const idLivroRegistroColumn = ["idlivroregistro", "id_livro_registro", "id"].find(
+    (column) => livroRegistroTable.columns.has(column) && isSafeIdentifier(column),
+  );
+  const idContaCorrenteColumn = ["idcontacorrente", "id_conta_corrente"].find(
+    (column) => livroRegistroTable.columns.has(column) && isSafeIdentifier(column),
+  );
+  const descricaoColumn = ["descricao", "descricao_livro"].find(
+    (column) => livroRegistroTable.columns.has(column) && isSafeIdentifier(column),
+  );
+  const acessoColumn = ["acesso"].find((column) => livroRegistroTable.columns.has(column) && isSafeIdentifier(column));
+  const conciliacaoColumn = ["conciliacaobancaria", "conciliacao_bancaria"].find(
+    (column) => livroRegistroTable.columns.has(column) && isSafeIdentifier(column),
+  );
+
+  if (!idLivroRegistroColumn) {
+    return [] as LivroRegistroOption[];
+  }
+
+  const selectedColumns = [
+    `CAST("${idLivroRegistroColumn}" AS INTEGER) AS "idlivroregistro"`,
+    idContaCorrenteColumn
+      ? `CAST("${idContaCorrenteColumn}" AS INTEGER) AS "idcontacorrente"`
+      : `NULL::INTEGER AS "idcontacorrente"`,
+    descricaoColumn ? `COALESCE(CAST("${descricaoColumn}" AS TEXT), '') AS "descricao"` : `'' AS "descricao"`,
+    acessoColumn ? `COALESCE(CAST("${acessoColumn}" AS TEXT), '') AS "acesso"` : `'' AS "acesso"`,
+    conciliacaoColumn
+      ? `CAST("${conciliacaoColumn}" AS BOOLEAN) AS "conciliacaobancaria"`
+      : `NULL::BOOLEAN AS "conciliacaobancaria"`,
+  ];
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (Number.isInteger(filterIdContaCorrente) && Number(filterIdContaCorrente) > 0 && idContaCorrenteColumn) {
+    params.push(Number(filterIdContaCorrente));
+    conditions.push(`CAST("${idContaCorrenteColumn}" AS INTEGER) = $${params.length}`);
+  }
+
+  if (conciliacaoColumn) {
+    conditions.push(`("${conciliacaoColumn}" IS NULL OR "${conciliacaoColumn}" = true)`);
+  }
+
+  const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
+  const query = `
+    SELECT ${selectedColumns.join(", ")}
+    FROM "${livroRegistroTable.tableName}"${whereClause}
+    ORDER BY "idlivroregistro" ASC
+  `;
+
+  const result = await client.query<Row>(query, params);
+
+  return (result.rows as Row[])
+    .map((row) => {
+      const idlivroregistro = pickIntFromUnknown(row.idlivroregistro);
+      if (!idlivroregistro || idlivroregistro <= 0) {
+        return null;
+      }
+
+      return {
+        idlivroregistro,
+        idcontacorrente: pickIntFromUnknown(row.idcontacorrente),
+        descricao: String(row.descricao ?? "").trim(),
+        acesso: String(row.acesso ?? "").trim(),
+        conciliacaobancaria: pickBooleanFromUnknown(row.conciliacaobancaria),
+      } as LivroRegistroOption;
+    })
+    .filter((item): item is LivroRegistroOption => item !== null);
+}
+
+async function resolveLivroRegistroIdForLiquidacao(
+  client: Pick<Client, "query">,
+  dto: UpdateContaPagarDto,
+  contaAtualizada: Record<string, unknown>,
+) {
+  const requestedLivroRegistroId = pickIntFromUnknown((dto as Record<string, unknown>).idlivroregistro);
+  const origemPagamentoIds = [
+    pickIntFromUnknown((dto as Record<string, unknown>).idorigempagamento),
+    pickIntFromUnknown(contaAtualizada.idorigempagamento),
+  ].filter((value): value is number => typeof value === "number" && Number.isInteger(value) && value > 0);
+
+  if (requestedLivroRegistroId && requestedLivroRegistroId > 0) {
+    const todosLivros = await loadLivroRegistroOptions(client);
+    const escolhido = todosLivros.find((item) => item.idlivroregistro === requestedLivroRegistroId);
+    if (!escolhido) {
+      throw new BadRequestException(`idlivroregistro ${requestedLivroRegistroId} nao encontrado no Athos`);
+    }
+    return escolhido.idlivroregistro;
+  }
+
+  for (const origemPagamentoId of origemPagamentoIds) {
+    const livrosDaConta = await loadLivroRegistroOptions(client, origemPagamentoId);
+    if (livrosDaConta.length === 1) {
+      return livrosDaConta[0].idlivroregistro;
+    }
+    if (livrosDaConta.length > 1) {
+      throw new BadRequestException(
+        `Multiplos bancos encontrados para a conta ${origemPagamentoId}. Informe idlivroregistro ao liquidar o pagamento.`,
+      );
+    }
+  }
+
+  const livrosDisponiveis = await loadLivroRegistroOptions(client);
+  if (livrosDisponiveis.length === 0) {
+    throw new NotFoundException("Tabela livro_registro nao encontrada ou sem registros para liquidacao");
+  }
+
+  if (livrosDisponiveis.length > 1) {
+    throw new BadRequestException("Existe mais de um banco no Athos. Informe idlivroregistro ao liquidar o pagamento.");
+  }
+
+  return livrosDisponiveis[0].idlivroregistro;
+}
+
 function parseDateFilter(value: string, fieldName: string, endOfDay = false) {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -576,6 +726,33 @@ export class AthosService {
         throw error;
       }
       throw new InternalServerErrorException("Erro ao listar contas a pagar no Athos");
+    } finally {
+      client.release();
+    }
+  }
+
+  async listarLivrosRegistro(idContaCorrente?: number): Promise<LivroRegistroOption[]> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+
+    try {
+      const normalizedIdContaCorrente =
+        typeof idContaCorrente === "number" && Number.isInteger(idContaCorrente) && idContaCorrente > 0
+          ? idContaCorrente
+          : undefined;
+
+      const livros = await loadLivroRegistroOptions(client, normalizedIdContaCorrente);
+      if (livros.length === 0) {
+        throw new NotFoundException("Nenhum banco encontrado em livro_registro no Athos");
+      }
+
+      return livros;
+    } catch (error) {
+      this.logger.error(`Erro ao listar livro_registro no Athos: ${error}`);
+      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new InternalServerErrorException("Erro ao listar livro_registro no Athos");
     } finally {
       client.release();
     }
@@ -1177,9 +1354,10 @@ export class AthosService {
         const livroParams: unknown[] = [idcontapagar, idFuncionario, valorSaida];
 
         if (livroIdLivroRegistroColumn) {
+          const livroRegistroSelecionado = await resolveLivroRegistroIdForLiquidacao(client, dto, contaAtualizada);
           livroColumns.push(`"${livroIdLivroRegistroColumn}"`);
           livroValues.push(`$${livroParams.length + 1}`);
-          livroParams.push(1);
+          livroParams.push(livroRegistroSelecionado);
         }
 
         const dataPagamento = String(contaAtualizada.datapagamento ?? "").trim();

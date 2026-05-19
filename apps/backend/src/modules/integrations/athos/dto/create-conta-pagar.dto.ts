@@ -156,6 +156,12 @@ export class CreateContaPagarDto {
   @IsInt()
   idorigempagamento?: number;
 
+  @ApiPropertyOptional({ example: 3, description: "ID do livro_registro (banco) para liquidacao" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  idlivroregistro?: number;
+
   @ApiPropertyOptional({ example: "2026-05-11T10:15:00.000Z", description: "Ultima alteracao" })
   @IsOptional()
   @IsDateString()
