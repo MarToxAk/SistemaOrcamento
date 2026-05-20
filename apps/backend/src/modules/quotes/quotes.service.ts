@@ -1022,51 +1022,34 @@ export class QuotesService {
     const convId = quote.conversationId ? String(quote.conversationId) : undefined;
     if (!convId) throw new BadRequestException("conversationId ausente no orcamento");
 
-    // Tentar pegar o documento PDF mais recente
-    let latestDocument = await this.prisma.quoteDocument.findFirst({ where: { quoteId: quote.id }, orderBy: { generatedAt: "desc" } });
+    let fileBuffer: Buffer;
+    let fileName: string;
+    let contentType: string;
 
-    let fileBuffer: Buffer | null = null;
-    let fileName = latestDocument?.fileName ?? `Orcamento-${quote.internalNumber}.pdf`;
-    let contentType = latestDocument?.contentType ?? "application/pdf";
+    try {
+      const stored = await this.quotesPdfStorageService.generateAndStore(this.mapQuoteBody(quote).body);
 
-    if (latestDocument && latestDocument.storagePath) {
       try {
-        fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(latestDocument.storagePath);
+        await this.prisma.quoteDocument.create({
+          data: {
+            quoteId: quote.id,
+            fileName: stored.fileName,
+            contentType: stored.contentType,
+            storagePath: stored.objectName,
+            publicUrl: stored.publicUrl,
+            generatedBy: "resend",
+          },
+        });
       } catch (err) {
-        this.logger.warn(`Falha ao baixar PDF do storage para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
-        fileBuffer = null;
+        this.logger.debug(`Falha ao persistir QuoteDocument apos gerar PDF para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
-    }
 
-    // Se nao temos buffer do storage, gerar e salvar um novo PDF
-          if (!fileBuffer) {
-            try {
-              // Para gerar o PDF, use o formato esperado pelo gerador (mapQuoteBody)
-              const stored = await this.quotesPdfStorageService.generateAndStore(this.mapQuoteBody(quote).body);
-
-        // Persistir registro de documento
-        try {
-          await this.prisma.quoteDocument.create({
-            data: {
-              quoteId: quote.id,
-              fileName: stored.fileName,
-              contentType: stored.contentType,
-              storagePath: stored.objectName,
-              publicUrl: stored.publicUrl,
-              generatedBy: "resend",
-            },
-          });
-        } catch (err) {
-          this.logger.debug(`Falha ao persistir QuoteDocument apos gerar PDF para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
-        }
-
-        fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(stored.objectName);
-        fileName = stored.fileName;
-        contentType = stored.contentType;
-      } catch (err) {
-        this.logger.warn(`Falha ao gerar PDF para reenvio do orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
-        throw new BadRequestException("Falha ao obter/gerar PDF para reenvio");
-      }
+      fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(stored.objectName);
+      fileName = stored.fileName;
+      contentType = stored.contentType;
+    } catch (err) {
+      this.logger.warn(`Falha ao gerar PDF para reenvio do orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
+      throw new BadRequestException("Falha ao obter/gerar PDF para reenvio");
     }
 
     // Envia o anexo para o Chatwoot
@@ -1916,57 +1899,30 @@ export class QuotesService {
       if (convId) {
         await this.chatwootService.sendOutgoingMessage(convId, finalMessage);
 
-        // Tentar anexar o PDF: usar documento salvo ou gerar um novo se necessário
+        // Sempre regera o PDF com o template mais recente antes de anexar
         try {
-          let latestDocument = await this.prisma.quoteDocument.findFirst({ where: { quoteId: quote.id }, orderBy: { generatedAt: "desc" } });
+          const stored = await this.quotesPdfStorageService.generateAndStore(this.mapQuoteBody(quote).body);
 
-          let fileBuffer: Buffer | null = null;
-          let fileName = latestDocument?.fileName ?? `Orcamento-${quote.internalNumber}.pdf`;
-          let contentType = latestDocument?.contentType ?? "application/pdf";
-
-          if (latestDocument && latestDocument.storagePath) {
-            try {
-              fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(latestDocument.storagePath);
-            } catch (err) {
-              this.logger.warn(`Falha ao baixar PDF do storage para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
-              fileBuffer = null;
-            }
+          try {
+            await this.prisma.quoteDocument.create({
+              data: {
+                quoteId: quote.id,
+                fileName: stored.fileName,
+                contentType: stored.contentType,
+                storagePath: stored.objectName,
+                publicUrl: stored.publicUrl,
+                generatedBy: "enviar",
+              },
+            });
+          } catch (err) {
+            this.logger.debug(`Falha ao persistir QuoteDocument apos gerar PDF para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
           }
 
-          if (!fileBuffer) {
-            try {
-              // Gerar PDF a partir do formato interno esperado pelo gerador
-              const stored = await this.quotesPdfStorageService.generateAndStore(this.mapQuoteBody(quote).body);
-
-              try {
-                await this.prisma.quoteDocument.create({
-                  data: {
-                    quoteId: quote.id,
-                    fileName: stored.fileName,
-                    contentType: stored.contentType,
-                    storagePath: stored.objectName,
-                    publicUrl: stored.publicUrl,
-                    generatedBy: "enviar",
-                  },
-                });
-              } catch (err) {
-                this.logger.debug(`Falha ao persistir QuoteDocument apos gerar PDF para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
-              }
-
-              fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(stored.objectName);
-              fileName = stored.fileName;
-              contentType = stored.contentType;
-            } catch (err) {
-              this.logger.warn(`Falha ao gerar PDF para anexo no enviarParaCliente ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          }
-
-          if (fileBuffer) {
-            try {
-              await this.chatwootService.sendAttachment(convId, fileBuffer, fileName, contentType);
-            } catch (err) {
-              this.logger.warn(`Falha ao enviar anexo PDF ao Chatwoot para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
-            }
+          const fileBuffer = await this.quotesPdfStorageService.downloadObjectBuffer(stored.objectName);
+          try {
+            await this.chatwootService.sendAttachment(convId, fileBuffer, stored.fileName, stored.contentType);
+          } catch (err) {
+            this.logger.warn(`Falha ao enviar anexo PDF ao Chatwoot para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
           }
         } catch (err) {
           this.logger.debug(`Erro no fluxo de anexo de PDF para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
