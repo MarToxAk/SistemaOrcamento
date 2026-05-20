@@ -41,7 +41,10 @@ function toSmbError(operation: string, targetPath: string, error: unknown): Erro
 }
 
 export function isSmbEnabled(): boolean {
-  return !!(process.env.SMB_USER?.trim() && process.env.SMB_PASS?.trim());
+  // Permite SMB2 mesmo com usuário/senha vazios (guest/public)
+  // Só retorna false se explicitamente desabilitado por env
+  if (process.env.SMB_ENABLED?.trim() === "false") return false;
+  return true;
 }
 
 function createClient(): Smb2Client {
