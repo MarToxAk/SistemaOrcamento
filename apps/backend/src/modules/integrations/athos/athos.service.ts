@@ -1546,6 +1546,8 @@ export class AthosService {
 
       const { writeDirectoryPath, writeFullPath, dbFullPath, fileName } = buildContaPagarAnexoPaths(idcontapagar, file.originalname);
 
+      const storageMode = !hasSmbMountPath() && isSmbEnabled() ? "smb2" : hasSmbMountPath() ? "mount" : "local";
+
       if (!hasSmbMountPath() && isSmbEnabled()) {
         await smbWriteContaPagarFile(idcontapagar, fileName, file.buffer);
         writtenFilePath = fileName;
@@ -1557,7 +1559,7 @@ export class AthosService {
       }
 
       this.logger.log(
-        `[Athos] anexarContaPagar: idcontapagar=${idcontapagar} idclientehistorico=${DEFAULT_ATHOS_ANEXO_IDCLIENTEHISTORICO} dbPath=${dbFullPath}`,
+        `[Athos] anexarContaPagar: idcontapagar=${idcontapagar} arquivo=${fileName} modo=${storageMode} writePath=${writeFullPath} dbPath=${dbFullPath}`,
       );
 
       const result = await client.query<{ idanexo: number }>(
