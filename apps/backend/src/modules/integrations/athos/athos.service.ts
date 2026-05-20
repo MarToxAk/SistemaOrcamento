@@ -8,7 +8,7 @@ import {
   resolveContaPagarIdColumn,
 } from "./athos-conta-pagar.util";
 import { buildContaPagarAnexoPaths, hasSmbMountPath } from "./athos-anexo.util";
-import { isSmbEnabled, smbUnlinkContaPagarFile, smbWriteContaPagarFile } from "./athos-smb.util";
+import { getSmbDebugInfo, isSmbEnabled, smbUnlinkContaPagarFile, smbWriteContaPagarFile } from "./athos-smb.util";
 import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
 import { UpdateContaPagarDto } from "./dto/update-conta-pagar.dto";
 
@@ -1483,6 +1483,10 @@ export class AthosService {
     let client: PoolClient | null = null;
     let writtenFilePath: string | null = null;
     let writtenViaSMB = false;
+    let storageMode = "unknown";
+    let writeFullPath = "";
+    let dbFullPath = "";
+    let fileName = "";
 
     try {
       client = await pool.connect();
@@ -1544,9 +1548,13 @@ export class AthosService {
         throw new InternalServerErrorException("Tabela de anexos sem colunas obrigatorias para upload");
       }
 
-      const { writeDirectoryPath, writeFullPath, dbFullPath, fileName } = buildContaPagarAnexoPaths(idcontapagar, file.originalname);
+      const { writeDirectoryPath, writeFullPath: computedWriteFullPath, dbFullPath: computedDbFullPath, fileName: computedFileName } =
+        buildContaPagarAnexoPaths(idcontapagar, file.originalname);
 
-      const storageMode = !hasSmbMountPath() && isSmbEnabled() ? "smb2" : hasSmbMountPath() ? "mount" : "local";
+      writeFullPath = computedWriteFullPath;
+      dbFullPath = computedDbFullPath;
+      fileName = computedFileName;
+      storageMode = !hasSmbMountPath() && isSmbEnabled() ? "smb2" : hasSmbMountPath() ? "mount" : "local";
 
       if (!hasSmbMountPath() && isSmbEnabled()) {
         await smbWriteContaPagarFile(idcontapagar, fileName, file.buffer);
@@ -1591,7 +1599,10 @@ export class AthosService {
         }
       }
 
-      this.logger.error(`Erro ao anexar conta a pagar no Athos: ${error}`);
+      const smbDetails = getSmbDebugInfo();
+      this.logger.error(
+        `Erro ao anexar conta a pagar no Athos: modo=${storageMode} idcontapagar=${idcontapagar} arquivo=${fileName || "<nao-gerado>"} writePath=${writeFullPath || "<nao-definido>"} dbPath=${dbFullPath || "<nao-definido>"} smbShare=${smbDetails.share} smbDomain=${smbDetails.domain} smbUser=${smbDetails.userMasked} causa=${String(error)}`,
+      );
       if (
         error instanceof BadRequestException ||
         error instanceof InternalServerErrorException ||
