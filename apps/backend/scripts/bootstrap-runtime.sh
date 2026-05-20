@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+case " ${NODE_OPTIONS-} " in
+  *" --openssl-legacy-provider "*)
+    ;;
+  *)
+    export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--openssl-legacy-provider"
+    ;;
+esac
+
 echo "[bootstrap] waiting for PostgreSQL readiness"
 node apps/backend/scripts/wait-for-db.js
 
