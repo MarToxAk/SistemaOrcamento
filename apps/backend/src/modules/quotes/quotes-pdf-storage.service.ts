@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import { Injectable, InternalServerErrorException, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Handlebars from "handlebars";
 import { Client as MinioClient } from "minio";
@@ -40,6 +40,8 @@ const HTML_TEMPLATE = QUOTES_PDF_HTML_TEMPLATE;
 
 @Injectable()
 export class QuotesPdfStorageService {
+  private readonly logger = new Logger(QuotesPdfStorageService.name);
+
   constructor(private readonly configService: ConfigService) {}
 
   async generateAndStore(payload: QuotePdfData): Promise<StoredPdfResult> {
@@ -48,8 +50,10 @@ export class QuotesPdfStorageService {
     const fileName = `Orçamento - ${quoteNumber}.pdf`;
     const objectName = `${this.getPathPrefix()}/${quoteNumber}/${fileName}`;
 
+    this.logger.log(`Gerando PDF — orçamento ${quoteNumber}, template v2 (${QUOTES_PDF_HTML_TEMPLATE.length} chars)`);
     const html = this.renderHtml(payload);
     const pdfBuffer = await this.renderPdfBuffer(html);
+    this.logger.log(`PDF gerado — ${pdfBuffer.length} bytes`);
 
     const client = this.buildMinioClient();
     const bucket = this.requireEnv("MINIO_BUCKET");
@@ -129,7 +133,7 @@ export class QuotesPdfStorageService {
   private async renderPdfBuffer(html: string): Promise<Buffer> {
     const browser = await puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
     });
 
     // A4 at 96 DPI: 794 x 1122 px
@@ -139,7 +143,13 @@ export class QuotesPdfStorageService {
     try {
       const page = await browser.newPage();
       await page.setViewport({ width: A4_WIDTH_PX, height: A4_HEIGHT_PX, deviceScaleFactor: 1 });
-      await page.setContent(html, { waitUntil: "networkidle0" });
+
+      // "load" aguarda o evento load (CSS + fonts incluídas) sem travar em
+      // networkidle0 que pode timeout quando CDNs externas demoram.
+      await page.setContent(html, { waitUntil: "load", timeout: 60000 });
+
+      // Aguarda um tick extra para garantir que fontes web sejam aplicadas
+      await new Promise((r) => setTimeout(r, 500));
 
       // Calculate scale to guarantee single-page output
       const contentHeight = await page.evaluate(() => document.documentElement.scrollHeight);
