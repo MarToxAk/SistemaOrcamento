@@ -66,6 +66,17 @@ function callAsync(fn: (cb: (err: Error | null) => void) => void): Promise<void>
   });
 }
 
+function isIgnorableMkdirError(error: unknown): boolean {
+  const msg = String(error).toLowerCase();
+  return (
+    msg.includes("status_object_name_collision") ||
+    msg.includes("status_object_path_collision") ||
+    msg.includes("already exists") ||
+    msg.includes("file/folder already exists") ||
+    msg.includes("eexist")
+  );
+}
+
 export async function smbWriteContaPagarFile(
   idcontapagar: number,
   fileName: string,
@@ -77,8 +88,7 @@ export async function smbWriteContaPagarFile(
 
   try {
     await callAsync((cb) => client.mkdir(dirPath, cb)).catch((err: unknown) => {
-      const msg = String(err);
-      if (!msg.includes("STATUS_OBJECT_NAME_COLLISION") && !msg.includes("STATUS_OBJECT_PATH_COLLISION")) {
+      if (!isIgnorableMkdirError(err)) {
         throw toSmbError("mkdir", dirPath, err);
       }
     });
