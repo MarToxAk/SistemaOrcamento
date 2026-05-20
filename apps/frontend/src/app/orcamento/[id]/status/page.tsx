@@ -103,7 +103,7 @@ export default function StatusPage() {
           <div className="status-header text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/media/logo_new.svg"
+              src="/media/logo-primary.png"
               alt="Bom Custo Papelaria &amp; Gráfica Rápida"
               style={{ maxWidth: 140, maxHeight: 80, background: "#fff", borderRadius: 8, padding: 6 }}
             />

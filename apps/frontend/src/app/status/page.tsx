@@ -301,7 +301,7 @@ export default function StatusPage() {
       <div className="container my-4">
         <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top">
           <div className="d-flex align-items-center gap-3 flex-wrap">
-            <img src="/media/logo_new.svg" alt="Logo Bom Custo" className="logo-img" />
+            <img src="/media/logo-primary.png" alt="Logo Bom Custo" className="logo-img" />
             <div>
               <h3 className="mb-1">Produção de Orçamentos</h3>
               <div className="small d-flex align-items-center gap-2">
