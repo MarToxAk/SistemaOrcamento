@@ -6,7 +6,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   chromium \
   ca-certificates \
   fonts-liberation \
-  cifs-utils \
   && rm -rf /var/lib/apt/lists/*
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true
