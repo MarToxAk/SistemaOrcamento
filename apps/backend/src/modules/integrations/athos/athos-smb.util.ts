@@ -16,9 +16,10 @@ function createClient(): Smb2Client {
   // Lazy require — não carrega o módulo em tempo de importação (evita quebrar testes)
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const SMB2 = require("@marsaud/smb2");
+  const smbDomain = process.env.SMB_DOMAIN?.trim() || "WORKGROUP";
   return new SMB2({
     share: SMB_SHARE,
-    domain: process.env.SMB_DOMAIN ?? "WORKGROUP",
+    domain: smbDomain,
     username: process.env.SMB_USER,
     password: process.env.SMB_PASS,
   }) as Smb2Client;
