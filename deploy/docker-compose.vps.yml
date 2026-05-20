@@ -67,6 +67,7 @@
       ATHOS_PG_PASS: ${ATHOS_PG_PASS}
       ATHOS_PG_PORT: ${ATHOS_PG_PORT}
       ATHOS_API_TOKEN: ${ATHOS_API_TOKEN}
+      ATHOS_SMB_MOUNT_PATH: ${ATHOS_SMB_MOUNT_PATH}
       PDV_DB_URL: ${PDV_DB_URL}
       PDV_DB_SCHEMA: ${PDV_DB_SCHEMA}
       PDV_DB_READONLY_USER: ${PDV_DB_READONLY_USER}
@@ -98,6 +99,12 @@
       NFSE_AUX_URL: ${NFSE_AUX_URL}
       SMB_USER: ${SMB_USER}
       SMB_PASS: ${SMB_PASS}
+
+    # Volumes opcionais: descomente e configure ATHOS_SMB_HOST_MOUNT_PATH e ATHOS_SMB_MOUNT_PATH
+    # somente se o host VPS tiver acesso direto ao share Samba e precisar de bind mount.
+    # Com Tailscale, o backend usa SMB2 via TCP direto — nenhum mount é necessário.
+    # volumes:
+    #   - ${ATHOS_SMB_HOST_MOUNT_PATH}:${ATHOS_SMB_MOUNT_PATH}
 
     # Backend compartilha o namespace de rede do Tailscale para acessar a Tailnet.
 

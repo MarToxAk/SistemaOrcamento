@@ -7,7 +7,7 @@ import {
   mapContaPagarRow,
   resolveContaPagarIdColumn,
 } from "./athos-conta-pagar.util";
-import { buildContaPagarAnexoPaths } from "./athos-anexo.util";
+import { buildContaPagarAnexoPaths, hasSmbMountPath } from "./athos-anexo.util";
 import { isSmbEnabled, smbUnlinkContaPagarFile, smbWriteContaPagarFile } from "./athos-smb.util";
 import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
 import { UpdateContaPagarDto } from "./dto/update-conta-pagar.dto";
@@ -1546,7 +1546,7 @@ export class AthosService {
 
       const { writeDirectoryPath, writeFullPath, dbFullPath, fileName } = buildContaPagarAnexoPaths(idcontapagar, file.originalname);
 
-      if (isSmbEnabled()) {
+      if (!hasSmbMountPath() && isSmbEnabled()) {
         await smbWriteContaPagarFile(idcontapagar, fileName, file.buffer);
         writtenFilePath = fileName;
         writtenViaSMB = true;

@@ -122,3 +122,4 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 260514-003 | Status page: SSE tempo real, banner persistente, badge pago no caixa, botao novo orcamento | 2026-05-14 | 2369502 | [260514-003-status-page-realtime-dashboard](./quick/260514-003-status-page-realtime-dashboard/) |
 | 260515-001 | Remover controle de edicao de status (Alterar status) da pagina publica | 2026-05-15 | n/a | [260515-001-remover-edicao-status-pagina-publica](./quick/260515-001-remover-edicao-status-pagina-publica/) |
 | 260515-004 | Correcoes de seguranca: EFI webhook bypass + Athos timingSafeEqual | 2026-05-15 | 2ca9004, 470f652 | [260515-004-security-webhook-token-fixes](./quick/260515-004-security-webhook-token-fixes/) |
+| 260518-001 | Upload de anexo Athos no Docker via pasta Samba montada (Tailscale) | 2026-05-20 | n/a | [260518-001-docker-smb-mount-fix](./quick/260518-001-docker-smb-mount-fix/) |

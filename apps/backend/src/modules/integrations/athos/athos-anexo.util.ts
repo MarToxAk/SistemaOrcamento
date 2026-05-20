@@ -12,6 +12,10 @@ function getSmbMountRoot(): string | null {
   return process.env.ATHOS_SMB_MOUNT_PATH?.trim() || null;
 }
 
+export function hasSmbMountPath(): boolean {
+  return getSmbMountRoot() !== null;
+}
+
 const ALLOWED_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg"]);
 
 export function sanitizeAthosAttachmentName(originalName: string): string {
