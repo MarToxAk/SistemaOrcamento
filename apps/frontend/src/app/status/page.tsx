@@ -214,6 +214,12 @@ export default function StatusPage() {
     setBannerDismissed(true);
   }
 
+  const COLUMN_META: Record<string, { label: string; icon: string }> = {
+    APROVADO: { label: "APROVADO", icon: "bi-check2-circle" },
+    EM_PRODUCAO: { label: "EM PRODUÇÃO", icon: "bi-gear-fill" },
+    PRONTO_PARA_ENTREGA: { label: "PRONTO PARA ENTREGA", icon: "bi-box-seam" },
+  };
+
   function renderQuoteCard(quote: QuoteRow) {
     const customerName = quote.body.cliente?.nome || "Cliente não informado";
     const phone = quote.body.cliente?.telefone || "Sem telefone";
@@ -226,6 +232,7 @@ export default function StatusPage() {
     const pdfBusy = pdfLoadingId === quote.id;
     const isHighlighted = highlightedId === quote.id;
     const detailsHref = `/orcamento/${getQuoteIdentifier(quote)}`;
+    const isPaid = badgeType === "PAGO_CAIXA" || badgeType === "PIX_CONFIRMADO";
 
     const badgeClass =
       badgeType === "PAGO_CAIXA" ? "bg-success" :
@@ -240,7 +247,7 @@ export default function StatusPage() {
     return (
       <div
         key={quote.id}
-        className={`kanban-card status-border-${quote.statusKey.toLowerCase()} ${isHighlighted ? "card-highlighted" : ""}`}
+        className={`kanban-card ${isPaid ? "card-paid" : `status-border-${quote.statusKey.toLowerCase()}`} ${isHighlighted ? "card-highlighted" : ""}`}
       >
         <div className="kanban-card-header d-flex align-items-center justify-content-between">
           <span className="kanban-card-number">#{quoteNumber}</span>
@@ -380,9 +387,10 @@ export default function StatusPage() {
               <ul className="nav nav-tabs nav-fill mb-3" role="tablist">
                 {PRODUCTION_STATUSES.map((statusKey) => {
                   const count = visibleQuotes.filter((q) => q.statusKey === statusKey).length;
-                  const label =
+                  const meta = COLUMN_META[statusKey] ?? { label: statusKey, icon: "bi-circle" };
+                  const shortLabel =
                     statusKey === "APROVADO" ? "APROVADO" :
-                    statusKey === "EM_PRODUCAO" ? "EM PRODUÇÃO" :
+                    statusKey === "EM_PRODUCAO" ? "EM PROD." :
                     "PRONTO";
                   return (
                     <li className="nav-item" key={statusKey} role="presentation">
@@ -393,7 +401,7 @@ export default function StatusPage() {
                         role="tab"
                         aria-selected={activeMobileTab === statusKey}
                       >
-                        {label} <span className="badge bg-secondary ms-1">{count}</span>
+                        <i className={`bi ${meta.icon} me-1`} />{shortLabel} <span className="badge bg-secondary ms-1">{count}</span>
                       </button>
                     </li>
                   );
@@ -414,14 +422,13 @@ export default function StatusPage() {
             <div className="kanban-board d-none d-md-flex gap-3">
               {PRODUCTION_STATUSES.map((statusKey) => {
                 const columnQuotes = visibleQuotes.filter((q) => q.statusKey === statusKey);
-                const columnLabel =
-                  statusKey === "APROVADO" ? "APROVADO" :
-                  statusKey === "EM_PRODUCAO" ? "EM PRODUÇÃO" :
-                  "PRONTO PARA ENTREGA";
+                const meta = COLUMN_META[statusKey] ?? { label: statusKey, icon: "bi-circle" };
                 return (
                   <div key={statusKey} className={`kanban-column kanban-column-${statusKey.toLowerCase()}`}>
-                    <div className={`kanban-column-header status-${statusKey.toLowerCase()}`}>
-                      <span className="kanban-column-title">{columnLabel}</span>
+                    <div className={`kanban-column-header kanban-col-header-${statusKey.toLowerCase()}`}>
+                      <span className="kanban-column-title">
+                        <i className={`bi ${meta.icon} kanban-col-icon`} />{meta.label}
+                      </span>
                       <span className="kanban-column-count">{columnQuotes.length}</span>
                     </div>
                     <div className="kanban-column-body">
@@ -443,13 +450,16 @@ export default function StatusPage() {
       <div id="toast-container" className="toast-container position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1100 }} />
 
       <style>{`
-        body { background: #f7f1e3; font-size: 1.02rem; }
+        body { background: #f9f7ed; font-size: 1.02rem; }
         .orcamento-header {
           background: linear-gradient(135deg, #c5f2e8 0%, #cbe1f9 25%, #e7d8f9 50%, #f9e7f5 75%, #f0cacb 100%);
           color: #222;
           border-radius: 8px 8px 0 0;
         }
-        .orcamento-section { border-radius: 0 0 8px 8px; }
+        .orcamento-section {
+          border-radius: 0 0 8px 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
         .logo-img { max-width: 140px; max-height: 88px; background: #fff; border-radius: 8px; padding: 6px; }
         .status-pill {
           display: inline-flex; width: fit-content;
@@ -458,7 +468,7 @@ export default function StatusPage() {
         }
         .status-aprovado { background: #e9f8ef; color: #1f7a44; }
         .status-em_producao { background: #eef4ff; color: #2457a6; }
-        .status-pronto_para_entrega { background: #fff5e8; color: #a65b12; }
+        .status-pronto_para_entrega { background: #f3eeff; color: #6f42c1; }
         .status-entregue { background: #ececec; color: #444; }
         .status-cancelado { background: #fdecec; color: #b42318; }
         .action-list { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
@@ -466,7 +476,6 @@ export default function StatusPage() {
         .kanban-column {
           flex: 1 1 0;
           min-width: 0;
-          background: #f8f9fa;
           border-radius: 8px;
           padding: 0.75rem;
           display: flex;
@@ -482,7 +491,11 @@ export default function StatusPage() {
           font-weight: 700;
           font-size: 0.95rem;
         }
-        .kanban-column-title { letter-spacing: 0.02em; }
+        .kanban-col-header-aprovado { background: #e9f8ef; color: #1f7a44; }
+        .kanban-col-header-em_producao { background: #eef4ff; color: #2457a6; }
+        .kanban-col-header-pronto_para_entrega { background: #f3eeff; color: #6f42c1; }
+        .kanban-col-icon { font-size: 1.1rem; margin-right: 0.5rem; }
+        .kanban-column-title { letter-spacing: 0.02em; display: flex; align-items: center; }
         .kanban-column-count {
           background: rgba(0,0,0,0.08);
           border-radius: 999px;
@@ -502,9 +515,13 @@ export default function StatusPage() {
           flex-direction: column;
           gap: 0.4rem;
         }
+        .kanban-card.card-paid {
+          background: #effaf3;
+          border-top-color: #1f7a44;
+        }
         .status-border-aprovado { border-top-color: #1f7a44; }
         .status-border-em_producao { border-top-color: #2457a6; }
-        .status-border-pronto_para_entrega { border-top-color: #a65b12; }
+        .status-border-pronto_para_entrega { border-top-color: #6f42c1; }
         .kanban-card-header { gap: 0.5rem; }
         .kanban-card-number { font-weight: 700; font-size: 1rem; }
         .kanban-card-client { font-weight: 600; font-size: 0.95rem; }
