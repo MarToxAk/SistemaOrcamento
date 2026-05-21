@@ -85,6 +85,17 @@ export class QuotesPdfStorageService {
     return Buffer.concat(chunks);
   }
 
+  async objectExists(objectName: string): Promise<boolean> {
+    try {
+      const client = this.buildMinioClient();
+      const bucket = this.requireEnv("MINIO_BUCKET");
+      await client.statObject(bucket, objectName);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private renderHtml(payload: QuotePdfData): string {
     const template = Handlebars.compile(HTML_TEMPLATE);
 
