@@ -4,9 +4,9 @@ import { backendFetch } from "@/lib/backend-client";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { idcliente: string } },
+  { params }: { params: Promise<{ idcliente: string }> },
 ) {
-  const { idcliente } = params;
+  const { idcliente } = await params;
   const id = Number(idcliente);
   if (!Number.isFinite(id) || id <= 0) {
     return NextResponse.json({ error: "idcliente inválido." }, { status: 400 });
