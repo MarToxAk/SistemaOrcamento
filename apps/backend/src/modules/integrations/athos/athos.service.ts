@@ -1616,7 +1616,7 @@ export class AthosService {
     }
   }
 
-  async buscarDashboardContasReceber(): Promise<{
+  async buscarDashboardContasReceber(statusFiltro?: string): Promise<{
     summary: {
       total_a_receber: number;
       total_atrasado: number;
@@ -1657,13 +1657,13 @@ export class AthosService {
         INNER JOIN conta_receber cr ON c.idcliente = cr.idcliente
         LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
         LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
-        WHERE TRIM(cr.statusconta) IN ('AVC', 'VEN')
+        WHERE TRIM(cr.statusconta) = ANY($1)
         GROUP BY c.idcliente, cf.nome, cj.nomefantasia, cj.razaosocial,
                  c.dddtelefoneempresa, c.telefoneempresa, c.emailcliente,
                  c.emailcobrancacliente, c.limitecredito, c.bloqueaprazo
         ORDER BY total_atrasado DESC NULLS LAST, total_devido DESC
         LIMIT 100
-      `);
+      `, [statusFiltro ? [statusFiltro] : ["AVC", "VEN"]]);
 
       const clientes = (result.rows as Row[]).map((row) => {
         const telefone = row["telefone_completo"];

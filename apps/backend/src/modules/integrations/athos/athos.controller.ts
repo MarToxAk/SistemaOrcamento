@@ -231,17 +231,21 @@ export class AthosController {
 
   @ApiOperation({
     summary: "Dashboard de contas a receber",
-    description: "Retorna summary global e top 100 clientes devedores com títulos em aberto (statusconta=ABE).",
+    description: "Retorna summary global e top 100 clientes. status: AVC, VEN, REC, CAN ou vazio para AVC+VEN.",
   })
-  @ApiOkResponse({ description: "Dashboard com summary e lista de clientes devedores" })
+  @ApiQuery({ name: "status", required: false, example: "VEN", description: "Filtro: AVC | VEN | REC | CAN (omitir = AVC+VEN)" })
+  @ApiOkResponse({ description: "Dashboard com summary e lista de clientes" })
   @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
   @Get("contas-receber/dashboard")
   async dashboardContasReceber(
     @Headers("authorization") authorization?: string,
     @Headers("x-api-token") xApiToken?: string,
+    @Query("status") status?: string,
   ) {
     this.validateAthosToken(authorization, xApiToken);
-    return this.athosService.buscarDashboardContasReceber();
+    const ALLOWED = ["AVC", "VEN", "REC", "CAN"];
+    const filtro = status && ALLOWED.includes(status.toUpperCase()) ? status.toUpperCase() : undefined;
+    return this.athosService.buscarDashboardContasReceber(filtro);
   }
 
   @ApiOperation({

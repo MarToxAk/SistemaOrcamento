@@ -1,15 +1,18 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { backendFetch } from "@/lib/backend-client";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const athosToken = process.env.INTERNAL_API_KEY ?? "";
   const extraHeaders: Record<string, string> = athosToken
     ? { "x-api-token": athosToken }
     : {};
 
+  const status = req.nextUrl.searchParams.get("status");
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+
   try {
-    const res = await backendFetch("/athos/contas-receber/dashboard", {
+    const res = await backendFetch(`/athos/contas-receber/dashboard${qs}`, {
       method: "GET",
       headers: extraHeaders,
     });

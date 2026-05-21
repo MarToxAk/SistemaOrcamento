@@ -54,6 +54,16 @@ function getBadgeLabel(dias: number | null): string {
   return `${dias}d atraso`;
 }
 
+type StatusFiltro = "AVC" | "VEN" | "REC" | "CAN" | "";
+
+const STATUS_OPTIONS: { value: StatusFiltro; label: string; cls: string }[] = [
+  { value: "",    label: "Todos (abertos)", cls: "btn-outline-secondary" },
+  { value: "AVC", label: "A Vencer",        cls: "btn-outline-info"      },
+  { value: "VEN", label: "Vencidos",        cls: "btn-outline-danger"    },
+  { value: "REC", label: "Recebidos",       cls: "btn-outline-success"   },
+  { value: "CAN", label: "Cancelados",      cls: "btn-outline-dark"      },
+];
+
 export default function ContasReceberPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [clientes, setClientes] = useState<ClienteDevedor[]>([]);
@@ -61,12 +71,16 @@ export default function ContasReceberPage() {
   const [erro, setErro] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [titulosMap, setTitulosMap] = useState<Record<number, TituloReceber[] | "loading" | "error">>({});
+  const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("");
 
-  async function fetchDashboard() {
+  async function fetchDashboard(status: StatusFiltro = statusFiltro) {
     setLoading(true);
     setErro("");
+    setExpandedId(null);
+    setTitulosMap({});
     try {
-      const res = await fetch("/api/athos/contas-receber/dashboard", { cache: "no-store" });
+      const qs = status ? `?status=${status}` : "";
+      const res = await fetch(`/api/athos/contas-receber/dashboard${qs}`, { cache: "no-store" });
       if (!res.ok) {
         throw new Error("Erro ao carregar dashboard de contas a receber.");
       }
@@ -102,7 +116,7 @@ export default function ContasReceberPage() {
   }
 
   useEffect(() => {
-    void fetchDashboard();
+    void fetchDashboard(statusFiltro);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -139,13 +153,27 @@ export default function ContasReceberPage() {
               <small className="text-muted">Monitoramento de inadimplência</small>
             </div>
           </div>
-          <div className="d-flex align-items-center gap-2">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            {STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`btn btn-sm ${statusFiltro === opt.value ? opt.cls.replace("outline-", "") : opt.cls}`}
+                onClick={() => {
+                  setStatusFiltro(opt.value);
+                  void fetchDashboard(opt.value);
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
             <button
               type="button"
-              className="btn btn-sm btn-outline-secondary"
-              onClick={() => void fetchDashboard()}
+              className="btn btn-sm btn-light border"
+              onClick={() => void fetchDashboard(statusFiltro)}
+              title="Atualizar"
             >
-              <i className="bi bi-arrow-clockwise me-1" />Atualizar
+              <i className="bi bi-arrow-clockwise" />
             </button>
           </div>
         </div>
