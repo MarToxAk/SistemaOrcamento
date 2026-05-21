@@ -210,6 +210,19 @@ Success criteria:
 - [x] 26-02-PLAN.md — Cards reais com conteúdo completo — complete
 - [x] 26-03-PLAN.md — Filtro de carimbo funcional — complete
 
+## Phase 27: Dashboard de Contas a Receber — Read-Only (PLANNING)
+
+**Goal:** Implementar interface analitica reativa (read-only) para acompanhar clientes devedores, agrupando titulos em aberto da tabela conta_receber com dados de contato e vinculo com vendas.
+
+**Requirements:** CR-01, CR-02, CR-03, CR-04, CR-05
+
+**Success criteria:**
+1. GET /api/athos/contas-receber/dashboard retorna clientes agrupados com total_devido, total_atrasado e contagem de titulos.
+2. Top Cards exibem totais globais (a receber, inadimplencia, clientes devedores).
+3. Grid de cards por cliente com barra de progresso de limite de credito e badges de criticidade.
+4. Drawer/accordion de titulos individuais por cliente com vinculo a venda (numeroordem).
+5. Dashboard atualiza em tempo real via SSE quando conta_receber e alterada no Athos.
+
 ---
 ## Backlog (Future)
 ## v2.0 Gestão Integrada Financeira e Caixa (Phases 23-25) - IN PROGRESS
