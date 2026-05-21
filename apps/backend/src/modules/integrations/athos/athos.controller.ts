@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -226,5 +227,41 @@ export class AthosController {
       file,
       idfuncionario: dto.idfuncionario,
     });
+  }
+
+  @ApiOperation({
+    summary: "Dashboard de contas a receber",
+    description: "Retorna summary global e top 100 clientes devedores com títulos em aberto (statusconta=ABE).",
+  })
+  @ApiOkResponse({ description: "Dashboard com summary e lista de clientes devedores" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/dashboard")
+  async dashboardContasReceber(
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    return this.athosService.buscarDashboardContasReceber();
+  }
+
+  @ApiOperation({
+    summary: "Títulos individuais de um cliente (contas a receber)",
+    description: "Retorna títulos em aberto (ABE) do cliente para exibição no drawer. Lazy load.",
+  })
+  @ApiParam({ name: "idcliente", example: "123", description: "ID do cliente no Athos" })
+  @ApiOkResponse({ description: "Array de títulos em aberto do cliente" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/cliente/:idcliente/titulos")
+  async titulosClienteContasReceber(
+    @Param("idcliente") idcliente: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idcliente);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException("idcliente inválido");
+    }
+    return this.athosService.buscarTitulosClienteContasReceber(id);
   }
 }
