@@ -1616,4 +1616,155 @@ export class AthosService {
     }
   }
 
+  async buscarDashboardContasReceber(): Promise<{
+    summary: {
+      total_a_receber: number;
+      total_atrasado: number;
+      total_clientes_devedores: number;
+    };
+    clientes: Array<{
+      idcliente: number;
+      nome_cliente: string;
+      telefone_completo: string | null;
+      emailcliente: string | null;
+      emailcobrancacliente: string | null;
+      limitecredito: number;
+      bloqueaprazo: string | null;
+      total_devido: number;
+      total_atrasado: number;
+      titulos_pendentes: number;
+      maior_atraso_dias: number | null;
+    }>;
+  }> {
+    this.logger.log("buscarDashboardContasReceber: iniciando consulta agregada de contas a receber");
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT
+            c.idcliente,
+            COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial, 'Cliente #' || c.idcliente::text) AS nome_cliente,
+            c.dddtelefoneempresa || c.telefoneempresa AS telefone_completo,
+            c.emailcliente,
+            c.emailcobrancacliente,
+            c.limitecredito,
+            c.bloqueaprazo,
+            SUM(cr.valor) FILTER (WHERE cr.statusconta = 'ABE') AS total_devido,
+            SUM(cr.valor) FILTER (WHERE cr.statusconta = 'ABE' AND cr.datavencimento < CURRENT_DATE) AS total_atrasado,
+            COUNT(cr.idcontareceber) FILTER (WHERE cr.statusconta = 'ABE') AS titulos_pendentes,
+            MAX(CURRENT_DATE - cr.datavencimento::date) FILTER (WHERE cr.statusconta = 'ABE' AND cr.datavencimento < CURRENT_DATE) AS maior_atraso_dias
+        FROM cliente c
+        INNER JOIN conta_receber cr ON c.idcliente = cr.idcliente
+        LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+        LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+        WHERE cr.statusconta = 'ABE'
+        GROUP BY c.idcliente, cf.nome, cj.nomefantasia, cj.razaosocial,
+                 c.dddtelefoneempresa, c.telefoneempresa, c.emailcliente,
+                 c.emailcobrancacliente, c.limitecredito, c.bloqueaprazo
+        ORDER BY total_atrasado DESC NULLS LAST, total_devido DESC
+        LIMIT 100
+      `);
+
+      const clientes = (result.rows as Row[]).map((row) => {
+        const telefone = row["telefone_completo"];
+        const telefoneFull =
+          typeof telefone === "string" && telefone.trim() ? telefone.trim() : null;
+
+        const email = row["emailcliente"];
+        const emailcobranca = row["emailcobrancacliente"];
+        const bloqueaprazo = row["bloqueaprazo"];
+
+        return {
+          idcliente: Number(row["idcliente"]),
+          nome_cliente: typeof row["nome_cliente"] === "string" ? row["nome_cliente"] : String(row["idcliente"]),
+          telefone_completo: telefoneFull,
+          emailcliente: typeof email === "string" && email.trim() ? email.trim() : null,
+          emailcobrancacliente:
+            typeof emailcobranca === "string" && emailcobranca.trim() ? emailcobranca.trim() : null,
+          limitecredito: Number(row["limitecredito"] ?? 0),
+          bloqueaprazo: typeof bloqueaprazo === "string" && bloqueaprazo.trim() ? bloqueaprazo.trim() : null,
+          total_devido: Number(row["total_devido"] ?? 0),
+          total_atrasado: Number(row["total_atrasado"] ?? 0),
+          titulos_pendentes: Number(row["titulos_pendentes"] ?? 0),
+          maior_atraso_dias:
+            row["maior_atraso_dias"] != null ? Number(row["maior_atraso_dias"]) : null,
+        };
+      });
+
+      const summary = {
+        total_a_receber: clientes.reduce((acc, c) => acc + c.total_devido, 0),
+        total_atrasado: clientes.reduce((acc, c) => acc + (c.total_atrasado ?? 0), 0),
+        total_clientes_devedores: clientes.length,
+      };
+
+      return { summary, clientes };
+    } finally {
+      client.release();
+    }
+  }
+
+  async buscarTitulosClienteContasReceber(idcliente: number): Promise<
+    Array<{
+      idcontareceber: number;
+      numerotitulo: string | null;
+      datavencimento: string;
+      valor: number;
+      observacao: string | null;
+      idvenda: number | null;
+      dataemissao: string | null;
+      numeroordem: string | null;
+    }>
+  > {
+    this.logger.log(`buscarTitulosClienteContasReceber: idcliente=${idcliente}`);
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `
+        SELECT
+            cr.idcontareceber, cr.numerotitulo, cr.datavencimento, cr.valor,
+            cr.observacao, cr.idvenda, cr.dataemissao,
+            v.numeroordem
+        FROM conta_receber cr
+        LEFT JOIN venda v ON v.idvenda = cr.idvenda
+        WHERE cr.idcliente = $1 AND cr.statusconta = 'ABE'
+        ORDER BY cr.datavencimento ASC
+        `,
+        [idcliente],
+      );
+
+      return (result.rows as Row[]).map((row) => {
+        const datavenc = row["datavencimento"];
+        const dataemis = row["dataemissao"];
+        const obs = row["observacao"];
+        const numerotitulo = row["numerotitulo"];
+        const numeroordem = row["numeroordem"];
+
+        return {
+          idcontareceber: Number(row["idcontareceber"]),
+          numerotitulo: typeof numerotitulo === "string" && numerotitulo.trim() ? numerotitulo.trim() : null,
+          datavencimento:
+            datavenc instanceof Date
+              ? datavenc.toISOString().slice(0, 10)
+              : typeof datavenc === "string" && datavenc.trim()
+              ? datavenc.trim()
+              : String(datavenc),
+          valor: Number(row["valor"]),
+          observacao: typeof obs === "string" && obs.trim() ? obs.trim() : null,
+          idvenda: row["idvenda"] != null ? Number(row["idvenda"]) : null,
+          dataemissao:
+            dataemis instanceof Date
+              ? dataemis.toISOString().slice(0, 10)
+              : typeof dataemis === "string" && dataemis.trim()
+              ? dataemis.trim()
+              : null,
+          numeroordem:
+            typeof numeroordem === "string" && numeroordem.trim() ? numeroordem.trim() : null,
+        };
+      });
+    } finally {
+      client.release();
+    }
+  }
+
 }
