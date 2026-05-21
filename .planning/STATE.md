@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: Pagamento EFI/Athos + Desconto NFS-e
-current_phase: 26
-status: completed
-last_updated: "2026-05-15T16:28:08.516Z"
-last_activity: 2026-05-15
+milestone: v1.9
+milestone_name: Dashboard Contas a Receber
+current_phase: 27
+status: in_progress
+last_updated: "2026-05-21T00:18:00Z"
+last_activity: 2026-05-21
 progress:
-  total_phases: 26
+  total_phases: 27
   completed_phases: 19
-  total_plans: 44
-  completed_plans: 40
+  total_plans: 45
+  completed_plans: 41
   percent: 91
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-21 (quick-260521-bkl)
-Current phase: 26
-Milestone: v1.9 (planning)
+Last updated: 2026-05-21 (27-01)
+Current phase: 27
+Milestone: v1.9 (in progress)
 
 ---
 
 ## Current Position
 
-Phase: 26 (status-producao-kanban) — COMPLETE
-Plan: Not started
-Status: Phase 26 complete — all 3 plans executed
-Last activity: 2026-05-15
+Phase: 27 (dashboard-contas-receber) — IN PROGRESS
+Plan: 27-01 COMPLETE (backend endpoints)
+Status: Plan 01 of phase 27 complete — 2 tasks executed
+Last activity: 2026-05-21
 
 ## Project Status
 
@@ -101,6 +101,9 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 2026-05-15 | borda superior do card via .status-border-{statusKey} — identidade visual por coluna | Cada card identifica sua coluna kanban pela cor da borda superior (verde/azul/laranja) |
 | 2026-05-15 | Contagem nos botoes do filtro usa quotes (total), nao visibleQuotes | Cada botao mostra quantos cards entrariam se selecionado, independente do filtro ativo (D-12) |
 | 2026-05-15 | badgeFilter nao persiste — reseta para TODOS a cada carregamento | D-14 exige nao persistir filtro; sem localStorage.setItem para badgeFilter |
+| 2026-05-21 | summary de contas a receber calculado via Array.reduce no Node.js (nao subquery SQL) | Evita subquery adicional e mantém query principal simples |
+| 2026-05-21 | LIMIT 100 hardcoded na query de dashboard de contas a receber | Decisao D-08: sem paginacao no frontend para este MVP |
+| 2026-05-21 | datavencimento/dataemissao convertidos com instanceof Date check antes de toISOString() | Driver pg pode retornar Date ou string dependendo da configuracao pg.types |
 
 ## Notes
 

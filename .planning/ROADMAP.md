@@ -219,7 +219,7 @@ Success criteria:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 27-01-PLAN.md — Backend: buscarDashboardContasReceber + buscarTitulosClienteContasReceber + rotas NestJS (wave 1)
+- [x] 27-01-PLAN.md — Backend: buscarDashboardContasReceber + buscarTitulosClienteContasReceber + rotas NestJS (wave 1) — complete
 - [ ] 27-02-PLAN.md — Frontend: página /contas-receber, Top Cards, Grid de Cards, Accordion de títulos, link de navegação (wave 2)
 
 **Success criteria:**
