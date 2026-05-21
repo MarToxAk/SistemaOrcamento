@@ -1650,14 +1650,14 @@ export class AthosService {
             c.limitecredito,
             c.bloqueaprazo,
             SUM(cr.valor) AS total_devido,
-            SUM(CASE WHEN cr.datavencimento < CURRENT_DATE THEN cr.valor ELSE 0 END) AS total_atrasado,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' THEN cr.valor ELSE 0 END) AS total_atrasado,
             COUNT(cr.idcontareceber) AS titulos_pendentes,
-            MAX(CASE WHEN cr.datavencimento < CURRENT_DATE THEN CURRENT_DATE - cr.datavencimento::date END) AS maior_atraso_dias
+            MAX(CASE WHEN TRIM(cr.statusconta) = 'VEN' THEN CURRENT_DATE - cr.datavencimento::date END) AS maior_atraso_dias
         FROM cliente c
         INNER JOIN conta_receber cr ON c.idcliente = cr.idcliente
         LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
         LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
-        WHERE cr.statusconta = 'ABE'
+        WHERE TRIM(cr.statusconta) IN ('AVC', 'VEN')
         GROUP BY c.idcliente, cf.nome, cj.nomefantasia, cj.razaosocial,
                  c.dddtelefoneempresa, c.telefoneempresa, c.emailcliente,
                  c.emailcobrancacliente, c.limitecredito, c.bloqueaprazo
@@ -1727,7 +1727,7 @@ export class AthosService {
             v.numeroordem
         FROM conta_receber cr
         LEFT JOIN venda v ON v.idvenda = cr.idvenda
-        WHERE cr.idcliente = $1 AND cr.statusconta = 'ABE'
+        WHERE cr.idcliente = $1 AND TRIM(cr.statusconta) IN ('AVC', 'VEN')
         ORDER BY cr.datavencimento ASC
         `,
         [idcliente],
