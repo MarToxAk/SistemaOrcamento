@@ -16,7 +16,7 @@ progress:
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-21
+Last updated: 2026-05-21 (quick-260521-bkl)
 Current phase: 26
 Milestone: v1.9 (planning)
 
@@ -124,3 +124,4 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 260515-004 | Correcoes de seguranca: EFI webhook bypass + Athos timingSafeEqual | 2026-05-15 | 2ca9004, 470f652 | [260515-004-security-webhook-token-fixes](./quick/260515-004-security-webhook-token-fixes/) |
 | 260518-001 | Upload de anexo Athos no Docker via pasta Samba montada (Tailscale) | 2026-05-20 | n/a | [260518-001-docker-smb-mount-fix](./quick/260518-001-docker-smb-mount-fix/) |
 | 260521-bdu | Corrigir geração de PDF: dist/ stale usava template inline antigo; recompilado com template v2 | 2026-05-21 | 024ebdf | [260521-bdu-corrigir-gera-o-de-pdf-com-template-novo](./quick/260521-bdu-corrigir-gera-o-de-pdf-com-template-novo/) |
+| 260521-bkl | Remover redundância de geração de PDF no envio: usar PDF existente no MinIO, regenerar só se ausente | 2026-05-21 | c99af84 | [260521-bkl-remover-redund-ncia-de-gera-o-de-pdf-no-](./quick/260521-bkl-remover-redund-ncia-de-gera-o-de-pdf-no-/) |
