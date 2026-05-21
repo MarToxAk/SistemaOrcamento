@@ -126,7 +126,7 @@ Full details: .planning/milestones/v1.6-ROADMAP.md
 
 - [x] Phase 17: Correcao do calculo de desconto no modal NFS-e (NFSC-01..05)
 
-## v1.7 Correcoes NFS-e � Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
+## v1.7 Correcoes NFS-e — Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
 
 Full details: .planning/milestones/v1.7-ROADMAP.md
 
@@ -216,12 +216,18 @@ Success criteria:
 
 **Requirements:** CR-01, CR-02, CR-03, CR-04, CR-05
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 27-01-PLAN.md — Backend: buscarDashboardContasReceber + buscarTitulosClienteContasReceber + rotas NestJS (wave 1)
+- [ ] 27-02-PLAN.md — Frontend: página /contas-receber, Top Cards, Grid de Cards, Accordion de títulos, link de navegação (wave 2)
+
 **Success criteria:**
 1. GET /api/athos/contas-receber/dashboard retorna clientes agrupados com total_devido, total_atrasado e contagem de titulos.
 2. Top Cards exibem totais globais (a receber, inadimplencia, clientes devedores).
 3. Grid de cards por cliente com barra de progresso de limite de credito e badges de criticidade.
 4. Drawer/accordion de titulos individuais por cliente com vinculo a venda (numeroordem).
-5. Dashboard atualiza em tempo real via SSE quando conta_receber e alterada no Athos.
+5. Dashboard atualiza via botao Atualizar manual (sem real-time nesta fase).
 
 ---
 ## Backlog (Future)
