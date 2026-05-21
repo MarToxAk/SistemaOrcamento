@@ -316,6 +316,9 @@ export default function StatusPage() {
             <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => void fetchQuotes()} title="Atualizar lista">
               <i className="bi bi-arrow-clockwise me-1" />Atualizar
             </button>
+            <a href="/contas-receber" className="btn btn-sm btn-outline-warning">
+              <i className="bi bi-receipt me-1" />Contas a Receber
+            </a>
             <a href="/orcamento/novo#condPagamento" className="btn btn-sm btn-success">
               <i className="bi bi-plus-circle me-1" />Novo Orçamento
             </a>
