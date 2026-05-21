@@ -210,7 +210,7 @@ Success criteria:
 - [x] 26-02-PLAN.md — Cards reais com conteúdo completo — complete
 - [x] 26-03-PLAN.md — Filtro de carimbo funcional — complete
 
-## Phase 27: Dashboard de Contas a Receber — Read-Only (PLANNING)
+## Phase 27: Dashboard de Contas a Receber — Read-Only (COMPLETE)
 
 **Goal:** Implementar interface analitica reativa (read-only) para acompanhar clientes devedores, agrupando titulos em aberto da tabela conta_receber com dados de contato e vinculo com vendas.
 
@@ -220,7 +220,7 @@ Success criteria:
 
 Plans:
 - [x] 27-01-PLAN.md — Backend: buscarDashboardContasReceber + buscarTitulosClienteContasReceber + rotas NestJS (wave 1) — complete
-- [ ] 27-02-PLAN.md — Frontend: página /contas-receber, Top Cards, Grid de Cards, Accordion de títulos, link de navegação (wave 2)
+- [x] 27-02-PLAN.md — Frontend: página /contas-receber, Top Cards, Grid de Cards, Accordion de títulos, link de navegação (wave 2) — complete
 
 **Success criteria:**
 1. GET /api/athos/contas-receber/dashboard retorna clientes agrupados com total_devido, total_atrasado e contagem de titulos.

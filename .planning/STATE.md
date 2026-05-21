@@ -4,29 +4,29 @@ milestone: v1.9
 milestone_name: Dashboard Contas a Receber
 current_phase: 27
 status: in_progress
-last_updated: "2026-05-21T00:18:00Z"
+last_updated: "2026-05-21T00:43:00Z"
 last_activity: 2026-05-21
 progress:
   total_phases: 27
-  completed_phases: 19
+  completed_phases: 20
   total_plans: 45
-  completed_plans: 41
-  percent: 91
+  completed_plans: 43
+  percent: 96
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-21 (27-01)
+Last updated: 2026-05-21 (27-02)
 Current phase: 27
-Milestone: v1.9 (in progress)
+Milestone: v1.9 (complete)
 
 ---
 
 ## Current Position
 
-Phase: 27 (dashboard-contas-receber) — IN PROGRESS
-Plan: 27-01 COMPLETE (backend endpoints)
-Status: Plan 01 of phase 27 complete — 2 tasks executed
+Phase: 27 (dashboard-contas-receber) — COMPLETE
+Plan: 27-02 COMPLETE (frontend página /contas-receber)
+Status: Todos os planos da fase 27 executados — 4 tasks totais
 Last activity: 2026-05-21
 
 ## Project Status
@@ -104,6 +104,8 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 2026-05-21 | summary de contas a receber calculado via Array.reduce no Node.js (nao subquery SQL) | Evita subquery adicional e mantém query principal simples |
 | 2026-05-21 | LIMIT 100 hardcoded na query de dashboard de contas a receber | Decisao D-08: sem paginacao no frontend para este MVP |
 | 2026-05-21 | datavencimento/dataemissao convertidos com instanceof Date check antes de toISOString() | Driver pg pode retornar Date ou string dependendo da configuracao pg.types |
+| 2026-05-21 | Next.js API Routes como proxy para /api/athos/contas-receber/* (nao rewrites em next.config.mjs) | Padrao existente no codebase; x-api-token adicionado server-side via ATHOS_API_TOKEN |
+| 2026-05-21 | Accordion fecha ao clicar no mesmo card (toggle); cache em titulosMap evita refetch ao reabrir | UX esperado: clique no card expandido fecha; dados ja carregados nao sao buscados novamente |
 
 ## Notes
 
