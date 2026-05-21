@@ -12,7 +12,7 @@ export async function GET(
     return NextResponse.json({ error: "idcliente inválido." }, { status: 400 });
   }
 
-  const athosToken = process.env.ATHOS_API_TOKEN ?? "";
+  const athosToken = process.env.INTERNAL_API_KEY ?? "";
   const extraHeaders: Record<string, string> = athosToken
     ? { "x-api-token": athosToken }
     : {};

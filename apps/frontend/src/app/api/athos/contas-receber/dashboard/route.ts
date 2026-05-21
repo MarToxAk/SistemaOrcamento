@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { backendFetch } from "@/lib/backend-client";
 
 export async function GET() {
-  const athosToken = process.env.ATHOS_API_TOKEN ?? "";
+  const athosToken = process.env.INTERNAL_API_KEY ?? "";
   const extraHeaders: Record<string, string> = athosToken
     ? { "x-api-token": athosToken }
     : {};
