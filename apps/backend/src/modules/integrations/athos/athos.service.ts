@@ -1649,10 +1649,10 @@ export class AthosService {
             c.emailcobrancacliente,
             c.limitecredito,
             c.bloqueaprazo,
-            SUM(cr.valor) FILTER (WHERE cr.statusconta = 'ABE') AS total_devido,
-            SUM(cr.valor) FILTER (WHERE cr.statusconta = 'ABE' AND cr.datavencimento < CURRENT_DATE) AS total_atrasado,
-            COUNT(cr.idcontareceber) FILTER (WHERE cr.statusconta = 'ABE') AS titulos_pendentes,
-            MAX(CURRENT_DATE - cr.datavencimento::date) FILTER (WHERE cr.statusconta = 'ABE' AND cr.datavencimento < CURRENT_DATE) AS maior_atraso_dias
+            SUM(cr.valor) AS total_devido,
+            SUM(CASE WHEN cr.datavencimento < CURRENT_DATE THEN cr.valor ELSE 0 END) AS total_atrasado,
+            COUNT(cr.idcontareceber) AS titulos_pendentes,
+            MAX(CASE WHEN cr.datavencimento < CURRENT_DATE THEN CURRENT_DATE - cr.datavencimento::date END) AS maior_atraso_dias
         FROM cliente c
         INNER JOIN conta_receber cr ON c.idcliente = cr.idcliente
         LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
