@@ -282,73 +282,61 @@ export default function ContasReceberPage() {
                               Títulos
                             </button>
                           </div>
+
+                          {/* Accordion inline no card */}
+                          {isExpanded && (
+                            <div className="card-body border-top pt-3 pb-2">
+                              {titulosMap[cliente.idcliente] === "loading" && (
+                                <div className="text-center py-2">
+                                  <span className="spinner-border spinner-border-sm text-primary" role="status" />
+                                  <span className="ms-2 small text-muted">Carregando títulos…</span>
+                                </div>
+                              )}
+                              {titulosMap[cliente.idcliente] === "error" && (
+                                <div className="alert alert-warning py-2 small mb-0">Erro ao carregar títulos.</div>
+                              )}
+                              {Array.isArray(titulosMap[cliente.idcliente]) && (titulosMap[cliente.idcliente] as TituloReceber[]).length === 0 && (
+                                <div className="text-muted small">Nenhum título encontrado.</div>
+                              )}
+                              {Array.isArray(titulosMap[cliente.idcliente]) && (titulosMap[cliente.idcliente] as TituloReceber[]).length > 0 && (
+                                <div className="table-responsive">
+                                  <table className="table table-sm table-hover mb-0">
+                                    <thead>
+                                      <tr>
+                                        <th>Título</th>
+                                        <th>Vencimento</th>
+                                        <th>Valor</th>
+                                        <th>Pedido</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(titulosMap[cliente.idcliente] as TituloReceber[]).map((titulo) => {
+                                        const vencido = new Date(titulo.datavencimento) < new Date();
+                                        return (
+                                          <tr key={titulo.idcontareceber}>
+                                            <td className="small">{titulo.numerotitulo ?? "—"}</td>
+                                            <td className={`small${vencido ? " text-danger fw-semibold" : ""}`}>
+                                              {formatDate(titulo.datavencimento)}
+                                            </td>
+                                            <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
+                                            <td className="small">
+                                              {titulo.numeroordem ? (
+                                                <span className="badge bg-secondary">#{titulo.numeroordem}</span>
+                                              ) : "—"}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
                   })}
-                </div>
-              )}
-
-              {/* SEÇÃO 3 — Accordion de títulos */}
-              {expandedId !== null && (
-                <div className="mt-4">
-                  <h6 className="mb-3">
-                    Títulos em Aberto — {clientes.find((c) => c.idcliente === expandedId)?.nome_cliente}
-                  </h6>
-                  {titulosMap[expandedId] === "loading" && (
-                    <div className="text-center py-3">
-                      <span className="spinner-border spinner-border-sm text-primary" role="status" />
-                    </div>
-                  )}
-                  {titulosMap[expandedId] === "error" && (
-                    <div className="alert alert-warning">Erro ao carregar títulos.</div>
-                  )}
-                  {Array.isArray(titulosMap[expandedId]) && (titulosMap[expandedId] as TituloReceber[]).length === 0 && (
-                    <div className="alert alert-info">Nenhum título encontrado.</div>
-                  )}
-                  {Array.isArray(titulosMap[expandedId]) && (titulosMap[expandedId] as TituloReceber[]).length > 0 && (
-                    <div className="table-responsive">
-                      <table className="table table-sm table-hover">
-                        <thead>
-                          <tr>
-                            <th>Título</th>
-                            <th>Vencimento</th>
-                            <th>Valor</th>
-                            <th>Pedido</th>
-                            <th>Obs.</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(titulosMap[expandedId] as TituloReceber[]).map((titulo) => {
-                            const vencido = new Date(titulo.datavencimento) < new Date();
-                            return (
-                              <tr key={titulo.idcontareceber}>
-                                <td>{titulo.numerotitulo ?? "—"}</td>
-                                <td className={vencido ? "text-danger" : ""}>
-                                  {formatDate(titulo.datavencimento)}
-                                </td>
-                                <td className="fw-semibold">{formatBRL(titulo.valor)}</td>
-                                <td>
-                                  {titulo.numeroordem ? (
-                                    <span className="badge bg-secondary">#{titulo.numeroordem}</span>
-                                  ) : (
-                                    "—"
-                                  )}
-                                </td>
-                                <td>
-                                  {titulo.observacao
-                                    ? titulo.observacao.length > 40
-                                      ? titulo.observacao.slice(0, 40) + "…"
-                                      : titulo.observacao
-                                    : "—"}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
                 </div>
               )}
             </>
