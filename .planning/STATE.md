@@ -2,34 +2,34 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Cobranca e Fiscal do Cliente
-current_phase: 28 (em execucao)
-status: Phase 28 Plan 01 concluido — aguardando plan 02
-last_updated: "2026-05-22T16:10:00.000Z"
+current_phase: 28 (concluida)
+status: Phase 28 completa — Plans 01 e 02 concluidos
+last_updated: "2026-05-22T16:45:00.000Z"
 last_activity: 2026-05-22
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 12
+  completed_plans: 2
+  percent: 25
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-22 — Roadmap v2.1 criado (4 fases: 28-31)
-Current phase: 28 (planning — nao iniciado)
+Last updated: 2026-05-22 — Phase 28 concluida (Plans 01 + 02)
+Current phase: 29 (boleto-consolidado) — aguardando inicio
 Milestone: v2.1 — Cobranca e Fiscal do Cliente
 
 ---
 
 ## Current Position
 
-Phase: 28 (pagina-detalhe-cliente) — EM EXECUCAO
-Plan: 1 de 2 completo
-Status: Plan 01 concluido (backend + schema Prisma); aguardando Plan 02 (frontend)
+Phase: 28 (pagina-detalhe-cliente) — CONCLUIDA
+Plan: 2 de 2 completo
+Status: Phase 28 completa — backend (Plan 01) + frontend (Plan 02) entregues
 Last activity: 2026-05-22
 
-Progress: [#---------] 12% (0/4 phases complete, 1/2 plans Phase 28 done)
+Progress: [##--------] 25% (1/4 phases complete, 2/2 plans Phase 28 done)
 
 ---
 
@@ -64,7 +64,7 @@ Progress: [#---------] 12% (0/4 phases complete, 1/2 plans Phase 28 done)
 | 25 | Upload de Anexos — Gravacao SMB e registro tabela anexo | complete (v2.0) |
 | 26 | Status Pagina Producao — Layout Kanban 3 colunas | complete (v2.0) |
 | 27 | Dashboard de Contas a Receber — Read-Only | complete (v2.0) |
-| 28 | Pagina de Detalhe do Cliente + Schema Prisma | in-progress (v2.1) — Plan 01/02 done |
+| 28 | Pagina de Detalhe do Cliente + Schema Prisma | complete (v2.1) |
 | 29 | Boleto Consolidado via EFI Bank | pending (v2.1) |
 | 30 | Emissao de NFS-e a partir de Titulos | pending (v2.1) |
 | 31 | Historico NFS-e + Consulta NF Athos | pending (v2.1) |
@@ -92,7 +92,7 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 ## Active Context
 
 - Milestone ativo: v2.1 (iniciado 2026-05-22)
-- Proximo passo: /gsd:plan-phase 28
+- Proximo passo: /gsd:plan-phase 29 (boleto-consolidado)
 - Stack: NestJS + Next.js + Prisma + PostgreSQL
 - Athos: somente leitura — nunca gravar
 - NfseModule existente em apps/backend/src/modules/integrations/nfse/ — reutilizar
@@ -131,6 +131,9 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 | 2026-05-22 | buscarDadosClienteContasReceber usa COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial) para unificar nome PF/PJ | Padrao identico ao buscarClientePorId existente; retorna 'Cliente #N' como fallback |
 | 2026-05-22 | Rota GET /dados separada de GET /titulos no AthosController | Responsabilidade unica: dados cadastrais vs titulos em aberto — diferentes consumidores |
 | 2026-05-22 | Migration add_cobranca_boleto_nfse_emitida aplicada diretamente via DATABASE_URL do .env | Banco acessivel localmente; sem necessidade de defer para producao |
+| 2026-05-22 | React.use(params) em Client Component Next.js 15 — nao await | Client Components nao aceitam async/await em hooks; use() e o mecanismo correto para resolver Promise de params |
+| 2026-05-22 | Barra de acoes sticky bottom condicional (removida do DOM quando vazia) | D-13: nao disabled — elemento ausente do DOM garante que nao ocupa espaco nem confunde o operador |
+| 2026-05-22 | Set<number> imutavel para selectedIds — novo Set a cada toggle | Imutabilidade necessaria para React detectar mudanca de estado e acionar re-render |
 
 ## Notes
 
