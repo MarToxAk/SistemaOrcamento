@@ -949,6 +949,48 @@ export class AthosService {
     }
   }
 
+  async buscarDadosClienteContasReceber(idcliente: number): Promise<{
+    idcliente: number;
+    nome_cliente: string;
+    telefone_completo: string | null;
+    emailcliente: string | null;
+    emailcobrancacliente: string | null;
+    limitecredito: number;
+    bloqueaprazo: string | null;
+  } | null> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT c.idcliente,
+          COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial, 'Cliente #' || c.idcliente::text) AS nome_cliente,
+          c.dddtelefoneempresa || c.telefoneempresa AS telefone_completo,
+          c.emailcliente, c.emailcobrancacliente, c.limitecredito, c.bloqueaprazo
+        FROM cliente c
+        LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+        LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+        WHERE c.idcliente = $1`,
+        [idcliente],
+      );
+      if (result.rows.length === 0) return null;
+      const row = result.rows[0] as Row;
+      return {
+        idcliente: Number(row["idcliente"]),
+        nome_cliente: pickString(row, ["nome_cliente"]) || `Cliente #${idcliente}`,
+        telefone_completo: pickString(row, ["telefone_completo"]) || null,
+        emailcliente: pickString(row, ["emailcliente"]) || null,
+        emailcobrancacliente: pickString(row, ["emailcobrancacliente"]) || null,
+        limitecredito: Number(row["limitecredito"]) || 0,
+        bloqueaprazo: pickString(row, ["bloqueaprazo"]) || null,
+      };
+    } catch (err) {
+      this.logger.warn(`Falha ao buscar dados cadastrais do cliente ${idcliente} no Athos: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    } finally {
+      client.release();
+    }
+  }
+
   async buscarRelacaoOrcamentoVenda(idorcamento: number): Promise<{ idvenda: number | null }> {
     this.logger.log(`buscarRelacaoOrcamentoVenda: idorcamento=${idorcamento}`);
     const pool = this.getPool();

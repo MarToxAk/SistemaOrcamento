@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   InternalServerErrorException,
+  NotFoundException,
   Param,
   ParseFilePipeBuilder,
   ParseIntPipe,
@@ -267,5 +268,27 @@ export class AthosController {
       throw new BadRequestException("idcliente inválido");
     }
     return this.athosService.buscarTitulosClienteContasReceber(id);
+  }
+
+  @ApiOperation({ summary: "Dados cadastrais do cliente (contas a receber)" })
+  @ApiParam({ name: "idcliente", example: "123" })
+  @ApiOkResponse({ description: "Dados cadastrais: nome, telefone, email, limitecredito, bloqueaprazo" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/cliente/:idcliente/dados")
+  async dadosCadastraisClienteContasReceber(
+    @Param("idcliente") idcliente: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idcliente);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException("idcliente inválido");
+    }
+    const dados = await this.athosService.buscarDadosClienteContasReceber(id);
+    if (!dados) {
+      throw new NotFoundException(`Cliente ${id} não encontrado no Athos`);
+    }
+    return dados;
   }
 }
