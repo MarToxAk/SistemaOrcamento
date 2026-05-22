@@ -291,16 +291,6 @@ export default function ContasReceberPage() {
                             )}
                           </div>
                           <div className="card-footer bg-transparent border-top d-flex gap-2 flex-wrap">
-                            {cliente.telefone_completo && (
-                              <a
-                                href={`https://wa.me/55${cliente.telefone_completo.replace(/\D/g, "")}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-sm btn-success"
-                              >
-                                <i className="bi bi-whatsapp me-1" />WhatsApp
-                              </a>
-                            )}
                             <button
                               type="button"
                               className={`btn btn-sm ${isExpanded ? "btn-primary" : "btn-outline-primary"}`}
