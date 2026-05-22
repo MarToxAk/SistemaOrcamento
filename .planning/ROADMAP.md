@@ -194,13 +194,18 @@ Full details: .planning/milestones/v2.0-ROADMAP.md
 **Goal**: Operador acessa dados completos de um cliente e seus títulos em aberto a partir do dashboard, com a estrutura de banco de dados pronta para cobrança e NFS-e
 **Depends on**: Phase 27 (dashboard /contas-receber existente)
 **Requirements**: CLI-01, CLI-02, CLI-03
+**Plans**: 2 plans
+
+Plans:
+- [ ] 28-01-PLAN.md — Backend: buscarDadosClienteContasReceber + rota dados cadastrais + Prisma schema 4 modelos + migration (wave 1)
+- [ ] 28-02-PLAN.md — Frontend: modificar /contas-receber + proxy Route Handler + página /contas-receber/[idcliente] (wave 2)
+
 **Success Criteria** (what must be TRUE):
   1. Clicar em um cliente em /contas-receber navega para /contas-receber/[idcliente] exibindo nome, telefone, email e limite de crédito do cliente via Athos
   2. A página lista todos os títulos AVC + VEN do cliente em tabela com checkbox individual, numerotitulo, datavencimento, valor e status
   3. Checkbox "Selecionar todos" na thead e contador de valor total selecionado atualizado em tempo real
   4. Barra de ações com "Gerar Boleto" e "Emitir NFS-e" aparece somente quando ao menos um título está selecionado
   5. Migration Prisma cria tabelas cobranca_boleto e nfse_emitida sem conflito com schema existente
-**Plans**: TBD
 **UI hint**: yes
 
 ### Phase 29: Boleto Consolidado via EFI Bank
@@ -241,7 +246,7 @@ Full details: .planning/milestones/v2.0-ROADMAP.md
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 28. Página de Detalhe do Cliente + Schema Prisma | 0/? | Not started | - |
+| 28. Página de Detalhe do Cliente + Schema Prisma | 0/2 | In progress | - |
 | 29. Boleto Consolidado via EFI Bank | 0/? | Not started | - |
 | 30. Emissão de NFS-e a partir de Títulos | 0/? | Not started | - |
 | 31. Histórico NFS-e + Consulta NF Athos | 0/? | Not started | - |
