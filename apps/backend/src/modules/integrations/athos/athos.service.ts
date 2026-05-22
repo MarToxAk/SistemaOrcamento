@@ -1826,11 +1826,15 @@ export class AthosService {
            cr.idcontareceber,
            CASE
              WHEN cr.lotenfse = true THEN 'NFS-e'
-             WHEN v.idnota IS NOT NULL THEN 'NF-e'
+             WHEN EXISTS (
+               SELECT 1 FROM venda_nota vn
+               JOIN nota n ON n.idnota = vn.idnota
+               WHERE vn.idvenda = cr.idvenda
+                 AND COALESCE(n.cancelada, false) = false
+             ) THEN 'NF-e'
              ELSE NULL
            END AS tipo_nf
          FROM conta_receber cr
-         LEFT JOIN venda v ON v.idvenda = cr.idvenda
          WHERE cr.idcontareceber = ANY($1)`,
         [idcontasReceber],
       );
