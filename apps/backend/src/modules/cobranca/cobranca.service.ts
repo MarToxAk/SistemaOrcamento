@@ -128,10 +128,14 @@ export class CobrancaService {
         name: nomeCliente.slice(0, 80),
         ...cpfOuCnpj,
       },
-      settings: {
-        payment_method: "banking_billet",
-        expire_at: dto.expireAt,
-        request_delivery_address: false,
+      payment: {
+        banking_billet: {
+          expire_at: dto.expireAt,
+          customer: {
+            name: nomeCliente.slice(0, 80),
+            ...cpfOuCnpj,
+          },
+        },
       },
       metadata: {
         custom_id: `cr-${dto.idclienteAthos}-${Date.now()}`.slice(0, 50),
