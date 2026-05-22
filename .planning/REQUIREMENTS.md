@@ -201,7 +201,7 @@ Critérios:
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| CLI-01 | 28 | pending |
+| CLI-01 | 28 | in-progress (backend 28-01 done; frontend 28-02 pending) |
 | CLI-02 | 28 | pending |
 | CLI-03 | 28 | pending |
 | BOL-01 | 29 | pending |

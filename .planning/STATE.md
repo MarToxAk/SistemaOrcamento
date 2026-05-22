@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Cobranca e Fiscal do Cliente
-current_phase: 28
-status: planning
-last_updated: "2026-05-22T00:00:00Z"
+current_phase: 28 (em execucao)
+status: Phase 28 Plan 01 concluido — aguardando plan 02
+last_updated: "2026-05-22T16:10:00.000Z"
 last_activity: 2026-05-22
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 12
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -24,12 +24,12 @@ Milestone: v2.1 — Cobranca e Fiscal do Cliente
 
 ## Current Position
 
-Phase: 28 (pagina-detalhe-cliente) — NOT STARTED
-Plan: —
-Status: Roadmap v2.1 criado, aguardando plan-phase 28
+Phase: 28 (pagina-detalhe-cliente) — EM EXECUCAO
+Plan: 1 de 2 completo
+Status: Plan 01 concluido (backend + schema Prisma); aguardando Plan 02 (frontend)
 Last activity: 2026-05-22
 
-Progress: [----------] 0% (0/4 phases complete)
+Progress: [#---------] 12% (0/4 phases complete, 1/2 plans Phase 28 done)
 
 ---
 
@@ -64,7 +64,7 @@ Progress: [----------] 0% (0/4 phases complete)
 | 25 | Upload de Anexos — Gravacao SMB e registro tabela anexo | complete (v2.0) |
 | 26 | Status Pagina Producao — Layout Kanban 3 colunas | complete (v2.0) |
 | 27 | Dashboard de Contas a Receber — Read-Only | complete (v2.0) |
-| 28 | Pagina de Detalhe do Cliente + Schema Prisma | planning (v2.1) |
+| 28 | Pagina de Detalhe do Cliente + Schema Prisma | in-progress (v2.1) — Plan 01/02 done |
 | 29 | Boleto Consolidado via EFI Bank | pending (v2.1) |
 | 30 | Emissao de NFS-e a partir de Titulos | pending (v2.1) |
 | 31 | Historico NFS-e + Consulta NF Athos | pending (v2.1) |
@@ -128,6 +128,9 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 | 2026-05-22 | NFS-e emitidas registradas no banco proprio (nao Athos) — tabela nfse_emitida via Prisma | Athos e read-only; historico proprio evita dependencia de banco externo |
 | 2026-05-22 | Boleto consolidado (multiplos titulos) em vez de por titulo | Reduz numero de boletos e simplifica cobranca para o operador |
 | 2026-05-22 | Schema Prisma (cobranca_boleto + nfse_emitida) criado na Phase 28 | Ambas as tabelas sao pre-requisito para phases 29 e 30 respectivamente |
+| 2026-05-22 | buscarDadosClienteContasReceber usa COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial) para unificar nome PF/PJ | Padrao identico ao buscarClientePorId existente; retorna 'Cliente #N' como fallback |
+| 2026-05-22 | Rota GET /dados separada de GET /titulos no AthosController | Responsabilidade unica: dados cadastrais vs titulos em aberto — diferentes consumidores |
+| 2026-05-22 | Migration add_cobranca_boleto_nfse_emitida aplicada diretamente via DATABASE_URL do .env | Banco acessivel localmente; sem necessidade de defer para producao |
 
 ## Notes
 

@@ -197,7 +197,7 @@ Full details: .planning/milestones/v2.0-ROADMAP.md
 **Plans**: 2 plans
 
 Plans:
-- [ ] 28-01-PLAN.md — Backend: buscarDadosClienteContasReceber + rota dados cadastrais + Prisma schema 4 modelos + migration (wave 1)
+- [x] 28-01-PLAN.md — Backend: buscarDadosClienteContasReceber + rota dados cadastrais + Prisma schema 4 modelos + migration (wave 1) — DONE 2026-05-22
 - [ ] 28-02-PLAN.md — Frontend: modificar /contas-receber + proxy Route Handler + página /contas-receber/[idcliente] (wave 2)
 
 **Success Criteria** (what must be TRUE):
@@ -246,7 +246,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 28. Página de Detalhe do Cliente + Schema Prisma | 0/2 | In progress | - |
+| 28. Página de Detalhe do Cliente + Schema Prisma | 1/2 | In progress | Plan 01 done 2026-05-22 |
 | 29. Boleto Consolidado via EFI Bank | 0/? | Not started | - |
 | 30. Emissão de NFS-e a partir de Títulos | 0/? | Not started | - |
 | 31. Histórico NFS-e + Consulta NF Athos | 0/? | Not started | - |
