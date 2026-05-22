@@ -23,24 +23,10 @@ interface ClienteDevedor {
   maior_atraso_dias: number | null;
 }
 
-interface TituloReceber {
-  idcontareceber: number;
-  numerotitulo: string | null;
-  datavencimento: string;
-  valor: number;
-  observacao: string | null;
-  idvenda: number | null;
-  dataemissao: string | null;
-  numeroordem: string | null;
-}
-
 function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
 
 function getBadgeClass(maior_atraso_dias: number | null): string {
   if (maior_atraso_dias === null || maior_atraso_dias === 0) return "badge bg-success";
@@ -69,15 +55,11 @@ export default function ContasReceberPage() {
   const [clientes, setClientes] = useState<ClienteDevedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [titulosMap, setTitulosMap] = useState<Record<number, TituloReceber[] | "loading" | "error">>({});
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("");
 
   async function fetchDashboard(status: StatusFiltro = statusFiltro) {
     setLoading(true);
     setErro("");
-    setExpandedId(null);
-    setTitulosMap({});
     try {
       const qs = status ? `?status=${status}` : "";
       const res = await fetch(`/api/athos/contas-receber/dashboard${qs}`, { cache: "no-store" });
@@ -91,27 +73,6 @@ export default function ContasReceberPage() {
       setErro("Erro ao carregar dashboard de contas a receber.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleToggleCliente(idcliente: number) {
-    if (expandedId === idcliente) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(idcliente);
-    if (titulosMap[idcliente] !== undefined) return;
-
-    setTitulosMap((prev) => ({ ...prev, [idcliente]: "loading" }));
-    try {
-      const res = await fetch(`/api/athos/contas-receber/cliente/${idcliente}/titulos`, {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("Erro ao buscar títulos.");
-      const data = (await res.json()) as TituloReceber[];
-      setTitulosMap((prev) => ({ ...prev, [idcliente]: data }));
-    } catch {
-      setTitulosMap((prev) => ({ ...prev, [idcliente]: "error" }));
     }
   }
 
@@ -240,7 +201,6 @@ export default function ContasReceberPage() {
                         : 0;
                     const progressBarClass =
                       pct >= 80 ? "progress-bar bg-danger" : pct >= 50 ? "progress-bar bg-warning" : "progress-bar bg-success";
-                    const isExpanded = expandedId === cliente.idcliente;
 
                     return (
                       <div key={cliente.idcliente} className="col-md-6 col-lg-4">
@@ -290,67 +250,14 @@ export default function ContasReceberPage() {
                               </div>
                             )}
                           </div>
-                          <div className="card-footer bg-transparent border-top d-flex gap-2 flex-wrap">
-                            <button
-                              type="button"
-                              className={`btn btn-sm ${isExpanded ? "btn-primary" : "btn-outline-primary"}`}
-                              onClick={() => void handleToggleCliente(cliente.idcliente)}
+                          <div className="card-footer bg-transparent border-top">
+                            <a
+                              href={`/contas-receber/${cliente.idcliente}`}
+                              className="btn btn-sm btn-outline-primary"
                             >
-                              <i className={`bi ${isExpanded ? "bi-chevron-up" : "bi-chevron-down"} me-1`} />
-                              Títulos
-                            </button>
+                              <i className="bi bi-person-lines-fill me-1" />Ver Detalhe
+                            </a>
                           </div>
-
-                          {/* Accordion inline no card */}
-                          {isExpanded && (
-                            <div className="card-body border-top pt-3 pb-2">
-                              {titulosMap[cliente.idcliente] === "loading" && (
-                                <div className="text-center py-2">
-                                  <span className="spinner-border spinner-border-sm text-primary" role="status" />
-                                  <span className="ms-2 small text-muted">Carregando títulos…</span>
-                                </div>
-                              )}
-                              {titulosMap[cliente.idcliente] === "error" && (
-                                <div className="alert alert-warning py-2 small mb-0">Erro ao carregar títulos.</div>
-                              )}
-                              {Array.isArray(titulosMap[cliente.idcliente]) && (titulosMap[cliente.idcliente] as TituloReceber[]).length === 0 && (
-                                <div className="text-muted small">Nenhum título encontrado.</div>
-                              )}
-                              {Array.isArray(titulosMap[cliente.idcliente]) && (titulosMap[cliente.idcliente] as TituloReceber[]).length > 0 && (
-                                <div className="table-responsive">
-                                  <table className="table table-sm table-hover mb-0">
-                                    <thead>
-                                      <tr>
-                                        <th>Título</th>
-                                        <th>Vencimento</th>
-                                        <th>Valor</th>
-                                        <th>Pedido</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {(titulosMap[cliente.idcliente] as TituloReceber[]).map((titulo) => {
-                                        const vencido = new Date(titulo.datavencimento) < new Date();
-                                        return (
-                                          <tr key={titulo.idcontareceber}>
-                                            <td className="small">{titulo.numerotitulo ?? "—"}</td>
-                                            <td className={`small${vencido ? " text-danger fw-semibold" : ""}`}>
-                                              {formatDate(titulo.datavencimento)}
-                                            </td>
-                                            <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
-                                            <td className="small">
-                                              {titulo.numeroordem ? (
-                                                <span className="badge bg-secondary">#{titulo.numeroordem}</span>
-                                              ) : "—"}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </div>
                     );
