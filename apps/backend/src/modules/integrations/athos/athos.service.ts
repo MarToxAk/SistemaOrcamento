@@ -1833,6 +1833,7 @@ export class AthosService {
                JOIN nota n ON n.idnota = vn.idnota
                WHERE vn.idvenda = cr.idvenda
                  AND COALESCE(n.cancelada, false) = false
+                 AND n.nfechaveacesso IS NOT NULL
              ) THEN 'NF-e'
              ELSE NULL
            END AS tipo_nf,
@@ -1842,6 +1843,7 @@ export class AthosService {
              JOIN nota n ON n.idnota = vn.idnota
              WHERE vn.idvenda = cr.idvenda
                AND COALESCE(n.cancelada, false) = false
+               AND n.nfechaveacesso IS NOT NULL
              ORDER BY n.idnota DESC
              LIMIT 1
            ) AS numero_nf
