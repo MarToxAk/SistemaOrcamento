@@ -17,10 +17,16 @@ export async function POST(
     return NextResponse.json({ error: "Body inválido." }, { status: 400 });
   }
 
+  // Endpoints /athos/* usam x-api-token (validateAthosToken), não x-internal-api-key
+  const athosToken = process.env.INTERNAL_API_KEY ?? "";
+  const extraHeaders: Record<string, string> = athosToken
+    ? { "x-api-token": athosToken }
+    : {};
+
   try {
     const res = await backendFetch(`/athos/contas-receber/cliente/${id}/nf-status`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...extraHeaders },
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
