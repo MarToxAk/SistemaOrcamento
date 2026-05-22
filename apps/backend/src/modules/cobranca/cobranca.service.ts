@@ -124,10 +124,6 @@ export class CobrancaService {
           amount: 1,
         },
       ],
-      customer: {
-        name: nomeCliente.slice(0, 80),
-        ...cpfOuCnpj,
-      },
       payment: {
         banking_billet: {
           expire_at: dto.expireAt,
