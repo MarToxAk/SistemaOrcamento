@@ -22,7 +22,8 @@ interface TituloReceber {
   idvenda: number | null;
   dataemissao: string | null;
   numeroordem: string | null;
-  tipoNf?: "NF-e" | "NFS-e" | null; // preenchido após verificação
+  tipoNf?: "NF-e" | "NFS-e" | null;
+  numeroNf?: string | null;
 }
 
 function formatBRL(value: number): string {
@@ -110,9 +111,12 @@ export default function ClienteDetalhePage({
               cache: "no-store",
             });
             if (nfRes.ok) {
-              const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: "NF-e" | "NFS-e" | null }>;
-              const nfMap = new Map(nfData.map((n) => [n.idcontareceber, n.tipoNf]));
-              setTitulos(data.map((t) => ({ ...t, tipoNf: nfMap.get(t.idcontareceber) ?? null })));
+              const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: "NF-e" | "NFS-e" | null; numeroNf: string | null }>;
+              const nfMap = new Map(nfData.map((n) => [n.idcontareceber, { tipoNf: n.tipoNf, numeroNf: n.numeroNf }]));
+              setTitulos(data.map((t) => {
+                const nf = nfMap.get(t.idcontareceber);
+                return { ...t, tipoNf: nf?.tipoNf ?? null, numeroNf: nf?.numeroNf ?? null };
+              }));
               return;
             }
           } catch { /* silently ignore NF check errors */ }
@@ -371,8 +375,11 @@ export default function ClienteDetalhePage({
                           <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
                           <td>
                             {titulo.tipoNf ? (
-                              <span className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}>
-                                {titulo.tipoNf}
+                              <span
+                                className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}
+                                title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}
+                              >
+                                {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
                               </span>
                             ) : (
                               <span className="badge bg-secondary opacity-50" title="Sem nota fiscal">Sem NF</span>

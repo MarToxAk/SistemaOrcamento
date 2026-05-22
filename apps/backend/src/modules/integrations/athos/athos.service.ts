@@ -1816,6 +1816,7 @@ export class AthosService {
   async verificarNFTitulos(idcontasReceber: number[]): Promise<Array<{
     idcontareceber: number;
     tipoNf: "NF-e" | "NFS-e" | null;
+    numeroNf: string | null;
   }>> {
     if (idcontasReceber.length === 0) return [];
     const pool = this.getPool();
@@ -1834,14 +1835,24 @@ export class AthosService {
                  AND COALESCE(n.cancelada, false) = false
              ) THEN 'NF-e'
              ELSE NULL
-           END AS tipo_nf
+           END AS tipo_nf,
+           (
+             SELECT n.numero
+             FROM venda_nota vn
+             JOIN nota n ON n.idnota = vn.idnota
+             WHERE vn.idvenda = cr.idvenda
+               AND COALESCE(n.cancelada, false) = false
+             ORDER BY n.idnota DESC
+             LIMIT 1
+           ) AS numero_nf
          FROM conta_receber cr
          WHERE cr.idcontareceber = ANY($1)`,
         [idcontasReceber],
       );
-      return (result.rows as Array<{ idcontareceber: unknown; tipo_nf: unknown }>).map((row) => ({
+      return (result.rows as Array<{ idcontareceber: unknown; tipo_nf: unknown; numero_nf: unknown }>).map((row) => ({
         idcontareceber: Number(row["idcontareceber"]),
         tipoNf: (row["tipo_nf"] as "NF-e" | "NFS-e" | null) ?? null,
+        numeroNf: typeof row["numero_nf"] === "string" && row["numero_nf"].trim() ? row["numero_nf"].trim() : null,
       }));
     } finally {
       client.release();
