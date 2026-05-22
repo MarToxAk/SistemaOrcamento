@@ -1,7 +1,7 @@
 ---
 phase: 29
 slug: boleto-consolidado-efi
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-22
@@ -55,17 +55,20 @@ Exceções:
 
 Usa a escala do `colors_and_type.css` mapeada para tamanhos Bootstrap equivalentes.
 
+Pesos ativos: **400 (--fw-regular)** e **600 (--fw-semibold)** — máximo 2 pesos conforme contrato.
+
 | Papel | Tamanho CSS var | Tamanho aprox. | Weight | Line Height | Uso no modal |
 |-------|----------------|----------------|--------|-------------|--------------|
 | Body | --fs-base (1.05rem) | ~17px | 400 (--fw-regular) | 1.5 (--lh-normal) | Texto descritivo, rótulos de campo |
 | Label/Small | --fs-sm (0.95rem) | ~15px | 400 (--fw-regular) | 1.5 | Valores secundários, hints de campo |
 | Heading | --fs-lg (1.35rem) | ~22px | 600 (--fw-semibold) | 1.3 (--lh-snug) | Título do modal "Gerar Boleto" |
-| Display/Valor | --fs-xl (1.7rem) | ~27px | 700 (--fw-bold) | 1.15 (--lh-tight) | Valor total do boleto em destaque |
+| Display/Valor | --fs-xl (1.7rem) | ~27px | 600 (--fw-semibold) | 1.15 (--lh-tight) | Valor total do boleto em destaque |
 
 Regras de aplicação:
 - Linha digitável: `font-family: var(--font-mono)`, --fs-sm, weight 400 — permite leitura e cópia fácil
 - Vencimento e valor: sempre formatados via `toLocaleString('pt-BR', ...)` e `toLocaleDateString('pt-BR')`
-- Classes Bootstrap equivalentes: `.fw-semibold`, `.fw-bold`, `.small`, `.fs-5`
+- Classes Bootstrap equivalentes: `.fw-semibold`, `.small`, `.fs-5`
+- `--fw-bold` (700) **não declarado nesta fase** — remover uso de `.fw-bold` e `font-weight: 700` em todo o modal
 
 ---
 
@@ -106,7 +109,7 @@ Ativado por: clique em "Gerar Boleto" na barra de ações (≥1 título selecion
 |----------|---------------|
 | Título do modal | `<h5>` — "Gerar Boleto" com ícone `bi-receipt` à esquerda |
 | Subtítulo | `<small>` com texto dinâmico: "{N} título(s) selecionado(s)" |
-| Bloco de resumo | Card `border-0 shadow-sm` com: Valor Total (destaque --fs-xl bold), lista dos títulos selecionados (numerotitulo + valor, font-size .small) |
+| Bloco de resumo | Card `border-0 shadow-sm` com: Valor Total (destaque --fs-xl fw-semibold), lista dos títulos selecionados (numerotitulo + valor, font-size .small) |
 | Campo de vencimento | `<input type="date">` com label "Data de Vencimento do Boleto" |
 | Alert datas divergentes | `alert alert-danger` (visível somente quando títulos têm datavencimento diferentes): "Os títulos selecionados possuem datas de vencimento diferentes. Informe a data de vencimento manualmente." |
 | Pré-preenchimento | Se datas iguais → campo de data pré-preenchido e readonly (exibe data + badge "Preenchido automaticamente" `bg-info text-dark`) |
@@ -138,7 +141,7 @@ Ativado por: resposta 2xx da API com payload `{ linkBoleto, barcodeLinhaDigitave
 |----------|---------------|
 | Ícone de sucesso | `bi-check-circle-fill` tamanho `fs-1` (2rem), cor `--success` (#1a7f37), centralizado |
 | Heading | `<h5 class="fw-semibold text-success">` — "Boleto Gerado com Sucesso" |
-| Bloco de dados | Card `border-0 bg-light` com: Valor (`formatBRL(valor)` — --fs-xl bold), Vencimento (`formatDate(expireAt)`) |
+| Bloco de dados | Card `border-0 bg-light` com: Valor (`formatBRL(valor)` — --fs-xl fw-semibold), Vencimento (`formatDate(expireAt)`) |
 | Linha digitável | Label "Linha Digitável", input `type="text"` readonly com `font-family: var(--font-mono)` e `font-size: var(--fs-sm)`, largura 100% |
 | Botão copiar | `btn btn-outline-secondary btn-sm` com ícone `bi-clipboard` ao lado do campo — texto "Copiar" → muda para "Copiado!" por 2s após click (via estado React) |
 | Botão abrir boleto | `btn btn-success` — "Abrir Boleto" com ícone `bi-box-arrow-up-right` — `target="_blank" rel="noopener noreferrer"` abrindo `linkBoleto` |
@@ -290,7 +293,7 @@ Adicionar ao bloco `<style>` existente na página (mantém padrão do projeto):
   align-items: center;
   padding: 16px 24px;
   border-bottom: 1px solid #ececec;
-  background: #f8fafb;
+  background: #f9f7ed;
   border-radius: 10px 10px 0 0;
   flex-shrink: 0;
 }
@@ -340,7 +343,7 @@ Nenhum registry de terceiros declarado. Registry safety gate não executado (nã
 | Framework de UI | page.tsx detectado | Bootstrap 5.3.2 + Bootstrap Icons 1.11.1 |
 | Padrão de modal | orcamento/[id]/page.tsx (pdf-modal-backdrop) | Custom React state overlay, sem Bootstrap Modal JS |
 | Paleta de cores | colors_and_type.css | Tokens --surface, --danger, --success, --accent |
-| Tipografia | colors_and_type.css | --font-ui, --fs-sm/base/lg/xl, --fw-regular/semibold/bold |
+| Tipografia | colors_and_type.css | --font-ui, --fs-sm/base/lg/xl, --fw-regular/semibold (2 pesos) |
 | Escala de espaçamento | colors_and_type.css + Bootstrap | --space-4 (16px), --space-6 (24px) como base |
 | Botão trigger "Gerar Boleto" | page.tsx linha 297 | `btn btn-warning` com `bi-receipt` — não alterar |
 | Validação de datas | CONTEXT.md D-06 | Datas iguais → pré-preencher readonly; diferentes → campo vazio + alert danger |
