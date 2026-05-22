@@ -47,6 +47,26 @@ export default function ClienteDetalhePage({
   const [erroTitulos, setErroTitulos] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
+  // Modal boleto states
+  const [boletoModalState, setBoletoModalState] = useState<
+    "idle" | "confirm" | "loading" | "success" | "error"
+  >("idle");
+  const [expireAt, setExpireAt] = useState("");
+  const [expireAtReadonly, setExpireAtReadonly] = useState(false);
+  const [erroDatasModal, setErroDatasModal] = useState("");
+  const [boletoResult, setBoletoResult] = useState<{
+    cobrancaId: number;
+    chargeId: number;
+    linkBoleto: string;
+    barcodeLinhaDigitavel: string;
+    valor: number;
+    expireAt: string;
+    nomeArquivo: string;
+  } | null>(null);
+  const [boletoErro, setBoletoErro] = useState("");
+  const [boletoErroDetalhe, setBoletoErroDetalhe] = useState("");
+  const [copiado, setCopiado] = useState(false);
+
   const checkboxRef = useRef<HTMLInputElement>(null);
 
   const allSelected = titulos.length > 0 && selectedIds.size === titulos.length;
@@ -84,6 +104,19 @@ export default function ClienteDetalhePage({
       .finally(() => setLoadingTitulos(false));
   }, [idcliente]);
 
+  // ESC key handler for modal
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && boletoModalState !== "loading") {
+        fecharBoletoModal();
+      }
+    }
+    if (boletoModalState !== "idle") {
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [boletoModalState]);
+
   function handleToggle(id: number) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -103,6 +136,71 @@ export default function ClienteDetalhePage({
       setSelectedIds(new Set(titulos.map((t) => t.idcontareceber)));
     }
   }
+
+  function abreBoletoModal() {
+    const titulosSelecionados = titulos.filter((t) => selectedIds.has(t.idcontareceber));
+    const datas = new Set(titulosSelecionados.map((t) => t.datavencimento?.slice(0, 10)));
+    if (datas.size === 1) {
+      setExpireAt([...datas][0] ?? "");
+      setExpireAtReadonly(true);
+      setErroDatasModal("");
+    } else {
+      setExpireAt("");
+      setExpireAtReadonly(false);
+      setErroDatasModal(
+        "Os títulos selecionados possuem datas de vencimento diferentes. Informe a data de vencimento manualmente.",
+      );
+    }
+    setBoletoModalState("confirm");
+  }
+
+  async function confirmarGerarBoleto() {
+    setBoletoModalState("loading");
+    const titulosSelecionados = titulos.filter((t) => selectedIds.has(t.idcontareceber));
+    try {
+      const res = await fetch("/api/cobranca/boleto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idclienteAthos: Number(idcliente),
+          idcontasReceber: titulosSelecionados.map((t) => t.idcontareceber),
+          expireAt,
+        }),
+      });
+      const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
+      if (!res.ok) {
+        setBoletoErro(
+          (data as { message?: string; error?: string })?.message ??
+            (data as { message?: string; error?: string })?.error ??
+            "Não foi possível gerar o boleto. Verifique a conexão e tente novamente.",
+        );
+        setBoletoErroDetalhe(`HTTP ${res.status}`);
+        setBoletoModalState("error");
+      } else {
+        setBoletoResult(data as typeof boletoResult);
+        setBoletoModalState("success");
+      }
+    } catch (err) {
+      setBoletoErro(
+        "Não foi possível gerar o boleto. Verifique a conexão e tente novamente.",
+      );
+      setBoletoErroDetalhe(err instanceof Error ? err.message : "");
+      setBoletoModalState("error");
+    }
+  }
+
+  function fecharBoletoModal() {
+    setBoletoModalState("idle");
+    setBoletoResult(null);
+    setBoletoErro("");
+    setBoletoErroDetalhe("");
+    setCopiado(false);
+  }
+
+  // Derived variables for the modal
+  const titulosSelecionadosParaBoleto = titulos.filter((t) => selectedIds.has(t.idcontareceber));
+  const hoje = new Date().toISOString().slice(0, 10);
+  const expireAtInvalido = !expireAt || expireAt < hoje;
 
   return (
     <>
@@ -296,9 +394,7 @@ export default function ClienteDetalhePage({
             <button
               type="button"
               className="btn btn-warning me-2"
-              onClick={() => {
-                /* TODO: Phase 29 — Gerar Boleto */
-              }}
+              onClick={abreBoletoModal}
             >
               <i className="bi bi-receipt me-1" />Gerar Boleto
             </button>
@@ -315,6 +411,261 @@ export default function ClienteDetalhePage({
         </div>
       )}
 
+      {/* Modal boleto — 4 estados */}
+      {boletoModalState !== "idle" && (
+        <div
+          className="boleto-modal-backdrop"
+          onClick={boletoModalState !== "loading" ? fecharBoletoModal : undefined}
+        >
+          <div
+            className="boleto-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Gerar Boleto Bancário"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* HEADER — visível em todos os estados */}
+            <div className="boleto-modal-header">
+              <h5 className="mb-0 fw-semibold" style={{ fontSize: "var(--fs-lg, 1.35rem)" }}>
+                <i className="bi bi-receipt me-2" />Gerar Boleto
+              </h5>
+              {boletoModalState !== "loading" && (
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={fecharBoletoModal}
+                  aria-label="Fechar"
+                />
+              )}
+            </div>
+
+            {/* ESTADO 1 — CONFIRMAÇÃO */}
+            {boletoModalState === "confirm" && (
+              <>
+                <div className="boleto-modal-body">
+                  <small className="text-muted d-block mb-3">
+                    {titulosSelecionadosParaBoleto.length} título(s) selecionado(s) —{" "}
+                    {formatBRL(totalSelecionado)}
+                  </small>
+
+                  {/* Resumo dos títulos */}
+                  <div className="card border-0 shadow-sm mb-3">
+                    <div className="card-body p-3">
+                      <div className="mb-2 text-muted small">Valor Total</div>
+                      <div
+                        className="fw-semibold mb-3"
+                        style={{ fontSize: "var(--fs-xl, 1.7rem)" }}
+                      >
+                        {formatBRL(totalSelecionado)}
+                      </div>
+                      <ul className="list-unstyled mb-0">
+                        {titulosSelecionadosParaBoleto.map((t) => (
+                          <li
+                            key={t.idcontareceber}
+                            className="d-flex justify-content-between small border-bottom pb-1 mb-1"
+                          >
+                            <span className="text-muted">
+                              {t.numerotitulo ?? `#${t.idcontareceber}`}
+                            </span>
+                            <span>{formatBRL(t.valor)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Alert datas divergentes */}
+                  {erroDatasModal && (
+                    <div className="alert alert-danger d-flex gap-2 mb-3" role="alert">
+                      <i className="bi bi-exclamation-triangle-fill flex-shrink-0" />
+                      <span className="small">{erroDatasModal}</span>
+                    </div>
+                  )}
+
+                  {/* Campo de vencimento */}
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold small">
+                      Data de Vencimento do Boleto
+                    </label>
+                    <input
+                      type="date"
+                      className={`form-control${expireAt && expireAt < hoje ? " is-invalid" : ""}`}
+                      value={expireAt}
+                      min={hoje}
+                      readOnly={expireAtReadonly}
+                      onChange={(e) => !expireAtReadonly && setExpireAt(e.target.value)}
+                    />
+                    {expireAtReadonly && (
+                      <div className="mt-1">
+                        <span className="badge bg-info text-dark small">
+                          Preenchido automaticamente
+                        </span>
+                        <small className="text-muted ms-2">
+                          Preenchida automaticamente com a data dos títulos.
+                        </small>
+                      </div>
+                    )}
+                    {expireAt && expireAt < hoje && (
+                      <div className="invalid-feedback">
+                        A data de vencimento não pode ser no passado.
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="boleto-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={fecharBoletoModal}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={confirmarGerarBoleto}
+                    disabled={expireAtInvalido}
+                  >
+                    <i className="bi bi-check-lg me-1" />Confirmar Geração
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ESTADO 2 — LOADING */}
+            {boletoModalState === "loading" && (
+              <div className="boleto-modal-body d-flex flex-column align-items-center justify-content-center py-5">
+                <div className="spinner-border text-primary" role="status">
+                  <span className="visually-hidden">Gerando boleto...</span>
+                </div>
+                <p className="mt-3 text-muted mb-0">Gerando boleto junto à EFI Bank…</p>
+              </div>
+            )}
+
+            {/* ESTADO 3 — SUCESSO */}
+            {boletoModalState === "success" && boletoResult && (
+              <>
+                <div className="boleto-modal-body" role="status" aria-live="polite">
+                  <div className="text-center mb-4">
+                    <i className="bi bi-check-circle-fill fs-1 text-success" />
+                    <h5 className="fw-semibold text-success mt-2">Boleto Gerado com Sucesso</h5>
+                  </div>
+                  <div className="card border-0 bg-light mb-3">
+                    <div className="card-body p-3">
+                      <div className="d-flex justify-content-between mb-2">
+                        <span className="text-muted small">Valor</span>
+                        <span
+                          className="fw-semibold"
+                          style={{ fontSize: "var(--fs-xl, 1.7rem)" }}
+                        >
+                          {formatBRL(boletoResult.valor)}
+                        </span>
+                      </div>
+                      <div className="d-flex justify-content-between">
+                        <span className="text-muted small">Vencimento</span>
+                        <span className="small">{formatDate(boletoResult.expireAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="form-label small fw-semibold">Linha Digitável</label>
+                  <div className="d-flex gap-2 align-items-start mb-3">
+                    <input
+                      type="text"
+                      className="form-control boleto-linha-digitavel"
+                      value={boletoResult.barcodeLinhaDigitavel}
+                      readOnly
+                      aria-label="Linha digitável do boleto"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm flex-shrink-0"
+                      style={{ minWidth: "44px", minHeight: "44px" }}
+                      onClick={() => {
+                        void navigator.clipboard.writeText(boletoResult!.barcodeLinhaDigitavel);
+                        setCopiado(true);
+                        setTimeout(() => setCopiado(false), 2000);
+                      }}
+                    >
+                      {copiado ? (
+                        "Copiado! ✔"
+                      ) : (
+                        <>
+                          <i className="bi bi-clipboard" /> Copiar
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div className="boleto-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={fecharBoletoModal}
+                  >
+                    Fechar
+                  </button>
+                  <a
+                    href={boletoResult.linkBoleto}
+                    download={boletoResult.nomeArquivo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-success"
+                  >
+                    <i className="bi bi-box-arrow-up-right me-1" />Abrir Boleto
+                  </a>
+                  {boletoResult.nomeArquivo && (
+                    <small className="text-muted d-block mt-1 text-center">
+                      {boletoResult.nomeArquivo}
+                    </small>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ESTADO 4 — ERRO */}
+            {boletoModalState === "error" && (
+              <>
+                <div className="boleto-modal-body" role="alert" aria-live="assertive">
+                  <div className="alert alert-danger d-flex gap-2">
+                    <i className="bi bi-exclamation-triangle-fill flex-shrink-0" />
+                    <div>
+                      <div>
+                        {boletoErro ||
+                          "Não foi possível gerar o boleto. Verifique a conexão e tente novamente."}
+                      </div>
+                      {boletoErroDetalhe && (
+                        <small className="text-muted d-block mt-1">{boletoErroDetalhe}</small>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="boleto-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={fecharBoletoModal}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-warning"
+                    onClick={() => {
+                      setBoletoErro("");
+                      setBoletoErroDetalhe("");
+                      setBoletoModalState("confirm");
+                    }}
+                  >
+                    Tentar Novamente
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <style>{`
         body { background: #f7f1e3; font-size: 1.02rem; }
         .orcamento-header {
@@ -325,6 +676,61 @@ export default function ClienteDetalhePage({
         .orcamento-section { border-radius: 0 0 8px 8px; }
         .logo-img { max-width: 140px; max-height: 88px; background: #fff; border-radius: 8px; padding: 6px; }
         .bg-orange { background-color: #fd7e14 !important; }
+        .boleto-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.55);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1050;
+          padding: 1rem;
+          animation: fadeIn 150ms ease-out;
+        }
+        .boleto-modal-card {
+          width: min(520px, 100%);
+          background: #fff;
+          border-radius: 10px;
+          box-shadow: 0 18px 30px rgba(12, 27, 42, 0.15);
+          display: flex;
+          flex-direction: column;
+          max-height: calc(100vh - 2rem);
+          overflow-y: auto;
+          animation: slideUp 150ms ease-out;
+        }
+        .boleto-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 24px;
+          border-bottom: 1px solid #ececec;
+          background: #f9f7ed;
+          border-radius: 10px 10px 0 0;
+          flex-shrink: 0;
+        }
+        .boleto-modal-body {
+          padding: 24px;
+          flex: 1;
+        }
+        .boleto-modal-footer {
+          display: flex;
+          gap: 8px;
+          justify-content: flex-end;
+          padding: 16px 24px;
+          border-top: 1px solid #ececec;
+          flex-shrink: 0;
+        }
+        .boleto-linha-digitavel {
+          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+          font-size: 0.85rem;
+          background: #f5f5f5;
+          border: 1px solid #ececec;
+          border-radius: 6px;
+          padding: 8px 12px;
+          word-break: break-all;
+        }
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes slideUp { from { transform: translateY(8px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
       `}</style>
     </>
   );
