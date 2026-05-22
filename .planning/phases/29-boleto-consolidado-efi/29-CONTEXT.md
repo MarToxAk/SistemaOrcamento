@@ -111,6 +111,17 @@ Implementar a geração de boleto bancário consolidado (múltiplos títulos sel
   - Valor + vencimento
 - **D-21:** Novo Route Handler proxy: `apps/frontend/src/app/api/cobranca/boleto/route.ts` — POST com `x-internal-api-key` via `INTERNAL_API_KEY`.
 
+### Nome do Arquivo PDF do Boleto
+
+- **D-22:** O backend gera um `nomeArquivo` sugerido para o PDF do boleto seguindo o padrão:
+  ```
+  {idclienteAthos} - {NOME_CLIENTE_MAIUSCULO} {expireAt}.pdf
+  ```
+  Exemplo: `87 - HOTEL PORTO DO PIUVA LTDA EPP 2026-05-14.pdf`
+- **D-23:** `nomeArquivo` incluído na resposta do endpoint: `{ ..., nomeArquivo: string }`.
+- **D-24:** Frontend usa `nomeArquivo` no atributo `download` do link "Abrir Boleto" e o exibe abaixo do link no Estado 3 do modal (`<small className="text-muted">Arquivo: {nomeArquivo}</small>`).
+- **D-25:** Nome gerado no `CobrancaService`: `const nomeArquivo = \`\${idclienteAthos} - \${nomeCliente.trim().toUpperCase()} \${expireAt}.pdf\``
+
 ### Claude's Discretion
 
 - `CobrancaService` injeta `EFIService` via NestJS DI — não cria cliente HTTP próprio
