@@ -218,6 +218,7 @@ export default function ClienteDetalhePage({
 
   // Derived variables for the modal
   const titulosSelecionadosParaBoleto = titulos.filter((t) => selectedIds.has(t.idcontareceber));
+  const selecionadosSemNf = titulosSelecionadosParaBoleto.filter((t) => !t.tipoNf);
   const hoje = new Date().toISOString().slice(0, 10);
   const expireAtInvalido = !expireAt || expireAt < hoje;
 
@@ -354,15 +355,13 @@ export default function ClienteDetalhePage({
                       const vencido = new Date(titulo.datavencimento) < new Date();
                       const temNf = titulo.tipoNf != null;
                       return (
-                        <tr key={titulo.idcontareceber} className={temNf ? "" : "table-secondary opacity-75"}>
+                        <tr key={titulo.idcontareceber}>
                           <td>
                             <input
                               type="checkbox"
                               className="form-check-input"
                               checked={selectedIds.has(titulo.idcontareceber)}
-                              onChange={() => temNf && handleToggle(titulo.idcontareceber)}
-                              disabled={!temNf}
-                              title={temNf ? undefined : "Sem nota fiscal emitida"}
+                              onChange={() => handleToggle(titulo.idcontareceber)}
                             />
                           </td>
                           <td className="small">{titulo.numerotitulo ?? "—"}</td>
@@ -422,11 +421,19 @@ export default function ClienteDetalhePage({
             <strong>{selectedIds.size}</strong> título(s) selecionado(s) —{" "}
             <strong>{formatBRL(totalSelecionado)}</strong>
           </span>
-          <div className="ms-auto d-flex gap-2">
+          <div className="ms-auto d-flex align-items-center gap-2">
+            {selecionadosSemNf.length > 0 && (
+              <small className="text-danger">
+                <i className="bi bi-exclamation-triangle me-1" />
+                {selecionadosSemNf.length} título(s) sem NF — boleto bloqueado
+              </small>
+            )}
             <button
               type="button"
-              className="btn btn-warning me-2"
+              className="btn btn-warning"
               onClick={abreBoletoModal}
+              disabled={selecionadosSemNf.length > 0}
+              title={selecionadosSemNf.length > 0 ? "Selecione apenas títulos com NF emitida para gerar boleto" : undefined}
             >
               <i className="bi bi-receipt me-1" />Gerar Boleto
             </button>
