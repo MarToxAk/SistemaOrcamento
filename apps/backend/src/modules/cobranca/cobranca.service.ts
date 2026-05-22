@@ -64,16 +64,18 @@ export class CobrancaService {
     const dadosCliente = await this.athosService.buscarDadosClienteContasReceber(dto.idclienteAthos);
     const nomeCliente = dadosCliente?.nome_cliente ?? `Cliente ${dto.idclienteAthos}`;
 
-    let cpfOuCnpj: Record<string, string> = {};
+    let cpfOuCnpj: Record<string, unknown> = {};
     try {
       const clienteCompleto = await this.athosService.buscarClientePorId(dto.idclienteAthos);
       const doc = clienteCompleto?.documento;
       if (doc) {
         const digitsOnly = doc.replace(/\D/g, "");
         if (digitsOnly.length === 11) {
+          // PF: cpf direto no customer
           cpfOuCnpj = { cpf: digitsOnly };
         } else if (digitsOnly.length === 14) {
-          cpfOuCnpj = { cnpj: digitsOnly };
+          // PJ: EFI exige juridical_person.cnpj (não cnpj diretamente)
+          cpfOuCnpj = { juridical_person: { corporate_name: nomeCliente.slice(0, 80), cnpj: digitsOnly } };
         }
       }
     } catch (err: unknown) {
@@ -127,10 +129,9 @@ export class CobrancaService {
       payment: {
         banking_billet: {
           expire_at: dto.expireAt,
-          customer: {
-            name: nomeCliente.slice(0, 80),
-            ...cpfOuCnpj,
-          },
+          customer: cpfOuCnpj && "juridical_person" in cpfOuCnpj
+            ? cpfOuCnpj  // PJ: { juridical_person: { corporate_name, cnpj } }
+            : { name: nomeCliente.slice(0, 80), ...cpfOuCnpj }, // PF ou sem doc
         },
       },
       metadata: {
