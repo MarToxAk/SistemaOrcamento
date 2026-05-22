@@ -1,4 +1,6 @@
-import { Body, Controller, HttpCode, HttpStatus, Logger, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Query, Res } from "@nestjs/common";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ExpressResponse = any;
 
 import { Public } from "../security/public.decorator";
 import { CobrancaService } from "./cobranca.service";
@@ -17,6 +19,21 @@ export class CobrancaController {
   @Post("boleto")
   async criarBoleto(@Body() dto: CriarBoletoDto) {
     return this.cobrancaService.criarBoleto(dto);
+  }
+
+  /**
+   * Download do PDF do boleto com nome formatado.
+   * Requer autenticação via x-internal-api-key.
+   */
+  @Get("boleto/:id/pdf")
+  async downloadBoleto(
+    @Param("id", ParseIntPipe) cobrancaId: number,
+    @Res() res: ExpressResponse,
+  ): Promise<void> {
+    const { pdfBuffer, nomeArquivo } = await this.cobrancaService.downloadBoletoPdf(cobrancaId);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
+    res.send(pdfBuffer);
   }
 
   /**

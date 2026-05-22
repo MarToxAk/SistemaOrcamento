@@ -606,13 +606,19 @@ export default function ClienteDetalhePage({
                     Fechar
                   </button>
                   <a
-                    href={boletoResult.linkBoleto}
+                    href={`/api/cobranca/boleto/${boletoResult.cobrancaId}/pdf`}
                     download={boletoResult.nomeArquivo}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="btn btn-success"
                   >
-                    <i className="bi bi-box-arrow-up-right me-1" />Abrir Boleto
+                    <i className="bi bi-download me-1" />Baixar Boleto PDF
+                  </a>
+                  <a
+                    href={boletoResult.linkBoleto}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-outline-secondary btn-sm"
+                  >
+                    <i className="bi bi-box-arrow-up-right me-1" />Ver no EFI
                   </a>
                   {boletoResult.nomeArquivo && (
                     <small className="text-muted d-block mt-1 text-center">

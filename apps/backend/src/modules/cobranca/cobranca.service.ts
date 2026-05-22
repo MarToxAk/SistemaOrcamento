@@ -280,6 +280,38 @@ export class CobrancaService {
     }
   }
 
+  async downloadBoletoPdf(cobrancaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
+    const cobranca = await this.prisma.cobrancaBoleto.findUnique({ where: { id: cobrancaId } });
+    if (!cobranca) {
+      throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
+    }
+    if (!cobranca.txidEfi) {
+      throw new BadRequestException(`Cobrança ${cobrancaId} ainda não possui chargeId EFI.`);
+    }
+
+    const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
+    const clientId = this.getRequiredConfig("EFI_CLIENT_ID");
+    const clientSecret = this.getRequiredConfig("EFI_CLIENT_SECRET");
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    const cobrancaClient = axios.create({ baseURL: baseUrl, timeout: 30_000 });
+
+    const authResp = await cobrancaClient.post(
+      "/v1/authorize",
+      { grant_type: "client_credentials" },
+      { headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" } },
+    );
+    const token: string = authResp.data?.access_token;
+    if (!token) throw new InternalServerErrorException("Falha ao autenticar na EFI para download do PDF.");
+
+    const pdfResp = await cobrancaClient.get(
+      `/v1/charge/${cobranca.txidEfi}/billet/pdf`,
+      { headers: { Authorization: `Bearer ${token}` }, responseType: "arraybuffer" },
+    );
+
+    const nomeArquivo = `${cobranca.idclienteAthos} - boleto-${cobranca.txidEfi}.pdf`;
+    return { pdfBuffer: Buffer.from(pdfResp.data as ArrayBuffer), nomeArquivo };
+  }
+
   private getRequiredConfig(key: string): string {
     const value = this.config.get<string>(key)?.trim();
     if (!value) {
