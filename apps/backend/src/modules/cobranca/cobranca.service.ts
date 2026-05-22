@@ -59,8 +59,13 @@ export class CobrancaService {
     }
 
     // Determinar tipo de NF para o item EFI
+    // Montar nome do item com tipo + números das NFs (ex: "NF-e #308, #398")
+    const numeros = [...new Set(nfInfo.map((n) => n.numeroNf).filter(Boolean))];
     const tipos = [...new Set(nfInfo.map((n) => n.tipoNf))];
-    const nomeItemNf = tipos.length === 1 ? (tipos[0] ?? "NF-e / NFS-e") : "NF-e / NFS-e";
+    const tipoLabel = tipos.length === 1 ? (tipos[0] ?? "NF-e") : "NF-e / NFS-e";
+    const nomeItemNf = numeros.length > 0
+      ? `${tipoLabel} ${numeros.map((num) => `#${num}`).join(", ")}`.slice(0, 255)
+      : tipoLabel;
 
     const totalValorRaw = titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0);
     const totalValor = Number(totalValorRaw.toFixed(2));
