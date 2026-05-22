@@ -204,9 +204,9 @@ Critérios:
 | CLI-01 | 28 | complete (28-01 + 28-02 — 2026-05-22) |
 | CLI-02 | 28 | complete (28-02 — 2026-05-22) |
 | CLI-03 | 28 | complete (28-02 — 2026-05-22) |
-| BOL-01 | 29 | pending |
-| BOL-02 | 29 | pending |
-| BOL-03 | 29 | pending |
+| BOL-01 | 29 | backend-complete (29-01 — 2026-05-22) |
+| BOL-02 | 29 | backend-complete (29-01 — 2026-05-22) |
+| BOL-03 | 29 | backend-complete (29-01 — 2026-05-22) |
 | NFR-01 | 30 | pending |
 | NFR-02 | 30 | pending |
 | NFR-03 | 30 | pending |

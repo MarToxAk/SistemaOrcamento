@@ -2,34 +2,34 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Cobranca e Fiscal do Cliente
-current_phase: 28 (concluida)
-status: Phase 28 completa — Plans 01 e 02 concluidos
-last_updated: "2026-05-22T16:45:00.000Z"
+current_phase: 29 (boleto-consolidado) — Plan 01 completo, aguardando checkpoint
+status: Phase 29 Plan 01 completo — CobrancaModule backend implementado
+last_updated: "2026-05-22T00:30:00.000Z"
 last_activity: 2026-05-22
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 25
+  total_plans: 5
+  completed_plans: 4
+  percent: 30
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-22 — Phase 28 concluida (Plans 01 + 02)
-Current phase: 29 (boleto-consolidado) — aguardando inicio
+Last updated: 2026-05-22 — Phase 29 Plan 01 completo (CobrancaModule backend)
+Current phase: 29 (boleto-consolidado) — Plan 01 entregue, checkpoint aguardando verificacao humana
 Milestone: v2.1 — Cobranca e Fiscal do Cliente
 
 ---
 
 ## Current Position
 
-Phase: 28 (pagina-detalhe-cliente) — CONCLUIDA
-Plan: 2 de 2 completo
-Status: Phase 28 completa — backend (Plan 01) + frontend (Plan 02) entregues
+Phase: 29 (boleto-consolidado-efi) — EM PROGRESSO
+Plan: 1 de 2 completo
+Status: Plan 01 entregue — CobrancaModule backend (POST /cobranca/boleto + webhook)
 Last activity: 2026-05-22
 
-Progress: [##--------] 25% (1/4 phases complete, 2/2 plans Phase 28 done)
+Progress: [###-------] 30% (Phase 28 completa + Phase 29 Plan 01 completo)
 
 ---
 
@@ -65,7 +65,7 @@ Progress: [##--------] 25% (1/4 phases complete, 2/2 plans Phase 28 done)
 | 26 | Status Pagina Producao — Layout Kanban 3 colunas | complete (v2.0) |
 | 27 | Dashboard de Contas a Receber — Read-Only | complete (v2.0) |
 | 28 | Pagina de Detalhe do Cliente + Schema Prisma | complete (v2.1) |
-| 29 | Boleto Consolidado via EFI Bank | pending (v2.1) |
+| 29 | Boleto Consolidado via EFI Bank | in-progress (v2.1) — Plan 01 completo |
 | 30 | Emissao de NFS-e a partir de Titulos | pending (v2.1) |
 | 31 | Historico NFS-e + Consulta NF Athos | pending (v2.1) |
 
@@ -134,6 +134,10 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 | 2026-05-22 | React.use(params) em Client Component Next.js 15 — nao await | Client Components nao aceitam async/await em hooks; use() e o mecanismo correto para resolver Promise de params |
 | 2026-05-22 | Barra de acoes sticky bottom condicional (removida do DOM quando vazia) | D-13: nao disabled — elemento ausente do DOM garante que nao ocupa espaco nem confunde o operador |
 | 2026-05-22 | Set<number> imutavel para selectedIds — novo Set a cada toggle | Imutabilidade necessaria para React detectar mudanca de estado e acionar re-render |
+| 2026-05-22 | CobrancaModule importa EfiModule + AthosModule; DatabaseModule @Global() nao precisa ser importado | Padrao estabelecido: modulos globais nao precisam ser re-importados |
+| 2026-05-22 | Auth EFI boleto: padrão identico ao createCardPaymentLink() — Basic Auth sem mTLS para obter Bearer token | D-03 exige reutilizacao exata do padrao existente |
+| 2026-05-22 | Webhook POST /cobranca/boleto/notificacao retorna HTTP 200 sempre — erros logados internamente | D-18: evitar retentativas EFI por falha HTTP |
+| 2026-05-22 | notification_url omitida quando WEBHOOK_BASE_URL/APP_URL contem localhost ou 127.0.0.1 | Mesmo padrao de isPublicUrl de createCardPaymentLink() |
 
 ## Notes
 

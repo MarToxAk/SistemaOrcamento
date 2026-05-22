@@ -251,7 +251,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 28. Página de Detalhe do Cliente + Schema Prisma | 2/2 | Complete | 2026-05-22 |
-| 29. Boleto Consolidado via EFI Bank | 0/2 | In Progress | - |
+| 29. Boleto Consolidado via EFI Bank | 1/2 | In Progress | - |
 | 30. Emissão de NFS-e a partir de Títulos | 0/? | Not started | - |
 | 31. Histórico NFS-e + Consulta NF Athos | 0/? | Not started | - |
 
