@@ -48,7 +48,20 @@ export class CobrancaService {
       throw new BadRequestException("Alguns títulos solicitados não foram encontrados para este cliente.");
     }
 
-    // Passo 3: Calcular total
+    // Passo 3: Validar NF e calcular total
+    const nfInfo = await this.athosService.verificarNFTitulos(dto.idcontasReceber);
+    const semNf = nfInfo.filter((n) => n.tipoNf === null);
+    if (semNf.length > 0) {
+      throw new BadRequestException(
+        `Os títulos ${semNf.map((n) => n.idcontareceber).join(", ")} não possuem nota fiscal emitida. ` +
+        "Apenas títulos com NF-e ou NFS-e podem gerar boleto.",
+      );
+    }
+
+    // Determinar tipo de NF para o item EFI
+    const tipos = [...new Set(nfInfo.map((n) => n.tipoNf))];
+    const nomeItemNf = tipos.length === 1 ? (tipos[0] ?? "NF-e / NFS-e") : "NF-e / NFS-e";
+
     const totalValorRaw = titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0);
     const totalValor = Number(totalValorRaw.toFixed(2));
 
@@ -121,7 +134,7 @@ export class CobrancaService {
     const body: Record<string, unknown> = {
       items: [
         {
-          name: `Cobrança #${dto.idclienteAthos}`.slice(0, 255),
+          name: nomeItemNf,
           value: valorCentavos,
           amount: 1,
         },

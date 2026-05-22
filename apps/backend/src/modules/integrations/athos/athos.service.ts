@@ -1809,4 +1809,38 @@ export class AthosService {
     }
   }
 
+  /**
+   * Verifica se cada título possui NF emitida (NF-e via venda.idnota ou NFS-e via lotenfse).
+   * Retorna tipo de NF por título para validação antes de gerar boleto.
+   */
+  async verificarNFTitulos(idcontasReceber: number[]): Promise<Array<{
+    idcontareceber: number;
+    tipoNf: "NF-e" | "NFS-e" | null;
+  }>> {
+    if (idcontasReceber.length === 0) return [];
+    const pool = this.getPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           cr.idcontareceber,
+           CASE
+             WHEN cr.lotenfse = true THEN 'NFS-e'
+             WHEN v.idnota IS NOT NULL THEN 'NF-e'
+             ELSE NULL
+           END AS tipo_nf
+         FROM conta_receber cr
+         LEFT JOIN venda v ON v.idvenda = cr.idvenda
+         WHERE cr.idcontareceber = ANY($1)`,
+        [idcontasReceber],
+      );
+      return (result.rows as Array<{ idcontareceber: unknown; tipo_nf: unknown }>).map((row) => ({
+        idcontareceber: Number(row["idcontareceber"]),
+        tipoNf: (row["tipo_nf"] as "NF-e" | "NFS-e" | null) ?? null,
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
 }

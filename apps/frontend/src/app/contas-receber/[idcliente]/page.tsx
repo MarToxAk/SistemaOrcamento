@@ -22,6 +22,7 @@ interface TituloReceber {
   idvenda: number | null;
   dataemissao: string | null;
   numeroordem: string | null;
+  tipoNf?: "NF-e" | "NFS-e" | null; // preenchido após verificação
 }
 
 function formatBRL(value: number): string {
@@ -93,11 +94,29 @@ export default function ClienteDetalhePage({
       .catch(() => setErroCliente("Erro ao carregar dados do cliente."))
       .finally(() => setLoadingCliente(false));
 
-    // Fetch títulos do cliente
+    // Fetch títulos do cliente + verificação de NF em paralelo
     fetch(`/api/athos/contas-receber/cliente/${idcliente}/titulos`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error("Erro ao carregar títulos.");
         const data = (await res.json()) as TituloReceber[];
+        // Verificar NF para cada título
+        const ids = data.map((t) => t.idcontareceber);
+        if (ids.length > 0) {
+          try {
+            const nfRes = await fetch(`/api/athos/contas-receber/cliente/${idcliente}/nf-status`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ idcontasReceber: ids }),
+              cache: "no-store",
+            });
+            if (nfRes.ok) {
+              const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: "NF-e" | "NFS-e" | null }>;
+              const nfMap = new Map(nfData.map((n) => [n.idcontareceber, n.tipoNf]));
+              setTitulos(data.map((t) => ({ ...t, tipoNf: nfMap.get(t.idcontareceber) ?? null })));
+              return;
+            }
+          } catch { /* silently ignore NF check errors */ }
+        }
         setTitulos(data);
       })
       .catch(() => setErroTitulos("Erro ao carregar títulos."))
@@ -326,20 +345,24 @@ export default function ClienteDetalhePage({
                       <th>Título</th>
                       <th>Vencimento</th>
                       <th>Valor</th>
+                      <th>NF</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {titulos.map((titulo) => {
                       const vencido = new Date(titulo.datavencimento) < new Date();
+                      const temNf = titulo.tipoNf != null;
                       return (
-                        <tr key={titulo.idcontareceber}>
+                        <tr key={titulo.idcontareceber} className={temNf ? "" : "table-secondary opacity-75"}>
                           <td>
                             <input
                               type="checkbox"
                               className="form-check-input"
                               checked={selectedIds.has(titulo.idcontareceber)}
-                              onChange={() => handleToggle(titulo.idcontareceber)}
+                              onChange={() => temNf && handleToggle(titulo.idcontareceber)}
+                              disabled={!temNf}
+                              title={temNf ? undefined : "Sem nota fiscal emitida"}
                             />
                           </td>
                           <td className="small">{titulo.numerotitulo ?? "—"}</td>
@@ -347,6 +370,15 @@ export default function ClienteDetalhePage({
                             {formatDate(titulo.datavencimento)}
                           </td>
                           <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
+                          <td>
+                            {titulo.tipoNf ? (
+                              <span className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}>
+                                {titulo.tipoNf}
+                              </span>
+                            ) : (
+                              <span className="badge bg-secondary opacity-50" title="Sem nota fiscal">Sem NF</span>
+                            )}
+                          </td>
                           <td>
                             {vencido ? (
                               <span className="badge bg-danger">VEN</span>

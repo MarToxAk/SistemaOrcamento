@@ -270,6 +270,27 @@ export class AthosController {
     return this.athosService.buscarTitulosClienteContasReceber(id);
   }
 
+  @ApiOperation({
+    summary: "Verificar NF emitida para títulos de contas a receber",
+    description: "Para cada idcontareceber informado, verifica se há NF-e (venda.idnota) ou NFS-e (lotenfse) associada.",
+  })
+  @ApiParam({ name: "idcliente", example: "123" })
+  @Post("contas-receber/cliente/:idcliente/nf-status")
+  async nfStatusTitulos(
+    @Param("idcliente") idcliente: string,
+    @Body() body: { idcontasReceber: number[] },
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idcliente);
+    if (!Number.isFinite(id) || id <= 0) throw new BadRequestException("idcliente inválido");
+    if (!Array.isArray(body?.idcontasReceber) || body.idcontasReceber.length === 0) {
+      return [];
+    }
+    return this.athosService.verificarNFTitulos(body.idcontasReceber);
+  }
+
   @ApiOperation({ summary: "Dados cadastrais do cliente (contas a receber)" })
   @ApiParam({ name: "idcliente", example: "123" })
   @ApiOkResponse({ description: "Dados cadastrais: nome, telefone, email, limitecredito, bloqueaprazo" })
