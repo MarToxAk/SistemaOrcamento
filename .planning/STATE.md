@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Cobranca e Fiscal do Cliente
-current_phase: 29 (boleto-consolidado) — Plan 01 completo, aguardando checkpoint
-status: Phase 29 Plan 01 completo — CobrancaModule backend implementado
-last_updated: "2026-05-22T00:30:00.000Z"
+current_phase: 29 (boleto-consolidado) — Plan 02 completo, aguardando checkpoint humano
+status: Phase 29 Plan 02 completo — modal boleto 4 estados + Route Handler proxy
+last_updated: "2026-05-22T00:55:00.000Z"
 last_activity: 2026-05-22
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 30
+  completed_plans: 5
+  percent: 40
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-22 — Phase 29 Plan 01 completo (CobrancaModule backend)
-Current phase: 29 (boleto-consolidado) — Plan 01 entregue, checkpoint aguardando verificacao humana
+Last updated: 2026-05-22 — Phase 29 Plan 02 completo (modal boleto frontend + Route Handler)
+Current phase: 29 (boleto-consolidado) — Plan 02 entregue, checkpoint aguardando verificacao humana
 Milestone: v2.1 — Cobranca e Fiscal do Cliente
 
 ---
@@ -25,11 +25,11 @@ Milestone: v2.1 — Cobranca e Fiscal do Cliente
 ## Current Position
 
 Phase: 29 (boleto-consolidado-efi) — EM PROGRESSO
-Plan: 1 de 2 completo
-Status: Plan 01 entregue — CobrancaModule backend (POST /cobranca/boleto + webhook)
+Plan: 2 de 2 completo (aguardando checkpoint verificacao humana)
+Status: Plan 02 entregue — modal 4 estados + Route Handler proxy POST /api/cobranca/boleto
 Last activity: 2026-05-22
 
-Progress: [###-------] 30% (Phase 28 completa + Phase 29 Plan 01 completo)
+Progress: [####------] 40% (Phase 28 completa + Phase 29 Plans 01+02 completos)
 
 ---
 
@@ -65,7 +65,7 @@ Progress: [###-------] 30% (Phase 28 completa + Phase 29 Plan 01 completo)
 | 26 | Status Pagina Producao — Layout Kanban 3 colunas | complete (v2.0) |
 | 27 | Dashboard de Contas a Receber — Read-Only | complete (v2.0) |
 | 28 | Pagina de Detalhe do Cliente + Schema Prisma | complete (v2.1) |
-| 29 | Boleto Consolidado via EFI Bank | in-progress (v2.1) — Plan 01 completo |
+| 29 | Boleto Consolidado via EFI Bank | in-progress (v2.1) — Plans 01+02 completos, checkpoint pendente |
 | 30 | Emissao de NFS-e a partir de Titulos | pending (v2.1) |
 | 31 | Historico NFS-e + Consulta NF Athos | pending (v2.1) |
 
@@ -138,6 +138,9 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 | 2026-05-22 | Auth EFI boleto: padrão identico ao createCardPaymentLink() — Basic Auth sem mTLS para obter Bearer token | D-03 exige reutilizacao exata do padrao existente |
 | 2026-05-22 | Webhook POST /cobranca/boleto/notificacao retorna HTTP 200 sempre — erros logados internamente | D-18: evitar retentativas EFI por falha HTTP |
 | 2026-05-22 | notification_url omitida quando WEBHOOK_BASE_URL/APP_URL contem localhost ou 127.0.0.1 | Mesmo padrao de isPublicUrl de createCardPaymentLink() |
+| 2026-05-22 | backendFetch ja injeta x-internal-api-key — Route Handler /api/cobranca/boleto nao duplica header | internalHeaders() em backend-client.ts cobre a injecao server-side automaticamente |
+| 2026-05-22 | void navigator.clipboard.writeText() no botao Copiar da linha digitavel | Suprimir aviso de floating Promise no TypeScript strict sem quebrar o comportamento |
+| 2026-05-22 | Modal boleto sem Bootstrap Modal JS — React state overlay padrao pdf-modal-backdrop | Consistencia com padrao existente em orcamento/[id]/page.tsx; sem dependencia de Bootstrap JS |
 
 ## Notes
 

@@ -183,8 +183,8 @@ Full details: .planning/milestones/v2.0-ROADMAP.md
 
 ### Phases
 
-- [ ] **Phase 28: Página de Detalhe do Cliente + Schema Prisma** - Rota /contas-receber/[idcliente] com dados Athos, lista de títulos selecionáveis e migrations para cobranca_boleto e nfse_emitida
-- [ ] **Phase 29: Boleto Consolidado via EFI Bank** - Geração de boleto único consolidando múltiplos títulos, retorno de link boleto + linha digitavel, registro em cobranca_boleto
+- [x] **Phase 28: Página de Detalhe do Cliente + Schema Prisma** - Rota /contas-receber/[idcliente] com dados Athos, lista de títulos selecionáveis e migrations para cobranca_boleto e nfse_emitida — DONE 2026-05-22
+- [~] **Phase 29: Boleto Consolidado via EFI Bank** - Plans 01+02 completos (backend + frontend modal); aguardando checkpoint de verificacao humana — IN PROGRESS
 - [ ] **Phase 30: Emissão de NFS-e a partir de Títulos** - Modal pré-preenchido com valor ajustável, emissão via NfseService existente e registro em nfse_emitida
 - [ ] **Phase 31: Histórico NFS-e + Consulta NF Athos** - Seção de NFS-e emitidas na página do cliente e consulta de notas fiscais Athos com busca por número
 
@@ -220,8 +220,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 29-01-PLAN.md — Backend: CobrancaModule + CobrancaService.criarBoleto() + CobrancaController + registro no AppModule (wave 1)
-- [ ] 29-02-PLAN.md — Frontend: Route Handler /api/cobranca/boleto + modal 4 estados em /contas-receber/[idcliente] (wave 2)
+- [x] 29-01-PLAN.md — Backend: CobrancaModule + CobrancaService.criarBoleto() + CobrancaController + registro no AppModule (wave 1) — DONE 2026-05-22
+- [x] 29-02-PLAN.md — Frontend: Route Handler /api/cobranca/boleto + modal 4 estados em /contas-receber/[idcliente] (wave 2) — DONE 2026-05-22 (checkpoint pendente)
 
 ### Phase 30: Emissão de NFS-e a partir de Títulos
 **Goal**: Operador emite NFS-e com valor ajustável diretamente a partir de títulos selecionados, reutilizando o NfseService existente, e o registro fica persistido no banco próprio
