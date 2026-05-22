@@ -3,12 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.9
 milestone_name: Dashboard Contas a Receber
 current_phase: 27
-status: completed
+status: milestone_complete
 last_updated: "2026-05-22T00:00:00Z"
 last_activity: 2026-05-22
+milestone: v2.0
+milestone_name: Gestao Integrada Financeira, Caixa e Dashboards
 progress:
   total_phases: 27
-  completed_phases: 21
+  completed_phases: 27
   total_plans: 45
   completed_plans: 45
   percent: 100

@@ -17,6 +17,7 @@ Date: 2026-05-05
 - [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
 - [x] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (shipped 2026-05-05) - [details](.planning/milestones/v1.8-ROADMAP.md)
 - [x] v1.9 Webhook EFI PIX e Robustez de URLs - Phase 22 (shipped 2026-05-15)
+- [x] v2.0 Gestão Integrada Financeira, Caixa e Dashboards - Phases 23-27 (shipped 2026-05-22)
 
 ---
 
@@ -160,84 +161,27 @@ Plans:
 3. Spec de efi.service inclui teste cobrindo a URL com /pix.
 4. Build backend sem erros apos as correcoes.
 
-## v2.0 Gestão Integrada Financeira e Caixa (Phases 23-25) - PLANNING
+<details>
+<summary>v2.0 Gestão Integrada Financeira, Caixa e Dashboards (Phases 23-27) - SHIPPED 2026-05-22</summary>
 
 Full details: .planning/milestones/v2.0-ROADMAP.md
 
-- [ ] Phase 23: Notificação de Caixa Interna — Hardening AthosListenerService (CAIXA-01..04)
-- [ ] Phase 24: API Contas a Pagar — Endpoint POST e autenticação obrigatória (CPAG-01..04)
-- [ ] Phase 25: Upload de Anexos — Gravação SMB \\192.168.3.203 e registro tabela `anexo` (ANEX-01..03)
+- [x] Phase 23: Notificação de Caixa Interna — Hardening AthosListenerService (CAIXA-01..04)
+- [x] Phase 24: API Contas a Pagar — Endpoint POST e autenticação obrigatória (CPAG-01..04)
+- [x] Phase 25: Upload de Anexos — Gravação SMB \\192.168.3.203 e registro tabela `anexo` (ANEX-01..03)
+- [x] Phase 26: Status Página Produção — Layout Kanban 3 colunas
+- [x] Phase 27: Dashboard de Contas a Receber — Read-Only (CR-01..05)
 
-### Phase Details
-
-**Phase 23: Notificação de Caixa Interna — Hardening**
-Goal: Hardenar o AthosListenerService com reconexão automática, notificação Chatwoot e testes.
-Requirements: CAIXA-01, CAIXA-02, CAIXA-03, CAIXA-04
-Success criteria:
-1. Listener reconecta com backoff exponencial (máx 30s) após queda do PG.
-2. Chatwoot notificado (fire-and-forget) ao detectar pagamento no caixa.
-3. GET /api/events/pagamentos protegido por x-internal-api-key.
-4. Unit tests cobrem: caixa detectado, venda sem caixa, reconnect, falha Chatwoot.
-
-**Phase 24: API Contas a Pagar — POST**
-Goal: Expor endpoint POST /athos/contas-pagar para lançar contas a pagar direto no Athos.
-Requirements: CPAG-01, CPAG-02, CPAG-03, CPAG-04
-Success criteria:
-1. POST /athos/contas-pagar insere em `conta_pagar` e retorna `idcontapagar`.
-2. Validações de campos obrigatórios com mensagens claras.
-3. GET aprimorado com filtro por `statusconta`.
-4. ATHOS_API_TOKEN obrigatório (fail-closed) em todos os endpoints.
-
-**Phase 25: Upload de Anexos via SMB**
-Goal: Receber arquivo via multipart e gravá-lo em \\192.168.3.203\html\Anexo\contapagar\{id}\.
-Requirements: ANEX-01, ANEX-02, ANEX-03
-Plans: 2 plans
-
-Plans:
-- [x] 25-01-PLAN.md - Confirmar contrato de idclientehistorico e implementar upload SMB + insert em anexo
-- [x] 25-02-PLAN.md - Cobertura de testes unitarios para upload de anexo Athos
-
-Success criteria:
-1. POST /athos/contas-pagar/:id/anexo grava arquivo no servidor de rede.
-2. Registro inserido em tabela `anexo` com path UNC e nome do arquivo.
-3. Extensões validadas (pdf/png/jpg/jpeg), tamanho máx 10MB, sem path traversal.
-
-## Phase 26: Status Página Produção — Layout Kanban (COMPLETE)
-
-**Plans:** 3/3 plans complete
-
-- [x] 26-01-PLAN.md — Kanban 3-colunas + tabs mobile (estrutura base) — complete
-- [x] 26-02-PLAN.md — Cards reais com conteúdo completo — complete
-- [x] 26-03-PLAN.md — Filtro de carimbo funcional — complete
-
-## Phase 27: Dashboard de Contas a Receber — Read-Only (COMPLETE)
-
-**Goal:** Implementar interface analitica reativa (read-only) para acompanhar clientes devedores, agrupando titulos em aberto da tabela conta_receber com dados de contato e vinculo com vendas.
-
-**Requirements:** CR-01, CR-02, CR-03, CR-04, CR-05
-
-**Plans:** 2 plans
-
-Plans:
-- [x] 27-01-PLAN.md — Backend: buscarDashboardContasReceber + buscarTitulosClienteContasReceber + rotas NestJS (wave 1) — complete
-- [x] 27-02-PLAN.md — Frontend: página /contas-receber, Top Cards, Grid de Cards, Accordion de títulos, link de navegação (wave 2) — complete
-
-**Success criteria:**
-1. GET /api/athos/contas-receber/dashboard retorna clientes agrupados com total_devido, total_atrasado e contagem de titulos.
-2. Top Cards exibem totais globais (a receber, inadimplencia, clientes devedores).
-3. Grid de cards por cliente com barra de progresso de limite de credito e badges de criticidade.
-4. Drawer/accordion de titulos individuais por cliente com vinculo a venda (numeroordem).
-5. Dashboard atualiza via botao Atualizar manual (sem real-time nesta fase).
+</details>
 
 ---
 ## Backlog (Future)
-## v2.0 Gestão Integrada Financeira e Caixa (Phases 23-25) - IN PROGRESS
 
 - Relatorios e exportacao CSV de orcamentos
-- Notificacoes em tempo real (WebSocket) para mudanca de status
+- Notificacoes em tempo real via SSE para dashboard contas a receber (tg_alterarcontareceber AFTER + NOTIFY)
 - RBAC por role (ADMIN / VENDEDOR / ATENDENTE)
 - Templates de mensagem configuraveis pelo painel
 - Historico de mensagens enviados ao cliente
 
 ---
-Roadmap v1.9 - 2026-05-15
+Roadmap v2.0 - 2026-05-22
