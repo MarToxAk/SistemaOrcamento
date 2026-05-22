@@ -1828,10 +1828,9 @@ export class AthosService {
              WHEN cr.lotenfse = true THEN 'NFS-e'
              WHEN EXISTS (
                SELECT 1
-               FROM venda v2
-               JOIN venda_nota vn ON vn.idvenda = v2.idvenda
+               FROM venda_nota vn
                JOIN nota n ON n.idnota = vn.idnota
-               WHERE v2.idvenda = cr.idvenda
+               WHERE vn.idvenda = cr.idvenda
                  AND COALESCE(n.cancelada, false) = false
              ) THEN 'NF-e'
              ELSE NULL
