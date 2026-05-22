@@ -1,35 +1,37 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.9
-milestone_name: Dashboard Contas a Receber
-current_phase: 27
-status: milestone_complete
+milestone: v2.1
+milestone_name: Cobranca e Fiscal do Cliente
+current_phase: 28
+status: planning
 last_updated: "2026-05-22T00:00:00Z"
 last_activity: 2026-05-22
-milestone: v2.0
-milestone_name: Gestao Integrada Financeira, Caixa e Dashboards
 progress:
-  total_phases: 27
-  completed_phases: 27
-  total_plans: 45
-  completed_plans: 45
-  percent: 100
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-22 (UAT completo — 10/10 testes passaram)
-Current phase: 27 (COMPLETE)
-Milestone: v1.9 (complete)
+Last updated: 2026-05-22 — Roadmap v2.1 criado (4 fases: 28-31)
+Current phase: 28 (planning — nao iniciado)
+Milestone: v2.1 — Cobranca e Fiscal do Cliente
 
 ---
 
 ## Current Position
 
-Phase: 27 (dashboard-contas-receber) — COMPLETE
-Plan: 27-02 COMPLETE (frontend página /contas-receber)
-Status: Todos os planos da fase 27 executados — 4 tasks totais
-Last activity: 2026-05-21
+Phase: 28 (pagina-detalhe-cliente) — NOT STARTED
+Plan: —
+Status: Roadmap v2.1 criado, aguardando plan-phase 28
+Last activity: 2026-05-22
+
+Progress: [----------] 0% (0/4 phases complete)
+
+---
 
 ## Project Status
 
@@ -53,8 +55,19 @@ Last activity: 2026-05-21
 | 16 | UI de desconto no modal NFS-e | complete (v1.5) |
 | 17 | Correcao do calculo de desconto no modal NFS-e | complete (v1.6) |
 | 18 | Correcoes NFS-e - RPS e Tomador | complete (v1.7) |
-| 19 | Aprovacao Associada ao Pagamento + Conciliacao Caixa Athos | complete (v1.8) |
-| 20 | Relatorios e Exportacao CSV de Orcamentos | planning (v1.9) |
+| 19 | API de busca de cliente Athos | complete (v1.8) |
+| 20 | Resolucao de tomador por cliente selecionado | complete (v1.8) |
+| 21 | UI NFS-e, observabilidade e testes | complete (v1.8) |
+| 22 | Correcao webhook EFI /pix e fallback NfseService | complete (v1.9) |
+| 23 | Notificacao de Caixa Interna — Hardening AthosListenerService | complete (v2.0) |
+| 24 | API Contas a Pagar — Endpoint POST e autenticacao obrigatoria | complete (v2.0) |
+| 25 | Upload de Anexos — Gravacao SMB e registro tabela anexo | complete (v2.0) |
+| 26 | Status Pagina Producao — Layout Kanban 3 colunas | complete (v2.0) |
+| 27 | Dashboard de Contas a Receber — Read-Only | complete (v2.0) |
+| 28 | Pagina de Detalhe do Cliente + Schema Prisma | planning (v2.1) |
+| 29 | Boleto Consolidado via EFI Bank | pending (v2.1) |
+| 30 | Emissao de NFS-e a partir de Titulos | pending (v2.1) |
+| 31 | Historico NFS-e + Consulta NF Athos | pending (v2.1) |
 
 ## Milestones Archived
 
@@ -67,20 +80,24 @@ Last activity: 2026-05-21
 - v1.6 — phase 17 (.planning/milestones/v1.6-ROADMAP.md)
 - v1.7 — phase 18 (.planning/milestones/v1.7-ROADMAP.md)
 - v1.8 — phases 19-21 (.planning/milestones/v1.8-ROADMAP.md)
+- v1.9 — phase 22
+- v2.0 — phases 23-27 (.planning/milestones/v2.0-ROADMAP.md)
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-05)
+See: .planning/PROJECT.md (updated 2026-05-22)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
+Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 
 ## Active Context
 
-- Branch atual: fix/frontend-proxy-auth-header
-- PR ativo: #5
-- Ultima versao tagged: v1.7
-- Milestones archived: v1.0, v1.1, v1.2, v1.3
-- Escopo v1.4: webhook EFI sem auth HMAC obrigatoria + conciliacao Athos sem n8n + desconto NFS-e opcional
+- Milestone ativo: v2.1 (iniciado 2026-05-22)
+- Proximo passo: /gsd:plan-phase 28
+- Stack: NestJS + Next.js + Prisma + PostgreSQL
+- Athos: somente leitura — nunca gravar
+- NfseModule existente em apps/backend/src/modules/integrations/nfse/ — reutilizar
+- EFI integration existente — reutilizar para boleto consolidado
+- Phases 28 e 30 requerem Prisma migrations
 
 ## Decisions Log
 
@@ -108,6 +125,9 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 2026-05-21 | datavencimento/dataemissao convertidos com instanceof Date check antes de toISOString() | Driver pg pode retornar Date ou string dependendo da configuracao pg.types |
 | 2026-05-21 | Next.js API Routes como proxy para /api/athos/contas-receber/* (nao rewrites em next.config.mjs) | Padrao existente no codebase; x-api-token adicionado server-side via ATHOS_API_TOKEN |
 | 2026-05-21 | Accordion fecha ao clicar no mesmo card (toggle); cache em titulosMap evita refetch ao reabrir | UX esperado: clique no card expandido fecha; dados ja carregados nao sao buscados novamente |
+| 2026-05-22 | NFS-e emitidas registradas no banco proprio (nao Athos) — tabela nfse_emitida via Prisma | Athos e read-only; historico proprio evita dependencia de banco externo |
+| 2026-05-22 | Boleto consolidado (multiplos titulos) em vez de por titulo | Reduz numero de boletos e simplifica cobranca para o operador |
+| 2026-05-22 | Schema Prisma (cobranca_boleto + nfse_emitida) criado na Phase 28 | Ambas as tabelas sao pre-requisito para phases 29 e 30 respectivamente |
 
 ## Notes
 
@@ -121,7 +141,7 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 260506-001 | Front-end nao tem nenhuma representacao visual do pagamento nem numero do pedido aparecendo | 2026-05-06 | n/a | [260506-001-frontend-pagamento-pedido-visual](./quick/260506-001-frontend-pagamento-pedido-visual/) |
 | 260506-002 | Front-end nao mostra icone de pago no caixa nem numero do pedido (numeroordem) na pagina de detalhe do orcamento | 2026-05-06 | n/a | [260506-002-frontend-pago-no-caixa-numeroordem](./quick/260506-002-frontend-pago-no-caixa-numeroordem/) |
 | 260506-003 | Exibir numero do pedido na lista de orcamentos com cor diferente para pagamento confirmado | 2026-05-06 | n/a | [260506-003-lista-orcamento-numero-pedido-pagamento](./quick/260506-003-lista-orcamento-numero-pedido-pagamento/) |
-| 260511-swg | Gere a documentação OpenAPI (Swagger) para os novos endpoints de Contas a Pagar e Anexos | 2026-05-11 | 271b9c9 | [260511-swg-swagger-contas-pagar-anexos](./quick/260511-swg-swagger-contas-pagar-anexos/) |
+| 260511-swg | Gere a documentacao OpenAPI (Swagger) para os novos endpoints de Contas a Pagar e Anexos | 2026-05-11 | 271b9c9 | [260511-swg-swagger-contas-pagar-anexos](./quick/260511-swg-swagger-contas-pagar-anexos/) |
 | 260511-athos | Implementar Schema Completo Athos para GET, POST e PATCH de conta_pagar | 2026-05-11 | 6aabae0, 54597d2 | [260511-athos-schema-completo](./quick/260511-athos-schema-completo/) |
 | 260511-kvy | Implementar Fluxo Completo de Pagamento e GED (Patch Athos V2) com liquidacao transacional | 2026-05-11 | ba57544 | [260511-kvy-para-aplicar-este-patch-de-fluxo-complet](./quick/260511-kvy-para-aplicar-este-patch-de-fluxo-complet/) |
 | 260514-001 | Correcao link de aprovacao no envio — approval link nunca gerado por guarda isAssociatedCustomer | 2026-05-14 | fabc37e | [260514-001-approval-link-correcao-envio](./quick/260514-001-approval-link-correcao-envio/) |
@@ -130,6 +150,6 @@ Current focus: v1.9 - relatorios e exportacao CSV de orcamentos
 | 260515-001 | Remover controle de edicao de status (Alterar status) da pagina publica | 2026-05-15 | n/a | [260515-001-remover-edicao-status-pagina-publica](./quick/260515-001-remover-edicao-status-pagina-publica/) |
 | 260515-004 | Correcoes de seguranca: EFI webhook bypass + Athos timingSafeEqual | 2026-05-15 | 2ca9004, 470f652 | [260515-004-security-webhook-token-fixes](./quick/260515-004-security-webhook-token-fixes/) |
 | 260518-001 | Upload de anexo Athos no Docker via pasta Samba montada (Tailscale) | 2026-05-20 | n/a | [260518-001-docker-smb-mount-fix](./quick/260518-001-docker-smb-mount-fix/) |
-| 260521-bdu | Corrigir geração de PDF: dist/ stale usava template inline antigo; recompilado com template v2 | 2026-05-21 | 024ebdf | [260521-bdu-corrigir-gera-o-de-pdf-com-template-novo](./quick/260521-bdu-corrigir-gera-o-de-pdf-com-template-novo/) |
-| 260521-bkl | Remover redundância de geração de PDF no envio: usar PDF existente no MinIO, regenerar só se ausente | 2026-05-21 | c99af84 | [260521-bkl-remover-redund-ncia-de-gera-o-de-pdf-no-](./quick/260521-bkl-remover-redund-ncia-de-gera-o-de-pdf-no-/) |
-| 260521-bqc | Refatorar status/page.tsx como Kanban 3 colunas (Aprovado/Em Produção/Pronto) com design system Bom Custo | 2026-05-21 | b3bd9b8 | [260521-bqc-refatorar-status-page-tsx-como-kanban-3-](./quick/260521-bqc-refatorar-status-page-tsx-como-kanban-3-/) |
+| 260521-bdu | Corrigir geracao de PDF: dist/ stale usava template inline antigo; recompilado com template v2 | 2026-05-21 | 024ebdf | [260521-bdu-corrigir-gera-o-de-pdf-com-template-novo](./quick/260521-bdu-corrigir-gera-o-de-pdf-com-template-novo/) |
+| 260521-bkl | Remover redundancia de geracao de PDF no envio: usar PDF existente no MinIO, regenerar so se ausente | 2026-05-21 | c99af84 | [260521-bkl-remover-redund-ncia-de-gera-o-de-pdf-no-](./quick/260521-bkl-remover-redund-ncia-de-gera-o-de-pdf-no-/) |
+| 260521-bqc | Refatorar status/page.tsx como Kanban 3 colunas (Aprovado/Em Producao/Pronto) com design system Bom Custo | 2026-05-21 | b3bd9b8 | [260521-bqc-refatorar-status-page-tsx-como-kanban-3-](./quick/260521-bqc-refatorar-status-page-tsx-como-kanban-3-/) |

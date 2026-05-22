@@ -18,6 +18,7 @@ Date: 2026-05-05
 - [x] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (shipped 2026-05-05) - [details](.planning/milestones/v1.8-ROADMAP.md)
 - [x] v1.9 Webhook EFI PIX e Robustez de URLs - Phase 22 (shipped 2026-05-15)
 - [x] v2.0 Gestão Integrada Financeira, Caixa e Dashboards - Phases 23-27 (shipped 2026-05-22)
+- [ ] v2.1 Cobrança e Fiscal do Cliente - Phases 28-31 (active)
 
 ---
 
@@ -175,6 +176,97 @@ Full details: .planning/milestones/v2.0-ROADMAP.md
 </details>
 
 ---
+
+## v2.1 Cobrança e Fiscal do Cliente (Phases 28-31) - ACTIVE
+
+**Milestone goal:** A partir do dashboard de contas a receber, permitir ao operador acessar o detalhe de um cliente, selecionar títulos em aberto e tomar ações de cobrança (boleto consolidado EFI Bank ou NFS-e com valor ajustável), registrando tudo no banco próprio do sistema.
+
+### Phases
+
+- [ ] **Phase 28: Página de Detalhe do Cliente + Schema Prisma** - Rota /contas-receber/[idcliente] com dados Athos, lista de títulos selecionáveis e migrations para cobranca_boleto e nfse_emitida
+- [ ] **Phase 29: Boleto Consolidado via EFI Bank** - Geração de boleto único consolidando múltiplos títulos, retorno de link e QR Code Pix, registro em cobranca_boleto
+- [ ] **Phase 30: Emissão de NFS-e a partir de Títulos** - Modal pré-preenchido com valor ajustável, emissão via NfseService existente e registro em nfse_emitida
+- [ ] **Phase 31: Histórico NFS-e + Consulta NF Athos** - Seção de NFS-e emitidas na página do cliente e consulta de notas fiscais Athos com busca por número
+
+### Phase Details
+
+### Phase 28: Página de Detalhe do Cliente + Schema Prisma
+**Goal**: Operador acessa dados completos de um cliente e seus títulos em aberto a partir do dashboard, com a estrutura de banco de dados pronta para cobrança e NFS-e
+**Depends on**: Phase 27 (dashboard /contas-receber existente)
+**Requirements**: CLI-01, CLI-02, CLI-03
+**Success Criteria** (what must be TRUE):
+  1. Clicar em um cliente em /contas-receber navega para /contas-receber/[idcliente] exibindo nome, telefone, email e limite de crédito do cliente via Athos
+  2. A página lista todos os títulos AVC + VEN do cliente em tabela com checkbox individual, numerotitulo, datavencimento, valor e status
+  3. Checkbox "Selecionar todos" na thead e contador de valor total selecionado atualizado em tempo real
+  4. Barra de ações com "Gerar Boleto" e "Emitir NFS-e" aparece somente quando ao menos um título está selecionado
+  5. Migration Prisma cria tabelas cobranca_boleto e nfse_emitida sem conflito com schema existente
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 29: Boleto Consolidado via EFI Bank
+**Goal**: Operador gera um único boleto consolidando múltiplos títulos selecionados, obtém link e QR Code Pix para compartilhar com o cliente, e a cobrança fica registrada no banco
+**Depends on**: Phase 28 (página de detalhe + tabela cobranca_boleto disponível)
+**Requirements**: BOL-01, BOL-02, BOL-03
+**Success Criteria** (what must be TRUE):
+  1. POST /api/cobranca/boleto com array de idcontareceber cria cobrança EFI com valor igual à soma dos títulos e retorna txid
+  2. Modal exibe link_boleto (URL do PDF) e pix_payload copiável, e operador pode abrir boleto em nova aba
+  3. Registro criado em cobranca_boleto com txid EFI, idcliente Athos, lista de idcontareceber, valor e data de geração
+  4. Status do registro em cobranca_boleto atualizado para pago via webhook EFI existente quando boleto for liquidado
+**Plans**: TBD
+
+### Phase 30: Emissão de NFS-e a partir de Títulos
+**Goal**: Operador emite NFS-e com valor ajustável diretamente a partir de títulos selecionados, reutilizando o NfseService existente, e o registro fica persistido no banco próprio
+**Depends on**: Phase 28 (tabela nfse_emitida disponível + página de detalhe com ação)
+**Requirements**: NFR-01, NFR-02, NFR-03, NFR-04
+**Success Criteria** (what must be TRUE):
+  1. Modal de NFS-e abre pré-preenchido com soma dos títulos e dados do cliente carregados via buscarClientePorId do Athos
+  2. Campo de valor é editável (mínimo R$0,01) e o valor enviado ao backend é o que o operador confirmar, não o calculado
+  3. NfseService.emitirNfse() chamado com tomador resolvido por clienteAthosId, RPS gerado sem conflito de numeração com orçamentos existentes
+  4. Resposta inclui número da NFS-e emitida e registro criado em nfse_emitida com numeroNfse, numeroRps, idclienteAthos, valorServico e idcontareceber[] vinculados
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 31: Histórico NFS-e + Consulta NF Athos
+**Goal**: Operador consulta NFS-e já emitidas para o cliente (banco próprio) e notas fiscais não-serviço registradas no Athos, com busca por número
+**Depends on**: Phase 28 (página de detalhe do cliente) + Phase 30 (dados em nfse_emitida)
+**Requirements**: NFR-05, NFAT-01, NFAT-02
+**Success Criteria** (what must be TRUE):
+  1. Seção "NFS-e Emitidas" na página do cliente lista data, número NFS-e, valor e títulos vinculados lidos do banco próprio (Prisma), exibindo mensagem "Nenhuma NFS-e emitida para este cliente" quando não há registros
+  2. Seção "Notas Fiscais Athos" lista notas fiscais (não-serviço) do cliente buscadas no Athos (número, data, valor, tipo), limitada a 50 registros
+  3. Campo de busca por número filtra a lista NFAT executando query no Athos, exibindo "Nenhuma nota encontrada com este número" quando sem resultado
+**Plans**: TBD
+**UI hint**: yes
+
+### Progress Table
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 28. Página de Detalhe do Cliente + Schema Prisma | 0/? | Not started | - |
+| 29. Boleto Consolidado via EFI Bank | 0/? | Not started | - |
+| 30. Emissão de NFS-e a partir de Títulos | 0/? | Not started | - |
+| 31. Histórico NFS-e + Consulta NF Athos | 0/? | Not started | - |
+
+### Coverage
+
+All 13 v2.1 requirements mapped:
+
+| REQ-ID | Phase | Category |
+|--------|-------|----------|
+| CLI-01 | 28 | Detalhe do Cliente |
+| CLI-02 | 28 | Detalhe do Cliente |
+| CLI-03 | 28 | Detalhe do Cliente |
+| BOL-01 | 29 | Boleto EFI |
+| BOL-02 | 29 | Boleto EFI |
+| BOL-03 | 29 | Boleto EFI |
+| NFR-01 | 30 | NFS-e de Títulos |
+| NFR-02 | 30 | NFS-e de Títulos |
+| NFR-03 | 30 | NFS-e de Títulos |
+| NFR-04 | 30 | NFS-e de Títulos |
+| NFR-05 | 31 | Histórico + Consulta |
+| NFAT-01 | 31 | Histórico + Consulta |
+| NFAT-02 | 31 | Histórico + Consulta |
+
+---
 ## Backlog (Future)
 
 - Relatorios e exportacao CSV de orcamentos
@@ -182,6 +274,9 @@ Full details: .planning/milestones/v2.0-ROADMAP.md
 - RBAC por role (ADMIN / VENDEDOR / ATENDENTE)
 - Templates de mensagem configuraveis pelo painel
 - Historico de mensagens enviados ao cliente
+- Envio automatico de boleto por WhatsApp/Chatwoot ao cliente
+- Cancelamento de NFS-e emitida
+- Relatorio de NFS-e emitidas por periodo (CSV export)
 
 ---
-Roadmap v2.0 - 2026-05-22
+Roadmap v2.1 - 2026-05-22
