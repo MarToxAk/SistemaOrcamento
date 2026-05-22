@@ -60,16 +60,16 @@ Critérios:
 
 ---
 
-**BOL-02 — Boleto retorna link de pagamento e QR Code Pix**
+**BOL-02 — Boleto retorna link e linha digitável copiável**
 
-Contexto: Após a geração, o operador precisa compartilhar o boleto com o cliente.
+Contexto: Após a geração, o operador precisa compartilhar o boleto com o cliente. Decisão: boleto bancário tradicional sem Pix (usuário escolheu 1b em discuss-phase).
 
-Requisito: Resposta do endpoint inclui link do boleto bancário e payload Pix (QR Code).
+Requisito: Resposta do endpoint inclui link do PDF do boleto e linha digitável bancária.
 
 Critérios:
-1. Resposta contém link_boleto (URL do PDF/boleto) e pix_payload (copia-e-cola).
-2. Frontend exibe modal com link copiável e QR Code.
-3. Operador pode copiar o Pix e/ou abrir o boleto em nova aba.
+1. Resposta contém linkBoleto (URL do PDF do boleto) e barcodeLinhaDigitavel (código de barras).
+2. Frontend exibe modal com botão "Abrir Boleto" (nova aba) e linha digitável copiável.
+3. Operador pode copiar a linha digitável e/ou abrir o PDF do boleto.
 
 ---
 

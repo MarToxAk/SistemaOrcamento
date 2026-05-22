@@ -184,7 +184,7 @@ Full details: .planning/milestones/v2.0-ROADMAP.md
 ### Phases
 
 - [ ] **Phase 28: Página de Detalhe do Cliente + Schema Prisma** - Rota /contas-receber/[idcliente] com dados Athos, lista de títulos selecionáveis e migrations para cobranca_boleto e nfse_emitida
-- [ ] **Phase 29: Boleto Consolidado via EFI Bank** - Geração de boleto único consolidando múltiplos títulos, retorno de link e QR Code Pix, registro em cobranca_boleto
+- [ ] **Phase 29: Boleto Consolidado via EFI Bank** - Geração de boleto único consolidando múltiplos títulos, retorno de link boleto + linha digitavel, registro em cobranca_boleto
 - [ ] **Phase 30: Emissão de NFS-e a partir de Títulos** - Modal pré-preenchido com valor ajustável, emissão via NfseService existente e registro em nfse_emitida
 - [ ] **Phase 31: Histórico NFS-e + Consulta NF Athos** - Seção de NFS-e emitidas na página do cliente e consulta de notas fiscais Athos com busca por número
 
@@ -209,15 +209,19 @@ Plans:
 **UI hint**: yes
 
 ### Phase 29: Boleto Consolidado via EFI Bank
-**Goal**: Operador gera um único boleto consolidando múltiplos títulos selecionados, obtém link e QR Code Pix para compartilhar com o cliente, e a cobrança fica registrada no banco
+**Goal**: Operador gera um único boleto consolidando múltiplos títulos selecionados, obtém link do boleto (PDF) e linha digitável bancária, e a cobrança fica registrada no banco
 **Depends on**: Phase 28 (página de detalhe + tabela cobranca_boleto disponível)
 **Requirements**: BOL-01, BOL-02, BOL-03
 **Success Criteria** (what must be TRUE):
   1. POST /api/cobranca/boleto com array de idcontareceber cria cobrança EFI com valor igual à soma dos títulos e retorna txid
-  2. Modal exibe link_boleto (URL do PDF) e pix_payload copiável, e operador pode abrir boleto em nova aba
+  2. Modal exibe linkBoleto (botão Abrir Boleto em nova aba) e barcodeLinhaDigitavel copiável
   3. Registro criado em cobranca_boleto com txid EFI, idcliente Athos, lista de idcontareceber, valor e data de geração
   4. Status do registro em cobranca_boleto atualizado para pago via webhook EFI existente quando boleto for liquidado
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 29-01-PLAN.md — Backend: CobrancaModule + CobrancaService.criarBoleto() + CobrancaController + registro no AppModule (wave 1)
+- [ ] 29-02-PLAN.md — Frontend: Route Handler /api/cobranca/boleto + modal 4 estados em /contas-receber/[idcliente] (wave 2)
 
 ### Phase 30: Emissão de NFS-e a partir de Títulos
 **Goal**: Operador emite NFS-e com valor ajustável diretamente a partir de títulos selecionados, reutilizando o NfseService existente, e o registro fica persistido no banco próprio
@@ -247,7 +251,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 28. Página de Detalhe do Cliente + Schema Prisma | 2/2 | Complete | 2026-05-22 |
-| 29. Boleto Consolidado via EFI Bank | 0/? | Not started | - |
+| 29. Boleto Consolidado via EFI Bank | 0/2 | In Progress | - |
 | 30. Emissão de NFS-e a partir de Títulos | 0/? | Not started | - |
 | 31. Histórico NFS-e + Consulta NF Athos | 0/? | Not started | - |
 
