@@ -1,4 +1,4 @@
-# Roadmap - Sistema de Orcamento BomCusto
+﻿# Roadmap - Sistema de Orcamento BomCusto
 
 Version: 1.9
 Date: 2026-05-05
@@ -232,7 +232,13 @@ Plans:
   2. Campo de valor é editável (mínimo R$0,01) e o valor enviado ao backend é o que o operador confirmar, não o calculado
   3. NfseService.emitirNfse() chamado com tomador resolvido por clienteAthosId, RPS gerado sem conflito de numeração com orçamentos existentes
   4. Resposta inclui número da NFS-e emitida e registro criado em nfse_emitida com numeroNfse, numeroRps, idclienteAthos, valorServico e idcontareceber[] vinculados
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 30-01-PLAN.md — Wave 1: Schema Prisma idvenda + migration + NfseService.emitirParaContaReceber() + AthosService.verificarTipoProdutoVenda() + GET /athos/venda/:idvenda/tipo-produto
+- [ ] 30-02-PLAN.md — Wave 2: CobrancaService.emitirNfse() + CobrancaController POST /cobranca/nfse + EmitirNfseCobrancaDto + CobrancaModule com NfseModule
+- [ ] 30-03-PLAN.md — Wave 3: Route Handlers Next.js + Modal NFS-e 4-estados em /contas-receber/[idcliente] (checkpoint humano)
+- [ ] 30-04-PLAN.md — Wave 2 paralelo: NfseService.emitir() salva idvenda + aviso duplicidade em /orcamento/[id]
 **UI hint**: yes
 
 ### Phase 31: Histórico NFS-e + Consulta NF Athos
