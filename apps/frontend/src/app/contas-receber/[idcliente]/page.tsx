@@ -1055,14 +1055,11 @@ export default function ClienteDetalhePage({
                         type="number"
                         step="0.01"
                         min="0.01"
-                        className={`form-control${valorInvalido && nfseValor !== "" ? " is-invalid" : ""}`}
+                        className={`form-control-plaintext fw-semibold${valorInvalido && nfseValor !== "" ? " is-invalid" : ""}`}
                         value={nfseValor}
                         aria-required="true"
-                        onChange={(e) => setNfseValor(e.target.value)}
+                        readOnly
                       />
-                      <div className="form-text text-muted small">
-                        Pré-preenchido com a soma dos títulos. Você pode editar antes de confirmar.
-                      </div>
                       {valorInvalido && nfseValor !== "" && (
                         <div className="invalid-feedback">
                           {nfseAvisoFisico && nfseValor === "0"
