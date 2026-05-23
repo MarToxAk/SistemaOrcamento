@@ -1870,6 +1870,7 @@ export class AthosService {
   async verificarTipoProdutoVenda(idvenda: number): Promise<{
     temProdutoFisico: boolean;
     todosServico: boolean;
+    valorServicos: number | null;
   }> {
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
@@ -1877,7 +1878,8 @@ export class AthosService {
       const result = await client.query(
         `SELECT
            BOOL_OR(p.tipoproduto) as tem_produto_fisico,
-           BOOL_AND(NOT COALESCE(p.tipoproduto, false)) as todos_servico
+           BOOL_AND(NOT COALESCE(p.tipoproduto, false)) as todos_servico,
+           SUM(CASE WHEN NOT COALESCE(p.tipoproduto, false) THEN COALESCE(vi.valortotal, 0) ELSE 0 END) as valor_servicos
          FROM venda_item vi
          JOIN produto p ON p.idproduto = vi.idproduto
          WHERE vi.idvenda = $1 AND COALESCE(vi.cancelada, false) = false`,
@@ -1888,6 +1890,7 @@ export class AthosService {
       return {
         temProdutoFisico: row?.tem_produto_fisico ?? false,
         todosServico: row?.todos_servico ?? true,
+        valorServicos: row?.valor_servicos != null ? Number(row.valor_servicos) : null,
       };
     } finally {
       client.release();

@@ -299,8 +299,13 @@ export default function ClienteDetalhePage({
       try {
         const res = await fetch(`/api/athos/venda/${idvenda}/tipo-produto`, { cache: "no-store" });
         if (res.ok) {
-          const data = (await res.json()) as { temProdutoFisico?: boolean };
+          const data = (await res.json()) as { temProdutoFisico?: boolean; valorServicos?: number | null };
           setNfseAvisoFisico(data.temProdutoFisico ?? false);
+          // Quando há produto físico e o backend retornou o valor de serviços,
+          // pré-preencher apenas com a parcela de serviços (descontando produtos)
+          if (data.temProdutoFisico && data.valorServicos != null && data.valorServicos > 0) {
+            setNfseValor(data.valorServicos.toFixed(2));
+          }
         }
       } catch {
         // Falha silenciosa — aviso = false, não bloqueia abertura do modal
@@ -984,7 +989,7 @@ export default function ClienteDetalhePage({
                               key={t.idcontareceber}
                               className="d-flex justify-content-between small border-bottom pb-1 mb-1"
                             >
-                              <span className="text-muted">{t.numerotitulo ?? `#${t.idcontareceber}`}</span>
+                              <span className="text-muted">{(t.numerotitulo && t.numerotitulo !== "?") ? t.numerotitulo : `#${t.idcontareceber}`}</span>
                               <span>{formatBRL(t.valor)}</span>
                             </li>
                           ))}
