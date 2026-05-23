@@ -74,6 +74,7 @@ export default function ClienteDetalhePage({
   const [nfseModalState, setNfseModalState] = useState<"idle" | "confirm" | "loading" | "success" | "error">("idle");
   const [nfseValor, setNfseValor] = useState("");
   const [nfseDescricao, setNfseDescricao] = useState("");
+  const [nfseServico, setNfseServico] = useState("24.01");
   const [nfseAvisoFisico, setNfseAvisoFisico] = useState(false);
   const [nfseResult, setNfseResult] = useState<{
     nfseEmitidaId: number;
@@ -373,6 +374,7 @@ export default function ClienteDetalhePage({
           idcontasReceber: nfseTitulosElegiveis,
           valor: parseFloat(nfseValor),
           descricaoServico: nfseDescricao || undefined,
+          servicoCodigo: nfseServico,
         }),
       });
       const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
@@ -1068,6 +1070,24 @@ export default function ClienteDetalhePage({
                             : "Informe um valor maior que zero."}
                         </div>
                       )}
+                    </div>
+
+                    {/* Tipo de serviço */}
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold small" htmlFor="nfse-servico">
+                        Tipo de Serviço
+                      </label>
+                      <select
+                        id="nfse-servico"
+                        className="form-select form-select-sm"
+                        value={nfseServico}
+                        onChange={(e) => setNfseServico(e.target.value)}
+                      >
+                        <option value="24.01">24.01 — Confecção de carimbos, banners, placas e sinalização</option>
+                        <option value="24.01-02">24.01-02 — Gravação de objetos e joias</option>
+                        <option value="13.05">13.05 — Composição gráfica e confecção de matrizes</option>
+                        <option value="14.08">14.08 — Encadernação e acabamento</option>
+                      </select>
                     </div>
 
                     {/* Campo de descrição do serviço */}
