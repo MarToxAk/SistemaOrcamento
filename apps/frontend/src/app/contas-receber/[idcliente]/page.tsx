@@ -83,6 +83,7 @@ export default function ClienteDetalhePage({
   } | null>(null);
   const [nfseErro, setNfseErro] = useState("");
   const [nfseErroDetalhe, setNfseErroDetalhe] = useState("");
+  const [nfseTitulosElegiveis, setNfseTitulosElegiveis] = useState<number[]>([]);
 
   // Refetch key for triggering title list reload
   const [refetchKey, setRefetchKey] = useState(0);
@@ -286,49 +287,65 @@ export default function ClienteDetalhePage({
 
   async function abreNfseModal() {
     const titulosSel = titulos.filter((t) => selectedIds.has(t.idcontareceber));
-    const total = titulosSel.reduce((acc, t) => acc + t.valor, 0);
-    setNfseValor(total.toFixed(2));
     setNfseAvisoFisico(false);
     setNfseResult(null);
     setNfseErro("");
     setNfseErroDetalhe("");
 
-    // Verificar tipo de produto se idvenda disponível
-    const idvenda = titulosSel[0]?.idvenda;
-    if (idvenda != null) {
-      try {
-        const res = await fetch(`/api/athos/venda/${idvenda}/tipo-produto`, { cache: "no-store" });
-        if (res.ok) {
-          const data = (await res.json()) as { temProdutoFisico?: boolean; todosServico?: boolean; valorServicos?: number | null };
-          setNfseAvisoFisico(data.temProdutoFisico ?? false);
-          if (data.temProdutoFisico) {
-            if (data.valorServicos != null && data.valorServicos > 0) {
-              // Venda mista: pré-preenche só com a parcela de serviços
-              setNfseValor(data.valorServicos.toFixed(2));
-            } else {
-              // Venda 100% física: sem serviços — bloqueia emissão zerando o valor
-              setNfseValor("0");
-            }
+    // Buscar tipo-produto para cada idvenda único em paralelo
+    type TipoProduto = { temProdutoFisico: boolean; valorServicos: number | null };
+    const vendasUnicas = [...new Set(titulosSel.map((t) => t.idvenda).filter((v): v is number => v != null))];
+    const tipoPorVenda = new Map<number, TipoProduto>();
+    await Promise.all(
+      vendasUnicas.map(async (idv) => {
+        try {
+          const res = await fetch(`/api/athos/venda/${idv}/tipo-produto`, { cache: "no-store" });
+          if (res.ok) {
+            const d = (await res.json()) as { temProdutoFisico?: boolean; valorServicos?: number | null };
+            tipoPorVenda.set(idv, { temProdutoFisico: d.temProdutoFisico ?? false, valorServicos: d.valorServicos ?? null });
           }
+        } catch { /* falha silenciosa */ }
+      }),
+    );
+
+    // Classificar cada título: elegível (serviço) ou excluído (100% físico)
+    let totalServicos = 0;
+    let temFisico = false;
+    const elegiveis: number[] = [];
+
+    for (const t of titulosSel) {
+      const tipo = t.idvenda != null ? tipoPorVenda.get(t.idvenda) : undefined;
+      if (tipo?.temProdutoFisico) {
+        temFisico = true;
+        if (!tipo.valorServicos || tipo.valorServicos <= 0) {
+          // 100% físico — exclui da NFS-e
+          continue;
         }
-      } catch {
-        // Falha silenciosa — aviso = false, não bloqueia abertura do modal
+        // Misto — inclui com o valor da parcela de serviços
+        elegiveis.push(t.idcontareceber);
+        totalServicos += tipo.valorServicos;
+      } else {
+        // Sem idvenda ou 100% serviço — inclui com valor total do título
+        elegiveis.push(t.idcontareceber);
+        totalServicos += t.valor;
       }
     }
 
+    setNfseTitulosElegiveis(elegiveis);
+    setNfseAvisoFisico(temFisico);
+    setNfseValor(elegiveis.length > 0 ? totalServicos.toFixed(2) : "0");
     setNfseModalState("confirm");
   }
 
   async function confirmarEmitirNfse() {
     setNfseModalState("loading");
-    const titulosSelecionados = titulos.filter((t) => selectedIds.has(t.idcontareceber));
     try {
       const res = await fetch("/api/cobranca/nfse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           idclienteAthos: Number(idcliente),
-          idcontasReceber: titulosSelecionados.map((t) => t.idcontareceber),
+          idcontasReceber: nfseTitulosElegiveis,
           valor: parseFloat(nfseValor),
           descricaoServico: nfseDescricao || undefined,
         }),
