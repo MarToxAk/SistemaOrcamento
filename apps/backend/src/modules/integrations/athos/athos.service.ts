@@ -1861,4 +1861,37 @@ export class AthosService {
     }
   }
 
+  /**
+   * Verifica o tipo de produto de uma venda via venda_item JOIN produto.
+   * D-04: query validada no banco Athos.
+   * D-02: resultado NULL (sem itens) → { temProdutoFisico: false, todosServico: true }
+   * Pitfall 4: aggregate functions retornam NULL para conjunto vazio — tratado com ?? false / ?? true
+   */
+  async verificarTipoProdutoVenda(idvenda: number): Promise<{
+    temProdutoFisico: boolean;
+    todosServico: boolean;
+  }> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           BOOL_OR(p.tipoproduto) as tem_produto_fisico,
+           BOOL_AND(NOT COALESCE(p.tipoproduto, false)) as todos_servico
+         FROM venda_item vi
+         JOIN produto p ON p.idproduto = vi.idproduto
+         WHERE vi.idvenda = $1 AND COALESCE(vi.cancelada, false) = false`,
+        [idvenda],
+      );
+      const row = result.rows[0];
+      // NULL = sem itens em venda_item → permitir sem aviso (D-02, Pitfall 4)
+      return {
+        temProdutoFisico: row?.tem_produto_fisico ?? false,
+        todosServico: row?.todos_servico ?? true,
+      };
+    } finally {
+      client.release();
+    }
+  }
+
 }

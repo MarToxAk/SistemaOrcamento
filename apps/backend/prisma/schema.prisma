@@ -261,7 +261,10 @@ model NfseEmitida {
   valorServico   Decimal             @db.Decimal(12, 2)
   dataEmissao    DateTime            @default(now())
   criadoEm       DateTime            @default(now())
+  idvenda        Int?                // D-07: venda Athos que originou a NFS-e
   titulos        NfseEmitidaTitulo[]
+
+  @@index([idvenda])                 // D-23: busca eficiente de duplicidade por venda
 }
 
 model NfseEmitidaTitulo {
