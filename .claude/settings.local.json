@@ -56,7 +56,16 @@
       "Bash(echo \"Exit: $?\")",
       "Bash(command -v gsd-sdk)",
       "Bash(gsd-sdk query *)",
-      "Skill(gsd-plan-phase)"
+      "Skill(gsd-plan-phase)",
+      "Bash(mkdir -p /c/Users/Use/Documents/Projeto/SistemaOrcamento-main/.claude/worktrees/agent-aac200bfe98eebdf8/apps/frontend/src/app/api/cobranca/nfse)",
+      "Bash(mkdir -p \"/c/Users/Use/Documents/Projeto/SistemaOrcamento-main/.claude/worktrees/agent-aac200bfe98eebdf8/apps/frontend/src/app/api/athos/venda/[idvenda]/tipo-produto\")",
+      "Bash(echo \"TSC Exit: $?\")",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@72.60.253.108:5435/bomcusto2\" npx prisma migrate status)",
+      "Bash(dotenv -e .env -- npx --prefix apps/backend prisma migrate status)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@72.60.253.108:5435/bomcusto11\" npx prisma migrate status)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@72.60.253.108:5435/bomcusto11\" npx prisma migrate deploy)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@72.60.253.108:5435/bomcusto11\" npx prisma db execute --stdin)",
+      "Skill(gsd-ship)"
     ]
   }
 }

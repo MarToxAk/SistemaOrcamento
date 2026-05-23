@@ -31,6 +31,8 @@ const mockQuotesService = {
   confirmarPagamentoCaixa: jest.fn(),
 };
 
+const activeServices: AthosListenerService[] = [];
+
 function buildService(): Promise<AthosListenerService> {
   return Test.createTestingModule({
     providers: [
@@ -50,7 +52,11 @@ function buildService(): Promise<AthosListenerService> {
         ),
     })
     .compile()
-    .then((m) => m.get(AthosListenerService));
+    .then((m) => {
+      const service = m.get(AthosListenerService);
+      activeServices.push(service);
+      return service;
+    });
 }
 
 beforeEach(() => {
@@ -74,6 +80,15 @@ afterEach(() => {
   delete process.env.ATHOS_PG_DB;
   delete process.env.ATHOS_PG_USER;
   delete process.env.ATHOS_PG_PASS;
+});
+
+afterEach(async () => {
+  while (activeServices.length > 0) {
+    const service = activeServices.pop();
+    if (service) {
+      await service.onApplicationShutdown();
+    }
+  }
 });
 
 describe("AthosListenerService - onApplicationBootstrap", () => {
