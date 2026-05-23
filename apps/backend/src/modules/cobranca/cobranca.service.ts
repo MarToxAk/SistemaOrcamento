@@ -8,8 +8,10 @@ import axios from "axios";
 import { ConfigService } from "@nestjs/config";
 
 import { AthosService } from "../integrations/athos/athos.service";
+import { NfseService } from "../integrations/nfse/nfse.service";
 import { PrismaService } from "../database/prisma.service";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
+import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
 
 export interface CriarBoletoResponseDto {
   cobrancaId: number;
@@ -29,6 +31,7 @@ export class CobrancaService {
     private readonly athosService: AthosService,
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly nfseService: NfseService,
   ) {}
 
   async criarBoleto(dto: CriarBoletoDto): Promise<CriarBoletoResponseDto> {
@@ -240,6 +243,82 @@ export class CobrancaService {
       valor: totalValor,
       expireAt: dto.expireAt,
       nomeArquivo,
+    };
+  }
+
+  async emitirNfse(dto: EmitirNfseCobrancaDto): Promise<{
+    nfseEmitidaId: number;
+    numeroNfse: string;
+    numeroRps: number;
+    valor: number;
+  }> {
+    // Passo 1: Buscar todos os títulos do cliente e filtrar pelos IDs solicitados
+    const todosTitulos = await this.athosService.buscarTitulosClienteContasReceber(dto.idclienteAthos);
+    const titulosFiltrados = todosTitulos.filter((t) =>
+      dto.idcontasReceber.includes(t.idcontareceber),
+    );
+
+    for (const id of dto.idcontasReceber) {
+      if (!titulosFiltrados.find((t) => t.idcontareceber === id)) {
+        throw new BadRequestException(`Título ${id} não encontrado para este cliente.`);
+      }
+    }
+
+    // Passo 2: Verificação de duplicidade por idvenda (D-08, D-09, D-10)
+    const idvenda = titulosFiltrados[0]?.idvenda ?? null;
+    if (idvenda !== null) {
+      const existente = await this.prisma.nfseEmitida.findFirst({ where: { idvenda } });
+      if (existente) {
+        throw new BadRequestException(
+          `NFS-e já emitida para esta venda (Nº ${existente.numeroNfse})`,
+        );
+      }
+    }
+
+    // Passo 3: Emitir via NfseService (SOAP iiBrasil)
+    let resultado: { numero: string; numeroRps: number; codigoVerificacao: string | null; link: string | null };
+    try {
+      resultado = await this.nfseService.emitirParaContaReceber({
+        clienteAthosId: dto.idclienteAthos,
+        valor: dto.valor,
+        servicoCodigo: dto.servicoCodigo,
+        discriminacao: dto.descricaoServico,
+      });
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      const detail = (e as { response?: { data?: unknown }; message?: string })?.response?.data ??
+        (e as { message?: string })?.message;
+      this.logger.error(
+        `Falha ao emitir NFS-e. status=${status} detalhe=${JSON.stringify(detail)}`,
+      );
+      throw new InternalServerErrorException("Não foi possível emitir a NFS-e.");
+    }
+
+    // Passo 4: Persistir em NfseEmitida com nested write
+    const nfseEmitida = await this.prisma.nfseEmitida.create({
+      data: {
+        numeroNfse: resultado.numero,
+        numeroRps: resultado.numeroRps,
+        idclienteAthos: dto.idclienteAthos,
+        valorServico: dto.valor,
+        idvenda: idvenda,
+        titulos: {
+          createMany: {
+            data: titulosFiltrados.map((t) => ({
+              idcontareceber: t.idcontareceber,
+              valor: t.valor,
+            })),
+          },
+        },
+      },
+    });
+
+    // Passo 5: Retornar resposta
+    return {
+      nfseEmitidaId: nfseEmitida.id,
+      numeroNfse: resultado.numero,
+      numeroRps: resultado.numeroRps,
+      valor: dto.valor,
     };
   }
 
