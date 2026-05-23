@@ -79,13 +79,16 @@ export default function ClienteDetalhePage({
     .filter((t) => selectedIds.has(t.idcontareceber))
     .reduce((acc, t) => acc + t.valor, 0);
 
-  // Ordenar títulos: agrupa por cobrancaId (títulos com mesmo boleto ficam juntos), depois sem boleto
-  const titulosOrdenados = [...titulos].sort((a, b) => {
-    const aId = a.boletoAtivo?.cobrancaId ?? 0;
-    const bId = b.boletoAtivo?.cobrancaId ?? 0;
-    if (aId !== bId) return bId - aId; // boletos mais recentes primeiro
-    return a.datavencimento.localeCompare(b.datavencimento);
-  });
+  // Separar títulos: com boleto (agrupados) vs livres
+  const titulosLivres = titulos.filter((t) => !t.boletoAtivo);
+  const boletoGrupos = new Map<number, { boleto: NonNullable<typeof titulos[0]["boletoAtivo"]>; titulos: typeof titulos }>();
+  for (const t of titulos) {
+    if (t.boletoAtivo) {
+      const id = t.boletoAtivo.cobrancaId;
+      if (!boletoGrupos.has(id)) boletoGrupos.set(id, { boleto: t.boletoAtivo, titulos: [] });
+      boletoGrupos.get(id)!.titulos.push(t);
+    }
+  }
 
   useEffect(() => {
     if (checkboxRef.current) {
@@ -363,133 +366,156 @@ export default function ClienteDetalhePage({
                 <i className="bi bi-info-circle me-2" />Nenhum título encontrado para este cliente.
               </div>
             ) : (
-              <div className="table-responsive">
-                <table className="table table-sm table-hover table-bordered">
-                  <thead className="table-light">
-                    <tr>
-                      <th style={{ width: "40px" }}>
-                        <input
-                          type="checkbox"
-                          className="form-check-input"
-                          checked={allSelected}
-                          ref={checkboxRef}
-                          onChange={handleToggleAll}
-                        />
-                      </th>
-                      <th>Título</th>
-                      <th>Vencimento</th>
-                      <th>Valor</th>
-                      <th>NF</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {titulosOrdenados.map((titulo, idx) => {
-                      const vencido = new Date(titulo.datavencimento) < new Date();
-                      const temNf = titulo.tipoNf != null;
-                      const temBoleto = titulo.boletoAtivo != null;
-                      const prevTitulo = titulosOrdenados[idx - 1];
-                      const isNovoGrupo = temBoleto &&
-                        titulo.boletoAtivo?.cobrancaId !== prevTitulo?.boletoAtivo?.cobrancaId;
-                      const isUltimoDoGrupo = temBoleto && (
-                        !titulosOrdenados[idx + 1]?.boletoAtivo ||
-                        titulosOrdenados[idx + 1]?.boletoAtivo?.cobrancaId !== titulo.boletoAtivo?.cobrancaId
-                      );
+              <div>
+                {/* ─── GRUPOS DE BOLETO ─── */}
+                {boletoGrupos.size > 0 && (
+                  <div className="mb-3">
+                    <h6 className="text-muted small mb-2">
+                      <i className="bi bi-receipt me-1" />Títulos com boleto emitido
+                    </h6>
+                    {[...boletoGrupos.values()].map(({ boleto, titulos: tsBoleto }) => {
+                      const totalBoleto = tsBoleto.reduce((s, t) => s + t.valor, 0);
+                      const isPago = boleto.status === "pago";
+                      const isStatus = isPago ? "bg-success" : boleto.status === "cancelado" ? "bg-secondary" : "bg-warning text-dark";
                       return (
-                        <tr key={titulo.idcontareceber}
-                          className={temBoleto ? "table-warning" : ""}
-                          style={temBoleto ? {
-                            borderLeft: isNovoGrupo ? "3px solid #ffc107" : "3px solid #ffc107",
-                            borderBottom: isUltimoDoGrupo ? "2px solid #e0a800" : undefined,
-                          } : {}}
-                        >
-                          <td>
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              checked={selectedIds.has(titulo.idcontareceber)}
-                              onChange={() => !temBoleto && handleToggle(titulo.idcontareceber)}
-                              disabled={temBoleto}
-                              title={temBoleto ? `Boleto ${titulo.boletoAtivo?.status} — cancele antes de gerar novo` : undefined}
-                            />
-                          </td>
-                          <td className="small">{titulo.numerotitulo ?? "—"}</td>
-                          <td className={`small${vencido ? " text-danger fw-semibold" : ""}`}>
-                            {formatDate(titulo.datavencimento)}
-                          </td>
-                          <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
-                          <td>
-                            <div className="d-flex flex-column gap-1">
-                              {titulo.tipoNf ? (
-                                <span
-                                  className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}
-                                  title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}
-                                >
-                                  {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
-                                </span>
-                              ) : (
-                                <span className="badge bg-secondary opacity-50">Sem NF</span>
+                        <div key={boleto.cobrancaId} className="border rounded mb-2 overflow-hidden">
+                          {/* Cabeçalho do grupo */}
+                          <div className={`d-flex align-items-center gap-2 px-3 py-2 ${isPago ? "bg-success bg-opacity-10" : "bg-warning bg-opacity-10"}`}>
+                            <span className={`badge ${isStatus}`}>
+                              <i className="bi bi-receipt me-1" />Boleto #{boleto.cobrancaId} — {boleto.status}
+                            </span>
+                            <span className="small fw-semibold">{formatBRL(totalBoleto)}</span>
+                            <span className="small text-muted">({tsBoleto.length} título{tsBoleto.length > 1 ? "s" : ""})</span>
+                            <div className="ms-auto d-flex gap-2">
+                              {boleto.linkBoleto && (
+                                <a href={`/api/cobranca/boleto/${boleto.cobrancaId}/pdf`}
+                                  download={boleto.nomeArquivo ?? undefined}
+                                  className="btn btn-sm btn-outline-primary"
+                                  title="Baixar PDF do boleto">
+                                  <i className="bi bi-download me-1" />PDF
+                                </a>
                               )}
-                              {titulo.boletoAtivo && (
-                                <div className="d-flex flex-column gap-1 mt-1">
-                                  <span className={`badge ${titulo.boletoAtivo.status === "pago" ? "bg-success" : titulo.boletoAtivo.status === "cancelado" ? "bg-secondary" : "bg-warning text-dark"}`}>
-                                    <i className="bi bi-receipt me-1" />Boleto {titulo.boletoAtivo.status}
-                                  </span>
-                                  <div className="d-flex gap-1 flex-wrap">
-                                    {titulo.boletoAtivo.linkBoleto && (
-                                      <a href={`/api/cobranca/boleto/${titulo.boletoAtivo.cobrancaId}/pdf`}
-                                        download={titulo.boletoAtivo.nomeArquivo ?? undefined}
-                                        className="btn btn-xs btn-outline-primary" style={{fontSize:"0.7rem",padding:"1px 5px"}}
-                                        title="Baixar PDF">
-                                        <i className="bi bi-download" />
-                                      </a>
-                                    )}
-                                    <button type="button"
-                                      className="btn btn-xs btn-outline-info" style={{fontSize:"0.7rem",padding:"1px 5px"}}
-                                      title="Verificar pagamento na EFI"
-                                      onClick={async () => {
-                                        await fetch(`/api/cobranca/boleto/${titulo.boletoAtivo!.cobrancaId}/verificar-pagamento`, { method: "POST" });
-                                        window.location.reload();
-                                      }}>
-                                      <i className="bi bi-arrow-clockwise" />
-                                    </button>
-                                    {titulo.boletoAtivo.status !== "pago" && (
-                                      <button type="button"
-                                        className="btn btn-xs btn-outline-danger" style={{fontSize:"0.7rem",padding:"1px 5px"}}
-                                        title="Cancelar boleto"
-                                        onClick={async () => {
-                                          if (!confirm("Cancelar este boleto?")) return;
-                                          await fetch(`/api/cobranca/boleto/${titulo.boletoAtivo!.cobrancaId}/cancelar`, { method: "POST" });
-                                          window.location.reload();
-                                        }}>
-                                        <i className="bi bi-x-circle" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
+                              <button type="button" className="btn btn-sm btn-outline-info"
+                                title="Verificar pagamento na EFI"
+                                onClick={async () => {
+                                  await fetch(`/api/cobranca/boleto/${boleto.cobrancaId}/verificar-pagamento`, { method: "POST" });
+                                  window.location.reload();
+                                }}>
+                                <i className="bi bi-arrow-clockwise me-1" />Verificar
+                              </button>
+                              {!isPago && (
+                                <button type="button" className="btn btn-sm btn-outline-danger"
+                                  title="Cancelar boleto e liberar títulos"
+                                  onClick={async () => {
+                                    if (!confirm(`Cancelar boleto #${boleto.cobrancaId}? Os ${tsBoleto.length} título(s) ficarão disponíveis para novo boleto.`)) return;
+                                    await fetch(`/api/cobranca/boleto/${boleto.cobrancaId}/cancelar`, { method: "POST" });
+                                    window.location.reload();
+                                  }}>
+                                  <i className="bi bi-x-circle me-1" />Cancelar
+                                </button>
                               )}
                             </div>
-                          </td>
-                          <td>
-                            {vencido ? (
-                              <span className="badge bg-danger">VEN</span>
-                            ) : (
-                              <span className="badge bg-info text-dark">AVC</span>
-                            )}
-                          </td>
-                        </tr>
+                          </div>
+                          {/* Sub-tabela de títulos deste boleto */}
+                          <table className="table table-sm mb-0">
+                            <thead className="table-light">
+                              <tr>
+                                <th className="small text-muted fw-normal">Título</th>
+                                <th className="small text-muted fw-normal">Vencimento</th>
+                                <th className="small text-muted fw-normal">Valor</th>
+                                <th className="small text-muted fw-normal">NF</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {tsBoleto.map((t) => {
+                                const vencido = new Date(t.datavencimento) < new Date();
+                                return (
+                                  <tr key={t.idcontareceber}>
+                                    <td className="small">{t.numerotitulo ?? "—"}</td>
+                                    <td className={`small${vencido ? " text-danger" : ""}`}>{formatDate(t.datavencimento)}</td>
+                                    <td className="small fw-semibold">{formatBRL(t.valor)}</td>
+                                    <td>
+                                      {t.tipoNf ? (
+                                        <span className={`badge ${t.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}>
+                                          {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
+                                        </span>
+                                      ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       );
                     })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="table-secondary">
-                      <td colSpan={5} className="small text-muted">
-                        {selectedIds.size} título(s) selecionado(s) — Total:{" "}
-                        <strong>{formatBRL(totalSelecionado)}</strong>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                  </div>
+                )}
+
+                {/* ─── TÍTULOS LIVRES (sem boleto) ─── */}
+                {titulosLivres.length === 0 && boletoGrupos.size > 0 ? null : (
+                  <div className="table-responsive">
+                    {boletoGrupos.size > 0 && (
+                      <h6 className="text-muted small mb-2">
+                        <i className="bi bi-list-check me-1" />Títulos disponíveis
+                      </h6>
+                    )}
+                    <table className="table table-sm table-hover table-bordered">
+                      <thead className="table-light">
+                        <tr>
+                          <th style={{ width: "40px" }}>
+                            <input type="checkbox" className="form-check-input"
+                              checked={allSelected} ref={checkboxRef} onChange={handleToggleAll} />
+                          </th>
+                          <th>Título</th>
+                          <th>Vencimento</th>
+                          <th>Valor</th>
+                          <th>NF</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {titulosLivres.map((titulo) => {
+                          const vencido = new Date(titulo.datavencimento) < new Date();
+                          return (
+                            <tr key={titulo.idcontareceber}>
+                              <td>
+                                <input type="checkbox" className="form-check-input"
+                                  checked={selectedIds.has(titulo.idcontareceber)}
+                                  onChange={() => handleToggle(titulo.idcontareceber)} />
+                              </td>
+                              <td className="small">{titulo.numerotitulo ?? "—"}</td>
+                              <td className={`small${vencido ? " text-danger fw-semibold" : ""}`}>
+                                {formatDate(titulo.datavencimento)}
+                              </td>
+                              <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
+                              <td>
+                                {titulo.tipoNf ? (
+                                  <span className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}
+                                    title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
+                                    {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
+                                  </span>
+                                ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
+                              </td>
+                              <td>
+                                {vencido
+                                  ? <span className="badge bg-danger">VEN</span>
+                                  : <span className="badge bg-info text-dark">AVC</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="table-secondary">
+                          <td colSpan={6} className="small text-muted">
+                            {selectedIds.size} título(s) selecionado(s) — Total: <strong>{formatBRL(totalSelecionado)}</strong>
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
