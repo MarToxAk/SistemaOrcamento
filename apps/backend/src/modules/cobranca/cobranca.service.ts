@@ -375,6 +375,9 @@ export class CobrancaService {
     if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
     if (cobranca.status === "cancelado") return { ok: true, mensagem: "Boleto já estava cancelado." };
 
+    // Cancelar na EFI via PUT /v1/charge/:chargeId/cancel
+    // Doc: https://dev.efipay.com.br/docs/api-cobrancas/boleto
+    // Statuses canceláveis: new, waiting, unpaid, link
     if (cobranca.txidEfi) {
       try {
         const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
@@ -385,11 +388,21 @@ export class CobrancaService {
         });
         const token: string = authResp.data?.access_token;
         if (token) {
-          await cli.delete(`/v1/charge/${cobranca.txidEfi}`, { headers: { Authorization: `Bearer ${token}` } });
-          this.logger.log(`Boleto EFI chargeId=${cobranca.txidEfi} cancelado.`);
+          const cancelResp = await cli.put(
+            `/v1/charge/${cobranca.txidEfi}/cancel`,
+            {},
+            { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } },
+          );
+          if (cancelResp.data?.code === 200) {
+            this.logger.log(`EFI: boleto chargeId=${cobranca.txidEfi} cancelado com sucesso (code 200).`);
+          } else {
+            this.logger.warn(`EFI: resposta inesperada ao cancelar chargeId=${cobranca.txidEfi}: ${JSON.stringify(cancelResp.data)}`);
+          }
         }
       } catch (e: unknown) {
-        this.logger.warn(`Falha ao cancelar na EFI (continua cancelando no banco): ${String(e)}`);
+        const detail = (e as { response?: { data?: unknown } })?.response?.data;
+        this.logger.warn(`Falha ao cancelar boleto na EFI (prosseguindo com remoção do banco): ${JSON.stringify(detail ?? String(e))}`);
+        // Não bloqueia: mesmo se EFI falhar, remove do banco para liberar os títulos
       }
     }
 
