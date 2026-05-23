@@ -301,7 +301,7 @@ export default function StatusPage() {
       <div className="container my-4">
         <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top">
           <div className="d-flex align-items-center gap-3 flex-wrap">
-            <img src="/media/logo_new.svg" alt="Logo Bom Custo" className="logo-img" />
+            <img src="/media/logo-primary.png" alt="Logo Bom Custo" className="logo-img" />
             <div>
               <h3 className="mb-1">Produção de Orçamentos</h3>
               <div className="small d-flex align-items-center gap-2">
@@ -316,6 +316,9 @@ export default function StatusPage() {
             <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => void fetchQuotes()} title="Atualizar lista">
               <i className="bi bi-arrow-clockwise me-1" />Atualizar
             </button>
+            <a href="/contas-receber" className="btn btn-sm btn-outline-warning">
+              <i className="bi bi-receipt me-1" />Contas a Receber
+            </a>
             <a href="/orcamento/novo#condPagamento" className="btn btn-sm btn-success">
               <i className="bi bi-plus-circle me-1" />Novo Orçamento
             </a>

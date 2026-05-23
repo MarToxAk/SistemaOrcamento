@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+<style>
+  html, body { margin:0; padding:0; background:#fff; }
+  .card-wrap { padding: 18px 20px; }
+  .swatch-row { display:flex; flex-wrap:wrap; gap:10px; }
+  .sw { width: 110px; }
+  .sw .chip { height: 56px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.06); }
+  .sw .name { font: 600 11px/1.2 var(--font-ui); color: var(--ink); margin-top:6px; }
+  .sw .hex  { font: 500 10.5px/1.2 var(--font-mono); color: var(--ink-soft); margin-top:2px; }
+  .row-tag { font: 700 10px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--teal); margin: 0 0 10px; }
+  .stack { display:flex; flex-direction:column; gap:14px; }
+  
+.field { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; max-width:300px; }
+.lbl { font:600 .95rem/1 var(--font-ui); color: var(--ink); }
+.lbl .req { color:#ee3637; }
+.inp { border:1px solid #d7ccb7; border-radius:10px; padding:.6rem .9rem; font:400 1.05rem/1.2 var(--font-ui); background:#fff; }
+.inp:focus { outline:none; border-color:#0d6efd; }
+.inp.invalid { border-color:#ee3637; }
+.fb { font:500 .85rem/1.2 var(--font-ui); color:#ee3637; }
+
+</style></head><body><div class="card-wrap">
+<div class="field"><label class="lbl">Nome do Cliente <span class="req">*</span></label><input class="inp" value="João Silveira" /></div>
+<div class="field"><label class="lbl">Telefone <span class="req">*</span></label><input class="inp" value="(12) 99648-4918" /></div>
+<div class="field"><label class="lbl">E-mail</label><input class="inp inp--invalid" style="border-color:#ee3637" value="naoeumemail" /><span class="fb">E-mail inválido.</span></div>
+<div class="field"><label class="lbl">Condição de Pagamento</label>
+  <select class="inp"><option>À vista</option><option>30 dias</option><option>2x sem juros</option></select>
+</div>
+</div></body></html>

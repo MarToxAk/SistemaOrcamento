@@ -526,7 +526,7 @@ export default function OrcamentoDetailPage() {
         <div className="container my-5">
           <div className="orcamento-header p-3 rounded-top" style={{background: "linear-gradient(135deg,#c5f2e8 0%,#cbe1f9 25%,#e7d8f9 50%,#f9e7f5 75%,#f0cacb 100%)", color: "#222"}}>
             <div className="header-left d-flex align-items-start gap-3 flex-grow-1">
-              <img src="/media/logo_new.svg" alt="Logo Bom Custo" className="me-3 logo-img" style={{maxWidth:140, maxHeight:100, background: "#fff", borderRadius:8, padding:6}} />
+              <img src="/media/logo-primary.png" alt="Logo Bom Custo" className="me-3 logo-img" style={{maxWidth:140, maxHeight:100, background: "#fff", borderRadius:8, padding:6}} />
               <div className="header-info">
                 <h3 className="mb-0">Bom Custo Papelaria & Gráfica Rápida LTDA</h3>
                 <div className="small">CNPJ: 62.391.927/0001-57</div>

@@ -713,6 +713,43 @@ export class NfseService {
 
     this.logger.log(`NFS-e #${numeroNfse} emitida para orÃ§amento #${quote.internalNumber}`);
 
+    // Salvar NfseEmitida com idvenda (D-17, D-24) — falha nao interrompe o fluxo SOAP ja executado
+    try {
+      const idvendaParam = quote?.saleExternalId ? Number(quote.saleExternalId) : null;
+      if (idvendaParam !== null) {
+        const existente = await this.prisma.nfseEmitida.findFirst({ where: { idvenda: idvendaParam } });
+        if (existente) {
+          this.logger.warn(`NfseEmitida ja existe para idvenda ${idvendaParam} (id=${existente.id}) — fluxo orcamento #${quote.internalNumber} nao cria duplicata`);
+        } else {
+          await this.prisma.nfseEmitida.create({
+            data: {
+              numeroNfse,
+              numeroRps: Number(rpsNumero),
+              idclienteAthos: input?.clienteAthosId ?? 0,
+              valorServico:   valorServicos,
+              idvenda:        idvendaParam,
+            },
+          });
+          this.logger.log(`NfseEmitida criada para idvenda=${idvendaParam} nfse=#${numeroNfse}`);
+        }
+      } else {
+        // saleExternalId ausente — salvar sem idvenda (orçamentos sem venda Athos associada)
+        await this.prisma.nfseEmitida.create({
+          data: {
+            numeroNfse,
+            numeroRps: Number(rpsNumero),
+            idclienteAthos: input?.clienteAthosId ?? 0,
+            valorServico:   valorServicos,
+            idvenda:        null,
+          },
+        });
+        this.logger.log(`NfseEmitida criada sem idvenda (saleExternalId ausente) nfse=#${numeroNfse}`);
+      }
+    } catch (err) {
+      this.logger.error(`Falha ao salvar NfseEmitida para orcamento #${quote.internalNumber}: ${err instanceof Error ? err.message : String(err)}`);
+      // Nao relançar — a NFS-e ja foi emitida com sucesso no SOAP; salvar NfseEmitida e melhor-esforco
+    }
+
     // Notifica cliente via Chatwoot (mensagem + PDF como anexo)
     if (quote.conversationId) {
       const convId      = String(quote.conversationId);
@@ -782,6 +819,124 @@ export class NfseService {
       },
       servicoSugerido:     DEFAULT_SERVICO,
       servicosDisponiveis: this.getServicosDisponiveis(),
+    };
+  }
+
+  /**
+   * Emite NFS-e para o fluxo de contas a receber (sem quoteId, sem Chatwoot).
+   * Reutiliza todos os métodos privados de emitir() mas não acessa o model Quote.
+   * NFR-03: tomador resolvido via clienteAthosId; RPS via API Auxiliar iiBrasil.
+   */
+  async emitirParaContaReceber(input: {
+    clienteAthosId: number;
+    valor: number;
+    servicoCodigo?: string;
+    discriminacao?: string;
+  }): Promise<{
+    numero: string;
+    numeroRps: number;
+    codigoVerificacao: string | null;
+    link: string | null;
+  }> {
+    // 1. Resolver tomador via Caminho A (clienteAthosId)
+    const info = await this.athosService.buscarClientePorId(input.clienteAthosId);
+    if (!info) {
+      throw new BadRequestException(
+        `Cliente Athos não encontrado. Verifique o clienteAthosId informado (${input.clienteAthosId}).`,
+      );
+    }
+
+    let tomadorNome: string | null = info.name ?? null;
+    let tomadorCnpj: string | null = null;
+    let tomadorCpf: string | null = null;
+    let tomadorEndereco: TomadorEndereco | null = (info as any).endereco ?? null;
+
+    if (info.type === "juridico" && info.documento?.replace(/\D/g, "").length === 14) {
+      tomadorCnpj = info.documento.replace(/\D/g, "");
+    } else if (info.type === "fisico" && info.documento?.replace(/\D/g, "").length === 11) {
+      tomadorCpf = info.documento.replace(/\D/g, "");
+    }
+
+    this.logger.log(
+      `[emitirParaContaReceber] clienteAthosId=${input.clienteAthosId} tipo=${info.type} nome="${tomadorNome ?? "?"}" doc=${info.documento ? info.documento.slice(0, 4) + "****" : "null"}`,
+    );
+
+    // 2. Obter RPS via API Auxiliar iiBrasil
+    const infoNfse = await this.getInfoNfse();
+    if (!infoNfse) {
+      throw new BadRequestException(
+        "API Auxiliar iiBrasil indisponível. Não é possível obter número RPS seguro.",
+      );
+    }
+    const rpsNumero = infoNfse.proximoRps;
+    const rpsSerie = infoNfse.serieRps || this.SERIE_RPS;
+
+    this.logger.log(`[RPS] emitirParaContaReceber proximoRPS=${rpsNumero} serie=${rpsSerie}`);
+
+    // 3. Resolver serviço
+    const servicoKey = input.servicoCodigo ?? DEFAULT_SERVICO;
+    const servico = SERVICOS[servicoKey] ?? SERVICOS[DEFAULT_SERVICO];
+
+    // 4. Valor e discriminação
+    const valorServicos = Number(input.valor);
+    const discriminacao = input.discriminacao ?? "Prestação de serviços";
+    const dataEmissao = new Date().toISOString().slice(0, 10);
+
+    // 5. Montar XML e enviar SOAP (reutiliza métodos privados existentes)
+    const rpsXml = this.buildRpsXml({
+      numero: rpsNumero,
+      serie: rpsSerie,
+      dataEmissao,
+      valorServicos,
+      descontoIncondicionado: 0,
+      discriminacao,
+      itemLista: servico.itemLista,
+      codigoNacional: servico.codigoNacional,
+      aliquotaIss: servico.aliquotaIss,
+      tomadorCnpj,
+      tomadorCpf,
+      tomadorNome,
+      tomadorEndereco,
+    });
+
+    const integridade = this.computeIntegridade(rpsXml);
+    const dados = `<?xml version="1.0" encoding="UTF-8"?>
+<GerarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  ${rpsXml}
+  <Integridade>${integridade}</Integridade>
+</GerarNfseEnvio>`;
+
+    this.logger.log(
+      `Emitindo NFS-e contas a receber - RPS #${rpsNumero}/${rpsSerie} - serviço ${servico.itemLista}/${servico.codigoNacional} - valor ${valorServicos.toFixed(2)}`,
+    );
+
+    const responseXml = await this.enviarSoap(this.buildCabecalho(), dados);
+
+    const erros = this.parseErros(responseXml);
+    const numeroNfse = this.parseNumeroNfse(responseXml);
+
+    if (erros.length > 0 && !numeroNfse) {
+      throw new BadRequestException(`Erro na emissão da NFS-e: ${erros.join(" | ")}`);
+    }
+
+    if (!numeroNfse) {
+      this.logger.error(`NFS-e sem número. Response: ${responseXml}`);
+      throw new BadRequestException(
+        "NFS-e processada mas número não retornado. Verifique no painel da prefeitura.",
+      );
+    }
+
+    const codigoVerificacao = this.parseCodigoVerificacao(responseXml);
+    const linkNfse = this.parseLinkNfse(responseXml);
+
+    this.logger.log(`NFS-e #${numeroNfse} emitida via emitirParaContaReceber (RPS #${rpsNumero})`);
+
+    // 6. Retornar resultado — SEM chamar prisma.quote.update() e SEM enviar Chatwoot
+    return {
+      numero: numeroNfse,
+      numeroRps: rpsNumero,
+      codigoVerificacao,
+      link: linkNfse,
     };
   }
 

@@ -9,6 +9,7 @@ import { EventsModule } from "./events/events.module";
 import { HealthController } from "./health.controller";
 import { ChatwootModule } from "./integrations/chatwoot/chatwoot.module";
 import { EfiModule } from "./integrations/efi/efi.module";
+import { AthosModule } from "./integrations/athos/athos.module";
 import { NfseModule } from "./integrations/nfse/nfse.module";
 import { PdvModule } from "./integrations/pdv/pdv.module";
 import { QuotesModule } from "./quotes/quotes.module";
@@ -16,6 +17,7 @@ import { LoggingInterceptor } from "./common/logging.interceptor";
 import { InternalAuthGuard } from "./security/internal-auth.guard";
 import { SecurityModule } from "./security/security.module";
 import { THROTTLE_DEFAULT } from "./security/throttle.config";
+import { CobrancaModule } from "./cobranca/cobranca.module";
 
 const REQUIRED_ENV_VARS = [
   "DATABASE_URL",
@@ -62,8 +64,10 @@ function validateEnv(config: Record<string, unknown>) {
     QuotesModule,
     ChatwootModule,
     EfiModule,
+    AthosModule,
     NfseModule,
     PdvModule,
+    CobrancaModule,
   ],
   controllers: [HealthController],
   providers: [    {

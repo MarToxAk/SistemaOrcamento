@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Orçamento Nº 12450 — Bom Custo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" />
+
+<style>
+  /* ============== Page setup ============== */
+  @page { size: A4; margin: 16mm 14mm; }
+  :root {
+    --ink:       #0b1220;
+    --ink-soft:  #5b6b80;
+    --ink-faint: #9aa7b8;
+    --line:      #e4e9f0;
+    --line-soft: #eef2f6;
+    --accent:    #0e6d73;
+    --accent-soft:#d6ebed;
+    --paper:     #f8fafc;
+    --success:   #128a3a;
+    --success-bg:#defce9;
+    --danger:    #c2362c;
+    --warn:      #a36500;
+    --total-red: #c2362c;
+  }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: 'Mulish', system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    background: #e9edf2;
+    font-size: 11pt;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    background: #ffffff;
+    width: 210mm; min-height: 297mm;
+    margin: 24px auto;
+    padding: 16mm 14mm;
+    box-shadow: 0 4px 24px rgba(0,0,0,.08);
+  }
+  @media print {
+    body { background: #ffffff; }
+    .page { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+  }
+
+  .num { font-variant-numeric: tabular-nums; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  /* ============== Header ============== */
+  .doc-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 18px;
+    align-items: flex-start;
+    padding-bottom: 14px;
+    border-bottom: 2px solid var(--accent);
+  }
+  .doc-header__logo {
+    width: 78px; height: 78px;
+    object-fit: contain;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 6px;
+  }
+  .doc-header__co h1 {
+    margin: 0 0 4px;
+    font: 800 13.5pt/1.15 'Mulish', sans-serif;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .doc-header__co p {
+    margin: 1px 0;
+    font: 500 8.2pt/1.4 'Mulish', sans-serif;
+    color: var(--ink-soft);
+  }
+  .doc-header__co .em { color: var(--ink); font-weight: 600; }
+  .doc-header__id {
+    text-align: right;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .doc-header__id-label {
+    font: 800 7.5pt/1 'Mulish', sans-serif;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .doc-header__id-num {
+    font: 800 22pt/1 'Mulish', sans-serif;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+    margin: 6px 0 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .doc-header__id-date {
+    font: 600 9pt/1.2 'Mulish', sans-serif;
+    color: var(--ink-soft);
+  }
+
+  /* ============== Customer block ============== */
+  .customer {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: flex-start;
+    margin-top: 16px;
+  }
+  .customer__to {
+    font: 800 7.5pt/1 'Mulish', sans-serif;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 6px;
+  }
+  .customer__name {
+    font: 800 13pt/1.15 'Mulish', sans-serif;
+    color: var(--ink);
+    margin: 0 0 4px;
+    letter-spacing: -0.012em;
+  }
+  .customer__meta {
+    font: 500 9pt/1.45 'Mulish', sans-serif;
+    color: var(--ink-soft);
+  }
+  .customer__meta b { color: var(--ink); font-weight: 600; margin-right: 4px; }
+
+  .intro {
+    margin: 14px 0 12px;
+    font: 500 9.5pt/1.5 'Mulish', sans-serif;
+    color: var(--ink-soft);
+  }
+
+  /* ============== Section label ============== */
+  .section-label {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 18px 0 8px;
+  }
+  .section-label h2 {
+    margin: 0;
+    font: 800 8.5pt/1 'Mulish', sans-serif;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .section-label .hint { font: 500 8pt/1 'Mulish', sans-serif; color: var(--ink-faint); }
+
+  /* ============== Items table ============== */
+  .items {
+    width: 100%;
+    border-collapse: collapse;
+    font: 500 9pt/1.35 'Mulish', sans-serif;
+  }
+  .items thead th {
+    font: 800 7.5pt/1 'Mulish', sans-serif;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    text-align: left;
+    padding: 8px 6px;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .items thead th.num { text-align: right; }
+  .items thead th.center { text-align: center; }
+  .items tbody td {
+    padding: 9px 6px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+    color: var(--ink);
+  }
+  .items tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .items tbody td.center { text-align: center; }
+  .items tbody td.idx {
+    color: var(--ink-faint);
+    font: 600 8.5pt/1.2 'JetBrains Mono', monospace;
+    width: 28px;
+  }
+  .items tbody tr:nth-child(even) td { background: #fafbfd; }
+  .items tbody .desc-strong { font-weight: 700; color: var(--ink); }
+  .items tbody .desc-sub { font: 500 8pt/1.3 'Mulish', sans-serif; color: var(--ink-soft); margin-top: 2px; display: block; }
+  .items tbody td.total { font-weight: 700; color: var(--ink); }
+
+  /* ============== Carimbos visualization ============== */
+  .stamps { margin-top: 18px; }
+  .stamps__grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-top: 8px;
+  }
+  .stamp {
+    border: 1.5px dashed var(--ink-faint);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #ffffff;
+    display: flex; flex-direction: column;
+    min-height: 90px;
+  }
+  .stamp__num {
+    font: 800 7.5pt/1 'Mulish', sans-serif;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .stamp__body {
+    font: 600 10pt/1.4 'Mulish', sans-serif;
+    color: var(--ink);
+    margin: 6px 0;
+    white-space: pre-wrap;
+    text-align: center;
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stamp__foot {
+    display: flex; justify-content: space-between;
+    font: 600 8pt/1 'Mulish', sans-serif;
+    color: var(--ink-soft);
+    border-top: 1px dashed var(--line);
+    padding-top: 6px;
+    margin-top: auto;
+  }
+  .stamp__dim { color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; font-size: 7.5pt; }
+  .stamp__model { color: var(--accent); }
+
+  /* ============== Footer row: observations + totals ============== */
+  .foot-row {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 14px;
+    margin-top: 16px;
+    align-items: stretch;
+  }
+  .obs {
+    background: var(--paper);
+    border-radius: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+  }
+  .obs__label {
+    font: 800 7.5pt/1 'Mulish', sans-serif;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .obs__body {
+    font: 500 9pt/1.45 'Mulish', sans-serif;
+    color: var(--ink);
+    white-space: pre-wrap;
+  }
+  .obs__body--empty { color: var(--ink-faint); font-style: italic; }
+
+  .totals {
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .totals__row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font: 600 9pt/1.2 'Mulish', sans-serif;
+    color: var(--ink-soft);
+  }
+  .totals__row b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .totals__row--disc b { color: var(--warn); }
+  .totals__row--grand {
+    border-top: 1.5px solid var(--ink);
+    margin-top: 6px;
+    padding-top: 10px;
+  }
+  .totals__row--grand span {
+    font: 800 8pt/1 'Mulish', sans-serif;
+    letter-spacing: .09em; text-transform: uppercase;
+    color: var(--ink);
+  }
+  .totals__row--grand b {
+    font: 800 16pt/1 'Mulish', sans-serif;
+    color: var(--total-red);
+    letter-spacing: -0.01em;
+  }
+
+  /* ============== Conditions grid ============== */
+  .conds {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .cond {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #ffffff;
+  }
+  .cond__label {
+    font: 800 7pt/1 'Mulish', sans-serif;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 4px;
+  }
+  .cond__value {
+    font: 700 9.5pt/1.2 'Mulish', sans-serif;
+    color: var(--ink);
+  }
+  .cond--accent .cond__label { color: var(--accent); }
+  .cond--danger .cond__value { color: var(--total-red); }
+
+  /* ============== Sign-off + buttons ============== */
+  .signoff {
+    margin-top: 18px;
+    font: 500 9pt/1.5 'Mulish', sans-serif;
+    color: var(--ink-soft);
+  }
+  .signoff b { color: var(--ink); font-weight: 700; }
+
+  .cta {
+    display: flex; gap: 10px; justify-content: center;
+    margin-top: 14px;
+  }
+  .cta a {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 11px 22px;
+    border-radius: 8px;
+    font: 800 9.5pt/1 'Mulish', sans-serif;
+    text-decoration: none;
+    letter-spacing: -0.005em;
+  }
+  .cta__accept { background: var(--success); color: #ffffff; }
+  .cta__reject { background: #ffffff; color: var(--total-red); border: 1.5px solid var(--total-red); }
+
+  /* ============== Page footer (very small) ============== */
+  .doc-foot {
+    margin-top: 22px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between;
+    font: 600 7.5pt/1.3 'Mulish', sans-serif;
+    color: var(--ink-faint);
+  }
+  .doc-foot a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body style="background-color: rgb(255, 255, 255)">
+
+<div class="page">
+
+  <!-- ============== HEADER ============== -->
+  <header class="doc-header">
+    <img src="assets/logo-primary.png" class="doc-header__logo" alt="Bom Custo">
+
+    <div class="doc-header__co">
+      <h1>Bom Custo Papelaria &amp; Gráfica Rápida LTDA</h1>
+      <p><span class="em">CNPJ</span> 62.391.927/0001-57</p>
+      <p>Rua Olímpio Leite da Silva, 39 — Loja 07, Perequê</p>
+      <p>Ilhabela / SP · CEP 11633-078</p>
+      <p>(12) 99648-4918 · (12) 3896-1474 · (12) 99678-2405</p>
+      <p>orcamento@bomcustoilhabela.com.br</p>
+    </div>
+
+    <div class="doc-header__id">
+      <div>
+        <div class="doc-header__id-label">Orçamento</div>
+        <div class="doc-header__id-num">Nº 12450</div>
+        <div class="doc-header__id-date">19 / maio / 2026</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============== CUSTOMER ============== -->
+  <div class="customer">
+    <div>
+      <div class="customer__to">Para</div>
+      <h2 class="customer__name">Pousada Mar Azul Hotelaria LTDA</h2>
+      <div class="customer__meta">
+        <b>Telefone</b> (12) 99812-3344 &nbsp;·&nbsp;
+        <b>E-mail</b> compras@pousadamarazul.com.br
+      </div>
+    </div>
+  </div>
+
+  <p class="intro">
+    Prezado cliente, apresentamos nossa proposta comercial para sua avaliação.
+    Estamos à disposição para qualquer esclarecimento adicional.
+  </p>
+
+  <!-- ============== ITEMS ============== -->
+  <div class="section-label">
+    <h2>Itens da proposta</h2>
+    <div class="hint">3 itens · valores em BRL</div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th class="idx">#</th>
+        <th>Descrição</th>
+        <th class="center">Qtd</th>
+        <th class="num">Valor unit.</th>
+        <th class="num">Desconto</th>
+        <th class="num">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="idx">01</td>
+        <td>
+          <span class="desc-strong">Carimbo automático Trodat 4913</span>
+          <span class="desc-sub">Texto personalizado · almofada azul · garantia de 6 meses</span>
+        </td>
+        <td class="center">2</td>
+        <td class="num">R$ 95,00</td>
+        <td class="num">—</td>
+        <td class="num total">R$ 190,00</td>
+      </tr>
+      <tr>
+        <td class="idx">02</td>
+        <td>
+          <span class="desc-strong">Gravação a laser em caneca cerâmica</span>
+          <span class="desc-sub">Logo do cliente em uma face · cor preto fosco · forno 180 °C</span>
+        </td>
+        <td class="center">10</td>
+        <td class="num">R$ 22,00</td>
+        <td class="num">—</td>
+        <td class="num total">R$ 220,00</td>
+      </tr>
+      <tr>
+        <td class="idx">03</td>
+        <td>
+          <span class="desc-strong">Cartão de visita — 4×0 cores</span>
+          <span class="desc-sub">Papel couché 250 g/m² · 5 × 9 cm · corte reto · 1ª prova grátis</span>
+        </td>
+        <td class="center">500</td>
+        <td class="num">R$ 1,66</td>
+        <td class="num">—</td>
+        <td class="num total">R$ 830,00</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ============== CARIMBOS ============== -->
+  <div class="stamps">
+    <div class="section-label">
+      <h2>Visualização de carimbos</h2>
+      <div class="hint">2 carimbos · aprovação visual</div>
+    </div>
+    <div class="stamps__grid">
+      <div class="stamp">
+        <div class="stamp__num">Carimbo 01</div>
+        <div class="stamp__body">POUSADA MAR AZUL
+RECEBIDO EM ___/___/_____
+ASS: _______________</div>
+        <div class="stamp__foot">
+          <span class="stamp__dim">38 × 14 mm</span>
+          <span class="stamp__model">Trodat 4912</span>
+        </div>
+      </div>
+      <div class="stamp">
+        <div class="stamp__num">Carimbo 02</div>
+        <div class="stamp__body">CONFERIDO
+POUSADA MAR AZUL</div>
+        <div class="stamp__foot">
+          <span class="stamp__dim">26 × 9 mm</span>
+          <span class="stamp__model">Trodat 4910</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== OBSERVATIONS + TOTALS ============== -->
+  <div class="foot-row">
+    <div class="obs">
+      <div class="obs__label">Observações</div>
+      <div class="obs__body">Entrega no balcão da loja em Perequê. Arte do carimbo será enviada por WhatsApp para aprovação antes da produção. Pagamento via PIX no ato da retirada.</div>
+    </div>
+    <div class="totals">
+      <div class="totals__row"><span>Subtotal</span><b>R$ 1.240,00</b></div>
+      <div class="totals__row totals__row--disc"><span>Desconto</span><b>Isento</b></div>
+      <div class="totals__row"><span>Acréscimos</span><b>—</b></div>
+      <div class="totals__row totals__row--grand"><span>Total</span><b>R$ 1.240,00</b></div>
+    </div>
+  </div>
+
+  <!-- ============== CONDITIONS ============== -->
+  <div class="conds">
+    <div class="cond">
+      <div class="cond__label">Vendedor</div>
+      <div class="cond__value">Marcos Almeida</div>
+    </div>
+    <div class="cond">
+      <div class="cond__label">Validade da proposta</div>
+      <div class="cond__value">7 dias</div>
+    </div>
+    <div class="cond cond--danger">
+      <div class="cond__label">Prazo de entrega</div>
+      <div class="cond__value">25 / 05 / 2026</div>
+    </div>
+    <div class="cond cond--accent">
+      <div class="cond__label">Pagamento</div>
+      <div class="cond__value">À vista</div>
+    </div>
+  </div>
+
+  <!-- ============== SIGN-OFF + CTA ============== -->
+  <p class="signoff">
+    Estamos à disposição e aguardamos seu retorno.<br>
+    <b>Atenciosamente, equipe Bom Custo.</b>
+  </p>
+
+  <div class="cta">
+    <a class="cta__accept" href="#"><span>✓</span> Aceitar orçamento</a>
+    <a class="cta__reject" href="#"><span>×</span> Recusar</a>
+  </div>
+
+  <!-- ============== DOC FOOTER ============== -->
+  <footer class="doc-foot">
+    <span>Bom Custo Papelaria &amp; Gráfica Rápida · Ilhabela / SP</span>
+    <span><a href="mailto:orcamento@bomcustoilhabela.com.br">orcamento@bomcustoilhabela.com.br</a></span>
+  </footer>
+</div>
+
+</body>
+</html>

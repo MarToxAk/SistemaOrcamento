@@ -75,7 +75,7 @@ export default function OrcamentosListPage() {
   return (
     <div className="orcamento-app">
       <div className="orcamento-header">
-        <img src="/media/logo_new.svg" alt="Logo" className="orcamento-logo" />
+        <img src="/media/logo-primary.png" alt="Logo" className="orcamento-logo" />
         <div className="orcamento-title">
           <h1>Lista de Orçamentos</h1>
           <p className="orcamento-subtitle">Consulte, filtre e acompanhe seus orçamentos em tempo real</p>

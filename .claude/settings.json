@@ -14,7 +14,9 @@
       "Bash(node -e ' *)",
       "Bash('\\\\\"]/.test\\(line\\) && /[ÃÂðŸ]/.test\\(line\\)\\) { *)",
       "Bash(node -e \"const fs=require\\('fs'\\);const str=fs.readFileSync\\('apps/backend/src/modules/quotes/quotes.service.ts','utf8'\\);const lines=str.split\\('\\\\n'\\);const results=[];lines.forEach\\(function\\(line,idx\\){if\\(line.indexOf\\('OlA'\\)>-1||line.indexOf\\('orcA'\\)>-1||line.indexOf\\('xf0'\\)>-1\\){results.push\\({ln:idx+1,c:line.trim\\(\\).substring\\(0,100\\)}\\);}}\\);console.log\\(JSON.stringify\\(results,null,2\\)\\);\")",
-      "Bash(node --input-type=module)"
+      "Bash(node --input-type=module)",
+      "Skill(gsd-discuss-phase)",
+      "Skill(gsd-discuss-phase:*)"
     ]
   }
 }

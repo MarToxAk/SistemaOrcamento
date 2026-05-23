@@ -226,3 +226,54 @@ model ExternalReference {
   @@index([externalSystem, externalId])
   @@unique([externalSystem, externalId, entityType])
 }
+
+model CobrancaBoleto {
+  id             Int                    @id @default(autoincrement())
+  txidEfi        String?
+  idclienteAthos Int
+  valor          Decimal                @db.Decimal(12, 2)
+  status         String                 @default("pendente")
+  linkBoleto     String?
+  pixPayload     String?
+  nomeArquivo    String?
+  expireAt       String?
+  criadoEm       DateTime               @default(now())
+  atualizadoEm   DateTime               @updatedAt
+  titulos        CobrancaBoletoTitulo[]
+}
+
+model CobrancaBoletoTitulo {
+  id               Int            @id @default(autoincrement())
+  cobrancaBoletoId Int
+  idcontareceber   Int
+  valor            Decimal        @db.Decimal(12, 2)
+  cobrancaBoleto   CobrancaBoleto @relation(fields: [cobrancaBoletoId], references: [id])
+
+  @@index([cobrancaBoletoId])
+  @@index([idcontareceber])
+}
+
+model NfseEmitida {
+  id             Int                 @id @default(autoincrement())
+  numeroNfse     String?
+  numeroRps      Int
+  idclienteAthos Int
+  valorServico   Decimal             @db.Decimal(12, 2)
+  dataEmissao    DateTime            @default(now())
+  criadoEm       DateTime            @default(now())
+  idvenda        Int?                // D-07: venda Athos que originou a NFS-e
+  titulos        NfseEmitidaTitulo[]
+
+  @@index([idvenda])                 // D-23: busca eficiente de duplicidade por venda
+}
+
+model NfseEmitidaTitulo {
+  id             Int         @id @default(autoincrement())
+  nfseEmitidaId  Int
+  idcontareceber Int
+  valor          Decimal     @db.Decimal(12, 2)
+  nfseEmitida    NfseEmitida @relation(fields: [nfseEmitidaId], references: [id])
+
+  @@index([nfseEmitidaId])
+  @@index([idcontareceber])
+}

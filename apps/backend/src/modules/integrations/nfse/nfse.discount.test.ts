@@ -133,6 +133,7 @@ describe("NfseService — desconto controlado (Fase 14)", () => {
     function setupQuote(total: number) {
       mockPrismaService.quote.findFirst.mockResolvedValue(makeQuote(total));
       mockPrismaService.quote.findUnique.mockResolvedValue(makeQuote(total));
+      jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
     }
 
     it("percentual > 100 lança BadRequestException", async () => {
@@ -143,8 +144,9 @@ describe("NfseService — desconto controlado (Fase 14)", () => {
         descontoAtivo: true,
         descontoPorcentagem: 101,
       };
-      await expect(service.emitir("quote-1", input)).rejects.toThrow(BadRequestException);
-      await expect(service.emitir("quote-1", input)).rejects.toThrow(/descontoPorcentagem deve estar entre 0 e 100/);
+      const emitirPromise = service.emitir("quote-1", input);
+      await expect(emitirPromise).rejects.toThrow(BadRequestException);
+      await expect(emitirPromise).rejects.toThrow(/descontoPorcentagem deve estar entre 0 e 100/);
     });
 
     it("percentual negativo lança BadRequestException", async () => {
@@ -166,8 +168,9 @@ describe("NfseService — desconto controlado (Fase 14)", () => {
         descontoAtivo: true,
         descontoValor: -1,
       };
-      await expect(service.emitir("quote-1", input)).rejects.toThrow(BadRequestException);
-      await expect(service.emitir("quote-1", input)).rejects.toThrow(/nao pode ser negativo/);
+      const emitirPromise = service.emitir("quote-1", input);
+      await expect(emitirPromise).rejects.toThrow(BadRequestException);
+      await expect(emitirPromise).rejects.toThrow(/nao pode ser negativo/);
     });
 
     it("desconto maior que valorServicos lança BadRequestException", async () => {
@@ -178,8 +181,9 @@ describe("NfseService — desconto controlado (Fase 14)", () => {
         descontoAtivo: true,
         descontoValor: 150,
       };
-      await expect(service.emitir("quote-1", input)).rejects.toThrow(BadRequestException);
-      await expect(service.emitir("quote-1", input)).rejects.toThrow(/nao pode ser maior que valorServicos/);
+      const emitirPromise = service.emitir("quote-1", input);
+      await expect(emitirPromise).rejects.toThrow(BadRequestException);
+      await expect(emitirPromise).rejects.toThrow(/nao pode ser maior que valorServicos/);
     });
   });
 });

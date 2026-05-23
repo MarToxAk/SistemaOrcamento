@@ -1,4 +1,4 @@
-# Roadmap - Sistema de Orcamento BomCusto
+﻿# Roadmap - Sistema de Orcamento BomCusto
 
 Version: 1.9
 Date: 2026-05-05
@@ -17,6 +17,8 @@ Date: 2026-05-05
 - [x] v1.7 Correcoes NFS-e — Tomador e Numeracao RPS - Phase 18 (shipped 2026-05-04) — [details](.planning/milestones/v1.7-ROADMAP.md)
 - [x] v1.8 Busca de Cliente Athos para NFS-e - Phases 19-21 (shipped 2026-05-05) - [details](.planning/milestones/v1.8-ROADMAP.md)
 - [x] v1.9 Webhook EFI PIX e Robustez de URLs - Phase 22 (shipped 2026-05-15)
+- [x] v2.0 Gestão Integrada Financeira, Caixa e Dashboards - Phases 23-27 (shipped 2026-05-22)
+- [ ] v2.1 Cobrança e Fiscal do Cliente - Phases 28-31 (active)
 
 ---
 
@@ -126,7 +128,7 @@ Full details: .planning/milestones/v1.6-ROADMAP.md
 
 - [x] Phase 17: Correcao do calculo de desconto no modal NFS-e (NFSC-01..05)
 
-## v1.7 Correcoes NFS-e � Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
+## v1.7 Correcoes NFS-e — Tomador e Numeracao RPS (Phase 18) - SHIPPED 2026-05-04
 
 Full details: .planning/milestones/v1.7-ROADMAP.md
 
@@ -160,65 +162,136 @@ Plans:
 3. Spec de efi.service inclui teste cobrindo a URL com /pix.
 4. Build backend sem erros apos as correcoes.
 
-## v2.0 Gestão Integrada Financeira e Caixa (Phases 23-25) - PLANNING
+<details>
+<summary>v2.0 Gestão Integrada Financeira, Caixa e Dashboards (Phases 23-27) - SHIPPED 2026-05-22</summary>
 
 Full details: .planning/milestones/v2.0-ROADMAP.md
 
-- [ ] Phase 23: Notificação de Caixa Interna — Hardening AthosListenerService (CAIXA-01..04)
-- [ ] Phase 24: API Contas a Pagar — Endpoint POST e autenticação obrigatória (CPAG-01..04)
-- [ ] Phase 25: Upload de Anexos — Gravação SMB \\192.168.3.203 e registro tabela `anexo` (ANEX-01..03)
+- [x] Phase 23: Notificação de Caixa Interna — Hardening AthosListenerService (CAIXA-01..04)
+- [x] Phase 24: API Contas a Pagar — Endpoint POST e autenticação obrigatória (CPAG-01..04)
+- [x] Phase 25: Upload de Anexos — Gravação SMB \\192.168.3.203 e registro tabela `anexo` (ANEX-01..03)
+- [x] Phase 26: Status Página Produção — Layout Kanban 3 colunas
+- [x] Phase 27: Dashboard de Contas a Receber — Read-Only (CR-01..05)
+
+</details>
+
+---
+
+## v2.1 Cobrança e Fiscal do Cliente (Phases 28-31) - ACTIVE
+
+**Milestone goal:** A partir do dashboard de contas a receber, permitir ao operador acessar o detalhe de um cliente, selecionar títulos em aberto e tomar ações de cobrança (boleto consolidado EFI Bank ou NFS-e com valor ajustável), registrando tudo no banco próprio do sistema.
+
+### Phases
+
+- [x] **Phase 28: Página de Detalhe do Cliente + Schema Prisma** - Rota /contas-receber/[idcliente] com dados Athos, lista de títulos selecionáveis e migrations para cobranca_boleto e nfse_emitida — DONE 2026-05-22
+- [~] **Phase 29: Boleto Consolidado via EFI Bank** - Plans 01+02 completos (backend + frontend modal); aguardando checkpoint de verificacao humana — IN PROGRESS
+- [ ] **Phase 30: Emissão de NFS-e a partir de Títulos** - Modal pré-preenchido com valor ajustável, emissão via NfseService existente e registro em nfse_emitida
+- [ ] **Phase 31: Histórico NFS-e + Consulta NF Athos** - Seção de NFS-e emitidas na página do cliente e consulta de notas fiscais Athos com busca por número
 
 ### Phase Details
 
-**Phase 23: Notificação de Caixa Interna — Hardening**
-Goal: Hardenar o AthosListenerService com reconexão automática, notificação Chatwoot e testes.
-Requirements: CAIXA-01, CAIXA-02, CAIXA-03, CAIXA-04
-Success criteria:
-1. Listener reconecta com backoff exponencial (máx 30s) após queda do PG.
-2. Chatwoot notificado (fire-and-forget) ao detectar pagamento no caixa.
-3. GET /api/events/pagamentos protegido por x-internal-api-key.
-4. Unit tests cobrem: caixa detectado, venda sem caixa, reconnect, falha Chatwoot.
-
-**Phase 24: API Contas a Pagar — POST**
-Goal: Expor endpoint POST /athos/contas-pagar para lançar contas a pagar direto no Athos.
-Requirements: CPAG-01, CPAG-02, CPAG-03, CPAG-04
-Success criteria:
-1. POST /athos/contas-pagar insere em `conta_pagar` e retorna `idcontapagar`.
-2. Validações de campos obrigatórios com mensagens claras.
-3. GET aprimorado com filtro por `statusconta`.
-4. ATHOS_API_TOKEN obrigatório (fail-closed) em todos os endpoints.
-
-**Phase 25: Upload de Anexos via SMB**
-Goal: Receber arquivo via multipart e gravá-lo em \\192.168.3.203\html\Anexo\contapagar\{id}\.
-Requirements: ANEX-01, ANEX-02, ANEX-03
-Plans: 2 plans
+### Phase 28: Página de Detalhe do Cliente + Schema Prisma
+**Goal**: Operador acessa dados completos de um cliente e seus títulos em aberto a partir do dashboard, com a estrutura de banco de dados pronta para cobrança e NFS-e
+**Depends on**: Phase 27 (dashboard /contas-receber existente)
+**Requirements**: CLI-01, CLI-02, CLI-03
+**Plans**: 2 plans
 
 Plans:
-- [x] 25-01-PLAN.md - Confirmar contrato de idclientehistorico e implementar upload SMB + insert em anexo
-- [x] 25-02-PLAN.md - Cobertura de testes unitarios para upload de anexo Athos
+- [x] 28-01-PLAN.md — Backend: buscarDadosClienteContasReceber + rota dados cadastrais + Prisma schema 4 modelos + migration (wave 1) — DONE 2026-05-22
+- [x] 28-02-PLAN.md — Frontend: modificar /contas-receber + proxy Route Handler + página /contas-receber/[idcliente] (wave 2) — DONE 2026-05-22
 
-Success criteria:
-1. POST /athos/contas-pagar/:id/anexo grava arquivo no servidor de rede.
-2. Registro inserido em tabela `anexo` com path UNC e nome do arquivo.
-3. Extensões validadas (pdf/png/jpg/jpeg), tamanho máx 10MB, sem path traversal.
+**Success Criteria** (what must be TRUE):
+  1. Clicar em um cliente em /contas-receber navega para /contas-receber/[idcliente] exibindo nome, telefone, email e limite de crédito do cliente via Athos
+  2. A página lista todos os títulos AVC + VEN do cliente em tabela com checkbox individual, numerotitulo, datavencimento, valor e status
+  3. Checkbox "Selecionar todos" na thead e contador de valor total selecionado atualizado em tempo real
+  4. Barra de ações com "Gerar Boleto" e "Emitir NFS-e" aparece somente quando ao menos um título está selecionado
+  5. Migration Prisma cria tabelas cobranca_boleto e nfse_emitida sem conflito com schema existente
+**UI hint**: yes
 
-## Phase 26: Status Página Produção — Layout Kanban (COMPLETE)
+### Phase 29: Boleto Consolidado via EFI Bank
+**Goal**: Operador gera um único boleto consolidando múltiplos títulos selecionados, obtém link do boleto (PDF) e linha digitável bancária, e a cobrança fica registrada no banco
+**Depends on**: Phase 28 (página de detalhe + tabela cobranca_boleto disponível)
+**Requirements**: BOL-01, BOL-02, BOL-03
+**Success Criteria** (what must be TRUE):
+  1. POST /api/cobranca/boleto com array de idcontareceber cria cobrança EFI com valor igual à soma dos títulos e retorna txid
+  2. Modal exibe linkBoleto (botão Abrir Boleto em nova aba) e barcodeLinhaDigitavel copiável
+  3. Registro criado em cobranca_boleto com txid EFI, idcliente Athos, lista de idcontareceber, valor e data de geração
+  4. Status do registro em cobranca_boleto atualizado para pago via webhook EFI existente quando boleto for liquidado
+**Plans**: 2 plans
 
-**Plans:** 3/3 plans complete
+Plans:
+- [x] 29-01-PLAN.md — Backend: CobrancaModule + CobrancaService.criarBoleto() + CobrancaController + registro no AppModule (wave 1) — DONE 2026-05-22
+- [x] 29-02-PLAN.md — Frontend: Route Handler /api/cobranca/boleto + modal 4 estados em /contas-receber/[idcliente] (wave 2) — DONE 2026-05-22 (checkpoint pendente)
 
-- [x] 26-01-PLAN.md — Kanban 3-colunas + tabs mobile (estrutura base) — complete
-- [x] 26-02-PLAN.md — Cards reais com conteúdo completo — complete
-- [x] 26-03-PLAN.md — Filtro de carimbo funcional — complete
+### Phase 30: Emissão de NFS-e a partir de Títulos
+**Goal**: Operador emite NFS-e com valor ajustável diretamente a partir de títulos selecionados, reutilizando o NfseService existente, e o registro fica persistido no banco próprio
+**Depends on**: Phase 28 (tabela nfse_emitida disponível + página de detalhe com ação)
+**Requirements**: NFR-01, NFR-02, NFR-03, NFR-04
+**Success Criteria** (what must be TRUE):
+  1. Modal de NFS-e abre pré-preenchido com soma dos títulos e dados do cliente carregados via buscarClientePorId do Athos
+  2. Campo de valor é editável (mínimo R$0,01) e o valor enviado ao backend é o que o operador confirmar, não o calculado
+  3. NfseService.emitirNfse() chamado com tomador resolvido por clienteAthosId, RPS gerado sem conflito de numeração com orçamentos existentes
+  4. Resposta inclui número da NFS-e emitida e registro criado em nfse_emitida com numeroNfse, numeroRps, idclienteAthos, valorServico e idcontareceber[] vinculados
+**Plans**: 4 plans
+
+Plans:
+- [x] 30-01-PLAN.md — Wave 1: Schema Prisma idvenda + migration + NfseService.emitirParaContaReceber() + AthosService.verificarTipoProdutoVenda() + GET /athos/venda/:idvenda/tipo-produto
+- [x] 30-02-PLAN.md — Wave 2: CobrancaService.emitirNfse() + CobrancaController POST /cobranca/nfse + EmitirNfseCobrancaDto + CobrancaModule com NfseModule
+- [ ] 30-03-PLAN.md — Wave 3: Route Handlers Next.js + Modal NFS-e 4-estados em /contas-receber/[idcliente] (checkpoint humano)
+- [x] 30-04-PLAN.md — Wave 2 paralelo: NfseService.emitir() salva idvenda + aviso duplicidade em /orcamento/[id]
+**UI hint**: yes
+
+### Phase 31: Histórico NFS-e + Consulta NF Athos
+**Goal**: Operador consulta NFS-e já emitidas para o cliente (banco próprio) e notas fiscais não-serviço registradas no Athos, com busca por número
+**Depends on**: Phase 28 (página de detalhe do cliente) + Phase 30 (dados em nfse_emitida)
+**Requirements**: NFR-05, NFAT-01, NFAT-02
+**Success Criteria** (what must be TRUE):
+  1. Seção "NFS-e Emitidas" na página do cliente lista data, número NFS-e, valor e títulos vinculados lidos do banco próprio (Prisma), exibindo mensagem "Nenhuma NFS-e emitida para este cliente" quando não há registros
+  2. Seção "Notas Fiscais Athos" lista notas fiscais (não-serviço) do cliente buscadas no Athos (número, data, valor, tipo), limitada a 50 registros
+  3. Campo de busca por número filtra a lista NFAT executando query no Athos, exibindo "Nenhuma nota encontrada com este número" quando sem resultado
+**Plans**: TBD
+**UI hint**: yes
+
+### Progress Table
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 28. Página de Detalhe do Cliente + Schema Prisma | 2/2 | Complete | 2026-05-22 |
+| 29. Boleto Consolidado via EFI Bank | 1/2 | In Progress | - |
+| 30. Emissão de NFS-e a partir de Títulos | 3/4 | In Progress|  |
+| 31. Histórico NFS-e + Consulta NF Athos | 0/? | Not started | - |
+
+### Coverage
+
+All 13 v2.1 requirements mapped:
+
+| REQ-ID | Phase | Category |
+|--------|-------|----------|
+| CLI-01 | 28 | Detalhe do Cliente |
+| CLI-02 | 28 | Detalhe do Cliente |
+| CLI-03 | 28 | Detalhe do Cliente |
+| BOL-01 | 29 | Boleto EFI |
+| BOL-02 | 29 | Boleto EFI |
+| BOL-03 | 29 | Boleto EFI |
+| NFR-01 | 30 | NFS-e de Títulos |
+| NFR-02 | 30 | NFS-e de Títulos |
+| NFR-03 | 30 | NFS-e de Títulos |
+| NFR-04 | 30 | NFS-e de Títulos |
+| NFR-05 | 31 | Histórico + Consulta |
+| NFAT-01 | 31 | Histórico + Consulta |
+| NFAT-02 | 31 | Histórico + Consulta |
 
 ---
 ## Backlog (Future)
-## v2.0 Gestão Integrada Financeira e Caixa (Phases 23-25) - IN PROGRESS
 
 - Relatorios e exportacao CSV de orcamentos
-- Notificacoes em tempo real (WebSocket) para mudanca de status
+- Notificacoes em tempo real via SSE para dashboard contas a receber (tg_alterarcontareceber AFTER + NOTIFY)
 - RBAC por role (ADMIN / VENDEDOR / ATENDENTE)
 - Templates de mensagem configuraveis pelo painel
 - Historico de mensagens enviados ao cliente
+- Envio automatico de boleto por WhatsApp/Chatwoot ao cliente
+- Cancelamento de NFS-e emitida
+- Relatorio de NFS-e emitidas por periodo (CSV export)
 
 ---
-Roadmap v1.9 - 2026-05-15
+Roadmap v2.1 - 2026-05-22

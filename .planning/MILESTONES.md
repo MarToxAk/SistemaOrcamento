@@ -102,11 +102,19 @@ Archive: .planning/milestones/v1.8-ROADMAP.md
 
 ---
 
-## v2.0 - Gestão Integrada Financeira e Caixa
+## v2.0 - Gestão Integrada Financeira, Caixa e Dashboards
 
-Status: PLANNING
-Phases: 23-25 | Plans: 1 (23-01-PLAN.md)
+Shipped: 2026-05-22
+Phases: 23-27 | Plans: 10
+Git range: v1.9..HEAD (~159 commits) | 203 files, +25164/-2371 linhas
 
-Goal: Consolidar ciclo financeiro interno: hardening do listener de caixa, lançamento de contas a pagar via API REST e upload de comprovantes via SMB.
+Delivered: Hardening do AthosListenerService com reconexão e notificação Chatwoot, API completa de Contas a Pagar (POST/GET/PATCH com Swagger), upload de anexos via SMB (Tailscale+Docker), redesign da página de status como Kanban 3 colunas, e dashboard analítico de Contas a Receber com filtros por status AVC/VEN/REC/CAN e accordion lazy de títulos.
+
+Key Accomplishments:
+1. AthosListenerService hardened — reconexão automática backoff exponencial, notificação Chatwoot no pagamento
+2. API Contas a Pagar — inserção/listagem/liquidação direta no banco Athos com autenticação fail-closed
+3. Upload SMB — gravação em \\192.168.3.203 via Docker+Tailscale com validação e registro em tabela anexo
+4. Status Kanban — /status redesenhada em 3 colunas com design system BomCusto
+5. Dashboard Contas a Receber — /contas-receber com Top Cards, Grid, Accordion lazy e filtros por status
 
 Archive: .planning/milestones/v2.0-ROADMAP.md

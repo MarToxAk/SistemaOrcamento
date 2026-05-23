@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>BomCusto Orçamento — UI Kit</title>
+<link rel="stylesheet" href="../../colors_and_type.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+<style>
+  /* ============ Kit-local component styles ============
+     Token-driven (everything resolves to colors_and_type.css vars). */
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); }
+
+  .bc-page { max-width: 1200px; margin: 0 auto; padding: 28px 24px 60px; }
+
+  /* Top nav (kit-only, lets the user move through the prototype) */
+  .bc-nav { display:flex; gap: 8px; margin-bottom: 14px; }
+  .bc-nav button {
+    background: #fff; border: 1px solid var(--line); color: var(--ink);
+    border-radius: 8px; padding: .45rem .9rem; font: 600 .9rem/1 var(--font-ui);
+    cursor: pointer;
+  }
+  .bc-nav button.is-on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Header band (gradient) */
+  .bc-header {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--gradient-hero);
+    border-radius: 8px 8px 0 0;
+    padding: 16px; color: var(--ink);
+    flex-wrap: wrap;
+  }
+  .bc-header__logo {
+    max-width: 110px; max-height: 110px;
+    background: #fff; border-radius: 10px; padding: 8px;
+    aspect-ratio: 1 / 1; object-fit: contain;
+  }
+  .bc-header__info { flex: 1; min-width: 260px; }
+  .bc-header__info h3 { margin: 0 0 6px; font: 700 1.35rem/1.2 var(--font-ui); }
+  .bc-header__meta { font: 400 .82rem/1.4 var(--font-ui); }
+  .bc-header__right { text-align: right; }
+  .bc-header__right h5 { margin: 0; font: 700 1.05rem/1.1 var(--font-ui); }
+  .bc-header__sub { font: 500 .82rem/1.3 var(--font-ui); margin-top: 4px; }
+
+  /* Section card under the header */
+  .bc-section {
+    background: var(--surface);
+    border-radius: 0 0 8px 8px;
+    box-shadow: var(--shadow-sm);
+    padding: 24px;
+  }
+
+  /* Filter pills (status nav) */
+  .bc-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .bc-fbtn {
+    background: #fff; color: var(--ink-soft);
+    border: 1px solid var(--ink-soft);
+    border-radius: 6px; padding: .35rem .8rem;
+    font: 600 .85rem/1 var(--font-ui); cursor: pointer;
+  }
+  .bc-fbtn.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Table */
+  .bc-table-wrap { overflow-x: auto; }
+  .bc-table {
+    width: 100%; border-collapse: collapse; font: 400 1.05rem/1.4 var(--font-ui);
+  }
+  .bc-table th {
+    background: var(--surface-soft); text-align: left;
+    padding: .7rem .6rem; font-weight: 700; color: var(--ink);
+    border-bottom: 2px solid var(--line);
+  }
+  .bc-table td {
+    padding: .7rem .6rem; border-bottom: 1px solid var(--line); vertical-align: middle;
+  }
+  .bc-table tr.row-paid { background: var(--success-soft-bg); }
+  .bc-table .bc-empty { text-align: center; color: var(--ink-soft); padding: 2.4rem 0; }
+  .bc-table--bordered td, .bc-table--bordered th { border: 1px solid var(--line); }
+
+  .bc-stack-1 { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+
+  /* Status pills */
+  .bc-pill {
+    display: inline-block; padding: .22em .8em; border-radius: 999px;
+    font: 600 .92rem/1.2 var(--font-ui);
+  }
+  .s-pendente  { background: var(--warn-bg);          color: var(--warn); }
+  .s-enviado   { background: var(--status-producao-bg); color: #1565c0; }
+  .s-aprovado  { background: var(--success-bg);       color: var(--success); }
+  .s-producao  { background: var(--status-producao-bg); color: var(--status-producao); }
+  .s-pronto    { background: var(--status-entrega-bg); color: var(--warn-brown); }
+  .s-entregue  { background: var(--success-bg);       color: #444; }
+  .s-cancelado { background: var(--danger-bg);        color: var(--danger); }
+  .s-recusado  { background: var(--danger-bg);        color: var(--danger); }
+
+  /* Inline badges */
+  .bc-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: .25em .7em; border-radius: 6px;
+    font: 600 .82rem/1.2 var(--font-ui);
+  }
+  .b-success         { background: var(--success); color: #fff; }
+  .b-success-subtle  { background: var(--success-bg); color: var(--success); }
+  .b-warning         { background: #ffe18a; color: var(--ink); }
+  .b-secondary       { background: var(--ink-soft); color: #fff; }
+
+  /* Buttons */
+  .bc-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid transparent; border-radius: 8px;
+    padding: .55rem 1rem; font: 700 .95rem/1 var(--font-ui);
+    cursor: pointer; background: #fff; color: var(--ink);
+    transition: background .2s, border .2s, color .2s;
+  }
+  .bc-btn:hover { filter: brightness(.98); }
+  .bc-btn--primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .bc-btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .bc-btn--outline-primary { background: #fff; color: var(--accent); border-color: var(--accent); }
+  .bc-btn--outline-warning { background: #fff; color: var(--warn); border-color: #ffe18a; }
+  .bc-btn--ghost { background: transparent; color: var(--ink-soft); border-color: var(--line); }
+  .bc-btn--sm { padding: .35rem .65rem; font-size: .85rem; }
+  .bc-btn--lg { padding: .7rem 1.25rem; font-size: 1.05rem; }
+  .bc-btn--cta-sage {
+    background: var(--cta-sage); color: #fff;
+    border-radius: 6px; padding: .7rem 1.4rem; font-weight: 600; font-size: 1.05rem;
+  }
+  .bc-btn--cta-sage:hover { background: var(--cta-sage-hover); }
+  .bc-btn[disabled] { opacity: .7; cursor: not-allowed; }
+
+  .bc-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+
+  /* Inputs / Selects */
+  .bc-input, .bc-select {
+    border: 1px solid var(--line-strong);
+    border-radius: 10px; padding: .55rem .85rem;
+    font: 400 1.05rem/1.2 var(--font-ui);
+    background: #fff; color: var(--ink);
+    width: 100%; box-sizing: border-box;
+    transition: border .2s;
+  }
+  .bc-input:focus, .bc-select:focus { outline: none; border-color: var(--accent); }
+  .bc-input--lg { padding: .65rem 1rem; font-size: 1.15rem; }
+  .bc-input--center { text-align: center; }
+  .bc-input.is-invalid { border-color: var(--danger); }
+  .bc-fb { font: 500 .85rem/1.2 var(--font-ui); color: var(--danger); margin-top: 4px; }
+  .bc-select.bc-btn--sm { padding: .35rem .65rem; font-size: .85rem; min-width: 150px; }
+
+  /* Form layout */
+  .bc-form { display: flex; flex-direction: column; gap: 18px; }
+  .bc-field { display: flex; flex-direction: column; gap: 6px; }
+  .bc-label { font: 600 .95rem/1 var(--font-ui); color: var(--ink); }
+  .bc-req { color: var(--danger); }
+  .bc-grid { display: grid; gap: 14px; }
+  .bc-grid--2 { grid-template-columns: 1fr 1fr; }
+  .bc-grid--3 { grid-template-columns: 2fr 1fr 1fr; }
+  .bc-span-2 { grid-column: span 2; }
+  @media (max-width: 720px) {
+    .bc-grid--2, .bc-grid--3 { grid-template-columns: 1fr; }
+    .bc-span-2 { grid-column: auto; }
+  }
+
+  .bc-lookup { max-width: 460px; margin: 0 auto 8px; text-align: center; }
+  .bc-lookup__row { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+  .bc-lookup__row .bc-input { text-align: center; }
+
+  .bc-card-section { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .bc-card-section h5 { margin: 0 0 10px; font: 700 1.05rem/1.2 var(--font-ui); }
+
+  .bc-form-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* Footer row above bottom of list (CTA on the right) */
+  .bc-footer-row { display: flex; justify-content: flex-end; margin-top: 18px; }
+
+  /* Toasts */
+  .bc-toasts {
+    position: fixed; right: 18px; bottom: 18px; z-index: 1100;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .bc-toast {
+    background: #1a7f37; color: #fff; padding: .75rem 1rem; border-radius: 10px;
+    font: 500 .95rem/1.3 var(--font-ui);
+    box-shadow: var(--shadow-md);
+    display: flex; gap: 10px; align-items: flex-start; max-width: 360px;
+  }
+  .bc-toast.t-danger { background: var(--danger); }
+  .bc-toast .x { background: none; border: none; color: #fff; opacity: .8; cursor: pointer; font-size: 1.1rem; }
+
+  /* Production board */
+  .bc-board {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  @media (max-width: 900px) { .bc-board { grid-template-columns: 1fr; } }
+  .bc-board__col { background: #fff; border-radius: 10px; border: 1px solid var(--line); padding: 12px; min-height: 200px; }
+  .bc-board__head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 4px 10px; margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    font: 700 1.05rem/1.1 var(--font-ui);
+  }
+  .bc-board__count { background: var(--surface-soft); color: var(--ink-soft); padding: 2px 9px; border-radius: 999px; font: 600 .82rem/1.2 var(--font-ui); }
+  .bc-board__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .bc-board__card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .bc-board__card.is-paid { background: var(--success-soft-bg); border-color: #c2e7cf; }
+  .bc-board__empty { font: 400 .9rem/1.3 var(--font-ui); color: var(--ink-soft); padding: 8px 4px; }
+  .bc-board__num { font: 700 .85rem/1 var(--font-mono); color: var(--ink-soft); }
+  .bc-board__client { font: 700 1.05rem/1.2 var(--font-ui); margin: 2px 0 4px; }
+  .bc-board__meta { font: 400 .85rem/1.3 var(--font-ui); color: var(--ink-soft); }
+  .bc-board__row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+  .bc-board__total { font: 700 .92rem/1 var(--font-ui); }
+
+  /* Detail screen */
+  .bc-detail {
+    display: grid; grid-template-columns: 2fr 1fr; gap: 14px;
+  }
+  @media (max-width: 900px) { .bc-detail { grid-template-columns: 1fr; } }
+  .bc-detail h5 { margin: 0 0 8px; font: 700 1rem/1 var(--font-ui); }
+  .bc-detail__panel { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .bc-kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; font: 400 1rem/1.3 var(--font-ui); }
+  .bc-kv dt { font-weight: 600; color: var(--ink-soft); }
+  .bc-kv dd { margin: 0; color: var(--ink); }
+  .bc-total { display: flex; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 10px; font: 700 1.1rem/1 var(--font-ui); }
+</style>
+
+<!-- React + Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="HeaderBand.jsx"></script>
+<script type="text/babel" src="StatusPill.jsx"></script>
+<script type="text/babel" src="QuoteTable.jsx"></script>
+<script type="text/babel" src="QuoteForm.jsx"></script>
+<script type="text/babel" src="StatusBoard.jsx"></script>
+
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+const ADVANCE = {
+  PENDENTE:            [{ value: "ENVIADO", label: "Marcar como Enviado" }, { value: "CANCELADO", label: "Cancelar" }],
+  ENVIADO:             [{ value: "APROVADO", label: "Marcar Aprovado" }, { value: "RECUSADO", label: "Marcar Recusado" }],
+  APROVADO:            [{ value: "EM_PRODUCAO", label: "Iniciar Produção" }],
+  EM_PRODUCAO:         [{ value: "PRONTO_PARA_ENTREGA", label: "Pronto p/ Entrega" }],
+  PRONTO_PARA_ENTREGA: [{ value: "ENTREGUE", label: "Marcar Entregue" }],
+  ENTREGUE: [],
+  CANCELADO: [],
+  RECUSADO: [],
+};
+
+const SEED = [
+  { id: "a", idorcamento: 12442, cliente: "Pousada Mar Azul", vendedor: "Marcos",   total: 1240.00, statusKey: "APROVADO",    orderNumber: "4821", paymentConfirmedAt: null, isAssociated: true,  approved: true,  updatedAt: "2026-05-18T10:11:00" },
+  { id: "b", idorcamento: 12443, cliente: "Padaria Ilhabela", vendedor: "Aline",    total:  380.00, statusKey: "EM_PRODUCAO", orderNumber: "4823", paymentConfirmedAt: "2026-05-19T08:30Z", isAssociated: true, approved: true, updatedAt: "2026-05-19T09:02:00" },
+  { id: "c", idorcamento: 12444, cliente: "Construtora Perequê", vendedor: "Marcos", total: 2150.90, statusKey: "PENDENTE",  orderNumber: null,  paymentConfirmedAt: null, isAssociated: false, approved: false, updatedAt: "2026-05-20T11:42:00" },
+  { id: "d", idorcamento: 12445, cliente: "Escola Sítio Bela",   vendedor: "Aline",  total:  720.00, statusKey: "ENVIADO",   orderNumber: null,  paymentConfirmedAt: null, isAssociated: true,  approved: false, updatedAt: "2026-05-20T13:14:00" },
+  { id: "e", idorcamento: 12446, cliente: "Mercado Vista Mar",   vendedor: "Marcos", total: 1535.00, statusKey: "PRONTO_PARA_ENTREGA", orderNumber: "4825", paymentConfirmedAt: "2026-05-20T09:55Z", isAssociated: true, approved: true, updatedAt: "2026-05-20T15:00:00" },
+];
+
+const decorate = (q) => ({ ...q, availableNextStatuses: ADVANCE[q.statusKey] || [] });
+
+function App() {
+  const [view, setView] = useState("list"); // list | new | detail | board
+  const [quotes, setQuotes] = useState(SEED.map(decorate));
+  const [filter, setFilter] = useState("");
+  const [savingId, setSavingId] = useState(null);
+  const [linkSendingId, setLinkSendingId] = useState(null);
+  const [activeId, setActiveId] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = (msg, kind = "success") => {
+    const id = Math.random();
+    setToasts((t) => [...t, { id, msg, kind }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+  };
+
+  const visible = useMemo(
+    () => quotes.filter((q) => !filter || q.statusKey === filter),
+    [quotes, filter]
+  );
+
+  const handleView = (q) => { setActiveId(q.id); setView("detail"); };
+  const handleSendLink = (q) => {
+    setLinkSendingId(q.id);
+    setTimeout(() => {
+      setLinkSendingId(null);
+      showToast(`Link de aprovação enviado ao cliente ${q.cliente}.`);
+    }, 700);
+  };
+  const handleAdvance = (q, next) => {
+    setSavingId(q.id);
+    setTimeout(() => {
+      setQuotes((qs) =>
+        qs.map((x) => (x.id === q.id ? decorate({ ...x, statusKey: next, updatedAt: new Date().toISOString() }) : x))
+      );
+      setSavingId(null);
+      showToast(`Status atualizado para ${STATUS_MAP[next]?.label || next}.`);
+    }, 500);
+  };
+
+  const handleCreate = (newQuote) => {
+    const q = decorate({
+      id: "new-" + Date.now(),
+      orderNumber: null, paymentConfirmedAt: null,
+      isAssociated: false, approved: false,
+      ...newQuote,
+    });
+    setQuotes((qs) => [q, ...qs]);
+    setView("list");
+    showToast(`Orçamento ${q.idorcamento} gerado com sucesso.`);
+  };
+
+  const active = quotes.find((q) => q.id === activeId);
+
+  return (
+    <div className="bc-page">
+      <nav className="bc-nav">
+        <button className={view === "list" ? "is-on" : ""} onClick={() => setView("list")}><i className="bi bi-list-ul" /> Lista</button>
+        <button className={view === "new" ? "is-on" : ""} onClick={() => setView("new")}><i className="bi bi-plus-circle" /> Novo</button>
+        <button className={view === "board" ? "is-on" : ""} onClick={() => setView("board")}><i className="bi bi-kanban" /> Produção (/status)</button>
+      </nav>
+
+      {view === "list" && (
+        <>
+          <HeaderBand rightTitle="Lista de Orçamentos" />
+          <div className="bc-section">
+            <QuoteFilters value={filter} onChange={setFilter} />
+            <QuoteTable
+              quotes={visible}
+              onView={handleView}
+              onSendLink={handleSendLink}
+              onAdvance={handleAdvance}
+              savingId={savingId}
+              linkSendingId={linkSendingId}
+            />
+            <div className="bc-footer-row">
+              <button className="bc-btn bc-btn--cta-sage" onClick={() => setView("new")}>
+                <i className="bi bi-plus-circle" /> Adicionar Orçamento
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {view === "new" && (
+        <>
+          <HeaderBand rightTitle="Novo Orçamento" rightSub={new Date().toLocaleDateString("pt-BR")} />
+          <div className="bc-section">
+            <QuoteForm onCancel={() => setView("list")} onSubmit={handleCreate} />
+          </div>
+        </>
+      )}
+
+      {view === "detail" && active && (
+        <>
+          <HeaderBand rightTitle={`Orçamento Nº ${active.idorcamento}`} rightSub={fmtDate(active.updatedAt)} />
+          <div className="bc-section">
+            <div className="bc-actions" style={{ marginBottom: 14 }}>
+              <button className="bc-btn bc-btn--ghost" onClick={() => setView("list")}><i className="bi bi-arrow-left" /> Voltar</button>
+              <button className="bc-btn bc-btn--outline-primary"><i className="bi bi-file-earmark-pdf" /> Gerar PDF</button>
+              <button className="bc-btn bc-btn--outline-primary"><i className="bi bi-send" /> Enviar via Chatwoot</button>
+              <button className="bc-btn bc-btn--outline-warning"><i className="bi bi-receipt" /> Emitir NFS-e</button>
+            </div>
+            <div className="bc-detail">
+              <div className="bc-detail__panel">
+                <h5>Cliente</h5>
+                <dl className="bc-kv">
+                  <dt>Nome</dt><dd>{active.cliente}</dd>
+                  <dt>Vendedor</dt><dd>{active.vendedor || "—"}</dd>
+                  <dt>Atualizado</dt><dd>{new Date(active.updatedAt).toLocaleString("pt-BR")}</dd>
+                  <dt>Status</dt><dd><StatusPill statusKey={active.statusKey} /></dd>
+                  <dt>Condição</dt><dd>À vista</dd>
+                  <dt>Validade</dt><dd>7 dias</dd>
+                </dl>
+                <h5 style={{ marginTop: 18 }}>Itens</h5>
+                <div className="bc-table-wrap">
+                  <table className="bc-table bc-table--bordered">
+                    <thead><tr><th>Descrição</th><th style={{textAlign:'center'}}>Qtd</th><th style={{textAlign:'right'}}>Unit.</th><th style={{textAlign:'right'}}>Total</th></tr></thead>
+                    <tbody>
+                      <tr><td>Carimbo automático Trodat 4913 — azul</td><td style={{textAlign:'center'}}>2</td><td style={{textAlign:'right'}}>R$ 95,00</td><td style={{textAlign:'right'}}>R$ 190,00</td></tr>
+                      <tr><td>Gravação a laser em caneca cerâmica</td><td style={{textAlign:'center'}}>10</td><td style={{textAlign:'right'}}>R$ 22,00</td><td style={{textAlign:'right'}}>R$ 220,00</td></tr>
+                      <tr><td>Cartão de visita — 4×0 cores, 250g</td><td style={{textAlign:'center'}}>500</td><td style={{textAlign:'right'}}>R$ 1,66</td><td style={{textAlign:'right'}}>R$ 830,00</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="bc-total"><span>Total</span><span>{fmtBRL(active.total)}</span></div>
+              </div>
+              <div className="bc-detail__panel">
+                <h5>Pedido &amp; pagamento</h5>
+                <div className="bc-stack-1" style={{ gap: 6 }}>
+                  <PedidoBadge orderNumber={active.orderNumber} />
+                  <PaymentBadge paid={Boolean(active.orderNumber || active.paymentConfirmedAt)} />
+                  {active.isAssociated && <ApprovalBadge approved={active.approved} />}
+                </div>
+                <h5 style={{ marginTop: 18 }}>Próxima ação</h5>
+                {active.availableNextStatuses.length > 0 ? (
+                  <select
+                    className="bc-input bc-select"
+                    value=""
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      e.target.value = "";
+                      if (v) handleAdvance(active, v);
+                    }}
+                  >
+                    <option value="">Alterar status</option>
+                    {active.availableNextStatuses.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p style={{ color: "var(--ink-soft)", margin: 0 }}>Fluxo encerrado.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {view === "board" && (
+        <>
+          <HeaderBand rightTitle="Produção em tempo real" rightSub="Painel público — /status" />
+          <div className="bc-section">
+            <StatusBoard quotes={quotes} />
+          </div>
+        </>
+      )}
+
+      <div className="bc-toasts">
+        {toasts.map((t) => (
+          <div key={t.id} className={`bc-toast ${t.kind === "danger" ? "t-danger" : ""}`}>
+            <i className={`bi ${t.kind === "danger" ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill"}`} />
+            <div style={{flex:1}}>{t.msg}</div>
+            <button className="x" onClick={() => setToasts((ts) => ts.filter((x) => x.id !== t.id))}>×</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

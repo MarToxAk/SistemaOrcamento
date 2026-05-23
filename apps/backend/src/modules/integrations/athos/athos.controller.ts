@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Headers,
   InternalServerErrorException,
+  NotFoundException,
   Param,
   ParseFilePipeBuilder,
   ParseIntPipe,
@@ -226,5 +228,106 @@ export class AthosController {
       file,
       idfuncionario: dto.idfuncionario,
     });
+  }
+
+  @ApiOperation({
+    summary: "Dashboard de contas a receber",
+    description: "Retorna summary global e top 100 clientes. status: AVC, VEN, REC, CAN ou vazio para AVC+VEN.",
+  })
+  @ApiQuery({ name: "status", required: false, example: "VEN", description: "Filtro: AVC | VEN | REC | CAN (omitir = AVC+VEN)" })
+  @ApiOkResponse({ description: "Dashboard com summary e lista de clientes" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/dashboard")
+  async dashboardContasReceber(
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+    @Query("status") status?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const ALLOWED = ["AVC", "VEN", "REC", "CAN"];
+    const filtro = status && ALLOWED.includes(status.toUpperCase()) ? status.toUpperCase() : undefined;
+    return this.athosService.buscarDashboardContasReceber(filtro);
+  }
+
+  @ApiOperation({
+    summary: "Títulos individuais de um cliente (contas a receber)",
+    description: "Retorna títulos em aberto (ABE) do cliente para exibição no drawer. Lazy load.",
+  })
+  @ApiParam({ name: "idcliente", example: "123", description: "ID do cliente no Athos" })
+  @ApiOkResponse({ description: "Array de títulos em aberto do cliente" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/cliente/:idcliente/titulos")
+  async titulosClienteContasReceber(
+    @Param("idcliente") idcliente: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idcliente);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException("idcliente inválido");
+    }
+    return this.athosService.buscarTitulosClienteContasReceber(id);
+  }
+
+  @ApiOperation({
+    summary: "Verificar NF emitida para títulos de contas a receber",
+    description: "Para cada idcontareceber informado, verifica se há NF-e (venda.idnota) ou NFS-e (lotenfse) associada.",
+  })
+  @ApiParam({ name: "idcliente", example: "123" })
+  @Post("contas-receber/cliente/:idcliente/nf-status")
+  async nfStatusTitulos(
+    @Param("idcliente") idcliente: string,
+    @Body() body: { idcontasReceber: number[] },
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idcliente);
+    if (!Number.isFinite(id) || id <= 0) throw new BadRequestException("idcliente inválido");
+    if (!Array.isArray(body?.idcontasReceber) || body.idcontasReceber.length === 0) {
+      return [];
+    }
+    return this.athosService.verificarNFTitulos(body.idcontasReceber);
+  }
+
+  @ApiOperation({ summary: "Dados cadastrais do cliente (contas a receber)" })
+  @ApiParam({ name: "idcliente", example: "123" })
+  @ApiOkResponse({ description: "Dados cadastrais: nome, telefone, email, limitecredito, bloqueaprazo" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/cliente/:idcliente/dados")
+  async dadosCadastraisClienteContasReceber(
+    @Param("idcliente") idcliente: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idcliente);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException("idcliente inválido");
+    }
+    const dados = await this.athosService.buscarDadosClienteContasReceber(id);
+    if (!dados) {
+      throw new NotFoundException(`Cliente ${id} não encontrado no Athos`);
+    }
+    return dados;
+  }
+
+  @ApiOperation({ summary: "Verificar tipo de produto de uma venda (serviço vs físico)" })
+  @ApiParam({ name: "idvenda", example: "12345" })
+  @ApiOkResponse({ description: "{ temProdutoFisico: boolean, todosServico: boolean }" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("venda/:idvenda/tipo-produto")
+  async verificarTipoProdutoVenda(
+    @Param("idvenda") idvenda: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idvenda);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException("idvenda inválido");
+    }
+    return this.athosService.verificarTipoProdutoVenda(id);
   }
 }

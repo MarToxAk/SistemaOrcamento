@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+<style>
+  html, body { margin:0; padding:0; background:#fff; }
+  .card-wrap { padding: 18px 20px; }
+  .swatch-row { display:flex; flex-wrap:wrap; gap:10px; }
+  .sw { width: 110px; }
+  .sw .chip { height: 56px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.06); }
+  .sw .name { font: 600 11px/1.2 var(--font-ui); color: var(--ink); margin-top:6px; }
+  .sw .hex  { font: 500 10.5px/1.2 var(--font-mono); color: var(--ink-soft); margin-top:2px; }
+  .row-tag { font: 700 10px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--teal); margin: 0 0 10px; }
+  .stack { display:flex; flex-direction:column; gap:14px; }
+  
+.pill { display:inline-block; padding: .28em .85em; border-radius:999px; font:600 .92rem/1.2 var(--font-ui); margin: 4px 6px 4px 0; }
+.row { margin-bottom:6px; }
+.s-pendente { background:#fffbe6; color:#bfa100; }
+.s-enviado  { background:#e3f0ff; color:#1565c0; }
+.s-aprovado { background:#e6fbe8; color:#1a7f37; }
+.s-producao { background:#e3f0ff; color:#0d6efd; }
+.s-pronto   { background:#f0f4ff; color:#a65b12; }
+.s-entregue { background:#e6fbe8; color:#444; }
+.s-cancelado{ background:#ffefef; color:#ee3637; }
+.s-recusado { background:#ffefef; color:#ee3637; }
+.bbadge { display:inline-flex; align-items:center; gap:4px; padding:.25em .7em; border-radius:6px; font:600 .82rem/1.2 var(--font-ui); margin: 4px 6px 4px 0; }
+.b-success { background:#1a7f37; color:#fff; }
+.b-warning { background:#ffe18a; color:#222; }
+.b-secondary { background:#5b6772; color:#fff; }
+.b-success-subtle { background:#e6fbe8; color:#1a7f37; }
+
+</style></head><body><div class="card-wrap">
+<p class="row-tag">Status pills</p>
+<div class="row">
+  <span class="pill s-pendente">Pendente</span>
+  <span class="pill s-enviado">Enviado</span>
+  <span class="pill s-aprovado">Aprovado</span>
+  <span class="pill s-producao">Em Produção</span>
+  <span class="pill s-pronto">Pronto p/ Entrega</span>
+  <span class="pill s-entregue">Entregue</span>
+  <span class="pill s-cancelado">Cancelado</span>
+</div>
+<p class="row-tag" style="margin-top:10px">Inline order / payment badges</p>
+<div class="row">
+  <span class="bbadge b-success">Pedido: #4821</span>
+  <span class="bbadge b-secondary">Pedido: não gerado</span>
+  <span class="bbadge b-success-subtle"><i class="bi bi-check-circle"></i>Pagamento confirmado</span>
+  <span class="bbadge b-warning"><i class="bi bi-hourglass-split"></i>Aguardando pagamento</span>
+</div>
+</div></body></html>

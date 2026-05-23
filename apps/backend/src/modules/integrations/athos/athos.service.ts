@@ -949,6 +949,48 @@ export class AthosService {
     }
   }
 
+  async buscarDadosClienteContasReceber(idcliente: number): Promise<{
+    idcliente: number;
+    nome_cliente: string;
+    telefone_completo: string | null;
+    emailcliente: string | null;
+    emailcobrancacliente: string | null;
+    limitecredito: number;
+    bloqueaprazo: string | null;
+  } | null> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT c.idcliente,
+          COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial, 'Cliente #' || c.idcliente::text) AS nome_cliente,
+          c.dddtelefoneempresa || c.telefoneempresa AS telefone_completo,
+          c.emailcliente, c.emailcobrancacliente, c.limitecredito, c.bloqueaprazo
+        FROM cliente c
+        LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+        LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+        WHERE c.idcliente = $1`,
+        [idcliente],
+      );
+      if (result.rows.length === 0) return null;
+      const row = result.rows[0] as Row;
+      return {
+        idcliente: Number(row["idcliente"]),
+        nome_cliente: pickString(row, ["nome_cliente"]) || `Cliente #${idcliente}`,
+        telefone_completo: pickString(row, ["telefone_completo"]) || null,
+        emailcliente: pickString(row, ["emailcliente"]) || null,
+        emailcobrancacliente: pickString(row, ["emailcobrancacliente"]) || null,
+        limitecredito: Number(row["limitecredito"]) || 0,
+        bloqueaprazo: pickString(row, ["bloqueaprazo"]) || null,
+      };
+    } catch (err) {
+      this.logger.warn(`Falha ao buscar dados cadastrais do cliente ${idcliente} no Athos: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    } finally {
+      client.release();
+    }
+  }
+
   async buscarRelacaoOrcamentoVenda(idorcamento: number): Promise<{ idvenda: number | null }> {
     this.logger.log(`buscarRelacaoOrcamentoVenda: idorcamento=${idorcamento}`);
     const pool = this.getPool();
@@ -1613,6 +1655,267 @@ export class AthosService {
       throw new InternalServerErrorException("Erro ao anexar conta a pagar no Athos");
     } finally {
       client?.release();
+    }
+  }
+
+  async buscarDashboardContasReceber(statusFiltro?: string): Promise<{
+    summary: {
+      total_a_receber: number;
+      total_atrasado: number;
+      total_clientes_devedores: number;
+    };
+    clientes: Array<{
+      idcliente: number;
+      nome_cliente: string;
+      telefone_completo: string | null;
+      emailcliente: string | null;
+      emailcobrancacliente: string | null;
+      limitecredito: number;
+      bloqueaprazo: string | null;
+      total_devido: number;
+      total_atrasado: number;
+      titulos_pendentes: number;
+      maior_atraso_dias: number | null;
+    }>;
+  }> {
+    this.logger.log("buscarDashboardContasReceber: iniciando consulta agregada de contas a receber");
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT
+            c.idcliente,
+            COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial, 'Cliente #' || c.idcliente::text) AS nome_cliente,
+            c.dddtelefoneempresa || c.telefoneempresa AS telefone_completo,
+            c.emailcliente,
+            c.emailcobrancacliente,
+            c.limitecredito,
+            c.bloqueaprazo,
+            SUM(cr.valor) AS total_devido,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' THEN cr.valor ELSE 0 END) AS total_atrasado,
+            COUNT(cr.idcontareceber) AS titulos_pendentes,
+            MAX(CASE WHEN TRIM(cr.statusconta) = 'VEN' THEN CURRENT_DATE - cr.datavencimento::date END) AS maior_atraso_dias
+        FROM cliente c
+        INNER JOIN conta_receber cr ON c.idcliente = cr.idcliente
+        LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+        LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+        WHERE TRIM(cr.statusconta) = ANY($1)
+        GROUP BY c.idcliente, cf.nome, cj.nomefantasia, cj.razaosocial,
+                 c.dddtelefoneempresa, c.telefoneempresa, c.emailcliente,
+                 c.emailcobrancacliente, c.limitecredito, c.bloqueaprazo
+        ORDER BY total_atrasado DESC NULLS LAST, total_devido DESC
+        LIMIT 100
+      `, [statusFiltro ? [statusFiltro] : ["AVC", "VEN"]]);
+
+      const clientes = (result.rows as Row[]).map((row) => {
+        const telefone = row["telefone_completo"];
+        const telefoneFull =
+          typeof telefone === "string" && telefone.trim() ? telefone.trim() : null;
+
+        const email = row["emailcliente"];
+        const emailcobranca = row["emailcobrancacliente"];
+        const bloqueaprazo = row["bloqueaprazo"];
+
+        return {
+          idcliente: Number(row["idcliente"]),
+          nome_cliente: typeof row["nome_cliente"] === "string" ? row["nome_cliente"] : String(row["idcliente"]),
+          telefone_completo: telefoneFull,
+          emailcliente: typeof email === "string" && email.trim() ? email.trim() : null,
+          emailcobrancacliente:
+            typeof emailcobranca === "string" && emailcobranca.trim() ? emailcobranca.trim() : null,
+          limitecredito: Number(row["limitecredito"] ?? 0),
+          bloqueaprazo: typeof bloqueaprazo === "string" && bloqueaprazo.trim() ? bloqueaprazo.trim() : null,
+          total_devido: Number(row["total_devido"] ?? 0),
+          total_atrasado: Number(row["total_atrasado"] ?? 0),
+          titulos_pendentes: Number(row["titulos_pendentes"] ?? 0),
+          maior_atraso_dias:
+            row["maior_atraso_dias"] != null ? Number(row["maior_atraso_dias"]) : null,
+        };
+      });
+
+      const summary = {
+        total_a_receber: clientes.reduce((acc, c) => acc + c.total_devido, 0),
+        total_atrasado: clientes.reduce((acc, c) => acc + (c.total_atrasado ?? 0), 0),
+        total_clientes_devedores: clientes.length,
+      };
+
+      return { summary, clientes };
+    } finally {
+      client.release();
+    }
+  }
+
+  async buscarTitulosClienteContasReceber(idcliente: number): Promise<
+    Array<{
+      idcontareceber: number;
+      numerotitulo: string | null;
+      datavencimento: string;
+      valor: number;
+      observacao: string | null;
+      idvenda: number | null;
+      dataemissao: string | null;
+      numeroordem: string | null;
+    }>
+  > {
+    this.logger.log(`buscarTitulosClienteContasReceber: idcliente=${idcliente}`);
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `
+        SELECT
+            cr.idcontareceber, cr.numerotitulo, cr.datavencimento, cr.valor,
+            cr.observacao, cr.idvenda, cr.dataemissao,
+            v.numeroordem
+        FROM conta_receber cr
+        LEFT JOIN venda v ON v.idvenda = cr.idvenda
+        WHERE cr.idcliente = $1 AND TRIM(cr.statusconta) IN ('AVC', 'VEN')
+        ORDER BY cr.datavencimento ASC
+        `,
+        [idcliente],
+      );
+
+      return (result.rows as Row[]).map((row) => {
+        const datavenc = row["datavencimento"];
+        const dataemis = row["dataemissao"];
+        const obs = row["observacao"];
+        const numerotitulo = row["numerotitulo"];
+        const numeroordem = row["numeroordem"];
+
+        return {
+          idcontareceber: Number(row["idcontareceber"]),
+          numerotitulo: typeof numerotitulo === "string" && numerotitulo.trim() ? numerotitulo.trim() : null,
+          datavencimento:
+            datavenc instanceof Date
+              ? datavenc.toISOString().slice(0, 10)
+              : typeof datavenc === "string" && datavenc.trim()
+              ? datavenc.trim()
+              : String(datavenc),
+          valor: Number(row["valor"]),
+          observacao: typeof obs === "string" && obs.trim() ? obs.trim() : null,
+          idvenda: row["idvenda"] != null ? Number(row["idvenda"]) : null,
+          dataemissao:
+            dataemis instanceof Date
+              ? dataemis.toISOString().slice(0, 10)
+              : typeof dataemis === "string" && dataemis.trim()
+              ? dataemis.trim()
+              : null,
+          numeroordem:
+            typeof numeroordem === "string" && numeroordem.trim() ? numeroordem.trim() : null,
+        };
+      });
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Verifica se cada título possui NF emitida (NF-e via venda.idnota ou NFS-e via lotenfse).
+   * Retorna tipo de NF por título para validação antes de gerar boleto.
+   */
+  async verificarNFTitulos(idcontasReceber: number[]): Promise<Array<{
+    idcontareceber: number;
+    tipoNf: "NF-e" | "NFS-e" | null;
+    numeroNf: string | null;
+  }>> {
+    if (idcontasReceber.length === 0) return [];
+    const pool = this.getPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           cr.idcontareceber,
+           CASE
+             WHEN cr.lotenfse = true THEN 'NFS-e'
+             WHEN EXISTS (
+               SELECT 1
+               FROM venda_nota vn
+               JOIN nota n ON n.idnota = vn.idnota
+               WHERE vn.idvenda = cr.idvenda
+                 AND COALESCE(n.cancelada, false) = false
+                 AND n.nfechaveacesso IS NOT NULL
+             ) THEN 'NF-e'
+             ELSE NULL
+           END AS tipo_nf,
+           (
+             SELECT n.numero
+             FROM venda_nota vn
+             JOIN nota n ON n.idnota = vn.idnota
+             WHERE vn.idvenda = cr.idvenda
+               AND COALESCE(n.cancelada, false) = false
+               AND n.nfechaveacesso IS NOT NULL
+             ORDER BY n.idnota DESC
+             LIMIT 1
+           ) AS numero_nf
+         FROM conta_receber cr
+         WHERE cr.idcontareceber = ANY($1)`,
+        [idcontasReceber],
+      );
+      return (result.rows as Array<{ idcontareceber: unknown; tipo_nf: unknown; numero_nf: unknown }>).map((row) => ({
+        idcontareceber: Number(row["idcontareceber"]),
+        tipoNf: (row["tipo_nf"] as "NF-e" | "NFS-e" | null) ?? null,
+        numeroNf: typeof row["numero_nf"] === "string" && row["numero_nf"].trim() ? row["numero_nf"].trim() : null,
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Verifica o tipo de produto de uma venda via venda_item JOIN produto.
+   * tipoproduto=true → produto físico (não entra na NFS-e); tipoproduto=false → serviço.
+   * D-02: resultado NULL (sem itens) → { temProdutoFisico: false, todosServico: true }
+   * Pitfall 4: aggregate functions retornam NULL para conjunto vazio — tratado com ?? false / ?? true
+   * Nota: filtro vi.cancelada removido — coluna pode não existir ou ter tipo não-boolean no Athos.
+   */
+  async verificarTipoProdutoVenda(idvenda: number): Promise<{
+    temProdutoFisico: boolean;
+    todosServico: boolean;
+    valorServicos: number | null;
+    itensServico: Array<{ nome: string; quantidade: number; valor: number }>;
+  }> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const aggResult = await client.query(
+        `SELECT
+           BOOL_OR(p.tipoproduto) as tem_produto_fisico,
+           BOOL_AND(NOT COALESCE(p.tipoproduto, false)) as todos_servico,
+           SUM(CASE WHEN NOT COALESCE(p.tipoproduto, false) THEN COALESCE(vi.vendavalorfinalitem, 0) ELSE 0 END) as valor_servicos
+         FROM venda_item vi
+         JOIN produto p ON p.idproduto = vi.idproduto
+         WHERE vi.idvenda = $1`,
+        [idvenda],
+      );
+      const itensResult = await client.query(
+        `SELECT p.descricaoproduto as nome, vi.quantidadeitem as quantidade, vi.vendavalorfinalitem as valor
+         FROM venda_item vi
+         JOIN produto p ON p.idproduto = vi.idproduto
+         WHERE vi.idvenda = $1
+           AND NOT COALESCE(p.tipoproduto, false)
+           AND COALESCE(vi.vendavalorfinalitem, 0) > 0
+         ORDER BY vi.sequenciaitem`,
+        [idvenda],
+      );
+      const row = aggResult.rows[0];
+      // NULL = sem itens em venda_item → permitir sem aviso (D-02, Pitfall 4)
+      return {
+        temProdutoFisico: row?.tem_produto_fisico ?? false,
+        todosServico: row?.todos_servico ?? true,
+        valorServicos: row?.valor_servicos != null ? Number(row.valor_servicos) : null,
+        itensServico: itensResult.rows.map((r) => ({
+          nome: String(r.nome ?? "").trim(),
+          quantidade: Number(r.quantidade ?? 1),
+          valor: Number(r.valor ?? 0),
+        })),
+      };
+    } catch (err) {
+      this.logger.warn(
+        `verificarTipoProdutoVenda idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return { temProdutoFisico: false, todosServico: true, valorServicos: null, itensServico: [] };
+    } finally {
+      client.release();
     }
   }
 

@@ -73,6 +73,7 @@ export class AthosListenerService implements OnApplicationBootstrap, OnApplicati
           this.logger.warn(`Keep-alive falhou: ${err.message}`);
         });
       }, KEEP_ALIVE_MS);
+      this.keepAliveTimer.unref?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Falha ao conectar Athos listener: ${msg}`);
@@ -86,6 +87,7 @@ export class AthosListenerService implements OnApplicationBootstrap, OnApplicati
     this.reconnectAttempt++;
     this.logger.warn(`Reconectando em ${delay}ms (tentativa ${this.reconnectAttempt})`);
     this.reconnectTimer = setTimeout(() => void this.connect(), delay);
+    this.reconnectTimer.unref?.();
   }
 
   async onApplicationShutdown(): Promise<void> {
