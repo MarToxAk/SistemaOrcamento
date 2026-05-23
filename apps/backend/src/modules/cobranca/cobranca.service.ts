@@ -48,7 +48,23 @@ export class CobrancaService {
       throw new BadRequestException("Alguns títulos solicitados não foram encontrados para este cliente.");
     }
 
-    // Passo 3: Validar NF e calcular total
+    // Passo 3: Verificar duplicidade — títulos já com boleto pendente/pago
+    const titulosJaUsados = await this.prisma.cobrancaBoletoTitulo.findMany({
+      where: {
+        idcontareceber: { in: dto.idcontasReceber },
+        cobrancaBoleto: { status: { in: ["pendente", "pago"] } },
+      },
+      select: { idcontareceber: true, cobrancaBoleto: { select: { id: true, status: true } } },
+    });
+    if (titulosJaUsados.length > 0) {
+      const ids = [...new Set(titulosJaUsados.map((t) => t.idcontareceber))];
+      throw new BadRequestException(
+        `Os títulos ${ids.join(", ")} já possuem boleto ${titulosJaUsados[0].cobrancaBoleto.status}. ` +
+        "Cancele o boleto anterior antes de gerar um novo.",
+      );
+    }
+
+    // Passo 4: Validar NF e calcular total
     const nfInfo = await this.athosService.verificarNFTitulos(dto.idcontasReceber);
     const semNf = nfInfo.filter((n) => n.tipoNf === null);
     if (semNf.length > 0) {
@@ -303,6 +319,29 @@ export class CobrancaService {
         `Webhook EFI: notificação recebida com status='${status}' para chargeId=${chargeId} — sem ação.`,
       );
     }
+  }
+
+  async buscarTitulosComBoletoAtivo(idcontasReceber: number[]): Promise<Array<{
+    idcontareceber: number;
+    cobrancaId: number;
+    status: string;
+  }>> {
+    if (idcontasReceber.length === 0) return [];
+    const rows = await this.prisma.cobrancaBoletoTitulo.findMany({
+      where: {
+        idcontareceber: { in: idcontasReceber },
+        cobrancaBoleto: { status: { in: ["pendente", "pago"] } },
+      },
+      select: {
+        idcontareceber: true,
+        cobrancaBoleto: { select: { id: true, status: true } },
+      },
+    });
+    return rows.map((r) => ({
+      idcontareceber: r.idcontareceber,
+      cobrancaId: r.cobrancaBoleto.id,
+      status: r.cobrancaBoleto.status,
+    }));
   }
 
   async downloadBoletoPdf(cobrancaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {

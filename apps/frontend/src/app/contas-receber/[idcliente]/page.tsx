@@ -24,6 +24,7 @@ interface TituloReceber {
   numeroordem: string | null;
   tipoNf?: "NF-e" | "NFS-e" | null;
   numeroNf?: string | null;
+  boletoAtivo?: { cobrancaId: number; status: string } | null;
 }
 
 function formatBRL(value: number): string {
@@ -113,10 +114,30 @@ export default function ClienteDetalhePage({
             if (nfRes.ok) {
               const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: "NF-e" | "NFS-e" | null; numeroNf: string | null }>;
               const nfMap = new Map(nfData.map((n) => [n.idcontareceber, { tipoNf: n.tipoNf, numeroNf: n.numeroNf }]));
-              setTitulos(data.map((t) => {
-                const nf = nfMap.get(t.idcontareceber);
-                return { ...t, tipoNf: nf?.tipoNf ?? null, numeroNf: nf?.numeroNf ?? null };
-              }));
+              // Verificar boletos ativos para os mesmos títulos
+                let boletoMap = new Map<number, { cobrancaId: number; status: string }>();
+                try {
+                  const boletoRes = await fetch("/api/cobranca/boleto/titulos-em-uso", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ idcontasReceber: ids }),
+                    cache: "no-store",
+                  });
+                  if (boletoRes.ok) {
+                    const boletoData = (await boletoRes.json()) as Array<{ idcontareceber: number; cobrancaId: number; status: string }>;
+                    boletoMap = new Map(boletoData.map((b) => [b.idcontareceber, { cobrancaId: b.cobrancaId, status: b.status }]));
+                  }
+                } catch { /* silently ignore */ }
+
+                setTitulos(data.map((t) => {
+                  const nf = nfMap.get(t.idcontareceber);
+                  return {
+                    ...t,
+                    tipoNf: nf?.tipoNf ?? null,
+                    numeroNf: nf?.numeroNf ?? null,
+                    boletoAtivo: boletoMap.get(t.idcontareceber) ?? null,
+                  };
+                }));
               return;
             }
           } catch { /* silently ignore NF check errors */ }
@@ -358,14 +379,17 @@ export default function ClienteDetalhePage({
                     {titulos.map((titulo) => {
                       const vencido = new Date(titulo.datavencimento) < new Date();
                       const temNf = titulo.tipoNf != null;
+                      const temBoleto = titulo.boletoAtivo != null;
                       return (
-                        <tr key={titulo.idcontareceber}>
+                        <tr key={titulo.idcontareceber} className={temBoleto ? "table-warning opacity-75" : ""}>
                           <td>
                             <input
                               type="checkbox"
                               className="form-check-input"
                               checked={selectedIds.has(titulo.idcontareceber)}
-                              onChange={() => handleToggle(titulo.idcontareceber)}
+                              onChange={() => !temBoleto && handleToggle(titulo.idcontareceber)}
+                              disabled={temBoleto}
+                              title={temBoleto ? `Boleto ${titulo.boletoAtivo?.status} — cancele antes de gerar novo` : undefined}
                             />
                           </td>
                           <td className="small">{titulo.numerotitulo ?? "—"}</td>
@@ -374,16 +398,27 @@ export default function ClienteDetalhePage({
                           </td>
                           <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
                           <td>
-                            {titulo.tipoNf ? (
-                              <span
-                                className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}
-                                title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}
-                              >
-                                {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
-                              </span>
-                            ) : (
-                              <span className="badge bg-secondary opacity-50" title="Sem nota fiscal">Sem NF</span>
-                            )}
+                            <div className="d-flex flex-column gap-1">
+                              {titulo.tipoNf ? (
+                                <span
+                                  className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}
+                                  title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}
+                                >
+                                  {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
+                                </span>
+                              ) : (
+                                <span className="badge bg-secondary opacity-50">Sem NF</span>
+                              )}
+                              {titulo.boletoAtivo && (
+                                <span
+                                  className={`badge ${titulo.boletoAtivo.status === "pago" ? "bg-success" : "bg-warning text-dark"}`}
+                                  title={`Boleto #${titulo.boletoAtivo.cobrancaId}`}
+                                >
+                                  <i className="bi bi-receipt me-1" />
+                                  Boleto {titulo.boletoAtivo.status}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td>
                             {vencido ? (

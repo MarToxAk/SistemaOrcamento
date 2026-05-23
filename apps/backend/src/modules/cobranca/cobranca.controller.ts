@@ -22,6 +22,15 @@ export class CobrancaController {
   }
 
   /**
+   * Retorna quais idcontareceber já possuem boleto pendente ou pago.
+   * Usado pelo frontend para desabilitar seleção e mostrar aviso.
+   */
+  @Post("boleto/titulos-em-uso")
+  async titulosEmUso(@Body() body: { idcontasReceber: number[] }) {
+    return this.cobrancaService.buscarTitulosComBoletoAtivo(body.idcontasReceber ?? []);
+  }
+
+  /**
    * Download do PDF do boleto com nome formatado.
    * Requer autenticação via x-internal-api-key.
    */
