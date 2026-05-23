@@ -293,7 +293,8 @@ export default function ClienteDetalhePage({
     setNfseErroDetalhe("");
 
     // Buscar tipo-produto para cada idvenda único em paralelo
-    type TipoProduto = { temProdutoFisico: boolean; valorServicos: number | null };
+    type ItemServico = { nome: string; quantidade: number; valor: number };
+    type TipoProduto = { temProdutoFisico: boolean; valorServicos: number | null; itensServico: ItemServico[] };
     const vendasUnicas = [...new Set(titulosSel.map((t) => t.idvenda).filter((v): v is number => v != null))];
     const tipoPorVenda = new Map<number, TipoProduto>();
     await Promise.all(
@@ -301,8 +302,12 @@ export default function ClienteDetalhePage({
         try {
           const res = await fetch(`/api/athos/venda/${idv}/tipo-produto`, { cache: "no-store" });
           if (res.ok) {
-            const d = (await res.json()) as { temProdutoFisico?: boolean; valorServicos?: number | null };
-            tipoPorVenda.set(idv, { temProdutoFisico: d.temProdutoFisico ?? false, valorServicos: d.valorServicos ?? null });
+            const d = (await res.json()) as { temProdutoFisico?: boolean; valorServicos?: number | null; itensServico?: ItemServico[] };
+            tipoPorVenda.set(idv, {
+              temProdutoFisico: d.temProdutoFisico ?? false,
+              valorServicos: d.valorServicos ?? null,
+              itensServico: d.itensServico ?? [],
+            });
           }
         } catch { /* falha silenciosa */ }
       }),
@@ -312,6 +317,7 @@ export default function ClienteDetalhePage({
     let totalServicos = 0;
     let temFisico = false;
     const elegiveis: number[] = [];
+    const vendasElegiveis = new Set<number>();
 
     for (const t of titulosSel) {
       const tipo = t.idvenda != null ? tipoPorVenda.get(t.idvenda) : undefined;
@@ -323,17 +329,36 @@ export default function ClienteDetalhePage({
         }
         // Misto — inclui com o valor da parcela de serviços
         elegiveis.push(t.idcontareceber);
-        totalServicos += tipo.valorServicos;
+        if (t.idvenda != null && !vendasElegiveis.has(t.idvenda)) {
+          totalServicos += tipo.valorServicos;
+          vendasElegiveis.add(t.idvenda);
+        }
       } else {
         // Sem idvenda ou 100% serviço — inclui com valor total do título
         elegiveis.push(t.idcontareceber);
         totalServicos += t.valor;
+        if (t.idvenda != null) vendasElegiveis.add(t.idvenda);
       }
     }
+
+    // Pré-preencher descrição com itens de serviço das vendas elegíveis
+    const itensDescricao: ItemServico[] = [];
+    for (const idv of vendasElegiveis) {
+      const tipo = tipoPorVenda.get(idv);
+      if (tipo?.itensServico?.length) itensDescricao.push(...tipo.itensServico);
+    }
+    const descricaoAuto = itensDescricao
+      .map((i) => {
+        const qtd = Number.isInteger(i.quantidade) ? `${i.quantidade}x` : `${i.quantidade.toFixed(2).replace(".", ",")}x`;
+        const val = `R$${i.valor.toFixed(2).replace(".", ",")}`;
+        return `${i.nome} (${qtd}) - ${val}`;
+      })
+      .join("; ");
 
     setNfseTitulosElegiveis(elegiveis);
     setNfseAvisoFisico(temFisico);
     setNfseValor(elegiveis.length > 0 ? totalServicos.toFixed(2) : "0");
+    setNfseDescricao(descricaoAuto);
     setNfseModalState("confirm");
   }
 

@@ -1872,11 +1872,12 @@ export class AthosService {
     temProdutoFisico: boolean;
     todosServico: boolean;
     valorServicos: number | null;
+    itensServico: Array<{ nome: string; quantidade: number; valor: number }>;
   }> {
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
     try {
-      const result = await client.query(
+      const aggResult = await client.query(
         `SELECT
            BOOL_OR(p.tipoproduto) as tem_produto_fisico,
            BOOL_AND(NOT COALESCE(p.tipoproduto, false)) as todos_servico,
@@ -1886,18 +1887,33 @@ export class AthosService {
          WHERE vi.idvenda = $1`,
         [idvenda],
       );
-      const row = result.rows[0];
+      const itensResult = await client.query(
+        `SELECT p.descricaoproduto as nome, vi.quantidadeitem as quantidade, vi.vendavalorfinalitem as valor
+         FROM venda_item vi
+         JOIN produto p ON p.idproduto = vi.idproduto
+         WHERE vi.idvenda = $1
+           AND NOT COALESCE(p.tipoproduto, false)
+           AND COALESCE(vi.vendavalorfinalitem, 0) > 0
+         ORDER BY vi.sequenciaitem`,
+        [idvenda],
+      );
+      const row = aggResult.rows[0];
       // NULL = sem itens em venda_item → permitir sem aviso (D-02, Pitfall 4)
       return {
         temProdutoFisico: row?.tem_produto_fisico ?? false,
         todosServico: row?.todos_servico ?? true,
         valorServicos: row?.valor_servicos != null ? Number(row.valor_servicos) : null,
+        itensServico: itensResult.rows.map((r) => ({
+          nome: String(r.nome ?? "").trim(),
+          quantidade: Number(r.quantidade ?? 1),
+          valor: Number(r.valor ?? 0),
+        })),
       };
     } catch (err) {
       this.logger.warn(
         `verificarTipoProdutoVenda idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`,
       );
-      return { temProdutoFisico: false, todosServico: true, valorServicos: null };
+      return { temProdutoFisico: false, todosServico: true, valorServicos: null, itensServico: [] };
     } finally {
       client.release();
     }
