@@ -2,32 +2,32 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Cobranca e Fiscal do Cliente
-current_phase: 29 (boleto-consolidado) — Plan 02 completo, aguardando checkpoint humano
-status: Phase 29 Plan 02 completo — modal boleto 4 estados + Route Handler proxy
-last_updated: "2026-05-22T00:55:00.000Z"
-last_activity: 2026-05-22
+current_phase: 30
+status: executing
+last_updated: "2026-05-23T18:00:11.370Z"
+last_activity: 2026-05-23 -- Phase 30 execution started
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
-  percent: 40
+  completed_phases: 2
+  total_plans: 8
+  completed_plans: 4
+  percent: 50
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-22 — Phase 29 Plan 02 completo (modal boleto frontend + Route Handler)
-Current phase: 29 (boleto-consolidado) — Plan 02 entregue, checkpoint aguardando verificacao humana
+Current phase: 30
 Milestone: v2.1 — Cobranca e Fiscal do Cliente
 
 ---
 
 ## Current Position
 
-Phase: 29 (boleto-consolidado-efi) — EM PROGRESSO
-Plan: 2 de 2 completo (aguardando checkpoint verificacao humana)
-Status: Plan 02 entregue — modal 4 estados + Route Handler proxy POST /api/cobranca/boleto
-Last activity: 2026-05-22
+Phase: 30 (emissao-nfse-titulos) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 30
+Last activity: 2026-05-23 -- Phase 30 execution started
 
 Progress: [####------] 40% (Phase 28 completa + Phase 29 Plans 01+02 completos)
 
