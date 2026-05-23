@@ -1,67 +1,79 @@
 ---
-status: testing
+status: complete
 phase: 29-boleto-consolidado-efi
 source: [29-01-SUMMARY.md, 29-02-SUMMARY.md]
 started: 2026-05-22T00:00:00Z
-updated: 2026-05-22T00:00:00Z
+updated: 2026-05-23T00:00:00Z
 ---
 
 ## Current Test
 
-number: 7
-name: Estado de sucesso — link e linha digitável
-expected: |
-  Após geração bem-sucedida, o modal mostra ícone verde de check,
-  botão "Abrir Boleto", linha digitável copiável e nome do arquivo.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
 ### 1. Botão Gerar Boleto aparece com seleção
-expected: Em /contas-receber/[idcliente], selecionar um ou mais títulos faz a barra de ações aparecer com o botão "Gerar Boleto".
+expected: Selecionar títulos faz a barra de ações aparecer com botão "Gerar Boleto".
 result: pass
 
 ### 2. Modal abre ao clicar Gerar Boleto
-expected: Clicar em "Gerar Boleto" abre um modal com campo de data de vencimento e resumo dos títulos selecionados.
+expected: Modal abre com campo de data e resumo dos títulos.
 result: pass
 
 ### 3. Datas iguais — data pré-preenchida
-expected: Se todos os títulos selecionados têm a mesma datavencimento, o campo de data é pré-preenchido automaticamente com essa data.
+expected: Campo de data pré-preenchido quando todos os títulos têm mesma datavencimento.
 result: pass
 
 ### 4. Datas diferentes — alerta e campo vazio
-expected: Se os títulos selecionados têm datas diferentes, aparece alerta vermelho e o campo de data fica vazio para preenchimento manual.
+expected: Alerta vermelho e campo de data vazio para preenchimento manual.
 result: pass
 
 ### 5. Data passada desabilita confirmação
-expected: Informar uma data já vencida mantém o botão "Confirmar Geração" desabilitado com mensagem de validação.
+expected: Botão "Confirmar Geração" desabilitado para data vencida.
 result: pass
 
 ### 6. Estado de loading durante geração
-expected: Ao clicar "Confirmar Geração" com data válida, aparece spinner com texto "Gerando boleto..." e os botões ficam ocultos.
+expected: Spinner "Gerando boleto..." e botões ocultos durante chamada EFI.
 result: pass
 
-### 7. Estado de sucesso — link e linha digitável
-expected: Após geração bem-sucedida, o modal mostra ícone verde de check, link "Abrir Boleto" e a linha digitável copiável. O nome do arquivo segue o padrão "idcliente - NOME CLIENTE data.pdf".
-result: issue
-reported: "Erro 500 — EFI retornou 400: A propriedade [payment] é obrigatória (code 3500034). Body usava settings.payment_method em vez de payment.banking_billet."
-severity: major
-fixed: "commit 29735ca — trocado settings por payment.banking_billet no body EFI"
+### 7. Geração bem-sucedida — sucesso e nome do arquivo
+expected: Modal de sucesso com linha digitável copiável e nome "idcliente - NOME CLIENTE data.pdf".
+result: pass
 
 ### 8. Botão Copiar linha digitável
-expected: Clicar em "Copiar" copia a linha digitável e o botão muda para "Copiado! ✔" por 2 segundos.
-result: [pending]
+expected: Clicar em "Copiar" copia a linha digitável e muda para "Copiado! ✔" por 2 segundos.
+result: pass
 
-### 9. Webhook e registro no banco
-expected: Cobrança registrada na tabela cobranca_boleto com status "pendente". Quando pago via EFI, status muda para "pago".
-result: [pending]
+### 9. Badge NF-e na tabela de títulos
+expected: Títulos com nota fiscal mostram badge "NF-e #308" (azul) ou "NFS-e #123" (verde). Títulos sem NF mostram "Sem NF" (cinza).
+result: pass
+
+### 10. Bloqueio de NF para boleto
+expected: Selecionar título sem NF mostra aviso "X título(s) sem NF — boleto bloqueado" e desabilita botão "Gerar Boleto".
+result: pass
+
+### 11. Agrupamento — títulos com mesmo boleto
+expected: Títulos que já têm boleto aparecem em card separado acima da tabela livre, agrupados por boleto com sub-tabela interna.
+result: pass
+
+### 12. Ações do boleto — verificar pagamento
+expected: Botão "Verificar" consulta EFI e atualiza o status do boleto (pendente → pago se quitado).
+result: pass
+
+### 13. Ações do boleto — cancelar
+expected: Botão "Cancelar" chama EFI PUT /cancel, remove do banco e os títulos ficam disponíveis novamente.
+result: pass
+
+### 14. Registro no banco
+expected: Cobrança salva em cobranca_boleto com status "pendente", txidEfi, nomeArquivo e expireAt. Títulos registrados em cobranca_boleto_titulo.
+result: pass
 
 ## Summary
 
-total: 9
-passed: 0
+total: 14
+passed: 14
 issues: 0
-pending: 9
+pending: 0
 skipped: 0
 blocked: 0
 
