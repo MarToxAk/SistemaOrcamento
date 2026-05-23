@@ -1,0 +1,302 @@
+/**
+ * BomCusto — Quotes PDF Handlebars template (v2 · colorful edition)
+ *
+ * Repaginado: faixa decorativa de lápis coloridos (topo + rodapé, full-bleed),
+ * ícones de contato coloridos, badge do nº do orçamento em vermelho da marca,
+ * tipografia Mulish, totais em caixa preta com destaque amarelo.
+ *
+ * Cole este arquivo em apps/backend/src/quotes/quotes-pdf.template.ts
+ * substituindo o existente. Todos os placeholders Handlebars permanecem
+ * iguais ao template original — nenhuma mudança no service necessária.
+ *
+ * ─── Assets externos necessários ────────────────────────────────────
+ * Os PNGs decorativos (pencils-top.png, pencils-bottom.png) precisam
+ * estar hospedados em URL pública para o Puppeteer baixar na hora da
+ * renderização. Sugestão: subir junto do logo em https://autopyweb.com.br/.
+ *
+ * Você pode passar `{{logoUrl}}`, `{{pencilsTopUrl}}` e `{{pencilsBottomUrl}}`
+ * no contexto. Se não passar, o template usa os defaults logo abaixo
+ * (TROCAR antes de subir!):
+ *   logoUrl          → https://autopyweb.com.br/logo-primary.png
+ *   pencilsTopUrl    → https://autopyweb.com.br/pencils-top.png
+ *   pencilsBottomUrl → https://autopyweb.com.br/pencils-bottom.png
+ *
+ * Os arquivos pencils-top.png e pencils-bottom.png estão em
+ * /assets/ do design system Bom Custo (export do PDF "Obrigado pelo seu
+ * pedido", cortado em top/bottom).
+ */
+export const QUOTES_PDF_HTML_TEMPLATE = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orçamento Nº {{idorcamento}} — Bom Custo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink:#0b1220; --ink-soft:#5b6b80; --ink-faint:#9aa7b8;
+    --line:#e4e9f0; --line-soft:#eef2f6;
+    --paper:#f8fafc; --warn:#a36500; --total-red:#c2362c; --brand-red:#ee3537;
+    --c-store:#e83e8c; --c-phone:#3b82f6; --c-mail:#22c55e; --c-pin:#ef4444;
+    --c-yellow:#FAED23; --c-green:#0F7949;
+    --strip-h:32mm;
+  }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  html,body{margin:0;padding:0;font-family:'Mulish',system-ui,-apple-system,sans-serif;color:var(--ink);background:#fff;font-size:11pt;line-height:1.45;-webkit-font-smoothing:antialiased}
+  .num{font-variant-numeric:tabular-nums}
+
+  /* Full-bleed decorative pencil strips (fixed → appear on every printed page) */
+  .pencils-top,.pencils-bottom{position:fixed;left:0;width:100%;height:var(--strip-h);object-fit:cover;pointer-events:none;z-index:1}
+  .pencils-top{top:0}
+  .pencils-bottom{bottom:0}
+
+  .page{position:relative;z-index:2;padding:calc(var(--strip-h) + 10mm) 14mm calc(var(--strip-h) + 6mm)}
+
+  /* Header */
+  .doc-header{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .doc-header__logo{width:86px;height:86px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px}
+  .doc-header__co h1{margin:0 0 6px;font:800 13pt/1.15 'Mulish',sans-serif;letter-spacing:-.018em;color:var(--ink)}
+  .doc-header__co .cnpj{font:600 8pt/1 'Mulish',sans-serif;color:var(--ink-soft);margin-bottom:8px}
+  .doc-header__co .cnpj b{color:var(--ink);font-weight:800}
+
+  .contact-list{display:grid;grid-template-columns:auto 1fr;gap:5px 8px;font:500 8.2pt/1.25 'Mulish',sans-serif;color:var(--ink)}
+  .contact-list .icon{width:17px;height:17px;border-radius:50%;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:9.5pt}
+  .ic-store{background:var(--c-store)}
+  .ic-phone{background:var(--c-phone)}
+  .ic-mail{background:var(--c-mail)}
+  .ic-pin{background:var(--c-pin)}
+  .ic-insta{background:linear-gradient(135deg,#f9ce34 0%,#ee2a7b 50%,#6228d7 100%)}
+
+  /* Orçamento number — colored brand-red band */
+  .doc-header__id{background:var(--brand-red);color:#fff;border-radius:10px;padding:12px 16px;text-align:right;min-width:130px;box-shadow:0 2px 0 rgba(0,0,0,.06)}
+  .doc-header__id-label{font:800 7.5pt/1 'Mulish',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#fff;opacity:.85}
+  .doc-header__id-num{font:900 22pt/1 'Mulish',sans-serif;letter-spacing:-.022em;margin:6px 0 4px;font-variant-numeric:tabular-nums;color:#fff}
+  .doc-header__id-date{font:600 8.5pt/1.2 'Mulish',sans-serif;color:#fff;opacity:.85}
+
+  /* Customer — soft yellow card with green label */
+  .customer{background:#fff8e8;border:1px solid #f3e2b3;border-left:4px solid var(--c-yellow);border-radius:8px;padding:12px 14px;margin-bottom:12px;display:grid;grid-template-columns:1fr auto;gap:18px;align-items:flex-start}
+  .customer__to{font:800 7.5pt/1 'Mulish',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--c-green);margin-bottom:6px}
+  .customer__name{font:800 13pt/1.15 'Mulish',sans-serif;color:var(--ink);margin:0 0 6px;letter-spacing:-.012em}
+  .customer__meta{font:500 9pt/1.5 'Mulish',sans-serif;color:var(--ink-soft)}
+  .customer__meta b{color:var(--ink);font-weight:600;margin-right:4px}
+  .intro{margin:0 0 14px;font:500 9.5pt/1.5 'Mulish',sans-serif;color:var(--ink-soft)}
+
+  /* Section labels with colored vertical bar */
+  .section-label{display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px;gap:10px}
+  .section-label h2{margin:0;font:800 8.5pt/1 'Mulish',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);display:flex;align-items:center;gap:8px}
+  .section-label h2::before{content:'';width:4px;height:14px;background:var(--brand-red);border-radius:2px;display:inline-block}
+  .section-label--items   h2::before{background:var(--c-phone)}
+  .section-label--stamps  h2::before{background:var(--c-store)}
+  .section-label--terms   h2::before{background:var(--c-green)}
+  .section-label .hint{font:500 8pt/1 'Mulish',sans-serif;color:var(--ink-faint)}
+
+  /* Items table — black header, numbered red circles */
+  .items{width:100%;border-collapse:collapse;font:500 9pt/1.35 'Mulish',sans-serif}
+  .items thead th{font:800 7.5pt/1 'Mulish',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--ink);text-align:left;padding:8px 8px}
+  .items thead th:first-child{border-radius:6px 0 0 6px}
+  .items thead th:last-child{border-radius:0 6px 6px 0}
+  .items thead th.num{text-align:right}
+  .items thead th.center{text-align:center}
+  .items tbody td{padding:9px 8px;border-bottom:1px solid var(--line-soft);vertical-align:top;color:var(--ink)}
+  .items tbody td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .items tbody td.center{text-align:center}
+  .items tbody td.idx{color:#fff;font:800 8.5pt/1 'JetBrains Mono',monospace;width:22px}
+  .items tbody td.idx span{background:var(--brand-red);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:8pt}
+  .items tbody tr:nth-child(even) td{background:#fafbfd}
+  .items tbody .desc-strong{font-weight:700;color:var(--ink)}
+  .items tbody .desc-sub{font:500 8pt/1.3 'Mulish',sans-serif;color:var(--ink-soft);margin-top:2px;display:block}
+  .items tbody td.total{font-weight:800;color:var(--ink)}
+
+  /* Stamps */
+  .stamps__grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+  .stamp{border:2px dashed var(--c-store);border-radius:8px;padding:10px 12px;background:#fffafd;display:flex;flex-direction:column;min-height:92px;page-break-inside:avoid}
+  .stamp__num{font:800 7.5pt/1 'Mulish',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--c-store)}
+  .stamp__body{font:700 10pt/1.4 'Mulish',sans-serif;color:var(--ink);margin:6px 0;white-space:pre-wrap;text-align:center;flex:1;display:flex;align-items:center;justify-content:center}
+  .stamp__foot{display:flex;justify-content:space-between;font:600 8pt/1 'Mulish',sans-serif;color:var(--ink-soft);border-top:1px dashed #f3c8e0;padding-top:6px;margin-top:auto}
+  .stamp__dim{color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-size:7.5pt}
+  .stamp__model{color:var(--c-store)}
+
+  /* Obs + totals (totals in black, total value in yellow) */
+  .foot-row{display:grid;grid-template-columns:1fr 280px;gap:12px;margin-top:14px;align-items:stretch}
+  .obs{background:var(--paper);border-radius:8px;padding:12px 14px;border:1px solid var(--line);border-left:4px solid var(--c-phone)}
+  .obs__label{font:800 7.5pt/1 'Mulish',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--c-phone);margin-bottom:6px}
+  .obs__body{font:500 9pt/1.5 'Mulish',sans-serif;color:var(--ink);white-space:pre-wrap}
+  .obs__body--empty{color:var(--ink-faint);font-style:italic}
+
+  .totals{background:var(--ink);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:7px;color:#fff}
+  .totals__row{display:flex;justify-content:space-between;align-items:baseline;font:600 9pt/1.2 'Mulish',sans-serif;color:rgba(255,255,255,.7)}
+  .totals__row b{color:#fff;font-weight:600;font-variant-numeric:tabular-nums}
+  .totals__row--disc b{color:var(--c-yellow)}
+  .totals__row--grand{border-top:1px solid rgba(255,255,255,.2);margin-top:6px;padding-top:10px}
+  .totals__row--grand span{font:800 8pt/1 'Mulish',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.9)}
+  .totals__row--grand b{font:900 16pt/1 'Mulish',sans-serif;color:var(--c-yellow);letter-spacing:-.01em}
+
+  /* Conditions */
+  .conds{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px;align-items:stretch}
+  .cond{border-radius:8px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-top:3px solid currentColor}
+  .cond--vendor{color:var(--c-phone)}
+  .cond--validity{color:var(--c-green)}
+  .cond--payment{color:var(--c-store)}
+  /* Destaque: prazo de entrega — card preenchido em vermelho com badge amarelo */
+  .cond--delivery{background:var(--c-pin);border:none;color:#fff;box-shadow:0 4px 12px rgba(239,68,68,.25);transform:translateY(-2px);position:relative}
+  .cond--delivery::before{content:'';position:absolute;top:-6px;right:-6px;width:24px;height:24px;background:var(--c-yellow) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%230b1220'%3E%3Cpath d='M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z'/%3E%3Cpath d='M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z'/%3E%3C/svg%3E") center/14px no-repeat;border-radius:50%}
+  .cond--delivery .cond__label{color:rgba(255,255,255,.92)}
+  .cond--delivery .cond__value{color:#fff;font-weight:800;font-size:10.5pt}
+  .cond__label{font:800 7pt/1 'Mulish',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:currentColor;margin-bottom:4px}
+  .cond__value{font:700 9.5pt/1.2 'Mulish',sans-serif;color:var(--ink)}
+
+  /* Sign-off + CTAs */
+  .signoff{margin-top:16px;font:500 9pt/1.5 'Mulish',sans-serif;color:var(--ink-soft)}
+  .signoff b{color:var(--ink);font-weight:800}
+  .cta{display:flex;gap:10px;justify-content:center;margin-top:12px}
+  .cta a{display:inline-flex;align-items:center;gap:6px;padding:12px 26px;border-radius:10px;font:800 9.5pt/1 'Mulish',sans-serif;text-decoration:none;letter-spacing:-.005em}
+  .cta__accept{background:#22c55e;color:#fff;box-shadow:0 2px 0 #14893d}
+  .cta__reject{background:#fff;color:var(--total-red);border:1.5px solid var(--total-red)}
+</style>
+</head>
+<body>
+
+<img src="{{#if pencilsTopUrl}}{{pencilsTopUrl}}{{else}}https://autopyweb.com.br/pencils-top.png{{/if}}" class="pencils-top" alt="">
+<img src="{{#if pencilsBottomUrl}}{{pencilsBottomUrl}}{{else}}https://autopyweb.com.br/pencils-bottom.png{{/if}}" class="pencils-bottom" alt="">
+
+<div class="page">
+
+  <header class="doc-header">
+    <img src="{{#if logoUrl}}{{logoUrl}}{{else}}https://autopyweb.com.br/logo-primary.png{{/if}}" class="doc-header__logo" alt="Bom Custo">
+
+    <div class="doc-header__co">
+      <h1>Bom Custo Papelaria &amp; Gráfica Rápida LTDA</h1>
+      <div class="cnpj"><b>CNPJ</b> 62.391.927/0001-57</div>
+      <div class="contact-list">
+        <span class="icon ic-pin"><i class="bi bi-geo-alt-fill"></i></span>
+        <span>Rua Olímpio Leite da Silva, 39 — Loja 07, Perequê · Ilhabela / SP · CEP 11633-078</span>
+        <span class="icon ic-phone"><i class="bi bi-telephone-fill"></i></span>
+        <span>(12) 99648-4918 · (12) 3896-1474 · (12) 99678-2405</span>
+        <span class="icon ic-mail"><i class="bi bi-envelope-fill"></i></span>
+        <span>orcamento@bomcustoilhabela.com.br</span>
+        <span class="icon ic-insta"><i class="bi bi-instagram"></i></span>
+        <span>@bomcustopapelaria</span>
+      </div>
+    </div>
+
+    <div class="doc-header__id">
+      <div class="doc-header__id-label">Orçamento</div>
+      <div class="doc-header__id-num">Nº {{idorcamento}}</div>
+      <div class="doc-header__id-date">{{dataorcamento}}</div>
+    </div>
+  </header>
+
+  <div class="customer">
+    <div>
+      <div class="customer__to">Para</div>
+      <h2 class="customer__name">{{cliente.nome}}</h2>
+      <div class="customer__meta">
+        {{#if cliente.telefone}}<b>Telefone</b> {{cliente.telefone}}{{/if}}
+        {{#if cliente.email}} &nbsp;·&nbsp; <b>E-mail</b> {{cliente.email}}{{/if}}
+      </div>
+    </div>
+  </div>
+
+  <p class="intro">
+    Prezado cliente, apresentamos nossa proposta comercial para sua avaliação.
+    Estamos à disposição para qualquer esclarecimento adicional.
+  </p>
+
+  <div class="section-label section-label--items">
+    <h2>Itens da proposta</h2>
+    <div class="hint">valores em BRL</div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th class="idx">#</th>
+        <th>Descrição</th>
+        <th class="center">Qtd</th>
+        <th class="num">Valor unit.</th>
+        <th class="num">Valor original</th>
+        <th class="num">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each itens}}
+      <tr>
+        <td class="idx"><span>{{sequenciaitem}}</span></td>
+        <td>
+          <span class="desc-strong">{{produto.descricaoproduto}}</span>
+          {{#if produto.descricaocurta}}<span class="desc-sub">{{produto.descricaocurta}}</span>{{/if}}
+        </td>
+        <td class="center">{{quantidadeitem}}</td>
+        <td class="num">R$&nbsp;{{valoritem}}</td>
+        <td class="num">R$&nbsp;{{orcamentovalorfinalitem}}</td>
+        <td class="num total">R$&nbsp;{{orcamentovalorfinalitem}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  {{#if carimbos.itens.length}}
+  <div class="section-label section-label--stamps">
+    <h2>Visualização de carimbos</h2>
+    <div class="hint">aprovação visual</div>
+  </div>
+  <div class="stamps__grid">
+    {{#each carimbos.itens}}
+    <div class="stamp">
+      <div class="stamp__num">Carimbo {{numero}}</div>
+      <div class="stamp__body">{{descricao}}</div>
+      <div class="stamp__foot">
+        <span class="stamp__dim">{{dimensoes}}</span>
+        <span class="stamp__model">{{carimbo}}</span>
+      </div>
+    </div>
+    {{/each}}
+  </div>
+  {{/if}}
+
+  <div class="foot-row">
+    <div class="obs">
+      <div class="obs__label">Observações</div>
+      <div class="obs__body{{#unless observacoes}} obs__body--empty{{/unless}}">{{#if observacoes}}{{observacoes}}{{else}}Sem observações.{{/if}}</div>
+    </div>
+    <div class="totals">
+      <div class="totals__row"><span>Valor original</span><b>R$&nbsp;{{totais.valor}}</b></div>
+      <div class="totals__row totals__row--disc"><span>Desconto</span><b>{{#if totais.desconto}}R$&nbsp;{{totais.desconto}}{{else}}Isento{{/if}}</b></div>
+      <div class="totals__row totals__row--grand"><span>Total</span><b>R$&nbsp;{{totais.valor}}</b></div>
+    </div>
+  </div>
+
+  <div class="section-label section-label--terms">
+    <h2>Condições</h2>
+  </div>
+  <div class="conds">
+    <div class="cond cond--vendor">
+      <div class="cond__label">Vendedor</div>
+      <div class="cond__value">{{vendedorNome}}</div>
+    </div>
+    <div class="cond cond--validity">
+      <div class="cond__label">Validade</div>
+      <div class="cond__value">{{validade}}</div>
+    </div>
+    <div class="cond cond--delivery">
+      <div class="cond__label">Prazo de entrega</div>
+      <div class="cond__value">{{prazoEntrega}}</div>
+    </div>
+    <div class="cond cond--payment">
+      <div class="cond__label">Pagamento</div>
+      <div class="cond__value">{{condicaoPagamento}}</div>
+    </div>
+  </div>
+
+  <p class="signoff">
+    Estamos à disposição e aguardamos seu retorno.<br>
+    <b>Atenciosamente, equipe Bom Custo.</b>
+  </p>
+
+</div>
+</body>
+</html>`;

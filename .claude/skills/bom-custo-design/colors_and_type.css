@@ -1,0 +1,207 @@
+/* ============================================================
+   Bom Custo Design System — Foundations
+   Type + color tokens for the BomCusto Orçamento web app
+   (Papelaria & Gráfica Rápida — Ilhabela / SP, Brazil)
+   ============================================================ */
+
+/* ---------- Fonts ----------------------------------------------------
+   The app does NOT ship a webfont — it falls back to the OS UI stack.
+   We document both the legacy stack (Trebuchet/Segoe UI) used in the
+   first iteration and the newer Bootstrap/Inter direction. Neither
+   needs to be loaded; both resolve through system fonts on Win/Mac.
+   -------------------------------------------------------------------- */
+
+:root {
+  /* font stacks */
+  --font-ui:        "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-casual:    "Trebuchet MS", "Segoe UI", system-ui, sans-serif; /* legacy hero pages */
+  --font-mono:      ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* ---------- Brand colors (from the logo SVG) -----------------------
+     Bom Custo wordmark sits on a YELLOW disc with a green leaf and red
+     letterforms — these three pigments are the brand DNA.
+     ------------------------------------------------------------------ */
+  --brand-yellow:        #FAED23; /* logo disc */
+  --brand-red:           #EE3537; /* "Bom Custo" wordmark + alert red */
+  --brand-green:         #14A958; /* leaf fill */
+  --brand-green-dark:    #0F7949; /* leaf stroke / forest tone */
+
+  /* ---------- Surface palette (active, Bootstrap-aligned) ------------ */
+  --bg:                  #f9f7ed; /* warm paper cream — the page bg */
+  --surface:             #ffffff; /* cards / sections */
+  --surface-soft:        #f5f5f5; /* table headers, subtle wells */
+  --ink:                 #222222; /* primary text */
+  --ink-soft:            #5b6772; /* secondary text / subtitles */
+  --line:                #ececec; /* hairline borders */
+  --line-strong:         #d7ccb7; /* warm border used on inputs/legacy */
+
+  /* ---------- Pastel gradient (signature header backdrop) ------------
+     The single most recognizable surface in the app — used as the
+     hero band on every screen. Five stops, soft and saturated. */
+  --grad-mint:           #c5f2e8;
+  --grad-sky:            #cbe1f9;
+  --grad-lavender:       #e7d8f9;
+  --grad-pink:           #f9e7f5;
+  --grad-peach:          #f0cacb;
+  --gradient-hero:       linear-gradient(135deg,
+                           var(--grad-mint)     0%,
+                           var(--grad-sky)     25%,
+                           var(--grad-lavender) 50%,
+                           var(--grad-pink)    75%,
+                           var(--grad-peach)   100%);
+
+  /* ---------- Action / accent (Bootstrap primary blue) --------------- */
+  --accent:              #0d6efd; /* primary buttons, links, focus */
+  --accent-hover:        #084298;
+  --accent-soft:         #f0f4ff; /* tinted info wells */
+
+  /* warm secondary, reserved for callouts (e.g. "fazer antes") */
+  --accent-warm:         #fd7e14;
+
+  /* "add orçamento" CTA — sage green from the active /orcamento page */
+  --cta-sage:            #7dc8aa;
+  --cta-sage-hover:      #6ab594;
+
+  /* ---------- Semantic / status tokens ------------------------------- */
+  --success:             #1a7f37;
+  --success-bg:          #e6fbe8;
+  --success-line:        #b6e2c1;
+  --success-soft-bg:     #effaf3; /* row-paid stripe */
+
+  --info:                #0d47a1;
+  --info-bg:             #f0f4ff;
+  --info-line:           #b6c6e2;
+
+  --warn:                #bfa100; /* "pendente" amber */
+  --warn-bg:             #fffbe6;
+  --warn-orange:         #f39c12; /* pendente label text */
+  --warn-brown:          #a65b12; /* pronto-para-entrega */
+
+  --danger:              #ee3637; /* matches brand red */
+  --danger-soft:         #ff6b6b;
+  --danger-bg:           #ffefef;
+
+  --status-producao:     #0d6efd;
+  --status-producao-bg:  #e3f0ff;
+  --status-entrega:      #0d47a1;
+  --status-entrega-bg:   #f0f4ff;
+
+  /* ---------- Legacy "casual" palette (status/landing shell) ---------
+     Earthy, paper-and-ink mood used on the consumer status page.
+     Keep these around — they appear in the public-facing UI. */
+  --paper:               #f3ede1;
+  --paper-card:          #fff9ef;
+  --terracotta:          #bf4d28;
+  --teal:                #0e6d73;
+  --teal-tint:           #94d9cb;
+  --peach-tint:          #f9c384;
+  --warm-ink:            #0c1b2a;
+
+  /* ---------- Type scale --------------------------------------------- */
+  --fs-xs:    0.78rem;   /* labels, small captions      */
+  --fs-sm:    0.95rem;   /* table cells, micro copy     */
+  --fs-base:  1.05rem;   /* body                         */
+  --fs-md:    1.18rem;   /* dense tables, lists         */
+  --fs-lg:    1.35rem;   /* card values, sub-titles     */
+  --fs-xl:    1.7rem;    /* h2                          */
+  --fs-2xl:   2.2rem;    /* h1 page titles              */
+  --fs-3xl:   clamp(1.7rem, 4vw, 2.7rem); /* hero       */
+
+  --lh-tight:    1.15;
+  --lh-snug:     1.3;
+  --lh-normal:   1.5;
+  --lh-relaxed:  1.65;
+
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+  --fw-black:    800;
+
+  /* ---------- Spacing / radius / shadow ------------------------------ */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  --radius-sm:    6px;   /* small buttons, badges                 */
+  --radius-md:    8px;   /* buttons, inputs, header band          */
+  --radius-lg:    10px;  /* inputs at form-control size, alerts   */
+  --radius-xl:    14px;  /* cards (legacy)                        */
+  --radius-2xl:   18px;  /* hero cards / shell                    */
+  --radius-pill:  999px; /* status pills                          */
+
+  --shadow-sm:  0 2px 8px rgba(0,0,0,0.06);
+  --shadow-md:  0 8px 32px rgba(31,31,31,0.08);
+  --shadow-lg:  0 18px 30px rgba(12, 27, 42, 0.08);
+}
+
+/* ---------- Semantic element styling -------------------------------- */
+
+body {
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background: var(--bg);
+  font-size: var(--fs-md);
+  line-height: var(--lh-normal);
+}
+
+h1 {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-black);
+  letter-spacing: 0.01em;
+  line-height: var(--lh-tight);
+  margin: 0;
+}
+
+h2 {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  margin: 0 0 var(--space-3);
+}
+
+h3 {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  margin: 0 0 var(--space-2);
+}
+
+h4, h5 {
+  font-weight: var(--fw-semibold);
+  margin: 0 0 var(--space-2);
+}
+
+p, li {
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+}
+
+small, .small {
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+
+.label-uppercase {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--teal);
+  font-weight: var(--fw-bold);
+}
+
+code, kbd, pre, samp {
+  font-family: var(--font-mono);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover { color: var(--accent-hover); text-decoration: underline; }

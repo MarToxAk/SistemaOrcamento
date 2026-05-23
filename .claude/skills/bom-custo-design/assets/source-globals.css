@@ -1,0 +1,360 @@
+/* Lista de orçamentos */
+.orcamento-lista {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+.orcamento-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1.05rem;
+}
+.orcamento-tabela th, .orcamento-tabela td {
+  padding: 0.7rem 0.5rem;
+  border-bottom: 1px solid #ececec;
+  text-align: left;
+}
+.orcamento-tabela th {
+  background: #f5f5f5;
+  font-weight: 700;
+  color: #222;
+}
+.orcamento-tabela tr:last-child td {
+  border-bottom: none;
+}
+.orcamento-status {
+  display: inline-block;
+  padding: 0.25em 0.7em;
+  border-radius: 12px;
+  font-size: 0.98em;
+  font-weight: 600;
+  background: #e9ecef;
+  color: #222;
+  text-transform: capitalize;
+}
+.orcamento-status-pendente { background: #fffbe6; color: #bfa100; }
+.orcamento-status-aprovado { background: #e6fbe8; color: #1a7f37; }
+.orcamento-status-em_producao, .orcamento-status-emproducao { background: #e3f0ff; color: #0d6efd; }
+.orcamento-status-pronto_para_entrega, .orcamento-status-prontoparaentrega { background: #f0f4ff; color: #0d47a1; }
+.orcamento-status-entregue { background: #e6fbe8; color: #1a7f37; }
+.orcamento-status-cancelado { background: #ffefef; color: #ff6b6b; }
+.btn-sm {
+  font-size: 0.95em;
+  padding: 0.4em 1em;
+  border-radius: 8px;
+}
+/* --- Design customizado para OrcamentoPage --- */
+.theme-light {
+  background: #f5f5f5;
+  color: #222;
+}
+.theme-dark {
+  background: #1f1f1f;
+  color: #f3f3f3;
+}
+
+.orcamento-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  background: inherit;
+}
+.orcamento-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2.5rem;
+  margin-bottom: 1.5rem;
+}
+.orcamento-logo {
+  max-width: 180px;
+  margin-bottom: 1.2rem;
+}
+.orcamento-title h1 {
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 2.2rem;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+.orcamento-subtitle {
+  font-size: 1.1rem;
+  color: #5b6772;
+  opacity: 0.85;
+  margin: 0.2rem 0 0 0;
+  font-weight: 500;
+}
+.orcamento-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.orcamento-card {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(31,31,31,0.08);
+  padding: 2.2rem 2rem 2rem 2rem;
+  min-width: 320px;
+  max-width: 370px;
+  width: 100%;
+  border: 1px solid #e3e3e3;
+}
+.orcamento-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+.orcamento-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.orcamento-label {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.2rem;
+}
+.orcamento-input {
+  border-radius: 10px;
+  border: 1px solid #d7ccb7;
+  padding: 0.7rem 1rem;
+  font-size: 1.1rem;
+  font-family: inherit;
+  outline: none;
+  transition: border 0.2s;
+}
+.orcamento-input:focus {
+  border-color: #0d6efd;
+}
+.orcamento-btn {
+  background: #0d6efd;
+  color: #fff;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding: 0.7rem 0;
+  border: none;
+  transition: background 0.2s;
+}
+.orcamento-btn:disabled {
+  opacity: 0.7;
+}
+.btn-accent {
+  background: #0d6efd;
+  color: #fff;
+}
+.btn-accent:hover {
+  background: #084298;
+}
+.orcamento-modal-bg {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.orcamento-modal {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(31,31,31,0.12);
+  min-width: 320px;
+  max-width: 350px;
+  padding: 1.5rem 1.2rem 1.2rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+}
+.orcamento-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.7rem;
+}
+.orcamento-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #888;
+  cursor: pointer;
+}
+.orcamento-modal-body {
+  text-align: center;
+  font-size: 1.1rem;
+  margin-bottom: 1.2rem;
+}
+.orcamento-assina {
+  color: #0d6efd;
+}
+.orcamento-fazantes {
+  color: #fd7e14;
+}
+.orcamento-modal-footer {
+  display: flex;
+  gap: 1.2rem;
+  justify-content: center;
+}
+.orcamento-btn-modal {
+  min-width: 80px;
+  font-size: 1rem;
+  border-radius: 8px;
+}
+.orcamento-alert {
+  margin-top: 1.2rem;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 1.05rem;
+  text-align: center;
+}
+.orcamento-alert-sucesso {
+  background: #e6fbe8;
+  color: #1a7f37;
+  border: 1px solid #b6e2c1;
+}
+.orcamento-alert-info {
+  background: #f0f4ff;
+  color: #0d47a1;
+  border: 1px solid #b6c6e2;
+}
+@media (max-width: 600px) {
+  .orcamento-card {
+    padding: 1.2rem 0.5rem;
+    min-width: 0;
+    max-width: 98vw;
+  }
+  .orcamento-modal {
+    min-width: 0;
+    max-width: 98vw;
+  }
+}
+:root {
+  --bg: #f3ede1;
+  --ink: #0c1b2a;
+  --accent: #bf4d28;
+  --accent-2: #0e6d73;
+  --card: #fff9ef;
+  --muted: #5b6772;
+  --line: #d7ccb7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 80% 20%, #f9c384 0%, transparent 25%),
+    radial-gradient(circle at 15% 80%, #94d9cb 0%, transparent 20%),
+    var(--bg);
+}
+
+.page {
+  min-height: 100vh;
+  padding: 2rem 1.25rem 4rem;
+}
+
+.shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: color-mix(in srgb, var(--card), white 10%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 18px 30px rgba(12, 27, 42, 0.08);
+}
+
+.hero {
+  padding: 2rem;
+  display: grid;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #fff9ef 0%, #faefd7 100%);
+  border-bottom: 1px solid var(--line);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(1.7rem, 4vw, 2.7rem);
+  letter-spacing: 0.02em;
+}
+
+.hero p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 700px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+.value {
+  margin-top: 0.4rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: var(--accent-2);
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding: 1.4rem;
+  }
+}

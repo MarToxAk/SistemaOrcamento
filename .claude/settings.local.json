@@ -40,7 +40,23 @@
       "Read(//c/Users/user/AppData/Local/Temp/**)",
       "Bash(grep -i \"\\\\.pdf$\")",
       "Bash(npx jest *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(npx ts-node -e ' *)",
+      "Bash(node *)",
+      "Bash(npx --prefix apps/backend tsc --noEmit)",
+      "Bash(python3 *)",
+      "Bash(xargs cat)",
+      "Bash(git *)",
+      "WebFetch(domain:dev.efipay.com.br)",
+      "Skill(gsd-ui-phase)",
+      "Bash(echo \"TSC_EXIT:$?\")",
+      "Bash(dir \"apps\\\\backend\\\\src\\\\modules\\\\cobranca\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4000/api/health)",
+      "Bash(echo \"TSC:$?\")",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(command -v gsd-sdk)",
+      "Bash(gsd-sdk query *)",
+      "Skill(gsd-plan-phase)"
     ]
   }
 }

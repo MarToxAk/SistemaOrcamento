@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+<style>
+  html, body { margin:0; padding:0; background:#fff; }
+  .card-wrap { padding: 18px 20px; }
+  .swatch-row { display:flex; flex-wrap:wrap; gap:10px; }
+  .sw { width: 110px; }
+  .sw .chip { height: 56px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.06); }
+  .sw .name { font: 600 11px/1.2 var(--font-ui); color: var(--ink); margin-top:6px; }
+  .sw .hex  { font: 500 10.5px/1.2 var(--font-mono); color: var(--ink-soft); margin-top:2px; }
+  .row-tag { font: 700 10px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--teal); margin: 0 0 10px; }
+  .stack { display:flex; flex-direction:column; gap:14px; }
+  
+</style></head><body><div class="card-wrap">
+<p class="row-tag">Font stack — no webfont loaded; OS fallback</p>
+<div style="font:700 1.1rem/1.3 var(--font-ui);color:#222">--font-ui</div>
+<div style="font:400 0.92rem/1.4 var(--font-mono);color:#5b6772;margin-top:4px">"Inter", "Segoe UI", system-ui, -apple-system, …</div>
+<div style="height:10px"></div>
+<div style="font:700 1.1rem/1.3 var(--font-casual);color:#222">--font-casual (legacy shell)</div>
+<div style="font:400 0.92rem/1.4 var(--font-mono);color:#5b6772;margin-top:4px">"Trebuchet MS", "Segoe UI", system-ui, sans-serif</div>
+<div style="height:10px"></div>
+<div style="font:700 1.1rem/1.3 var(--font-mono);color:#222">--font-mono</div>
+<div style="font:400 0.92rem/1.4 var(--font-mono);color:#5b6772;margin-top:4px">ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, …</div>
+</div></body></html>

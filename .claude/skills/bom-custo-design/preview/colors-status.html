@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+<style>
+  html, body { margin:0; padding:0; background:#fff; }
+  .card-wrap { padding: 18px 20px; }
+  .swatch-row { display:flex; flex-wrap:wrap; gap:10px; }
+  .sw { width: 110px; }
+  .sw .chip { height: 56px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.06); }
+  .sw .name { font: 600 11px/1.2 var(--font-ui); color: var(--ink); margin-top:6px; }
+  .sw .hex  { font: 500 10.5px/1.2 var(--font-mono); color: var(--ink-soft); margin-top:2px; }
+  .row-tag { font: 700 10px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--teal); margin: 0 0 10px; }
+  .stack { display:flex; flex-direction:column; gap:14px; }
+  
+</style></head><body><div class="card-wrap">
+<p class="row-tag">Status / semantic pairs</p>
+<div class="swatch-row" style="gap:14px;">
+  <div class="sw"><div class="chip" style="background:#e6fbe8;border:1px solid #b6e2c1"></div><div class="name" style="color:#1a7f37">Success</div><div class="hex">bg #E6FBE8 · fg #1A7F37</div></div>
+  <div class="sw"><div class="chip" style="background:#f0f4ff;border:1px solid #b6c6e2"></div><div class="name" style="color:#0d47a1">Info</div><div class="hex">bg #F0F4FF · fg #0D47A1</div></div>
+  <div class="sw"><div class="chip" style="background:#fffbe6"></div><div class="name" style="color:#bfa100">Warn</div><div class="hex">bg #FFFBE6 · fg #BFA100</div></div>
+  <div class="sw"><div class="chip" style="background:#ffefef"></div><div class="name" style="color:#ee3637">Danger</div><div class="hex">bg #FFEFEF · fg #EE3637</div></div>
+  <div class="sw"><div class="chip" style="background:#e3f0ff"></div><div class="name" style="color:#0d6efd">Em produção</div><div class="hex">bg #E3F0FF · fg #0D6EFD</div></div>
+  <div class="sw"><div class="chip" style="background:#effaf3"></div><div class="name" style="color:#1a7f37">Paid row</div><div class="hex">#EFFAF3</div></div>
+</div>
+</div></body></html>

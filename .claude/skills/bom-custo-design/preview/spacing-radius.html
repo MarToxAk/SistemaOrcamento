@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+<style>
+  html, body { margin:0; padding:0; background:#fff; }
+  .card-wrap { padding: 18px 20px; }
+  .swatch-row { display:flex; flex-wrap:wrap; gap:10px; }
+  .sw { width: 110px; }
+  .sw .chip { height: 56px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.06); }
+  .sw .name { font: 600 11px/1.2 var(--font-ui); color: var(--ink); margin-top:6px; }
+  .sw .hex  { font: 500 10.5px/1.2 var(--font-mono); color: var(--ink-soft); margin-top:2px; }
+  .row-tag { font: 700 10px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--teal); margin: 0 0 10px; }
+  .stack { display:flex; flex-direction:column; gap:14px; }
+  
+.bar { background:#0d6efd; height:14px; border-radius:3px; }
+.row { display:flex; align-items:center; gap:10px; margin-bottom:6px; font:500 11px/1 var(--font-mono); color: var(--ink-soft); }
+.row span:first-child { width:70px; }
+.rads { display:flex; gap:14px; margin-top:14px; align-items:flex-end; }
+.rads .r { width:60px; height:60px; background:#f0f4ff; border:1px solid #b6c6e2; }
+.rads .lbl { font:600 11px/1 var(--font-mono); color: var(--ink); margin-top:6px; text-align:center; }
+
+</style></head><body><div class="card-wrap">
+<p class="row-tag">Spacing scale (rem)</p>
+<div class="row"><span>--space-1</span><div class="bar" style="width:4px"></div><span>0.25</span></div>
+<div class="row"><span>--space-2</span><div class="bar" style="width:8px"></div><span>0.5</span></div>
+<div class="row"><span>--space-3</span><div class="bar" style="width:12px"></div><span>0.75</span></div>
+<div class="row"><span>--space-4</span><div class="bar" style="width:16px"></div><span>1.0</span></div>
+<div class="row"><span>--space-6</span><div class="bar" style="width:24px"></div><span>1.5</span></div>
+<div class="row"><span>--space-8</span><div class="bar" style="width:32px"></div><span>2.0</span></div>
+<div class="row"><span>--space-12</span><div class="bar" style="width:48px"></div><span>3.0</span></div>
+<p class="row-tag" style="margin-top:14px">Radius</p>
+<div class="rads">
+  <div><div class="r" style="border-radius:6px"></div><div class="lbl">6 · sm</div></div>
+  <div><div class="r" style="border-radius:8px"></div><div class="lbl">8 · md</div></div>
+  <div><div class="r" style="border-radius:10px"></div><div class="lbl">10 · lg</div></div>
+  <div><div class="r" style="border-radius:14px"></div><div class="lbl">14 · xl</div></div>
+  <div><div class="r" style="border-radius:18px"></div><div class="lbl">18 · 2xl</div></div>
+  <div><div class="r" style="border-radius:999px"></div><div class="lbl">pill</div></div>
+</div>
+</div></body></html>
