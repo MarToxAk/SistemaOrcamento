@@ -334,13 +334,15 @@ export class CobrancaService {
       },
       select: {
         idcontareceber: true,
-        cobrancaBoleto: { select: { id: true, status: true } },
+        cobrancaBoleto: { select: { id: true, status: true, linkBoleto: true, nomeArquivo: true } },
       },
     });
     return rows.map((r) => ({
       idcontareceber: r.idcontareceber,
       cobrancaId: r.cobrancaBoleto.id,
       status: r.cobrancaBoleto.status,
+      linkBoleto: r.cobrancaBoleto.linkBoleto,
+      nomeArquivo: r.cobrancaBoleto.nomeArquivo,
     }));
   }
 
@@ -362,6 +364,91 @@ export class CobrancaService {
         ? `${cobranca.idclienteAthos} - boleto-${cobranca.txidEfi}.pdf`
         : `${cobranca.idclienteAthos} - boleto-${cobrancaId}.pdf`);
     return { pdfBuffer: Buffer.from(pdfResp.data as ArrayBuffer), nomeArquivo };
+  }
+
+  /** Cancela boleto na EFI e marca como cancelado no banco */
+  async cancelarBoleto(cobrancaId: number): Promise<{ ok: boolean; mensagem: string }> {
+    const cobranca = await this.prisma.cobrancaBoleto.findUnique({
+      where: { id: cobrancaId },
+      include: { titulos: true },
+    });
+    if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
+    if (cobranca.status === "cancelado") return { ok: true, mensagem: "Boleto já estava cancelado." };
+
+    if (cobranca.txidEfi) {
+      try {
+        const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
+        const basic = Buffer.from(`${this.getRequiredConfig("EFI_CLIENT_ID")}:${this.getRequiredConfig("EFI_CLIENT_SECRET")}`).toString("base64");
+        const cli = axios.create({ baseURL: baseUrl, timeout: 15_000 });
+        const authResp = await cli.post("/v1/authorize", { grant_type: "client_credentials" }, {
+          headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
+        });
+        const token: string = authResp.data?.access_token;
+        if (token) {
+          await cli.delete(`/v1/charge/${cobranca.txidEfi}`, { headers: { Authorization: `Bearer ${token}` } });
+          this.logger.log(`Boleto EFI chargeId=${cobranca.txidEfi} cancelado.`);
+        }
+      } catch (e: unknown) {
+        this.logger.warn(`Falha ao cancelar na EFI (continua cancelando no banco): ${String(e)}`);
+      }
+    }
+
+    await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: "cancelado" } });
+    return { ok: true, mensagem: "Boleto cancelado. Títulos disponíveis para novo boleto." };
+  }
+
+  /** Verifica status do boleto na EFI e atualiza o banco */
+  async verificarPagamentoBoleto(cobrancaId: number): Promise<{ status: string; atualizado: boolean }> {
+    const cobranca = await this.prisma.cobrancaBoleto.findUnique({ where: { id: cobrancaId } });
+    if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
+    if (!cobranca.txidEfi) return { status: cobranca.status, atualizado: false };
+
+    const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
+    const basic = Buffer.from(`${this.getRequiredConfig("EFI_CLIENT_ID")}:${this.getRequiredConfig("EFI_CLIENT_SECRET")}`).toString("base64");
+    const cli = axios.create({ baseURL: baseUrl, timeout: 15_000 });
+    const authResp = await cli.post("/v1/authorize", { grant_type: "client_credentials" }, {
+      headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
+    });
+    const token: string = authResp.data?.access_token;
+
+    const resp = await cli.get(`/v1/charge/${cobranca.txidEfi}`, { headers: { Authorization: `Bearer ${token}` } });
+    const efiStatus: string = resp.data?.data?.status ?? resp.data?.data?.[0]?.status ?? "desconhecido";
+    const novoStatus = efiStatus === "paid" ? "pago" : efiStatus === "canceled" ? "cancelado" : cobranca.status;
+
+    if (novoStatus !== cobranca.status) {
+      await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: novoStatus } });
+      return { status: novoStatus, atualizado: true };
+    }
+    return { status: novoStatus, atualizado: false };
+  }
+
+  /** Remove boleto do banco (cleanup) — libera títulos para novo boleto */
+  async removerBoletoBanco(cobrancaId: number): Promise<{ ok: boolean }> {
+    const cobranca = await this.prisma.cobrancaBoleto.findUnique({ where: { id: cobrancaId } });
+    if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
+    await this.prisma.cobrancaBoletoTitulo.deleteMany({ where: { cobrancaBoletoId: cobrancaId } });
+    await this.prisma.cobrancaBoleto.delete({ where: { id: cobrancaId } });
+    this.logger.log(`CobrancaBoleto ${cobrancaId} removido do banco (cleanup).`);
+    return { ok: true };
+  }
+
+  /** Busca boletos de um cliente com seus títulos vinculados */
+  async buscarBoletosCliente(idclienteAthos: number): Promise<Array<{
+    id: number; status: string; valor: number; expireAt: string | null;
+    linkBoleto: string | null; nomeArquivo: string | null; txidEfi: string | null;
+    criadoEm: Date; titulos: Array<{ idcontareceber: number; valor: number }>;
+  }>> {
+    const boletos = await this.prisma.cobrancaBoleto.findMany({
+      where: { idclienteAthos },
+      orderBy: { criadoEm: "desc" },
+      include: { titulos: { select: { idcontareceber: true, valor: true } } },
+    });
+    return boletos.map((b) => ({
+      id: b.id, status: b.status, valor: Number(b.valor),
+      expireAt: b.expireAt, linkBoleto: b.linkBoleto, nomeArquivo: b.nomeArquivo,
+      txidEfi: b.txidEfi, criadoEm: b.criadoEm,
+      titulos: b.titulos.map((t) => ({ idcontareceber: t.idcontareceber, valor: Number(t.valor) })),
+    }));
   }
 
   private getRequiredConfig(key: string): string {

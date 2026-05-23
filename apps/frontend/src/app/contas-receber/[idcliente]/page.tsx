@@ -24,7 +24,7 @@ interface TituloReceber {
   numeroordem: string | null;
   tipoNf?: "NF-e" | "NFS-e" | null;
   numeroNf?: string | null;
-  boletoAtivo?: { cobrancaId: number; status: string } | null;
+  boletoAtivo?: { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null } | null;
 }
 
 function formatBRL(value: number): string {
@@ -115,7 +115,7 @@ export default function ClienteDetalhePage({
               const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: "NF-e" | "NFS-e" | null; numeroNf: string | null }>;
               const nfMap = new Map(nfData.map((n) => [n.idcontareceber, { tipoNf: n.tipoNf, numeroNf: n.numeroNf }]));
               // Verificar boletos ativos para os mesmos títulos
-                let boletoMap = new Map<number, { cobrancaId: number; status: string }>();
+                let boletoMap = new Map<number, { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null }>();
                 try {
                   const boletoRes = await fetch("/api/cobranca/boleto/titulos-em-uso", {
                     method: "POST",
@@ -124,8 +124,8 @@ export default function ClienteDetalhePage({
                     cache: "no-store",
                   });
                   if (boletoRes.ok) {
-                    const boletoData = (await boletoRes.json()) as Array<{ idcontareceber: number; cobrancaId: number; status: string }>;
-                    boletoMap = new Map(boletoData.map((b) => [b.idcontareceber, { cobrancaId: b.cobrancaId, status: b.status }]));
+                    const boletoData = (await boletoRes.json()) as Array<{ idcontareceber: number; cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null }>;
+                    boletoMap = new Map(boletoData.map((b) => [b.idcontareceber, { cobrancaId: b.cobrancaId, status: b.status, linkBoleto: b.linkBoleto, nomeArquivo: b.nomeArquivo }]));
                   }
                 } catch { /* silently ignore */ }
 
@@ -410,13 +410,52 @@ export default function ClienteDetalhePage({
                                 <span className="badge bg-secondary opacity-50">Sem NF</span>
                               )}
                               {titulo.boletoAtivo && (
-                                <span
-                                  className={`badge ${titulo.boletoAtivo.status === "pago" ? "bg-success" : "bg-warning text-dark"}`}
-                                  title={`Boleto #${titulo.boletoAtivo.cobrancaId}`}
-                                >
-                                  <i className="bi bi-receipt me-1" />
-                                  Boleto {titulo.boletoAtivo.status}
-                                </span>
+                                <div className="d-flex flex-column gap-1 mt-1">
+                                  <span className={`badge ${titulo.boletoAtivo.status === "pago" ? "bg-success" : titulo.boletoAtivo.status === "cancelado" ? "bg-secondary" : "bg-warning text-dark"}`}>
+                                    <i className="bi bi-receipt me-1" />Boleto {titulo.boletoAtivo.status}
+                                  </span>
+                                  <div className="d-flex gap-1 flex-wrap">
+                                    {titulo.boletoAtivo.linkBoleto && (
+                                      <a href={`/api/cobranca/boleto/${titulo.boletoAtivo.cobrancaId}/pdf`}
+                                        download={titulo.boletoAtivo.nomeArquivo ?? undefined}
+                                        className="btn btn-xs btn-outline-primary" style={{fontSize:"0.7rem",padding:"1px 5px"}}
+                                        title="Baixar PDF">
+                                        <i className="bi bi-download" />
+                                      </a>
+                                    )}
+                                    <button type="button"
+                                      className="btn btn-xs btn-outline-info" style={{fontSize:"0.7rem",padding:"1px 5px"}}
+                                      title="Verificar pagamento na EFI"
+                                      onClick={async () => {
+                                        await fetch(`/api/cobranca/boleto/${titulo.boletoAtivo!.cobrancaId}/verificar-pagamento`, { method: "POST" });
+                                        window.location.reload();
+                                      }}>
+                                      <i className="bi bi-arrow-clockwise" />
+                                    </button>
+                                    {titulo.boletoAtivo.status !== "pago" && (
+                                      <button type="button"
+                                        className="btn btn-xs btn-outline-danger" style={{fontSize:"0.7rem",padding:"1px 5px"}}
+                                        title="Cancelar boleto"
+                                        onClick={async () => {
+                                          if (!confirm("Cancelar este boleto?")) return;
+                                          await fetch(`/api/cobranca/boleto/${titulo.boletoAtivo!.cobrancaId}/cancelar`, { method: "POST" });
+                                          window.location.reload();
+                                        }}>
+                                        <i className="bi bi-x-circle" />
+                                      </button>
+                                    )}
+                                    <button type="button"
+                                      className="btn btn-xs btn-outline-secondary" style={{fontSize:"0.7rem",padding:"1px 5px"}}
+                                      title="Remover do banco (cleanup)"
+                                      onClick={async () => {
+                                        if (!confirm("Remover registro do boleto? Os títulos ficarão disponíveis para novo boleto.")) return;
+                                        await fetch(`/api/cobranca/boleto/${titulo.boletoAtivo!.cobrancaId}`, { method: "DELETE" });
+                                        window.location.reload();
+                                      }}>
+                                      <i className="bi bi-trash" />
+                                    </button>
+                                  </div>
+                                </div>
                               )}
                             </div>
                           </td>

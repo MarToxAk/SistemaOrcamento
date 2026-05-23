@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Query, Res } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Query, Res } from "@nestjs/common";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
 
@@ -28,6 +28,30 @@ export class CobrancaController {
   @Post("boleto/titulos-em-uso")
   async titulosEmUso(@Body() body: { idcontasReceber: number[] }) {
     return this.cobrancaService.buscarTitulosComBoletoAtivo(body.idcontasReceber ?? []);
+  }
+
+  /** Lista boletos de um cliente com títulos vinculados */
+  @Get("boleto/cliente/:idcliente")
+  async boletosCliente(@Param("idcliente", ParseIntPipe) idcliente: number) {
+    return this.cobrancaService.buscarBoletosCliente(idcliente);
+  }
+
+  /** Cancela boleto na EFI e no banco */
+  @Post("boleto/:id/cancelar")
+  async cancelarBoleto(@Param("id", ParseIntPipe) id: number) {
+    return this.cobrancaService.cancelarBoleto(id);
+  }
+
+  /** Verifica status do boleto na EFI e atualiza banco */
+  @Post("boleto/:id/verificar-pagamento")
+  async verificarPagamento(@Param("id", ParseIntPipe) id: number) {
+    return this.cobrancaService.verificarPagamentoBoleto(id);
+  }
+
+  /** Remove boleto do banco (cleanup — libera títulos) */
+  @Delete("boleto/:id")
+  async removerBoleto(@Param("id", ParseIntPipe) id: number) {
+    return this.cobrancaService.removerBoletoBanco(id);
   }
 
   /**
