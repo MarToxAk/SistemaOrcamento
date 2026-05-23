@@ -713,6 +713,43 @@ export class NfseService {
 
     this.logger.log(`NFS-e #${numeroNfse} emitida para orÃ§amento #${quote.internalNumber}`);
 
+    // Salvar NfseEmitida com idvenda (D-17, D-24) — falha nao interrompe o fluxo SOAP ja executado
+    try {
+      const idvendaParam = quote?.saleExternalId ? Number(quote.saleExternalId) : null;
+      if (idvendaParam !== null) {
+        const existente = await this.prisma.nfseEmitida.findFirst({ where: { idvenda: idvendaParam } });
+        if (existente) {
+          this.logger.warn(`NfseEmitida ja existe para idvenda ${idvendaParam} (id=${existente.id}) — fluxo orcamento #${quote.internalNumber} nao cria duplicata`);
+        } else {
+          await this.prisma.nfseEmitida.create({
+            data: {
+              numeroNfse,
+              numeroRps: Number(rpsNumero),
+              idclienteAthos: input?.clienteAthosId ?? 0,
+              valorServico:   valorServicos,
+              idvenda:        idvendaParam,
+            },
+          });
+          this.logger.log(`NfseEmitida criada para idvenda=${idvendaParam} nfse=#${numeroNfse}`);
+        }
+      } else {
+        // saleExternalId ausente — salvar sem idvenda (orçamentos sem venda Athos associada)
+        await this.prisma.nfseEmitida.create({
+          data: {
+            numeroNfse,
+            numeroRps: Number(rpsNumero),
+            idclienteAthos: input?.clienteAthosId ?? 0,
+            valorServico:   valorServicos,
+            idvenda:        null,
+          },
+        });
+        this.logger.log(`NfseEmitida criada sem idvenda (saleExternalId ausente) nfse=#${numeroNfse}`);
+      }
+    } catch (err) {
+      this.logger.error(`Falha ao salvar NfseEmitida para orcamento #${quote.internalNumber}: ${err instanceof Error ? err.message : String(err)}`);
+      // Nao relançar — a NFS-e ja foi emitida com sucesso no SOAP; salvar NfseEmitida e melhor-esforco
+    }
+
     // Notifica cliente via Chatwoot (mensagem + PDF como anexo)
     if (quote.conversationId) {
       const convId      = String(quote.conversationId);
