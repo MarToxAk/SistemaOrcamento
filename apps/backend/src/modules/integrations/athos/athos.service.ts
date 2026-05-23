@@ -1879,7 +1879,7 @@ export class AthosService {
         `SELECT
            BOOL_OR(p.tipoproduto) as tem_produto_fisico,
            BOOL_AND(NOT COALESCE(p.tipoproduto, false)) as todos_servico,
-           SUM(CASE WHEN NOT COALESCE(p.tipoproduto, false) THEN COALESCE(vi.valortotal, 0) ELSE 0 END) as valor_servicos
+           SUM(CASE WHEN NOT COALESCE(p.tipoproduto, false) THEN vi.valor * COALESCE(vi.quantidade, 1) ELSE 0 END) as valor_servicos
          FROM venda_item vi
          JOIN produto p ON p.idproduto = vi.idproduto
          WHERE vi.idvenda = $1 AND COALESCE(vi.cancelada, false) = false`,
