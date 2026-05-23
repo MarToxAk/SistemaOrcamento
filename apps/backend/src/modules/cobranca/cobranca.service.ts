@@ -199,6 +199,8 @@ export class CobrancaService {
         status: "pendente",
         linkBoleto: linkBoleto,
         pixPayload: null,
+        nomeArquivo: nomeArquivo,
+        expireAt: dto.expireAt,
         titulos: {
           createMany: {
             data: titulosFiltrados.map((t) => ({
@@ -316,9 +318,10 @@ export class CobrancaService {
     // Busca o PDF diretamente pela URL sem precisar de nova autenticação EFI
     const pdfResp = await axios.get(cobranca.linkBoleto, { responseType: "arraybuffer", timeout: 30_000 });
 
-    const nomeArquivo = cobranca.txidEfi
-      ? `${cobranca.idclienteAthos} - boleto-${cobranca.txidEfi}.pdf`
-      : `${cobranca.idclienteAthos} - boleto-${cobrancaId}.pdf`;
+    const nomeArquivo = cobranca.nomeArquivo
+      ?? (cobranca.txidEfi
+        ? `${cobranca.idclienteAthos} - boleto-${cobranca.txidEfi}.pdf`
+        : `${cobranca.idclienteAthos} - boleto-${cobrancaId}.pdf`);
     return { pdfBuffer: Buffer.from(pdfResp.data as ArrayBuffer), nomeArquivo };
   }
 

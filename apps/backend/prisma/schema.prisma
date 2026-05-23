@@ -235,6 +235,8 @@ model CobrancaBoleto {
   status         String                 @default("pendente")
   linkBoleto     String?
   pixPayload     String?
+  nomeArquivo    String?
+  expireAt       String?
   criadoEm       DateTime               @default(now())
   atualizadoEm   DateTime               @updatedAt
   titulos        CobrancaBoletoTitulo[]
