@@ -393,8 +393,10 @@ export class CobrancaService {
       }
     }
 
-    await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: "cancelado" } });
-    return { ok: true, mensagem: "Boleto cancelado. Títulos disponíveis para novo boleto." };
+    // Cancela e remove do banco — libera títulos para novo boleto
+    await this.prisma.cobrancaBoletoTitulo.deleteMany({ where: { cobrancaBoletoId: cobrancaId } });
+    await this.prisma.cobrancaBoleto.delete({ where: { id: cobrancaId } });
+    return { ok: true, mensagem: "Boleto cancelado e removido. Títulos disponíveis para novo boleto." };
   }
 
   /** Verifica status do boleto na EFI e atualiza o banco */

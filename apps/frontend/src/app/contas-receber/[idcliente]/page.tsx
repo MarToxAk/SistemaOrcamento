@@ -79,6 +79,14 @@ export default function ClienteDetalhePage({
     .filter((t) => selectedIds.has(t.idcontareceber))
     .reduce((acc, t) => acc + t.valor, 0);
 
+  // Ordenar títulos: agrupa por cobrancaId (títulos com mesmo boleto ficam juntos), depois sem boleto
+  const titulosOrdenados = [...titulos].sort((a, b) => {
+    const aId = a.boletoAtivo?.cobrancaId ?? 0;
+    const bId = b.boletoAtivo?.cobrancaId ?? 0;
+    if (aId !== bId) return bId - aId; // boletos mais recentes primeiro
+    return a.datavencimento.localeCompare(b.datavencimento);
+  });
+
   useEffect(() => {
     if (checkboxRef.current) {
       checkboxRef.current.indeterminate = someSelected;
@@ -376,12 +384,25 @@ export default function ClienteDetalhePage({
                     </tr>
                   </thead>
                   <tbody>
-                    {titulos.map((titulo) => {
+                    {titulosOrdenados.map((titulo, idx) => {
                       const vencido = new Date(titulo.datavencimento) < new Date();
                       const temNf = titulo.tipoNf != null;
                       const temBoleto = titulo.boletoAtivo != null;
+                      const prevTitulo = titulosOrdenados[idx - 1];
+                      const isNovoGrupo = temBoleto &&
+                        titulo.boletoAtivo?.cobrancaId !== prevTitulo?.boletoAtivo?.cobrancaId;
+                      const isUltimoDoGrupo = temBoleto && (
+                        !titulosOrdenados[idx + 1]?.boletoAtivo ||
+                        titulosOrdenados[idx + 1]?.boletoAtivo?.cobrancaId !== titulo.boletoAtivo?.cobrancaId
+                      );
                       return (
-                        <tr key={titulo.idcontareceber} className={temBoleto ? "table-warning opacity-75" : ""}>
+                        <tr key={titulo.idcontareceber}
+                          className={temBoleto ? "table-warning" : ""}
+                          style={temBoleto ? {
+                            borderLeft: isNovoGrupo ? "3px solid #ffc107" : "3px solid #ffc107",
+                            borderBottom: isUltimoDoGrupo ? "2px solid #e0a800" : undefined,
+                          } : {}}
+                        >
                           <td>
                             <input
                               type="checkbox"
@@ -444,16 +465,6 @@ export default function ClienteDetalhePage({
                                         <i className="bi bi-x-circle" />
                                       </button>
                                     )}
-                                    <button type="button"
-                                      className="btn btn-xs btn-outline-secondary" style={{fontSize:"0.7rem",padding:"1px 5px"}}
-                                      title="Remover do banco (cleanup)"
-                                      onClick={async () => {
-                                        if (!confirm("Remover registro do boleto? Os títulos ficarão disponíveis para novo boleto.")) return;
-                                        await fetch(`/api/cobranca/boleto/${titulo.boletoAtivo!.cobrancaId}`, { method: "DELETE" });
-                                        window.location.reload();
-                                      }}>
-                                      <i className="bi bi-trash" />
-                                    </button>
                                   </div>
                                 </div>
                               )}
