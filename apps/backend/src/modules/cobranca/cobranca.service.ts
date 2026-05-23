@@ -190,7 +190,10 @@ export class CobrancaService {
       throw new InternalServerErrorException("Não foi possível gerar o boleto na EFI.");
     }
 
-    // Passo 7: Salvar no Prisma com nested write
+    // Passo 7: Gerar nome do arquivo antes de salvar
+    const nomeArquivo = `${dto.idclienteAthos} - ${nomeCliente.trim().toUpperCase()} ${dto.expireAt}.pdf`;
+
+    // Passo 8: Salvar no Prisma com nested write
     const boleto = await this.prisma.cobrancaBoleto.create({
       data: {
         txidEfi: String(chargeId),
@@ -211,9 +214,6 @@ export class CobrancaService {
         },
       },
     });
-
-    // Passo 8: Gerar nome do arquivo
-    const nomeArquivo = `${dto.idclienteAthos} - ${nomeCliente.trim().toUpperCase()} ${dto.expireAt}.pdf`;
 
     // Passo 9: Retornar resposta
     return {
