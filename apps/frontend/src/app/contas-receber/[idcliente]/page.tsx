@@ -299,12 +299,16 @@ export default function ClienteDetalhePage({
       try {
         const res = await fetch(`/api/athos/venda/${idvenda}/tipo-produto`, { cache: "no-store" });
         if (res.ok) {
-          const data = (await res.json()) as { temProdutoFisico?: boolean; valorServicos?: number | null };
+          const data = (await res.json()) as { temProdutoFisico?: boolean; todosServico?: boolean; valorServicos?: number | null };
           setNfseAvisoFisico(data.temProdutoFisico ?? false);
-          // Quando há produto físico e o backend retornou o valor de serviços,
-          // pré-preencher apenas com a parcela de serviços (descontando produtos)
-          if (data.temProdutoFisico && data.valorServicos != null && data.valorServicos > 0) {
-            setNfseValor(data.valorServicos.toFixed(2));
+          if (data.temProdutoFisico) {
+            if (data.valorServicos != null && data.valorServicos > 0) {
+              // Venda mista: pré-preenche só com a parcela de serviços
+              setNfseValor(data.valorServicos.toFixed(2));
+            } else {
+              // Venda 100% física: sem serviços — bloqueia emissão zerando o valor
+              setNfseValor("0");
+            }
           }
         }
       } catch {
@@ -1016,7 +1020,11 @@ export default function ClienteDetalhePage({
                         Pré-preenchido com a soma dos títulos. Você pode editar antes de confirmar.
                       </div>
                       {valorInvalido && nfseValor !== "" && (
-                        <div className="invalid-feedback">Informe um valor maior que zero.</div>
+                        <div className="invalid-feedback">
+                          {nfseAvisoFisico && nfseValor === "0"
+                            ? "Esta venda contém apenas produtos físicos. NFS-e só pode ser emitida para serviços."
+                            : "Informe um valor maior que zero."}
+                        </div>
                       )}
                     </div>
 
