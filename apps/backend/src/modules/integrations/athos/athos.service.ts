@@ -1863,9 +1863,10 @@ export class AthosService {
 
   /**
    * Verifica o tipo de produto de uma venda via venda_item JOIN produto.
-   * D-04: query validada no banco Athos.
+   * tipoproduto=true → produto físico (não entra na NFS-e); tipoproduto=false → serviço.
    * D-02: resultado NULL (sem itens) → { temProdutoFisico: false, todosServico: true }
    * Pitfall 4: aggregate functions retornam NULL para conjunto vazio — tratado com ?? false / ?? true
+   * Nota: filtro vi.cancelada removido — coluna pode não existir ou ter tipo não-boolean no Athos.
    */
   async verificarTipoProdutoVenda(idvenda: number): Promise<{
     temProdutoFisico: boolean;
@@ -1882,7 +1883,7 @@ export class AthosService {
            SUM(CASE WHEN NOT COALESCE(p.tipoproduto, false) THEN COALESCE(vi.vendavalorfinalitem, 0) ELSE 0 END) as valor_servicos
          FROM venda_item vi
          JOIN produto p ON p.idproduto = vi.idproduto
-         WHERE vi.idvenda = $1 AND COALESCE(vi.cancelada, false) = false`,
+         WHERE vi.idvenda = $1`,
         [idvenda],
       );
       const row = result.rows[0];
@@ -1892,6 +1893,11 @@ export class AthosService {
         todosServico: row?.todos_servico ?? true,
         valorServicos: row?.valor_servicos != null ? Number(row.valor_servicos) : null,
       };
+    } catch (err) {
+      this.logger.warn(
+        `verificarTipoProdutoVenda idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return { temProdutoFisico: false, todosServico: true, valorServicos: null };
     } finally {
       client.release();
     }
