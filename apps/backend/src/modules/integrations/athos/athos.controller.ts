@@ -312,4 +312,22 @@ export class AthosController {
     }
     return dados;
   }
+
+  @ApiOperation({ summary: "Verificar tipo de produto de uma venda (serviço vs físico)" })
+  @ApiParam({ name: "idvenda", example: "12345" })
+  @ApiOkResponse({ description: "{ temProdutoFisico: boolean, todosServico: boolean }" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("venda/:idvenda/tipo-produto")
+  async verificarTipoProdutoVenda(
+    @Param("idvenda") idvenda: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idvenda);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException("idvenda inválido");
+    }
+    return this.athosService.verificarTipoProdutoVenda(id);
+  }
 }
