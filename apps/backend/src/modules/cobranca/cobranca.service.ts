@@ -169,12 +169,17 @@ export class CobrancaService {
         { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } },
       );
 
-      chargeId = resp.data?.data?.charge_id as number;
-      linkBoleto = resp.data?.data?.link as string;
-      barcode = resp.data?.data?.barcode as string;
+      // EFI /v1/charge/one-step retorna data como array: { data: [{ charge_id, pdf: { charge: url }, barcode, ... }] }
+      const item = Array.isArray(resp.data?.data) ? resp.data.data[0] : resp.data?.data;
+      chargeId = item?.charge_id as number;
+      // PDF URL direto em pdf.charge (ex: https://download.sejaefi.com.br/...)
+      linkBoleto = (item?.pdf?.charge ?? item?.pdf ?? item?.link) as string;
+      barcode = item?.barcode as string;
+
+      this.logger.log(`EFI response item: ${JSON.stringify({ chargeId, linkBoleto: linkBoleto?.slice(0, 60), barcode: barcode?.slice(0, 20) })}`);
 
       if (!chargeId) throw new Error("charge_id não retornado pela EFI");
-      if (!linkBoleto) throw new Error("link não retornado pela EFI");
+      if (!linkBoleto) throw new Error("PDF URL não retornada pela EFI (pdf.charge ausente)");
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       const detail = (e as { response?: { data?: unknown }; message?: string })?.response?.data ??
@@ -303,30 +308,17 @@ export class CobrancaService {
     if (!cobranca) {
       throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
     }
-    if (!cobranca.txidEfi) {
-      throw new BadRequestException(`Cobrança ${cobrancaId} ainda não possui chargeId EFI.`);
+    if (!cobranca.linkBoleto) {
+      throw new BadRequestException(`Cobrança ${cobrancaId} não possui URL do PDF armazenada.`);
     }
 
-    const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
-    const clientId = this.getRequiredConfig("EFI_CLIENT_ID");
-    const clientSecret = this.getRequiredConfig("EFI_CLIENT_SECRET");
-    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-    const cobrancaClient = axios.create({ baseURL: baseUrl, timeout: 30_000 });
+    // URL do PDF já salva em linkBoleto (ex: https://download.sejaefi.com.br/...)
+    // Busca o PDF diretamente pela URL sem precisar de nova autenticação EFI
+    const pdfResp = await axios.get(cobranca.linkBoleto, { responseType: "arraybuffer", timeout: 30_000 });
 
-    const authResp = await cobrancaClient.post(
-      "/v1/authorize",
-      { grant_type: "client_credentials" },
-      { headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" } },
-    );
-    const token: string = authResp.data?.access_token;
-    if (!token) throw new InternalServerErrorException("Falha ao autenticar na EFI para download do PDF.");
-
-    const pdfResp = await cobrancaClient.get(
-      `/v1/charge/${cobranca.txidEfi}/billet/pdf`,
-      { headers: { Authorization: `Bearer ${token}` }, responseType: "arraybuffer" },
-    );
-
-    const nomeArquivo = `${cobranca.idclienteAthos} - boleto-${cobranca.txidEfi}.pdf`;
+    const nomeArquivo = cobranca.txidEfi
+      ? `${cobranca.idclienteAthos} - boleto-${cobranca.txidEfi}.pdf`
+      : `${cobranca.idclienteAthos} - boleto-${cobrancaId}.pdf`;
     return { pdfBuffer: Buffer.from(pdfResp.data as ArrayBuffer), nomeArquivo };
   }
 
