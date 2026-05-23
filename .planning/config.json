@@ -11,7 +11,8 @@
       "plan_check": true,
       "code_review": true,
       "verification": true
-    }
+    },
+    "_auto_chain_active": false
   },
   "project": {
     "name": "Sistema de Orçamento BomCusto",

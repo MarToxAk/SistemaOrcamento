@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.1
-milestone_name: Cobranca e Fiscal do Cliente
+milestone_name: Cobrança e Fiscal do Cliente
 current_phase: 30
 status: executing
-last_updated: "2026-05-23T18:00:11.370Z"
+last_updated: "2026-05-23T19:17:42.024Z"
 last_activity: 2026-05-23 -- Phase 30 execution started
 progress:
-  total_phases: 4
-  completed_phases: 2
-  total_plans: 8
-  completed_plans: 4
-  percent: 50
+  total_phases: 5
+  completed_phases: 3
+  total_plans: 10
+  completed_plans: 9
+  percent: 60
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
