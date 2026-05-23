@@ -236,9 +236,9 @@ Plans:
 
 Plans:
 - [x] 30-01-PLAN.md — Wave 1: Schema Prisma idvenda + migration + NfseService.emitirParaContaReceber() + AthosService.verificarTipoProdutoVenda() + GET /athos/venda/:idvenda/tipo-produto
-- [ ] 30-02-PLAN.md — Wave 2: CobrancaService.emitirNfse() + CobrancaController POST /cobranca/nfse + EmitirNfseCobrancaDto + CobrancaModule com NfseModule
+- [x] 30-02-PLAN.md — Wave 2: CobrancaService.emitirNfse() + CobrancaController POST /cobranca/nfse + EmitirNfseCobrancaDto + CobrancaModule com NfseModule
 - [ ] 30-03-PLAN.md — Wave 3: Route Handlers Next.js + Modal NFS-e 4-estados em /contas-receber/[idcliente] (checkpoint humano)
-- [ ] 30-04-PLAN.md — Wave 2 paralelo: NfseService.emitir() salva idvenda + aviso duplicidade em /orcamento/[id]
+- [x] 30-04-PLAN.md — Wave 2 paralelo: NfseService.emitir() salva idvenda + aviso duplicidade em /orcamento/[id]
 **UI hint**: yes
 
 ### Phase 31: Histórico NFS-e + Consulta NF Athos
@@ -258,7 +258,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 28. Página de Detalhe do Cliente + Schema Prisma | 2/2 | Complete | 2026-05-22 |
 | 29. Boleto Consolidado via EFI Bank | 1/2 | In Progress | - |
-| 30. Emissão de NFS-e a partir de Títulos | 1/4 | In Progress|  |
+| 30. Emissão de NFS-e a partir de Títulos | 3/4 | In Progress|  |
 | 31. Histórico NFS-e + Consulta NF Athos | 0/? | Not started | - |
 
 ### Coverage
