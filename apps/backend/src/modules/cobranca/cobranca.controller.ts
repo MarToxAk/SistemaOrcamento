@@ -5,6 +5,7 @@ type ExpressResponse = any;
 import { Public } from "../security/public.decorator";
 import { CobrancaService } from "./cobranca.service";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
+import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
 
 @Controller("cobranca")
 export class CobrancaController {
@@ -19,6 +20,15 @@ export class CobrancaController {
   @Post("boleto")
   async criarBoleto(@Body() dto: CriarBoletoDto) {
     return this.cobrancaService.criarBoleto(dto);
+  }
+
+  /**
+   * Emite NFS-e para os títulos selecionados via iiBrasil.
+   * Requer autenticação via x-internal-api-key (InternalAuthGuard global).
+   */
+  @Post("nfse")
+  async emitirNfse(@Body() dto: EmitirNfseCobrancaDto) {
+    return this.cobrancaService.emitirNfse(dto);
   }
 
   /**
