@@ -575,14 +575,51 @@ export class CobrancaService {
     }));
   }
 
-  /** Remove registro NfseEmitida (e seus títulos) do nosso banco para permitir re-emissão */
-  async cancelarNfseEmitida(nfseEmitidaId: number): Promise<{ ok: boolean; mensagem: string }> {
+  /**
+   * Cancela NFS-e na prefeitura (SOAP CancelarNfse) e remove todos os registros
+   * com o mesmo numeroNfse do nosso banco — segurança: notas com mesmo número cancelam juntas.
+   */
+  async cancelarNfseEmitida(nfseEmitidaId: number): Promise<{ ok: boolean; mensagem: string; soapErros?: string[] }> {
     const nfse = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
     if (!nfse) throw new BadRequestException(`NFS-e emitida ${nfseEmitidaId} não encontrada.`);
-    await this.prisma.nfseEmitidaTitulo.deleteMany({ where: { nfseEmitidaId } });
-    await this.prisma.nfseEmitida.delete({ where: { id: nfseEmitidaId } });
-    this.logger.log(`NfseEmitida ${nfseEmitidaId} removida do banco (NFS-e #${nfse.numeroNfse ?? "?"}).`);
-    return { ok: true, mensagem: `Registro da NFS-e #${nfse.numeroNfse ?? nfseEmitidaId} removido. Títulos disponíveis para nova emissão.` };
+
+    const numeroNfse = nfse.numeroNfse;
+    let soapErros: string[] = [];
+
+    // 1. Cancelar na prefeitura via SOAP (se tiver número emitido)
+    if (numeroNfse) {
+      try {
+        const resultado = await this.nfseService.cancelarNfse(numeroNfse);
+        soapErros = resultado.erros;
+        if (!resultado.cancelada) {
+          throw new BadRequestException(
+            `Falha ao cancelar NFS-e #${numeroNfse} na prefeitura: ${resultado.erros.join(" | ") || "erro desconhecido"}`,
+          );
+        }
+      } catch (err) {
+        if (err instanceof BadRequestException) throw err;
+        throw new BadRequestException(
+          `Erro ao comunicar com a prefeitura: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // 2. Remover TODOS os registros com o mesmo numeroNfse do nosso banco (segurança)
+    const registros = numeroNfse
+      ? await this.prisma.nfseEmitida.findMany({ where: { numeroNfse }, select: { id: true } })
+      : [{ id: nfseEmitidaId }];
+
+    for (const r of registros) {
+      await this.prisma.nfseEmitidaTitulo.deleteMany({ where: { nfseEmitidaId: r.id } });
+      await this.prisma.nfseEmitida.delete({ where: { id: r.id } });
+    }
+
+    this.logger.log(`NFS-e #${numeroNfse ?? "?"} cancelada: ${registros.length} registro(s) removido(s).`);
+    return {
+      ok: true,
+      mensagem: `NFS-e #${numeroNfse ?? nfseEmitidaId} cancelada na prefeitura e ${registros.length} registro(s) removido(s) do banco.`,
+      soapErros: soapErros.length > 0 ? soapErros : undefined,
+    };
   }
 
   private getRequiredConfig(key: string): string {

@@ -251,8 +251,8 @@ export class NfseService {
     }
   }
 
-  private async enviarSoap(cabecalho: string, dados: string): Promise<string> {
-    this.logger.log(`[SOAP] Endpoint: ${this.ENDPOINT}`);
+  private async enviarSoap(cabecalho: string, dados: string, metodo = "GerarNfse"): Promise<string> {
+    this.logger.log(`[SOAP] Endpoint: ${this.ENDPOINT} metodo=${metodo}`);
     this.logger.log(`[SOAP] CNPJ: ${this.getCnpjPrestador()} | Token: ${this.getToken().slice(0, 6)}...`);
     this.logger.log(`[SOAP] nfseDadosMsg:\n${dados}`);
 
@@ -264,7 +264,7 @@ export class NfseService {
     );
 
     return new Promise<string>((resolve, reject) => {
-      (client as any).GerarNfse(
+      (client as any)[metodo](
         { nfseCabecMsg: cabecalho, nfseDadosMsg: dados },
         (err: any, _res: any, rawResponse: string, _soapHeader: any, rawRequest: string) => {
           if (rawRequest) {
@@ -938,6 +938,49 @@ export class NfseService {
       codigoVerificacao,
       link: linkNfse,
     };
+  }
+
+  /**
+   * Cancela NFS-e na prefeitura via SOAP CancelarNfse (ABRASF 2.04).
+   * CodigoCancelamento: 1 = Erro na emissão (padrão).
+   */
+  async cancelarNfse(numeroNfse: string, codigoCancelamento = "1"): Promise<{ cancelada: boolean; erros: string[] }> {
+    const infXml = `\t<InfPedidoCancelamento Id="cancel${numeroNfse}">
+\t\t<IdentificacaoNfse>
+\t\t\t<Numero>${numeroNfse}</Numero>
+\t\t\t<CpfCnpj>
+\t\t\t\t<Cnpj>${this.getCnpjPrestador()}</Cnpj>
+\t\t\t</CpfCnpj>
+\t\t\t<InscricaoMunicipal>${this.getInscricaoMunicipal()}</InscricaoMunicipal>
+\t\t\t<CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
+\t\t</IdentificacaoNfse>
+\t\t<CodigoCancelamento>${codigoCancelamento}</CodigoCancelamento>
+\t</InfPedidoCancelamento>`;
+
+    const integridade = this.computeIntegridade(infXml);
+    const dados = `<?xml version="1.0" encoding="UTF-8"?>
+<CancelarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  <Pedido>
+${infXml}
+  </Pedido>
+  <Integridade>${integridade}</Integridade>
+</CancelarNfseEnvio>`;
+
+    this.logger.log(`Cancelando NFS-e #${numeroNfse} — CodigoCancelamento=${codigoCancelamento}`);
+
+    const responseXml = await this.enviarSoap(this.buildCabecalho(), dados, "CancelarNfse");
+    const erros = this.parseErros(responseXml);
+
+    const decoded = this.decodeOutputXml(responseXml);
+    const cancelada = decoded.includes("<NfseCancelamento>") || decoded.includes("Cancelamento") || erros.length === 0;
+
+    if (erros.length > 0 && !cancelada) {
+      this.logger.warn(`CancelarNfse #${numeroNfse} retornou erros: ${erros.join(" | ")}`);
+    } else {
+      this.logger.log(`NFS-e #${numeroNfse} cancelada com sucesso na prefeitura`);
+    }
+
+    return { cancelada, erros };
   }
 
   async emitirTeste() {
