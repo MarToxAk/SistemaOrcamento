@@ -251,6 +251,7 @@ export class CobrancaService {
     numeroNfse: string;
     numeroRps: number;
     valor: number;
+    linkNfse: string | null;
   }> {
     // Passo 1: Buscar todos os títulos do cliente e filtrar pelos IDs solicitados
     const todosTitulos = await this.athosService.buscarTitulosClienteContasReceber(dto.idclienteAthos);
@@ -313,12 +314,19 @@ export class CobrancaService {
       },
     });
 
+    // Salvar linkNfse via raw SQL — coluna adicionada em migração; Prisma client pode estar
+    // desatualizado em ambientes onde o DLL engine está em uso e prisma generate não foi rodado.
+    if (resultado.link) {
+      await this.prisma.$executeRaw`UPDATE "NfseEmitida" SET "linkNfse" = ${resultado.link} WHERE id = ${nfseEmitida.id}`;
+    }
+
     // Passo 5: Retornar resposta
     return {
       nfseEmitidaId: nfseEmitida.id,
       numeroNfse: resultado.numero,
       numeroRps: resultado.numeroRps,
       valor: dto.valor,
+      linkNfse: resultado.link ?? null,
     };
   }
 

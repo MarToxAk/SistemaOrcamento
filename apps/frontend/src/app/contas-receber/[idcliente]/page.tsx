@@ -81,6 +81,7 @@ export default function ClienteDetalhePage({
     numeroNfse: string;
     numeroRps: number;
     valor: number;
+    linkNfse?: string | null;
   } | null>(null);
   const [nfseErro, setNfseErro] = useState("");
   const [nfseErroDetalhe, setNfseErroDetalhe] = useState("");
@@ -1180,6 +1181,18 @@ export default function ClienteDetalhePage({
                       </div>
                     </div>
                   </div>
+                  {nfseResult.linkNfse && (
+                    <div className="text-center">
+                      <a
+                        href={nfseResult.linkNfse}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-outline-primary btn-sm"
+                      >
+                        <i className="bi bi-download me-1" />Baixar NFS-e PDF
+                      </a>
+                    </div>
+                  )}
                 </div>
                 <div className="nfse-modal-footer">
                   <button
