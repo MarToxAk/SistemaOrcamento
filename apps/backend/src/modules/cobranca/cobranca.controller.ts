@@ -40,6 +40,18 @@ export class CobrancaController {
     return this.cobrancaService.buscarTitulosComBoletoAtivo(body.idcontasReceber ?? []);
   }
 
+  /** Retorna quais idcontareceber possuem NFS-e emitida no nosso banco */
+  @Post("nfse/titulos-em-uso")
+  async nfseTitulosEmUso(@Body() body: { idcontasReceber: number[] }) {
+    return this.cobrancaService.buscarNfseEmitidaParaTitulos(body.idcontasReceber ?? []);
+  }
+
+  /** Remove registro NfseEmitida do banco para permitir re-emissão */
+  @Delete("nfse/:id")
+  async cancelarNfse(@Param("id", ParseIntPipe) id: number) {
+    return this.cobrancaService.cancelarNfseEmitida(id);
+  }
+
   /** Lista boletos de um cliente com títulos vinculados */
   @Get("boleto/cliente/:idcliente")
   async boletosCliente(@Param("idcliente", ParseIntPipe) idcliente: number) {

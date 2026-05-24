@@ -553,6 +553,38 @@ export class CobrancaService {
     }));
   }
 
+  /** Retorna quais idcontareceber já possuem NFS-e emitida no nosso banco */
+  async buscarNfseEmitidaParaTitulos(idcontasReceber: number[]): Promise<Array<{
+    idcontareceber: number;
+    nfseEmitidaId: number;
+    numeroNfse: string | null;
+  }>> {
+    if (idcontasReceber.length === 0) return [];
+    const rows = await this.prisma.nfseEmitidaTitulo.findMany({
+      where: { idcontareceber: { in: idcontasReceber } },
+      select: {
+        idcontareceber: true,
+        nfseEmitidaId: true,
+        nfseEmitida: { select: { numeroNfse: true } },
+      },
+    });
+    return rows.map((r) => ({
+      idcontareceber: r.idcontareceber,
+      nfseEmitidaId: r.nfseEmitidaId,
+      numeroNfse: r.nfseEmitida.numeroNfse ?? null,
+    }));
+  }
+
+  /** Remove registro NfseEmitida (e seus títulos) do nosso banco para permitir re-emissão */
+  async cancelarNfseEmitida(nfseEmitidaId: number): Promise<{ ok: boolean; mensagem: string }> {
+    const nfse = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
+    if (!nfse) throw new BadRequestException(`NFS-e emitida ${nfseEmitidaId} não encontrada.`);
+    await this.prisma.nfseEmitidaTitulo.deleteMany({ where: { nfseEmitidaId } });
+    await this.prisma.nfseEmitida.delete({ where: { id: nfseEmitidaId } });
+    this.logger.log(`NfseEmitida ${nfseEmitidaId} removida do banco (NFS-e #${nfse.numeroNfse ?? "?"}).`);
+    return { ok: true, mensagem: `Registro da NFS-e #${nfse.numeroNfse ?? nfseEmitidaId} removido. Títulos disponíveis para nova emissão.` };
+  }
+
   private getRequiredConfig(key: string): string {
     const value = this.config.get<string>(key)?.trim();
     if (!value) {

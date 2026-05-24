@@ -25,6 +25,7 @@ interface TituloReceber {
   tipoNf?: "NF-e" | "NFS-e" | null;
   numeroNf?: string | null;
   boletoAtivo?: { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null } | null;
+  nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null } | null;
 }
 
 function formatBRL(value: number): string {
@@ -160,13 +161,33 @@ export default function ClienteDetalhePage({
                   }
                 } catch { /* silently ignore */ }
 
+                // Verificar NFS-e emitidas no nosso banco para os mesmos títulos
+                let nfseMap = new Map<number, { nfseEmitidaId: number; numeroNfse: string | null }>();
+                try {
+                  const nfseRes = await fetch("/api/cobranca/nfse/titulos-em-uso", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ idcontasReceber: ids }),
+                    cache: "no-store",
+                  });
+                  if (nfseRes.ok) {
+                    const nfseData = (await nfseRes.json()) as Array<{ idcontareceber: number; nfseEmitidaId: number; numeroNfse: string | null }>;
+                    nfseMap = new Map(nfseData.map((n) => [n.idcontareceber, { nfseEmitidaId: n.nfseEmitidaId, numeroNfse: n.numeroNfse }]));
+                  }
+                } catch { /* silently ignore */ }
+
                 setTitulos(data.map((t) => {
                   const nf = nfMap.get(t.idcontareceber);
+                  const nfseAtivo = nfseMap.get(t.idcontareceber) ?? null;
+                  // NFS-e do nosso banco tem prioridade sobre o campo lotenfse do Athos
+                  const tipoNf = nfseAtivo ? "NFS-e" : (nf?.tipoNf ?? null);
+                  const numeroNf = nfseAtivo ? (nfseAtivo.numeroNfse ?? null) : (nf?.numeroNf ?? null);
                   return {
                     ...t,
-                    tipoNf: nf?.tipoNf ?? null,
-                    numeroNf: nf?.numeroNf ?? null,
+                    tipoNf,
+                    numeroNf,
                     boletoAtivo: boletoMap.get(t.idcontareceber) ?? null,
+                    nfseAtivo,
                   };
                 }));
               return;
@@ -648,9 +669,35 @@ export default function ClienteDetalhePage({
                               <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
                               <td>
                                 {titulo.tipoNf ? (
-                                  <span className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}
-                                    title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
-                                    {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
+                                  <span className="d-inline-flex align-items-center gap-1">
+                                    <span className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}
+                                      title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
+                                      {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
+                                    </span>
+                                    {titulo.nfseAtivo && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-link btn-sm p-0 text-danger"
+                                        title="Remover NFS-e do banco (permite re-emissão)"
+                                        style={{ lineHeight: 1 }}
+                                        onClick={async () => {
+                                          if (!confirm(`Remover registro da NFS-e #${titulo.nfseAtivo!.numeroNfse ?? titulo.nfseAtivo!.nfseEmitidaId} do banco?\n\nIsso NÃO cancela a nota na prefeitura, apenas libera o título para nova emissão.`)) return;
+                                          try {
+                                            const res = await fetch(`/api/cobranca/nfse/${titulo.nfseAtivo!.nfseEmitidaId}`, { method: "DELETE" });
+                                            if (!res.ok) {
+                                              const d = await res.json().catch(() => ({}));
+                                              alert((d as { error?: string }).error ?? "Erro ao remover NFS-e.");
+                                            } else {
+                                              setRefetchKey((k) => k + 1);
+                                            }
+                                          } catch {
+                                            alert("Falha na conexão.");
+                                          }
+                                        }}
+                                      >
+                                        <i className="bi bi-x-circle" />
+                                      </button>
+                                    )}
                                   </span>
                                 ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
                               </td>
