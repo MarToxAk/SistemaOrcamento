@@ -22,7 +22,7 @@ interface TituloReceber {
   idvenda: number | null;
   dataemissao: string | null;
   numeroordem: string | null;
-  tipoNf?: "NF-e" | "NFS-e" | null;
+  tipoNf?: string | null;
   numeroNf?: string | null;
   boletoAtivo?: { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null } | null;
   nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null } | null;
@@ -34,6 +34,13 @@ function formatBRL(value: number): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+function badgeClassName(tipoNf?: string | null): string {
+  if (!tipoNf) return "";
+  if (tipoNf === "NF-e") return "bg-primary";
+  if (tipoNf === "NFS-e") return "bg-success";
+  return "bg-secondary"; // combined or other labels
 }
 
 export default function ClienteDetalhePage({
@@ -144,7 +151,7 @@ export default function ClienteDetalhePage({
               cache: "no-store",
             });
             if (nfRes.ok) {
-              const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: "NF-e" | "NFS-e" | null; numeroNf: string | null }>;
+              const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: string | null; numeroNf: string | null }>;
               const nfMap = new Map(nfData.map((n) => [n.idcontareceber, { tipoNf: n.tipoNf, numeroNf: n.numeroNf }]));
               // Verificar boletos ativos para os mesmos títulos
                 let boletoMap = new Map<number, { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null }>();
@@ -179,9 +186,22 @@ export default function ClienteDetalhePage({
                 setTitulos(data.map((t) => {
                   const nf = nfMap.get(t.idcontareceber);
                   const nfseAtivo = nfseMap.get(t.idcontareceber) ?? null;
-                  // NFS-e do nosso banco tem prioridade sobre o campo lotenfse do Athos
-                  const tipoNf = nfseAtivo ? "NFS-e" : (nf?.tipoNf ?? null);
-                  const numeroNf = nfseAtivo ? (nfseAtivo.numeroNfse ?? null) : (nf?.numeroNf ?? null);
+                  // Se houver NFS-e no nosso banco E NF-e/Athos, mostrar ambos combinados
+                  let tipoNf: string | null = null;
+                  let numeroNf: string | null = null;
+                  if (nfseAtivo && nf?.tipoNf) {
+                    tipoNf = `${nf.tipoNf} / NFS-e`;
+                    const nums: string[] = [];
+                    if (nf.numeroNf) nums.push(nf.numeroNf);
+                    if (nfseAtivo.numeroNfse) nums.push(nfseAtivo.numeroNfse);
+                    numeroNf = nums.length > 0 ? nums.join(", ") : null;
+                  } else if (nfseAtivo) {
+                    tipoNf = "NFS-e";
+                    numeroNf = nfseAtivo.numeroNfse ?? null;
+                  } else {
+                    tipoNf = nf?.tipoNf ?? null;
+                    numeroNf = nf?.numeroNf ?? null;
+                  }
                   return {
                     ...t,
                     tipoNf,
@@ -614,9 +634,9 @@ export default function ClienteDetalhePage({
                                     <td className="small fw-semibold">{formatBRL(t.valor)}</td>
                                     <td>
                                       {t.tipoNf ? (
-                                        <span className={`badge ${t.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}>
-                                          {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
-                                        </span>
+                                            <span className={`badge ${badgeClassName(t.tipoNf)}`}>
+                                              {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
+                                            </span>
                                       ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
                                     </td>
                                   </tr>
@@ -670,7 +690,7 @@ export default function ClienteDetalhePage({
                               <td>
                                 {titulo.tipoNf ? (
                                   <span className="d-inline-flex align-items-center gap-1">
-                                    <span className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}
+                                    <span className={`badge ${badgeClassName(titulo.tipoNf)}`}
                                       title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
                                       {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
                                     </span>
