@@ -69,6 +69,26 @@ export class CobrancaService {
 
     // Passo 4: Validar NF e calcular total
     const nfInfo = await this.athosService.verificarNFTitulos(dto.idcontasReceber);
+
+    // Complementar com NFS-e emitidas pelo nosso sistema (não refletidas no Athos)
+    const semNfAthos = nfInfo.filter((n) => n.tipoNf === null);
+    if (semNfAthos.length > 0) {
+      const nfseNossas = await this.prisma.nfseEmitidaTitulo.findMany({
+        where: {
+          idcontareceber: { in: semNfAthos.map((n) => n.idcontareceber) },
+          nfseEmitida: { numeroNfse: { not: null } },
+        },
+        select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true } } },
+      });
+      const cobertosPorNfse = new Map(nfseNossas.map((t) => [t.idcontareceber, t.nfseEmitida.numeroNfse]));
+      for (const item of nfInfo) {
+        if (item.tipoNf === null && cobertosPorNfse.has(item.idcontareceber)) {
+          item.tipoNf = "NFS-e";
+          item.numeroNf = cobertosPorNfse.get(item.idcontareceber) ?? null;
+        }
+      }
+    }
+
     const semNf = nfInfo.filter((n) => n.tipoNf === null);
     if (semNf.length > 0) {
       throw new BadRequestException(
@@ -585,16 +605,23 @@ export class CobrancaService {
 
     const numeroNfse = nfse.numeroNfse;
     let soapErros: string[] = [];
+    let soapOk = !numeroNfse;
 
-    // 1. Cancelar na prefeitura via SOAP (se tiver número emitido)
+    // 1. Tentar cancelar na prefeitura via SOAP (se tiver número emitido)
     if (numeroNfse) {
       try {
         const resultado = await this.nfseService.cancelarNfse(numeroNfse);
         soapErros = resultado.erros;
-        if (!resultado.cancelada) {
+        if (resultado.soapIndisponivel) {
+          // Endpoint IIBR não implementa CancelarNfse neste município.
+          // Prossegue com remoção local — usuário deve confirmar cancelamento na prefeitura.
+          this.logger.warn(`SOAP CancelarNfse indisponível para #${numeroNfse}; removendo apenas do banco.`);
+        } else if (!resultado.cancelada) {
           throw new BadRequestException(
             `Falha ao cancelar NFS-e #${numeroNfse} na prefeitura: ${resultado.erros.join(" | ") || "erro desconhecido"}`,
           );
+        } else {
+          soapOk = true;
         }
       } catch (err) {
         if (err instanceof BadRequestException) throw err;
@@ -614,10 +641,14 @@ export class CobrancaService {
       await this.prisma.nfseEmitida.delete({ where: { id: r.id } });
     }
 
-    this.logger.log(`NFS-e #${numeroNfse ?? "?"} cancelada: ${registros.length} registro(s) removido(s).`);
+    this.logger.log(`NFS-e #${numeroNfse ?? "?"} removida: ${registros.length} registro(s).`);
+
+    const aviso = !soapOk && numeroNfse
+      ? " Atenção: cancelamento na prefeitura não foi confirmado via SOAP — verifique manualmente se necessário."
+      : "";
     return {
       ok: true,
-      mensagem: `NFS-e #${numeroNfse ?? nfseEmitidaId} cancelada na prefeitura e ${registros.length} registro(s) removido(s) do banco.`,
+      mensagem: `NFS-e #${numeroNfse ?? nfseEmitidaId}: ${registros.length} registro(s) removido(s) do banco.${aviso}`,
       soapErros: soapErros.length > 0 ? soapErros : undefined,
     };
   }
