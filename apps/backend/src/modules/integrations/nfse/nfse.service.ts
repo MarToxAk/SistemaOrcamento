@@ -957,13 +957,12 @@ export class NfseService {
 \t\t<CodigoCancelamento>${codigoCancelamento}</CodigoCancelamento>
 \t</InfPedidoCancelamento>`;
 
-    const integridade = this.computeIntegridade(infXml);
+    // CancelarNfseEnvio não usa <Integridade> — elemento exclusivo de GerarNfseEnvio
     const dados = `<?xml version="1.0" encoding="UTF-8"?>
 <CancelarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
   <Pedido>
 ${infXml}
   </Pedido>
-  <Integridade>${integridade}</Integridade>
 </CancelarNfseEnvio>`;
 
     this.logger.log(`Cancelando NFS-e #${numeroNfse} — CodigoCancelamento=${codigoCancelamento}`);
