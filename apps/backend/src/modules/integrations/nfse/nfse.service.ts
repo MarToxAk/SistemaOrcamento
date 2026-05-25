@@ -832,6 +832,8 @@ export class NfseService {
     valor: number;
     servicoCodigo?: string;
     discriminacao?: string;
+    idvenda?: number;
+    idcontareceber?: number;
   }): Promise<{
     numero: string;
     numeroRps: number;
@@ -871,7 +873,13 @@ export class NfseService {
       this.logger.log(`[RPS] emitirParaContaReceber proximoRPS=${rpsNumero} serie=${rpsSerie}`);
     } else {
       // AUX API indisponível — usa idvenda ou idcontareceber como RPS (mesmo padrão do fluxo de orçamentos)
-      rpsNumero = input.idvenda ?? input.idcontareceber;
+      if (typeof input.idvenda === "number") {
+        rpsNumero = input.idvenda;
+      } else if (typeof input.idcontareceber === "number") {
+        rpsNumero = input.idcontareceber;
+      } else {
+        throw new Error("idvenda ou idcontareceber deve ser informado quando a API auxiliar está indisponível");
+      }
       rpsSerie  = this.SERIE_RPS;
       this.logger.warn(`[RPS] AUX indisponível; usando idvenda/idcontareceber=${rpsNumero} como RPS fallback`);
     }
