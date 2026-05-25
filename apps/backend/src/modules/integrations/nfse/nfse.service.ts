@@ -251,8 +251,8 @@ export class NfseService {
     }
   }
 
-  private async enviarSoap(cabecalho: string, dados: string): Promise<string> {
-    this.logger.log(`[SOAP] Endpoint: ${this.ENDPOINT}`);
+  private async enviarSoap(cabecalho: string, dados: string, metodo = "GerarNfse"): Promise<string> {
+    this.logger.log(`[SOAP] Endpoint: ${this.ENDPOINT} metodo=${metodo}`);
     this.logger.log(`[SOAP] CNPJ: ${this.getCnpjPrestador()} | Token: ${this.getToken().slice(0, 6)}...`);
     this.logger.log(`[SOAP] nfseDadosMsg:\n${dados}`);
 
@@ -264,7 +264,7 @@ export class NfseService {
     );
 
     return new Promise<string>((resolve, reject) => {
-      (client as any).GerarNfse(
+      (client as any)[metodo](
         { nfseCabecMsg: cabecalho, nfseDadosMsg: dados },
         (err: any, _res: any, rawResponse: string, _soapHeader: any, rawRequest: string) => {
           if (rawRequest) {
@@ -832,6 +832,8 @@ export class NfseService {
     valor: number;
     servicoCodigo?: string;
     discriminacao?: string;
+    idvenda?: number;
+    idcontareceber?: number;
   }): Promise<{
     numero: string;
     numeroRps: number;
@@ -861,17 +863,26 @@ export class NfseService {
       `[emitirParaContaReceber] clienteAthosId=${input.clienteAthosId} tipo=${info.type} nome="${tomadorNome ?? "?"}" doc=${info.documento ? info.documento.slice(0, 4) + "****" : "null"}`,
     );
 
-    // 2. Obter RPS via API Auxiliar iiBrasil
+    // 2. Obter RPS via API Auxiliar iiBrasil (com fallback para evitar bloqueio)
     const infoNfse = await this.getInfoNfse();
-    if (!infoNfse) {
-      throw new BadRequestException(
-        "API Auxiliar iiBrasil indisponível. Não é possível obter número RPS seguro.",
-      );
+    let rpsNumero: number;
+    let rpsSerie: string;
+    if (infoNfse) {
+      rpsNumero = infoNfse.proximoRps;
+      rpsSerie  = infoNfse.serieRps || this.SERIE_RPS;
+      this.logger.log(`[RPS] emitirParaContaReceber proximoRPS=${rpsNumero} serie=${rpsSerie}`);
+    } else {
+      // AUX API indisponível — usa idvenda ou idcontareceber como RPS (mesmo padrão do fluxo de orçamentos)
+      if (typeof input.idvenda === "number") {
+        rpsNumero = input.idvenda;
+      } else if (typeof input.idcontareceber === "number") {
+        rpsNumero = input.idcontareceber;
+      } else {
+        throw new Error("idvenda ou idcontareceber deve ser informado quando a API auxiliar está indisponível");
+      }
+      rpsSerie  = this.SERIE_RPS;
+      this.logger.warn(`[RPS] AUX indisponível; usando idvenda/idcontareceber=${rpsNumero} como RPS fallback`);
     }
-    const rpsNumero = infoNfse.proximoRps;
-    const rpsSerie = infoNfse.serieRps || this.SERIE_RPS;
-
-    this.logger.log(`[RPS] emitirParaContaReceber proximoRPS=${rpsNumero} serie=${rpsSerie}`);
 
     // 3. Resolver serviço
     const servicoKey = input.servicoCodigo ?? DEFAULT_SERVICO;
@@ -938,6 +949,107 @@ export class NfseService {
       codigoVerificacao,
       link: linkNfse,
     };
+  }
+
+  /**
+   * Cancela NFS-e na prefeitura via SOAP CancelarNfse (ABRASF 2.04).
+   * CodigoCancelamento: 1 = Erro na emissão (padrão).
+   */
+  async cancelarNfse(numeroNfse: string, codigoCancelamento = "1"): Promise<{
+    cancelada: boolean;
+    erros: string[];
+    soapIndisponivel?: boolean;
+  }> {
+    const infXml = `\t<InfPedidoCancelamento Id="cancel${numeroNfse}">
+\t\t<IdentificacaoNfse>
+\t\t\t<Numero>${numeroNfse}</Numero>
+\t\t\t<CpfCnpj>
+\t\t\t\t<Cnpj>${this.getCnpjPrestador()}</Cnpj>
+\t\t\t</CpfCnpj>
+\t\t\t<InscricaoMunicipal>${this.getInscricaoMunicipal()}</InscricaoMunicipal>
+\t\t\t<CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
+\t\t</IdentificacaoNfse>
+\t\t<CodigoCancelamento>${codigoCancelamento}</CodigoCancelamento>
+\t</InfPedidoCancelamento>`;
+
+    // CancelarNfseEnvio não usa <Integridade> — elemento exclusivo de GerarNfseEnvio
+    const dados = `<?xml version="1.0" encoding="UTF-8"?>
+<CancelarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  <Pedido>
+${infXml}
+  </Pedido>
+</CancelarNfseEnvio>`;
+
+    this.logger.log(`Cancelando NFS-e #${numeroNfse} — CodigoCancelamento=${codigoCancelamento}`);
+
+    let responseXml: string;
+    try {
+      responseXml = await this.enviarSoap(this.buildCabecalho(), dados, "CancelarNfse");
+    } catch (err) {
+      // O endpoint IIBR /rps/... não implementa CancelarNfse no NuSOAP.
+      // Retorna soapIndisponivel=true para que o chamador decida como prosseguir.
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`CancelarNfse #${numeroNfse} — SOAP indisponível: ${msg}`);
+      return { cancelada: false, erros: [msg], soapIndisponivel: true };
+    }
+
+    const erros = this.parseErros(responseXml);
+    const decoded = this.decodeOutputXml(responseXml);
+    const cancelada = decoded.includes("<NfseCancelamento>") && erros.length === 0;
+
+    if (!cancelada) {
+      this.logger.warn(`CancelarNfse #${numeroNfse} retornou erros: ${erros.join(" | ")}`);
+    } else {
+      this.logger.log(`NFS-e #${numeroNfse} cancelada com sucesso na prefeitura`);
+    }
+
+    return { cancelada, erros, soapIndisponivel: false };
+  }
+
+  async cancelarTeste(numeroNfse: string): Promise<{
+    cancelada: boolean;
+    erros: string[];
+    decodedXml: string;
+    temNfseCancelamento: boolean;
+  }> {
+    const infXml = `\t<InfPedidoCancelamento Id="cancel${numeroNfse}">
+\t\t<IdentificacaoNfse>
+\t\t\t<Numero>${numeroNfse}</Numero>
+\t\t\t<CpfCnpj>
+\t\t\t\t<Cnpj>${this.getCnpjPrestador()}</Cnpj>
+\t\t\t</CpfCnpj>
+\t\t\t<InscricaoMunicipal>${this.getInscricaoMunicipal()}</InscricaoMunicipal>
+\t\t\t<CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
+\t\t</IdentificacaoNfse>
+\t\t<CodigoCancelamento>1</CodigoCancelamento>
+\t</InfPedidoCancelamento>`;
+
+    const dados = `<?xml version="1.0" encoding="UTF-8"?>
+<CancelarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  <Pedido>
+${infXml}
+  </Pedido>
+</CancelarNfseEnvio>`;
+
+    this.logger.log(`[TESTE CANCELAR] NFS-e #${numeroNfse}`);
+    this.logger.log(`[TESTE CANCELAR] XML:\n${dados}`);
+
+    try {
+      const responseXml = await this.enviarSoap(this.buildCabecalho(), dados, "CancelarNfse");
+      const erros = this.parseErros(responseXml);
+      const decoded = this.decodeOutputXml(responseXml);
+      const temNfseCancelamento = decoded.includes("<NfseCancelamento>");
+      const cancelada = temNfseCancelamento && erros.length === 0;
+
+      this.logger.log(`[TESTE CANCELAR] decodedXml:\n${decoded}`);
+      this.logger.log(`[TESTE CANCELAR] cancelada=${cancelada} erros=${JSON.stringify(erros)}`);
+
+      return { cancelada, erros, decodedXml: decoded, temNfseCancelamento };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`[TESTE CANCELAR] Exceção: ${msg}`);
+      return { cancelada: false, erros: [msg], decodedXml: "", temNfseCancelamento: false };
+    }
   }
 
   async emitirTeste() {

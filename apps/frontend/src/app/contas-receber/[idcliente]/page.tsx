@@ -22,9 +22,10 @@ interface TituloReceber {
   idvenda: number | null;
   dataemissao: string | null;
   numeroordem: string | null;
-  tipoNf?: "NF-e" | "NFS-e" | null;
+  tipoNf?: string | null;
   numeroNf?: string | null;
   boletoAtivo?: { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null } | null;
+  nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null } | null;
 }
 
 function formatBRL(value: number): string {
@@ -33,6 +34,13 @@ function formatBRL(value: number): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+function badgeClassName(tipoNf?: string | null): string {
+  if (!tipoNf) return "";
+  if (tipoNf === "NF-e") return "bg-primary";
+  if (tipoNf === "NFS-e") return "bg-success";
+  return "bg-secondary"; // combined or other labels
 }
 
 export default function ClienteDetalhePage({
@@ -81,6 +89,7 @@ export default function ClienteDetalhePage({
     numeroNfse: string;
     numeroRps: number;
     valor: number;
+    linkNfse?: string | null;
   } | null>(null);
   const [nfseErro, setNfseErro] = useState("");
   const [nfseErroDetalhe, setNfseErroDetalhe] = useState("");
@@ -142,7 +151,7 @@ export default function ClienteDetalhePage({
               cache: "no-store",
             });
             if (nfRes.ok) {
-              const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: "NF-e" | "NFS-e" | null; numeroNf: string | null }>;
+              const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: string | null; numeroNf: string | null }>;
               const nfMap = new Map(nfData.map((n) => [n.idcontareceber, { tipoNf: n.tipoNf, numeroNf: n.numeroNf }]));
               // Verificar boletos ativos para os mesmos títulos
                 let boletoMap = new Map<number, { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null }>();
@@ -159,13 +168,46 @@ export default function ClienteDetalhePage({
                   }
                 } catch { /* silently ignore */ }
 
+                // Verificar NFS-e emitidas no nosso banco para os mesmos títulos
+                let nfseMap = new Map<number, { nfseEmitidaId: number; numeroNfse: string | null }>();
+                try {
+                  const nfseRes = await fetch("/api/cobranca/nfse/titulos-em-uso", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ idcontasReceber: ids }),
+                    cache: "no-store",
+                  });
+                  if (nfseRes.ok) {
+                    const nfseData = (await nfseRes.json()) as Array<{ idcontareceber: number; nfseEmitidaId: number; numeroNfse: string | null }>;
+                    nfseMap = new Map(nfseData.map((n) => [n.idcontareceber, { nfseEmitidaId: n.nfseEmitidaId, numeroNfse: n.numeroNfse }]));
+                  }
+                } catch { /* silently ignore */ }
+
                 setTitulos(data.map((t) => {
                   const nf = nfMap.get(t.idcontareceber);
+                  const nfseAtivo = nfseMap.get(t.idcontareceber) ?? null;
+                  // Se houver NFS-e no nosso banco E NF-e/Athos, mostrar ambos combinados
+                  let tipoNf: string | null = null;
+                  let numeroNf: string | null = null;
+                  if (nfseAtivo && nf?.tipoNf) {
+                    tipoNf = `${nf.tipoNf} / NFS-e`;
+                    const nums: string[] = [];
+                    if (nf.numeroNf) nums.push(nf.numeroNf);
+                    if (nfseAtivo.numeroNfse) nums.push(nfseAtivo.numeroNfse);
+                    numeroNf = nums.length > 0 ? nums.join(", ") : null;
+                  } else if (nfseAtivo) {
+                    tipoNf = "NFS-e";
+                    numeroNf = nfseAtivo.numeroNfse ?? null;
+                  } else {
+                    tipoNf = nf?.tipoNf ?? null;
+                    numeroNf = nf?.numeroNf ?? null;
+                  }
                   return {
                     ...t,
-                    tipoNf: nf?.tipoNf ?? null,
-                    numeroNf: nf?.numeroNf ?? null,
+                    tipoNf,
+                    numeroNf,
                     boletoAtivo: boletoMap.get(t.idcontareceber) ?? null,
+                    nfseAtivo,
                   };
                 }));
               return;
@@ -592,9 +634,9 @@ export default function ClienteDetalhePage({
                                     <td className="small fw-semibold">{formatBRL(t.valor)}</td>
                                     <td>
                                       {t.tipoNf ? (
-                                        <span className={`badge ${t.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}>
-                                          {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
-                                        </span>
+                                            <span className={`badge ${badgeClassName(t.tipoNf)}`}>
+                                              {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
+                                            </span>
                                       ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
                                     </td>
                                   </tr>
@@ -647,9 +689,35 @@ export default function ClienteDetalhePage({
                               <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
                               <td>
                                 {titulo.tipoNf ? (
-                                  <span className={`badge ${titulo.tipoNf === "NF-e" ? "bg-primary" : "bg-success"}`}
-                                    title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
-                                    {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
+                                  <span className="d-inline-flex align-items-center gap-1">
+                                    <span className={`badge ${badgeClassName(titulo.tipoNf)}`}
+                                      title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
+                                      {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
+                                    </span>
+                                    {titulo.nfseAtivo && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-link btn-sm p-0 text-danger"
+                                        title="Remover NFS-e do banco (permite re-emissão)"
+                                        style={{ lineHeight: 1 }}
+                                        onClick={async () => {
+                                          if (!confirm(`Remover registro da NFS-e #${titulo.nfseAtivo!.numeroNfse ?? titulo.nfseAtivo!.nfseEmitidaId} do banco?\n\nIsso NÃO cancela a nota na prefeitura, apenas libera o título para nova emissão.`)) return;
+                                          try {
+                                            const res = await fetch(`/api/cobranca/nfse/${titulo.nfseAtivo!.nfseEmitidaId}`, { method: "DELETE" });
+                                            if (!res.ok) {
+                                              const d = await res.json().catch(() => ({}));
+                                              alert((d as { error?: string }).error ?? "Erro ao remover NFS-e.");
+                                            } else {
+                                              setRefetchKey((k) => k + 1);
+                                            }
+                                          } catch {
+                                            alert("Falha na conexão.");
+                                          }
+                                        }}
+                                      >
+                                        <i className="bi bi-x-circle" />
+                                      </button>
+                                    )}
                                   </span>
                                 ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
                               </td>
@@ -1180,6 +1248,18 @@ export default function ClienteDetalhePage({
                       </div>
                     </div>
                   </div>
+                  {nfseResult.linkNfse && (
+                    <div className="text-center">
+                      <a
+                        href={nfseResult.linkNfse}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-outline-primary btn-sm"
+                      >
+                        <i className="bi bi-download me-1" />Baixar NFS-e PDF
+                      </a>
+                    </div>
+                  )}
                 </div>
                 <div className="nfse-modal-footer">
                   <button

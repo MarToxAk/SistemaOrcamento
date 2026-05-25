@@ -259,6 +259,7 @@ model NfseEmitida {
   numeroRps      Int
   idclienteAthos Int
   valorServico   Decimal             @db.Decimal(12, 2)
+  linkNfse       String?             // link de download da NFS-e retornado pela API IIBR
   dataEmissao    DateTime            @default(now())
   criadoEm       DateTime            @default(now())
   idvenda        Int?                // D-07: venda Athos que originou a NFS-e

@@ -69,6 +69,26 @@ export class CobrancaService {
 
     // Passo 4: Validar NF e calcular total
     const nfInfo = await this.athosService.verificarNFTitulos(dto.idcontasReceber);
+
+    // Complementar com NFS-e emitidas pelo nosso sistema (não refletidas no Athos)
+    const semNfAthos = nfInfo.filter((n) => n.tipoNf === null);
+    if (semNfAthos.length > 0) {
+      const nfseNossas = await this.prisma.nfseEmitidaTitulo.findMany({
+        where: {
+          idcontareceber: { in: semNfAthos.map((n) => n.idcontareceber) },
+          nfseEmitida: { numeroNfse: { not: null } },
+        },
+        select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true } } },
+      });
+      const cobertosPorNfse = new Map(nfseNossas.map((t) => [t.idcontareceber, t.nfseEmitida.numeroNfse]));
+      for (const item of nfInfo) {
+        if (item.tipoNf === null && cobertosPorNfse.has(item.idcontareceber)) {
+          item.tipoNf = "NFS-e";
+          item.numeroNf = cobertosPorNfse.get(item.idcontareceber) ?? null;
+        }
+      }
+    }
+
     const semNf = nfInfo.filter((n) => n.tipoNf === null);
     if (semNf.length > 0) {
       throw new BadRequestException(
@@ -251,6 +271,7 @@ export class CobrancaService {
     numeroNfse: string;
     numeroRps: number;
     valor: number;
+    linkNfse: string | null;
   }> {
     // Passo 1: Buscar todos os títulos do cliente e filtrar pelos IDs solicitados
     const todosTitulos = await this.athosService.buscarTitulosClienteContasReceber(dto.idclienteAthos);
@@ -313,12 +334,19 @@ export class CobrancaService {
       },
     });
 
+    // Salvar linkNfse via raw SQL — coluna adicionada em migração; Prisma client pode estar
+    // desatualizado em ambientes onde o DLL engine está em uso e prisma generate não foi rodado.
+    if (resultado.link) {
+      await this.prisma.$executeRaw`UPDATE "NfseEmitida" SET "linkNfse" = ${resultado.link} WHERE id = ${nfseEmitida.id}`;
+    }
+
     // Passo 5: Retornar resposta
     return {
       nfseEmitidaId: nfseEmitida.id,
       numeroNfse: resultado.numero,
       numeroRps: resultado.numeroRps,
       valor: dto.valor,
+      linkNfse: resultado.link ?? null,
     };
   }
 
@@ -543,6 +571,86 @@ export class CobrancaService {
       txidEfi: b.txidEfi, criadoEm: b.criadoEm,
       titulos: b.titulos.map((t) => ({ idcontareceber: t.idcontareceber, valor: Number(t.valor) })),
     }));
+  }
+
+  /** Retorna quais idcontareceber já possuem NFS-e emitida no nosso banco */
+  async buscarNfseEmitidaParaTitulos(idcontasReceber: number[]): Promise<Array<{
+    idcontareceber: number;
+    nfseEmitidaId: number;
+    numeroNfse: string | null;
+  }>> {
+    if (idcontasReceber.length === 0) return [];
+    const rows = await this.prisma.nfseEmitidaTitulo.findMany({
+      where: { idcontareceber: { in: idcontasReceber } },
+      select: {
+        idcontareceber: true,
+        nfseEmitidaId: true,
+        nfseEmitida: { select: { numeroNfse: true } },
+      },
+    });
+    return rows.map((r) => ({
+      idcontareceber: r.idcontareceber,
+      nfseEmitidaId: r.nfseEmitidaId,
+      numeroNfse: r.nfseEmitida.numeroNfse ?? null,
+    }));
+  }
+
+  /**
+   * Cancela NFS-e na prefeitura (SOAP CancelarNfse) e remove todos os registros
+   * com o mesmo numeroNfse do nosso banco — segurança: notas com mesmo número cancelam juntas.
+   */
+  async cancelarNfseEmitida(nfseEmitidaId: number): Promise<{ ok: boolean; mensagem: string; soapErros?: string[] }> {
+    const nfse = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
+    if (!nfse) throw new BadRequestException(`NFS-e emitida ${nfseEmitidaId} não encontrada.`);
+
+    const numeroNfse = nfse.numeroNfse;
+    let soapErros: string[] = [];
+    let soapOk = !numeroNfse;
+
+    // 1. Tentar cancelar na prefeitura via SOAP (se tiver número emitido)
+    if (numeroNfse) {
+      try {
+        const resultado = await this.nfseService.cancelarNfse(numeroNfse);
+        soapErros = resultado.erros;
+        if (resultado.soapIndisponivel) {
+          // Endpoint IIBR não implementa CancelarNfse neste município.
+          // Prossegue com remoção local — usuário deve confirmar cancelamento na prefeitura.
+          this.logger.warn(`SOAP CancelarNfse indisponível para #${numeroNfse}; removendo apenas do banco.`);
+        } else if (!resultado.cancelada) {
+          throw new BadRequestException(
+            `Falha ao cancelar NFS-e #${numeroNfse} na prefeitura: ${resultado.erros.join(" | ") || "erro desconhecido"}`,
+          );
+        } else {
+          soapOk = true;
+        }
+      } catch (err) {
+        if (err instanceof BadRequestException) throw err;
+        throw new BadRequestException(
+          `Erro ao comunicar com a prefeitura: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // 2. Remover TODOS os registros com o mesmo numeroNfse do nosso banco (segurança)
+    const registros = numeroNfse
+      ? await this.prisma.nfseEmitida.findMany({ where: { numeroNfse }, select: { id: true } })
+      : [{ id: nfseEmitidaId }];
+
+    for (const r of registros) {
+      await this.prisma.nfseEmitidaTitulo.deleteMany({ where: { nfseEmitidaId: r.id } });
+      await this.prisma.nfseEmitida.delete({ where: { id: r.id } });
+    }
+
+    this.logger.log(`NFS-e #${numeroNfse ?? "?"} removida: ${registros.length} registro(s).`);
+
+    const aviso = !soapOk && numeroNfse
+      ? " Atenção: cancelamento na prefeitura não foi confirmado via SOAP — verifique manualmente se necessário."
+      : "";
+    return {
+      ok: true,
+      mensagem: `NFS-e #${numeroNfse ?? nfseEmitidaId}: ${registros.length} registro(s) removido(s) do banco.${aviso}`,
+      soapErros: soapErros.length > 0 ? soapErros : undefined,
+    };
   }
 
   private getRequiredConfig(key: string): string {
