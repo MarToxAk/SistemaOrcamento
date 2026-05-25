@@ -1003,7 +1003,7 @@ ${infXml}
       this.logger.log(`NFS-e #${numeroNfse} cancelada com sucesso na prefeitura`);
     }
 
-    return { cancelada, erros };
+    return { cancelada, erros, soapIndisponivel: false };
   }
 
   async cancelarTeste(numeroNfse: string): Promise<{
