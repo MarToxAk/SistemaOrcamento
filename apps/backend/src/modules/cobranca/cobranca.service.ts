@@ -227,13 +227,13 @@ export class CobrancaService {
       this.logger.warn(`Não foi possível buscar documento do cliente ${dto.idclienteAthos}: ${String(err)}`);
     }
 
-    // Montar item EFI: nome do cliente + valor total (identificação clara na cobrança)
+    // Montar itens EFI a partir do split NF-e / NFS-e calculado acima
     const valorCentavos = Math.round(totalValor * 100);
-    const efiItems = [{
-      name: nomeCliente.trim().toUpperCase().slice(0, 80),
-      value: valorCentavos,
+    const efiItems = [...itemMap.values()].map((item) => ({
+      name: item.name.slice(0, 255),
+      value: item.valueCentavos,
       amount: 1 as const,
-    }];
+    }));
 
     // Passo 6: Criar boleto na EFI
     const baseUrl =
