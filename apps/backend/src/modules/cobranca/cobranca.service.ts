@@ -752,6 +752,102 @@ export class CobrancaService {
     };
   }
 
+  /** Calcula os itens que serão enviados à EFI sem criar o boleto — usado para preview no frontend. */
+  async previewBoleto(idclienteAthos: number, idcontasReceber: number[]): Promise<{
+    nomeCliente: string;
+    total: number;
+    itens: Array<{ nome: string; valor: number }>;
+  }> {
+    const todosTitulos = await this.athosService.buscarTitulosClienteContasReceber(idclienteAthos);
+    const titulosFiltrados = todosTitulos.filter(t => idcontasReceber.includes(t.idcontareceber));
+
+    const nfInfo = await this.athosService.verificarNFTitulos(idcontasReceber);
+    const todasNfesRows = await this.athosService.buscarTodasNfesParaTitulos(idcontasReceber);
+    const todasNfesMap = new Map<number, Array<{ numero: string; valorNota: number }>>();
+    for (const row of todasNfesRows) {
+      const arr = todasNfesMap.get(row.idcontareceber) ?? [];
+      arr.push({ numero: row.numero, valorNota: row.valorNota });
+      todasNfesMap.set(row.idcontareceber, arr);
+    }
+
+    const todasNfse = await this.prisma.nfseEmitidaTitulo.findMany({
+      where: { idcontareceber: { in: idcontasReceber }, nfseEmitida: { numeroNfse: { not: null } } },
+      select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true, valorServico: true } } },
+    });
+    const nfseMapTodos = new Map(todasNfse.map(t => [t.idcontareceber, t.nfseEmitida]));
+
+    const vendasUnicas = [...new Set(titulosFiltrados.map(t => t.idvenda).filter((v): v is number => v != null))];
+    const tipoPorVenda = new Map<number, { temProdutoFisico: boolean; valorServicos: number | null }>();
+    await Promise.all(vendasUnicas.map(async (idv) => {
+      try {
+        const tipo = await this.athosService.verificarTipoProdutoVenda(idv);
+        tipoPorVenda.set(idv, { temProdutoFisico: tipo.temProdutoFisico, valorServicos: tipo.valorServicos });
+      } catch { /* silently ignore */ }
+    }));
+
+    for (const item of nfInfo) {
+      if (item.tipoNf === null && nfseMapTodos.has(item.idcontareceber)) {
+        item.tipoNf = "NFS-e";
+        item.numeroNf = nfseMapTodos.get(item.idcontareceber)!.numeroNfse ?? null;
+      }
+    }
+
+    const itemMap = new Map<string, { name: string; valueCentavos: number }>();
+    for (const titulo of titulosFiltrados) {
+      const nf = nfInfo.find(n => n.idcontareceber === titulo.idcontareceber);
+      const nfse = nfseMapTodos.get(titulo.idcontareceber);
+      const nfes = todasNfesMap.get(titulo.idcontareceber) ?? [];
+      const tipoProd = titulo.idvenda ? tipoPorVenda.get(titulo.idvenda) : undefined;
+      const valorTitulo = Number(titulo.valor);
+
+      const valorServicoBruto = nfse
+        ? Number(nfse.valorServico ?? 0)
+        : (tipoProd?.temProdutoFisico && (tipoProd.valorServicos ?? 0) > 0 ? tipoProd.valorServicos! : 0);
+      const valorNfse = Math.min(valorServicoBruto, valorTitulo);
+      const valorFisico = Number((valorTitulo - valorNfse).toFixed(2));
+
+      if (valorNfse > 0) {
+        if (nfse) {
+          const key = `NFS-e-${nfse.numeroNfse ?? ""}`;
+          const prev = itemMap.get(key);
+          itemMap.set(key, { name: nfse.numeroNfse ? `NFS-e #${nfse.numeroNfse}` : "NFS-e", valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorNfse * 100) });
+        } else {
+          const prev = itemMap.get("servicos");
+          itemMap.set("servicos", { name: "Serviços", valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorNfse * 100) });
+        }
+      }
+      if (nfes.length > 0 && valorFisico > 0) {
+        const totalNotas = nfes.reduce((s, n) => s + n.valorNota, 0);
+        let restante = Math.round(valorFisico * 100);
+        nfes.forEach((nfRow, idx) => {
+          const centavos = idx === nfes.length - 1 ? restante : Math.round(valorFisico * 100 * (totalNotas > 0 ? nfRow.valorNota / totalNotas : 1 / nfes.length));
+          restante -= centavos;
+          if (centavos > 0 && nfRow.numero) {
+            const key = `NF-e-${nfRow.numero}`;
+            const prev = itemMap.get(key);
+            itemMap.set(key, { name: `NF-e #${nfRow.numero}`, valueCentavos: (prev?.valueCentavos ?? 0) + centavos });
+          }
+        });
+      } else if (nfes.length === 0 && valorFisico > 0) {
+        const tipoNf = nf?.tipoNf ?? "NF";
+        const numeroItem = (tipoNf === "NFS-e" && nfse?.numeroNfse) ? nfse.numeroNfse : (nf?.numeroNf ?? null);
+        const key = `${tipoNf}-${numeroItem ?? ""}`;
+        const prev = itemMap.get(key);
+        itemMap.set(key, { name: (numeroItem ? `${tipoNf} #${numeroItem}` : tipoNf).slice(0, 255), valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorFisico * 100) });
+      }
+    }
+
+    const total = Number(titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0).toFixed(2));
+    const dadosCliente = await this.athosService.buscarDadosClienteContasReceber(idclienteAthos);
+    const nomeCliente = dadosCliente?.nome_cliente ?? `Cliente ${idclienteAthos}`;
+
+    return {
+      nomeCliente,
+      total,
+      itens: [...itemMap.values()].map(item => ({ nome: item.name, valor: item.valueCentavos / 100 })),
+    };
+  }
+
   private getRequiredConfig(key: string): string {
     const value = this.config.get<string>(key)?.trim();
     if (!value) {

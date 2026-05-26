@@ -77,6 +77,11 @@ export default function ClienteDetalhePage({
   const [boletoErro, setBoletoErro] = useState("");
   const [boletoErroDetalhe, setBoletoErroDetalhe] = useState("");
   const [copiado, setCopiado] = useState(false);
+  const [boletoPreview, setBoletoPreview] = useState<{
+    nomeCliente: string; total: number;
+    itens: Array<{ nome: string; valor: number }>;
+  } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   // Modal NFS-e states
   const [nfseModalState, setNfseModalState] = useState<"idle" | "confirm" | "loading" | "success" | "error">("idle");
@@ -268,7 +273,7 @@ export default function ClienteDetalhePage({
     }
   }
 
-  function abreBoletoModal() {
+  async function abreBoletoModal() {
     const titulosSelecionados = titulos.filter((t) => selectedIds.has(t.idcontareceber));
     const datas = new Set(titulosSelecionados.map((t) => t.datavencimento?.slice(0, 10)));
     if (datas.size === 1) {
@@ -282,7 +287,21 @@ export default function ClienteDetalhePage({
         "Os títulos selecionados possuem datas de vencimento diferentes. Informe a data de vencimento manualmente.",
       );
     }
+    setBoletoPreview(null);
     setBoletoModalState("confirm");
+    setLoadingPreview(true);
+    try {
+      const res = await fetch("/api/cobranca/boleto/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idclienteAthos: Number(idcliente),
+          idcontasReceber: titulosSelecionados.map((t) => t.idcontareceber),
+        }),
+      });
+      if (res.ok) setBoletoPreview(await res.json());
+    } catch { /* silently ignore */ }
+    finally { setLoadingPreview(false); }
   }
 
   async function confirmarGerarBoleto() {
@@ -326,6 +345,7 @@ export default function ClienteDetalhePage({
     setBoletoErro("");
     setBoletoErroDetalhe("");
     setCopiado(false);
+    setBoletoPreview(null);
   }
 
   async function abreNfseModal() {
@@ -877,6 +897,25 @@ export default function ClienteDetalhePage({
                         ))}
                       </ul>
                     </div>
+                  </div>
+
+                  {/* Preview itens EFI */}
+                  <div className="mb-3">
+                    <div className="text-muted small fw-semibold mb-1">Itens da cobrança (EFI)</div>
+                    {loadingPreview ? (
+                      <div className="text-center py-2">
+                        <div className="spinner-border spinner-border-sm text-secondary" role="status" />
+                      </div>
+                    ) : boletoPreview?.itens?.length ? (
+                      <ul className="list-group list-group-flush border rounded">
+                        {boletoPreview.itens.map((item, i) => (
+                          <li key={i} className="list-group-item d-flex justify-content-between px-3 py-2 small">
+                            <span className="text-muted">{item.nome}</span>
+                            <span className="fw-semibold">{formatBRL(item.valor)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
 
                   {/* Alert datas divergentes */}
