@@ -69,6 +69,15 @@ export class CobrancaService {
 
     // Passo 4: Validar NF e calcular total
     const nfInfo = await this.athosService.verificarNFTitulos(dto.idcontasReceber);
+    // Busca TODAS as NF-es de cada título (não apenas LIMIT 1) para criar item por NF-e
+    const todasNfesRows = await this.athosService.buscarTodasNfesParaTitulos(dto.idcontasReceber);
+    // Map: idcontareceber → [{ numero, valorNota }]
+    const todasNfesMap = new Map<number, Array<{ numero: string; valorNota: number }>>();
+    for (const row of todasNfesRows) {
+      const arr = todasNfesMap.get(row.idcontareceber) ?? [];
+      arr.push({ numero: row.numero, valorNota: row.valorNota });
+      todasNfesMap.set(row.idcontareceber, arr);
+    }
 
     // Buscar NFS-e do nosso sistema para TODOS os títulos (inclui valorServico para split)
     const todasNfse = await this.prisma.nfseEmitidaTitulo.findMany({
@@ -79,6 +88,20 @@ export class CobrancaService {
       select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true, valorServico: true } } },
     });
     const nfseMapTodos = new Map(todasNfse.map((t) => [t.idcontareceber, t.nfseEmitida]));
+
+    // Buscar tipo-produto por venda (mesma lógica do modal NFS-e) para split sem NFS-e no nosso sistema
+    const vendasParaVerificar = [...new Set(
+      titulosFiltrados.map(t => t.idvenda).filter((v): v is number => v != null),
+    )];
+    const tipoPorVenda = new Map<number, { temProdutoFisico: boolean; valorServicos: number | null }>();
+    await Promise.all(
+      vendasParaVerificar.map(async (idv) => {
+        try {
+          const tipo = await this.athosService.verificarTipoProdutoVenda(idv);
+          tipoPorVenda.set(idv, { temProdutoFisico: tipo.temProdutoFisico, valorServicos: tipo.valorServicos });
+        } catch { /* falha silenciosa — split de fallback indisponível para esta venda */ }
+      }),
+    );
 
     // Complementar nfInfo: títulos sem NF no Athos mas com NFS-e no nosso sistema
     for (const item of nfInfo) {
@@ -96,42 +119,78 @@ export class CobrancaService {
       );
     }
 
-    // Montar itens EFI: um item por NF.
-    // Título com NF-e (Athos) + NFS-e (sistema próprio) é dividido em dois itens
-    // usando valorServico da NFS-e; o restante vai para a NF-e.
+    // Montar itens EFI: um item por NF-e + um item por NFS-e.
+    // todasNfesMap contém TODAS as NF-es do venda (sem LIMIT 1).
+    // Quando há NFS-e no sistema, o valor de serviço é reservado; o restante vai para NF-e(s).
+    // Múltiplas NF-es do mesmo venda são distribuídas proporcionalmente pelo valor da nota.
     const itemMap = new Map<string, { name: string; valueCentavos: number }>();
     for (const titulo of titulosFiltrados) {
       const nf = nfInfo.find((n) => n.idcontareceber === titulo.idcontareceber);
       const nfse = nfseMapTodos.get(titulo.idcontareceber);
+      const nfes = todasNfesMap.get(titulo.idcontareceber) ?? [];
+      const tipoProd = titulo.idvenda ? tipoPorVenda.get(titulo.idvenda) : undefined;
       const valorTitulo = Number(titulo.valor);
 
-      if (nf?.tipoNf === "NF-e" && nfse) {
-        const valorNfse = Math.min(Number(nfse.valorServico ?? 0), valorTitulo);
-        const valorNfe = Number((valorTitulo - valorNfse).toFixed(2));
-        if (valorNfe > 0) {
-          const key = `NF-e-${nf.numeroNf ?? ""}`;
-          const prev = itemMap.get(key);
-          itemMap.set(key, {
-            name: nf.numeroNf ? `NF-e #${nf.numeroNf}` : "NF-e",
-            valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(Number(valorNfe.toFixed(2)) * 100),
-          });
-        }
-        if (valorNfse > 0) {
+      // Valor de serviço: prioriza NFS-e emitida pelo nosso sistema;
+      // fallback para vendas mistas sem NFS-e: usa tipo-produto (mesma lógica do modal NFS-e).
+      const valorServicoBruto = nfse
+        ? Number(nfse.valorServico ?? 0)
+        : (tipoProd?.temProdutoFisico && (tipoProd.valorServicos ?? 0) > 0 ? tipoProd.valorServicos! : 0);
+      const valorNfse = Math.min(valorServicoBruto, valorTitulo);
+      // Valor restante para NF-e(s) (produto físico)
+      const valorFisico = Number((valorTitulo - valorNfse).toFixed(2));
+
+      // Registra item de serviço: NFS-e emitida OU serviços separados via tipo-produto
+      if (valorNfse > 0) {
+        if (nfse) {
           const key = `NFS-e-${nfse.numeroNfse ?? ""}`;
           const prev = itemMap.get(key);
           itemMap.set(key, {
             name: nfse.numeroNfse ? `NFS-e #${nfse.numeroNfse}` : "NFS-e",
-            valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(Number(valorNfse.toFixed(2)) * 100),
+            valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorNfse * 100),
+          });
+        } else {
+          // Split via tipo-produto — serviços sem NFS-e emitida pelo nosso sistema
+          const prev = itemMap.get("servicos");
+          itemMap.set("servicos", {
+            name: "Serviços",
+            valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorNfse * 100),
           });
         }
-      } else {
+      }
+
+      // Registra item(s) de produto (NF-e)
+      if (nfes.length > 0 && valorFisico > 0) {
+        // Distribui valorFisico proporcionalmente ao valor de cada nota.
+        // Se todas as notas têm valor 0 (campo ausente), divide igualmente.
+        const totalNotas = nfes.reduce((s, n) => s + n.valorNota, 0);
+        let restante = Math.round(valorFisico * 100); // centavos
+        nfes.forEach((nfRow, idx) => {
+          const frac = totalNotas > 0 ? nfRow.valorNota / totalNotas : 1 / nfes.length;
+          // Último recebe o restante para evitar arredondamento
+          const centavos = idx === nfes.length - 1
+            ? restante
+            : Math.round(valorFisico * 100 * frac);
+          restante -= centavos;
+          if (centavos > 0 && nfRow.numero) {
+            const key = `NF-e-${nfRow.numero}`;
+            const prev = itemMap.get(key);
+            itemMap.set(key, {
+              name: `NF-e #${nfRow.numero}`,
+              valueCentavos: (prev?.valueCentavos ?? 0) + centavos,
+            });
+          }
+        });
+      } else if (nfes.length === 0 && valorFisico > 0) {
+        // Sem NF-e com chave no Athos: NFS-e puro ou NF sem chave de acesso registrada.
+        // valorFisico já considera o split de serviço/produto acima.
         const tipoNf = nf?.tipoNf ?? "NF";
-        const numeroNf = nf?.numeroNf ?? null;
-        const key = `${tipoNf}-${numeroNf ?? ""}`;
+        const numeroItem = (tipoNf === "NFS-e" && nfse?.numeroNfse) ? nfse.numeroNfse : (nf?.numeroNf ?? null);
+        const key = `${tipoNf}-${numeroItem ?? ""}`;
         const prev = itemMap.get(key);
         itemMap.set(key, {
-          name: (numeroNf ? `${tipoNf} #${numeroNf}` : tipoNf).slice(0, 255),
-          valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(Number(valorTitulo.toFixed(2)) * 100),
+          name: (numeroItem ? `${tipoNf} #${numeroItem}` : tipoNf).slice(0, 255),
+          valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorFisico * 100),
         });
       }
     }
@@ -609,6 +668,7 @@ export class CobrancaService {
     idcontareceber: number;
     nfseEmitidaId: number;
     numeroNfse: string | null;
+    linkNfse: string | null;
   }>> {
     if (idcontasReceber.length === 0) return [];
     const rows = await this.prisma.nfseEmitidaTitulo.findMany({
@@ -616,13 +676,14 @@ export class CobrancaService {
       select: {
         idcontareceber: true,
         nfseEmitidaId: true,
-        nfseEmitida: { select: { numeroNfse: true } },
+        nfseEmitida: { select: { numeroNfse: true, linkNfse: true } },
       },
     });
     return rows.map((r) => ({
       idcontareceber: r.idcontareceber,
       nfseEmitidaId: r.nfseEmitidaId,
       numeroNfse: r.nfseEmitida.numeroNfse ?? null,
+      linkNfse: r.nfseEmitida.linkNfse ?? null,
     }));
   }
 

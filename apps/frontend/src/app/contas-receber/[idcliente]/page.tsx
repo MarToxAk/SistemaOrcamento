@@ -25,7 +25,7 @@ interface TituloReceber {
   tipoNf?: string | null;
   numeroNf?: string | null;
   boletoAtivo?: { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null } | null;
-  nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null } | null;
+  nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null } | null;
 }
 
 function formatBRL(value: number): string {
@@ -169,7 +169,7 @@ export default function ClienteDetalhePage({
                 } catch { /* silently ignore */ }
 
                 // Verificar NFS-e emitidas no nosso banco para os mesmos títulos
-                let nfseMap = new Map<number, { nfseEmitidaId: number; numeroNfse: string | null }>();
+                let nfseMap = new Map<number, { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null }>();
                 try {
                   const nfseRes = await fetch("/api/cobranca/nfse/titulos-em-uso", {
                     method: "POST",
@@ -178,8 +178,8 @@ export default function ClienteDetalhePage({
                     cache: "no-store",
                   });
                   if (nfseRes.ok) {
-                    const nfseData = (await nfseRes.json()) as Array<{ idcontareceber: number; nfseEmitidaId: number; numeroNfse: string | null }>;
-                    nfseMap = new Map(nfseData.map((n) => [n.idcontareceber, { nfseEmitidaId: n.nfseEmitidaId, numeroNfse: n.numeroNfse }]));
+                    const nfseData = (await nfseRes.json()) as Array<{ idcontareceber: number; nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null }>;
+                    nfseMap = new Map(nfseData.map((n) => [n.idcontareceber, { nfseEmitidaId: n.nfseEmitidaId, numeroNfse: n.numeroNfse, linkNfse: n.linkNfse }]));
                   }
                 } catch { /* silently ignore */ }
 
@@ -634,9 +634,23 @@ export default function ClienteDetalhePage({
                                     <td className="small fw-semibold">{formatBRL(t.valor)}</td>
                                     <td>
                                       {t.tipoNf ? (
-                                            <span className={`badge ${badgeClassName(t.tipoNf)}`}>
-                                              {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
-                                            </span>
+                                        <span className="d-inline-flex align-items-center gap-1">
+                                          <span className={`badge ${badgeClassName(t.tipoNf)}`}>
+                                            {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
+                                          </span>
+                                          {t.nfseAtivo?.linkNfse && (
+                                            <a
+                                              href={t.nfseAtivo.linkNfse}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="btn btn-link btn-sm p-0 text-success"
+                                              title="Baixar PDF da NFS-e"
+                                              style={{ lineHeight: 1 }}
+                                            >
+                                              <i className="bi bi-file-earmark-arrow-down" />
+                                            </a>
+                                          )}
+                                        </span>
                                       ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
                                     </td>
                                   </tr>
@@ -694,6 +708,18 @@ export default function ClienteDetalhePage({
                                       title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
                                       {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
                                     </span>
+                                    {titulo.nfseAtivo?.linkNfse && (
+                                      <a
+                                        href={titulo.nfseAtivo.linkNfse}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="btn btn-link btn-sm p-0 text-success"
+                                        title="Baixar PDF da NFS-e"
+                                        style={{ lineHeight: 1 }}
+                                      >
+                                        <i className="bi bi-file-earmark-arrow-down" />
+                                      </a>
+                                    )}
                                     {titulo.nfseAtivo && (
                                       <button
                                         type="button"

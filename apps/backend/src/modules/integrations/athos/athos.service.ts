@@ -1868,6 +1868,43 @@ export class AthosService {
    * Pitfall 4: aggregate functions retornam NULL para conjunto vazio — tratado com ?? false / ?? true
    * Nota: filtro vi.cancelada removido — coluna pode não existir ou ter tipo não-boolean no Athos.
    */
+  /**
+   * Para cada idcontareceber, retorna TODAS as NF-es ativas do venda associado,
+   * com número e valor de cada nota. Usado pelo boleto para criar um item por NF-e.
+   */
+  async buscarTodasNfesParaTitulos(idcontasReceber: number[]): Promise<
+    Array<{ idcontareceber: number; numero: string; valorNota: number }>
+  > {
+    if (idcontasReceber.length === 0) return [];
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT cr.idcontareceber,
+                n.numero,
+                COALESCE(n.valortotal, 0) AS valor_nota
+         FROM conta_receber cr
+         JOIN venda_nota vn ON vn.idvenda = cr.idvenda
+         JOIN nota n ON n.idnota = vn.idnota
+         WHERE cr.idcontareceber = ANY($1)
+           AND COALESCE(n.cancelada, false) = false
+           AND n.nfechaveacesso IS NOT NULL
+         ORDER BY cr.idcontareceber, n.idnota`,
+        [idcontasReceber],
+      );
+      return (result.rows as Array<{ idcontareceber: unknown; numero: unknown; valor_nota: unknown }>).map((r) => ({
+        idcontareceber: Number(r["idcontareceber"]),
+        numero: String(r["numero"] ?? "").trim(),
+        valorNota: Number(r["valor_nota"] ?? 0),
+      }));
+    } catch (err) {
+      this.logger.warn(`buscarTodasNfesParaTitulos: ${err instanceof Error ? err.message : String(err)}`);
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
   async verificarTipoProdutoVenda(idvenda: number): Promise<{
     temProdutoFisico: boolean;
     todosServico: boolean;
