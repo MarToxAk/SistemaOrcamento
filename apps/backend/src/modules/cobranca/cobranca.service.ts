@@ -751,19 +751,16 @@ export class CobrancaService {
       const nfeNums = nfeNumsPorTitulo.get(titulo.idcontareceber) ?? [];
 
       // Determina centavos de serviço deste título.
-      // Prioridade 1: valorServico real das NFS-e emitidas (limitado ao valor do título).
-      // Prioridade 2: split via venda_item.tipoFisico × fator (quando não há NFS-e no banco).
+      // Prioridade 1: split real via venda_item.tipoFisico × fator (natureza dos produtos da venda).
+      // Prioridade 2: valorServico da(s) NFS-e emitidas (quando não há venda_item disponível).
       // Fallback: aloca pelo tipo de NF que o título tem.
       const somaValorServicoNfse = nfseInfos.reduce((s, n) => s + n.valorServico, 0);
 
       let servCent = 0;
       let prodCent = 0;
 
-      if (nfseInfos.length > 0 && somaValorServicoNfse > 0) {
-        // Usa valorServico da(s) NFS-e — fonte autoritativa do valor emitido.
-        servCent = Math.min(Math.round(somaValorServicoNfse * 100), valorTituloCent);
-        prodCent = valorTituloCent - servCent;
-      } else if (itensVenda.length > 0 && valorTotalVenda > 0) {
+      if (itensVenda.length > 0 && valorTotalVenda > 0) {
+        // Split pela natureza real dos itens da venda — independe de como a NFS-e foi emitida
         const fator = Number(titulo.valor) / valorTotalVenda;
         const totalSrv = itensVenda.filter((i) => !i.tipoFisico).reduce((s, i) => s + i.valor, 0);
         const totalPrd = itensVenda.filter((i) => i.tipoFisico).reduce((s, i) => s + i.valor, 0);
@@ -774,6 +771,9 @@ export class CobrancaService {
           if (prodCent > 0) prodCent += delta;
           else servCent += delta;
         }
+      } else if (nfseInfos.length > 0 && somaValorServicoNfse > 0) {
+        servCent = Math.min(Math.round(somaValorServicoNfse * 100), valorTituloCent);
+        prodCent = valorTituloCent - servCent;
       } else {
         if (nfseInfos.length > 0 && nfeNums.length === 0) servCent = valorTituloCent;
         else if (nfseInfos.length === 0 && nfeNums.length > 0) prodCent = valorTituloCent;
