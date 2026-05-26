@@ -67,50 +67,21 @@ export class CobrancaService {
       );
     }
 
-    // Passo 4: Validar NF e calcular total
+    // Passo 4: Validar NF emitida (mantém regra "boleto requer NF" mesmo com itens vindos de venda_item)
     const nfInfo = await this.athosService.verificarNFTitulos(dto.idcontasReceber);
-    // Busca TODAS as NF-es de cada título (não apenas LIMIT 1) para criar item por NF-e
-    const todasNfesRows = await this.athosService.buscarTodasNfesParaTitulos(dto.idcontasReceber);
-    // Map: idcontareceber → [{ numero, valorNota }]
-    const todasNfesMap = new Map<number, Array<{ numero: string; valorNota: number }>>();
-    for (const row of todasNfesRows) {
-      const arr = todasNfesMap.get(row.idcontareceber) ?? [];
-      arr.push({ numero: row.numero, valorNota: row.valorNota });
-      todasNfesMap.set(row.idcontareceber, arr);
-    }
-
-    // Buscar NFS-e do nosso sistema para TODOS os títulos (inclui valorServico para split)
-    const todasNfse = await this.prisma.nfseEmitidaTitulo.findMany({
+    const nfseEmitidasTitulos = await this.prisma.nfseEmitidaTitulo.findMany({
       where: {
         idcontareceber: { in: dto.idcontasReceber },
         nfseEmitida: { numeroNfse: { not: null } },
       },
-      select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true, valorServico: true } } },
+      select: { idcontareceber: true },
     });
-    const nfseMapTodos = new Map(todasNfse.map((t) => [t.idcontareceber, t.nfseEmitida]));
-
-    // Buscar tipo-produto por venda (mesma lógica do modal NFS-e) para split sem NFS-e no nosso sistema
-    const vendasParaVerificar = [...new Set(
-      titulosFiltrados.map(t => t.idvenda).filter((v): v is number => v != null),
-    )];
-    const tipoPorVenda = new Map<number, { temProdutoFisico: boolean; valorServicos: number | null }>();
-    await Promise.all(
-      vendasParaVerificar.map(async (idv) => {
-        try {
-          const tipo = await this.athosService.verificarTipoProdutoVenda(idv);
-          tipoPorVenda.set(idv, { temProdutoFisico: tipo.temProdutoFisico, valorServicos: tipo.valorServicos });
-        } catch { /* falha silenciosa — split de fallback indisponível para esta venda */ }
-      }),
-    );
-
-    // Complementar nfInfo: títulos sem NF no Athos mas com NFS-e no nosso sistema
+    const titulosComNfseLocal = new Set(nfseEmitidasTitulos.map((t) => t.idcontareceber));
     for (const item of nfInfo) {
-      if (item.tipoNf === null && nfseMapTodos.has(item.idcontareceber)) {
+      if (item.tipoNf === null && titulosComNfseLocal.has(item.idcontareceber)) {
         item.tipoNf = "NFS-e";
-        item.numeroNf = nfseMapTodos.get(item.idcontareceber)!.numeroNfse ?? null;
       }
     }
-
     const semNf = nfInfo.filter((n) => n.tipoNf === null);
     if (semNf.length > 0) {
       throw new BadRequestException(
@@ -119,83 +90,11 @@ export class CobrancaService {
       );
     }
 
-    // Montar itens EFI: um item por NF-e + um item por NFS-e.
-    // todasNfesMap contém TODAS as NF-es do venda (sem LIMIT 1).
-    // Quando há NFS-e no sistema, o valor de serviço é reservado; o restante vai para NF-e(s).
-    // Múltiplas NF-es do mesmo venda são distribuídas proporcionalmente pelo valor da nota.
-    const itemMap = new Map<string, { name: string; valueCentavos: number }>();
-    for (const titulo of titulosFiltrados) {
-      const nf = nfInfo.find((n) => n.idcontareceber === titulo.idcontareceber);
-      const nfse = nfseMapTodos.get(titulo.idcontareceber);
-      const nfes = todasNfesMap.get(titulo.idcontareceber) ?? [];
-      const tipoProd = titulo.idvenda ? tipoPorVenda.get(titulo.idvenda) : undefined;
-      const valorTitulo = Number(titulo.valor);
-
-      // Valor de serviço: prioriza NFS-e emitida pelo nosso sistema;
-      // fallback para vendas mistas sem NFS-e: usa tipo-produto (mesma lógica do modal NFS-e).
-      const valorServicoBruto = nfse
-        ? Number(nfse.valorServico ?? 0)
-        : (tipoProd?.temProdutoFisico && (tipoProd.valorServicos ?? 0) > 0 ? tipoProd.valorServicos! : 0);
-      const valorNfse = Math.min(valorServicoBruto, valorTitulo);
-      // Valor restante para NF-e(s) (produto físico)
-      const valorFisico = Number((valorTitulo - valorNfse).toFixed(2));
-
-      // Registra item de serviço: NFS-e emitida OU serviços separados via tipo-produto
-      if (valorNfse > 0) {
-        if (nfse) {
-          const key = `NFS-e-${nfse.numeroNfse ?? ""}`;
-          const prev = itemMap.get(key);
-          itemMap.set(key, {
-            name: nfse.numeroNfse ? `NFS-e #${nfse.numeroNfse}` : "NFS-e",
-            valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorNfse * 100),
-          });
-        } else {
-          // Split via tipo-produto — serviços sem NFS-e emitida pelo nosso sistema
-          const prev = itemMap.get("servicos");
-          itemMap.set("servicos", {
-            name: "Serviços",
-            valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorNfse * 100),
-          });
-        }
-      }
-
-      // Registra item(s) de produto (NF-e)
-      if (nfes.length > 0 && valorFisico > 0) {
-        // Distribui valorFisico proporcionalmente ao valor de cada nota.
-        // Se todas as notas têm valor 0 (campo ausente), divide igualmente.
-        const totalNotas = nfes.reduce((s, n) => s + n.valorNota, 0);
-        let restante = Math.round(valorFisico * 100); // centavos
-        nfes.forEach((nfRow, idx) => {
-          const frac = totalNotas > 0 ? nfRow.valorNota / totalNotas : 1 / nfes.length;
-          // Último recebe o restante para evitar arredondamento
-          const centavos = idx === nfes.length - 1
-            ? restante
-            : Math.round(valorFisico * 100 * frac);
-          restante -= centavos;
-          if (centavos > 0 && nfRow.numero) {
-            const key = `NF-e-${nfRow.numero}`;
-            const prev = itemMap.get(key);
-            itemMap.set(key, {
-              name: `NF-e #${nfRow.numero}`,
-              valueCentavos: (prev?.valueCentavos ?? 0) + centavos,
-            });
-          }
-        });
-      } else if (nfes.length === 0 && valorFisico > 0) {
-        // Sem NF-e com chave no Athos: NFS-e puro ou NF sem chave de acesso registrada.
-        // valorFisico já considera o split de serviço/produto acima.
-        const tipoNf = nf?.tipoNf ?? "NF";
-        const numeroItem = (tipoNf === "NFS-e" && nfse?.numeroNfse) ? nfse.numeroNfse : (nf?.numeroNf ?? null);
-        const key = `${tipoNf}-${numeroItem ?? ""}`;
-        const prev = itemMap.get(key);
-        itemMap.set(key, {
-          name: (numeroItem ? `${tipoNf} #${numeroItem}` : tipoNf).slice(0, 255),
-          valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorFisico * 100),
-        });
-      }
-    }
     const totalValorRaw = titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0);
     const totalValor = Number(totalValorRaw.toFixed(2));
+
+    // Montar itens EFI a partir de venda_item do Athos (1 EFI item por produto/serviço da venda)
+    const itemMap = await this.montarItensEfiPorVendaItem(titulosFiltrados, totalValor);
 
     // Passo 4: Validar expireAt
     const hoje = new Date().toISOString().slice(0, 10);
@@ -227,12 +126,12 @@ export class CobrancaService {
       this.logger.warn(`Não foi possível buscar documento do cliente ${dto.idclienteAthos}: ${String(err)}`);
     }
 
-    // Montar itens EFI a partir do split NF-e / NFS-e calculado acima
+    // Montar itens EFI a partir dos venda_item do Athos
     const valorCentavos = Math.round(totalValor * 100);
     const efiItems = [...itemMap.values()].map((item) => ({
       name: item.name.slice(0, 255),
       value: item.valueCentavos,
-      amount: 1 as const,
+      amount: item.amount,
     }));
 
     // Passo 6: Criar boleto na EFI
@@ -756,96 +655,124 @@ export class CobrancaService {
   async previewBoleto(idclienteAthos: number, idcontasReceber: number[]): Promise<{
     nomeCliente: string;
     total: number;
-    itens: Array<{ nome: string; valor: number }>;
+    itens: Array<{ nome: string; valor: number; quantidade: number }>;
   }> {
     const todosTitulos = await this.athosService.buscarTitulosClienteContasReceber(idclienteAthos);
     const titulosFiltrados = todosTitulos.filter(t => idcontasReceber.includes(t.idcontareceber));
 
-    const nfInfo = await this.athosService.verificarNFTitulos(idcontasReceber);
-    const todasNfesRows = await this.athosService.buscarTodasNfesParaTitulos(idcontasReceber);
-    const todasNfesMap = new Map<number, Array<{ numero: string; valorNota: number }>>();
-    for (const row of todasNfesRows) {
-      const arr = todasNfesMap.get(row.idcontareceber) ?? [];
-      arr.push({ numero: row.numero, valorNota: row.valorNota });
-      todasNfesMap.set(row.idcontareceber, arr);
-    }
-
-    const todasNfse = await this.prisma.nfseEmitidaTitulo.findMany({
-      where: { idcontareceber: { in: idcontasReceber }, nfseEmitida: { numeroNfse: { not: null } } },
-      select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true, valorServico: true } } },
-    });
-    const nfseMapTodos = new Map(todasNfse.map(t => [t.idcontareceber, t.nfseEmitida]));
-
-    const vendasUnicas = [...new Set(titulosFiltrados.map(t => t.idvenda).filter((v): v is number => v != null))];
-    const tipoPorVenda = new Map<number, { temProdutoFisico: boolean; valorServicos: number | null }>();
-    await Promise.all(vendasUnicas.map(async (idv) => {
-      try {
-        const tipo = await this.athosService.verificarTipoProdutoVenda(idv);
-        tipoPorVenda.set(idv, { temProdutoFisico: tipo.temProdutoFisico, valorServicos: tipo.valorServicos });
-      } catch { /* silently ignore */ }
-    }));
-
-    for (const item of nfInfo) {
-      if (item.tipoNf === null && nfseMapTodos.has(item.idcontareceber)) {
-        item.tipoNf = "NFS-e";
-        item.numeroNf = nfseMapTodos.get(item.idcontareceber)!.numeroNfse ?? null;
-      }
-    }
-
-    const itemMap = new Map<string, { name: string; valueCentavos: number }>();
-    for (const titulo of titulosFiltrados) {
-      const nf = nfInfo.find(n => n.idcontareceber === titulo.idcontareceber);
-      const nfse = nfseMapTodos.get(titulo.idcontareceber);
-      const nfes = todasNfesMap.get(titulo.idcontareceber) ?? [];
-      const tipoProd = titulo.idvenda ? tipoPorVenda.get(titulo.idvenda) : undefined;
-      const valorTitulo = Number(titulo.valor);
-
-      const valorServicoBruto = nfse
-        ? Number(nfse.valorServico ?? 0)
-        : (tipoProd?.temProdutoFisico && (tipoProd.valorServicos ?? 0) > 0 ? tipoProd.valorServicos! : 0);
-      const valorNfse = Math.min(valorServicoBruto, valorTitulo);
-      const valorFisico = Number((valorTitulo - valorNfse).toFixed(2));
-
-      if (valorNfse > 0) {
-        if (nfse) {
-          const key = `NFS-e-${nfse.numeroNfse ?? ""}`;
-          const prev = itemMap.get(key);
-          itemMap.set(key, { name: nfse.numeroNfse ? `NFS-e #${nfse.numeroNfse}` : "NFS-e", valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorNfse * 100) });
-        } else {
-          const prev = itemMap.get("servicos");
-          itemMap.set("servicos", { name: "Serviços", valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorNfse * 100) });
-        }
-      }
-      if (nfes.length > 0 && valorFisico > 0) {
-        const totalNotas = nfes.reduce((s, n) => s + n.valorNota, 0);
-        let restante = Math.round(valorFisico * 100);
-        nfes.forEach((nfRow, idx) => {
-          const centavos = idx === nfes.length - 1 ? restante : Math.round(valorFisico * 100 * (totalNotas > 0 ? nfRow.valorNota / totalNotas : 1 / nfes.length));
-          restante -= centavos;
-          if (centavos > 0 && nfRow.numero) {
-            const key = `NF-e-${nfRow.numero}`;
-            const prev = itemMap.get(key);
-            itemMap.set(key, { name: `NF-e #${nfRow.numero}`, valueCentavos: (prev?.valueCentavos ?? 0) + centavos });
-          }
-        });
-      } else if (nfes.length === 0 && valorFisico > 0) {
-        const tipoNf = nf?.tipoNf ?? "NF";
-        const numeroItem = (tipoNf === "NFS-e" && nfse?.numeroNfse) ? nfse.numeroNfse : (nf?.numeroNf ?? null);
-        const key = `${tipoNf}-${numeroItem ?? ""}`;
-        const prev = itemMap.get(key);
-        itemMap.set(key, { name: (numeroItem ? `${tipoNf} #${numeroItem}` : tipoNf).slice(0, 255), valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(valorFisico * 100) });
-      }
-    }
-
     const total = Number(titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0).toFixed(2));
+    const itemMap = await this.montarItensEfiPorVendaItem(titulosFiltrados, total);
+
     const dadosCliente = await this.athosService.buscarDadosClienteContasReceber(idclienteAthos);
     const nomeCliente = dadosCliente?.nome_cliente ?? `Cliente ${idclienteAthos}`;
 
     return {
       nomeCliente,
       total,
-      itens: [...itemMap.values()].map(item => ({ nome: item.name, valor: item.valueCentavos / 100 })),
+      itens: [...itemMap.values()].map(item => ({
+        nome: item.name,
+        valor: item.valueCentavos / 100,
+        quantidade: item.amount,
+      })),
     };
+  }
+
+  /**
+   * Monta os itens EFI a partir de venda_item do Athos.
+   * Estratégia: por venda selecionada, busca seus itens; aplica fator de proporção
+   * (Σ valor dos títulos da venda / valortotal da venda) para títulos parciais.
+   * Fallback: se venda sem itens ou erro, gera 1 item agregando os títulos daquela venda.
+   * Garante Σ valueCentavos == round(totalValor * 100) ajustando o último item.
+   */
+  private async montarItensEfiPorVendaItem(
+    titulos: Array<{ idcontareceber: number; idvenda: number | null; valor: number }>,
+    totalValor: number,
+  ): Promise<Map<string, { name: string; valueCentavos: number; amount: number }>> {
+    const itemMap = new Map<string, { name: string; valueCentavos: number; amount: number }>();
+
+    // Agrupa títulos por idvenda
+    const titulosPorVenda = new Map<number | null, typeof titulos>();
+    for (const t of titulos) {
+      const key = t.idvenda ?? null;
+      const arr = titulosPorVenda.get(key) ?? [];
+      arr.push(t);
+      titulosPorVenda.set(key, arr);
+    }
+
+    // Para cada venda: busca itens + valortotal em paralelo
+    const vendasComIdv = [...titulosPorVenda.keys()].filter((v): v is number => v != null);
+    const dadosPorVenda = new Map<number, {
+      itens: Array<{ nome: string; quantidade: number; valor: number; tipoFisico: boolean; sequencia: number }>;
+      valorTotal: number;
+    }>();
+    await Promise.all(
+      vendasComIdv.map(async (idv) => {
+        const [itens, valorTotal] = await Promise.all([
+          this.athosService.buscarItensVenda(idv),
+          this.athosService.buscarValorTotalVenda(idv),
+        ]);
+        dadosPorVenda.set(idv, { itens, valorTotal });
+      }),
+    );
+
+    // Constrói itens por venda
+    for (const [idvenda, titulosDaVenda] of titulosPorVenda.entries()) {
+      const somaTitulos = titulosDaVenda.reduce((s, t) => s + Number(t.valor), 0);
+      const dados = idvenda != null ? dadosPorVenda.get(idvenda) : undefined;
+      const itensVenda = dados?.itens ?? [];
+      const valorTotalVenda = dados?.valorTotal ?? 0;
+
+      if (idvenda == null || itensVenda.length === 0 || valorTotalVenda <= 0) {
+        // Fallback: 1 item agregando os títulos desta venda
+        const key = `fallback-${idvenda ?? "sem-venda"}`;
+        const name = idvenda != null ? `Venda #${idvenda}` : "Cobrança";
+        itemMap.set(key, {
+          name,
+          valueCentavos: Math.round(somaTitulos * 100),
+          amount: 1,
+        });
+        continue;
+      }
+
+      const fator = somaTitulos / valorTotalVenda;
+      const targetCentavos = Math.round(somaTitulos * 100);
+
+      // Calcula centavos por item e ajusta o último para bater o total da venda
+      const itensCalc = itensVenda.map((it) => ({
+        nome: it.nome,
+        quantidade: Math.max(1, Math.round(it.quantidade)),
+        valueCentavos: Math.round(it.valor * fator * 100),
+        sequencia: it.sequencia,
+      }));
+      const somaCentavos = itensCalc.reduce((s, i) => s + i.valueCentavos, 0);
+      const delta = targetCentavos - somaCentavos;
+      if (itensCalc.length > 0 && delta !== 0) {
+        itensCalc[itensCalc.length - 1].valueCentavos += delta;
+      }
+
+      for (const ic of itensCalc) {
+        if (ic.valueCentavos <= 0) continue;
+        const key = `${idvenda}-${ic.sequencia}`;
+        const prev = itemMap.get(key);
+        itemMap.set(key, {
+          name: ic.nome.slice(0, 255),
+          valueCentavos: (prev?.valueCentavos ?? 0) + ic.valueCentavos,
+          amount: prev?.amount ?? ic.quantidade,
+        });
+      }
+    }
+
+    // Ajuste global final para garantir invariante EFI Σ items.value === total
+    const target = Math.round(totalValor * 100);
+    const soma = [...itemMap.values()].reduce((s, i) => s + i.valueCentavos, 0);
+    const diff = target - soma;
+    if (diff !== 0 && itemMap.size > 0) {
+      const ultimaKey = [...itemMap.keys()].pop()!;
+      const ultimo = itemMap.get(ultimaKey)!;
+      itemMap.set(ultimaKey, { ...ultimo, valueCentavos: ultimo.valueCentavos + diff });
+    }
+
+    return itemMap;
   }
 
   private getRequiredConfig(key: string): string {

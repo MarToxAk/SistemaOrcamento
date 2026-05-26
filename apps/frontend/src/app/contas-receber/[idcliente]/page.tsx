@@ -79,7 +79,7 @@ export default function ClienteDetalhePage({
   const [copiado, setCopiado] = useState(false);
   const [boletoPreview, setBoletoPreview] = useState<{
     nomeCliente: string; total: number;
-    itens: Array<{ nome: string; valor: number }>;
+    itens: Array<{ nome: string; valor: number; quantidade?: number }>;
   } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
@@ -910,7 +910,12 @@ export default function ClienteDetalhePage({
                       <ul className="list-group list-group-flush border rounded">
                         {boletoPreview.itens.map((item, i) => (
                           <li key={i} className="list-group-item d-flex justify-content-between px-3 py-2 small">
-                            <span className="text-muted">{item.nome}</span>
+                            <span className="text-muted">
+                              {item.nome}
+                              {item.quantidade && item.quantidade > 1 ? (
+                                <span className="text-secondary ms-1">×{item.quantidade}</span>
+                              ) : null}
+                            </span>
                             <span className="fw-semibold">{formatBRL(item.valor)}</span>
                           </li>
                         ))}

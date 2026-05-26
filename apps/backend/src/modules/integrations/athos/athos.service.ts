@@ -1904,6 +1904,68 @@ export class AthosService {
     }
   }
 
+  /**
+   * Retorna TODOS os itens (produto físico + serviço) de uma venda, com flag tipoFisico.
+   * Usado pelo boleto EFI para criar 1 item por venda_item.
+   */
+  async buscarItensVenda(idvenda: number): Promise<
+    Array<{ nome: string; quantidade: number; valor: number; tipoFisico: boolean; sequencia: number }>
+  > {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT p.descricaoproduto AS nome,
+                vi.quantidadeitem AS quantidade,
+                vi.vendavalorfinalitem AS valor,
+                COALESCE(p.tipoproduto, false) AS tipo_fisico,
+                vi.sequenciaitem AS sequencia
+         FROM venda_item vi
+         JOIN produto p ON p.idproduto = vi.idproduto
+         WHERE vi.idvenda = $1
+           AND COALESCE(vi.vendavalorfinalitem, 0) > 0
+         ORDER BY vi.sequenciaitem`,
+        [idvenda],
+      );
+      return result.rows.map((r) => ({
+        nome: String(r["nome"] ?? "").trim() || `Item ${r["sequencia"] ?? "?"}`,
+        quantidade: Number(r["quantidade"] ?? 1) || 1,
+        valor: Number(r["valor"] ?? 0),
+        tipoFisico: Boolean(r["tipo_fisico"]),
+        sequencia: Number(r["sequencia"] ?? 0),
+      }));
+    } catch (err) {
+      this.logger.warn(
+        `buscarItensVenda idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Retorna valortotal da venda (denominador para distribuir itens em títulos parciais). */
+  async buscarValorTotalVenda(idvenda: number): Promise<number> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query<{ valortotal: unknown }>(
+        "SELECT valortotal FROM venda WHERE idvenda = $1 LIMIT 1",
+        [idvenda],
+      );
+      const raw = result.rows[0]?.valortotal;
+      const v = Number(raw);
+      return Number.isFinite(v) && v > 0 ? v : 0;
+    } catch (err) {
+      this.logger.warn(
+        `buscarValorTotalVenda idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return 0;
+    } finally {
+      client.release();
+    }
+  }
+
   async verificarTipoProdutoVenda(idvenda: number): Promise<{
     temProdutoFisico: boolean;
     todosServico: boolean;
