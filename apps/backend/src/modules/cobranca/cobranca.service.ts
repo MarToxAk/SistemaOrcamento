@@ -70,22 +70,21 @@ export class CobrancaService {
     // Passo 4: Validar NF e calcular total
     const nfInfo = await this.athosService.verificarNFTitulos(dto.idcontasReceber);
 
-    // Complementar com NFS-e emitidas pelo nosso sistema (não refletidas no Athos)
-    const semNfAthos = nfInfo.filter((n) => n.tipoNf === null);
-    if (semNfAthos.length > 0) {
-      const nfseNossas = await this.prisma.nfseEmitidaTitulo.findMany({
-        where: {
-          idcontareceber: { in: semNfAthos.map((n) => n.idcontareceber) },
-          nfseEmitida: { numeroNfse: { not: null } },
-        },
-        select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true } } },
-      });
-      const cobertosPorNfse = new Map(nfseNossas.map((t) => [t.idcontareceber, t.nfseEmitida.numeroNfse]));
-      for (const item of nfInfo) {
-        if (item.tipoNf === null && cobertosPorNfse.has(item.idcontareceber)) {
-          item.tipoNf = "NFS-e";
-          item.numeroNf = cobertosPorNfse.get(item.idcontareceber) ?? null;
-        }
+    // Buscar NFS-e do nosso sistema para TODOS os títulos (inclui valorServico para split)
+    const todasNfse = await this.prisma.nfseEmitidaTitulo.findMany({
+      where: {
+        idcontareceber: { in: dto.idcontasReceber },
+        nfseEmitida: { numeroNfse: { not: null } },
+      },
+      select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true, valorServico: true } } },
+    });
+    const nfseMapTodos = new Map(todasNfse.map((t) => [t.idcontareceber, t.nfseEmitida]));
+
+    // Complementar nfInfo: títulos sem NF no Athos mas com NFS-e no nosso sistema
+    for (const item of nfInfo) {
+      if (item.tipoNf === null && nfseMapTodos.has(item.idcontareceber)) {
+        item.tipoNf = "NFS-e";
+        item.numeroNf = nfseMapTodos.get(item.idcontareceber)!.numeroNfse ?? null;
       }
     }
 
@@ -97,24 +96,50 @@ export class CobrancaService {
       );
     }
 
-    // Um item EFI por nota fiscal com seu valor individual
-    const nfMap = new Map<string, { tipoNf: string; numeroNf: string | null; idcontasReceber: number[] }>();
-    for (const nf of nfInfo) {
-      const key = `${nf.tipoNf ?? "NF"}-${nf.numeroNf ?? ""}`;
-      if (!nfMap.has(key)) {
-        nfMap.set(key, { tipoNf: nf.tipoNf ?? "NF", numeroNf: nf.numeroNf, idcontasReceber: [] });
+    // Montar itens EFI: um item por NF.
+    // Título com NF-e (Athos) + NFS-e (sistema próprio) é dividido em dois itens
+    // usando valorServico da NFS-e; o restante vai para a NF-e.
+    const itemMap = new Map<string, { name: string; valueCentavos: number }>();
+    for (const titulo of titulosFiltrados) {
+      const nf = nfInfo.find((n) => n.idcontareceber === titulo.idcontareceber);
+      const nfse = nfseMapTodos.get(titulo.idcontareceber);
+      const valorTitulo = Number(titulo.valor);
+
+      if (nf?.tipoNf === "NF-e" && nfse) {
+        const valorNfse = Math.min(Number(nfse.valorServico ?? 0), valorTitulo);
+        const valorNfe = Number((valorTitulo - valorNfse).toFixed(2));
+        if (valorNfe > 0) {
+          const key = `NF-e-${nf.numeroNf ?? ""}`;
+          const prev = itemMap.get(key);
+          itemMap.set(key, {
+            name: nf.numeroNf ? `NF-e #${nf.numeroNf}` : "NF-e",
+            valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(Number(valorNfe.toFixed(2)) * 100),
+          });
+        }
+        if (valorNfse > 0) {
+          const key = `NFS-e-${nfse.numeroNfse ?? ""}`;
+          const prev = itemMap.get(key);
+          itemMap.set(key, {
+            name: nfse.numeroNfse ? `NFS-e #${nfse.numeroNfse}` : "NFS-e",
+            valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(Number(valorNfse.toFixed(2)) * 100),
+          });
+        }
+      } else {
+        const tipoNf = nf?.tipoNf ?? "NF";
+        const numeroNf = nf?.numeroNf ?? null;
+        const key = `${tipoNf}-${numeroNf ?? ""}`;
+        const prev = itemMap.get(key);
+        itemMap.set(key, {
+          name: (numeroNf ? `${tipoNf} #${numeroNf}` : tipoNf).slice(0, 255),
+          valueCentavos: (prev?.valueCentavos ?? 0) + Math.round(Number(valorTitulo.toFixed(2)) * 100),
+        });
       }
-      nfMap.get(key)!.idcontasReceber.push(nf.idcontareceber);
     }
-    const efiItems = [...nfMap.values()].map((nf) => {
-      const valorNf = titulosFiltrados
-        .filter((t) => nf.idcontasReceber.includes(t.idcontareceber))
-        .reduce((acc, t) => acc + Number(t.valor), 0);
-      const name = nf.numeroNf
-        ? `${nf.tipoNf} #${nf.numeroNf}`.slice(0, 255)
-        : nf.tipoNf.slice(0, 255);
-      return { name, value: Math.round(Number(valorNf.toFixed(2)) * 100), amount: 1 };
-    });
+    const efiItems = [...itemMap.values()].map((item) => ({
+      name: item.name.slice(0, 255),
+      value: item.valueCentavos,
+      amount: 1 as const,
+    }));
 
     const totalValorRaw = titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0);
     const totalValor = Number(totalValorRaw.toFixed(2));
