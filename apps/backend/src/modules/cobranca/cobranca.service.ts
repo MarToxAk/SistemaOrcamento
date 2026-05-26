@@ -97,14 +97,24 @@ export class CobrancaService {
       );
     }
 
-    // Determinar tipo de NF para o item EFI
-    // Montar nome do item com tipo + números das NFs (ex: "NF-e #308, #398")
-    const numeros = [...new Set(nfInfo.map((n) => n.numeroNf).filter(Boolean))];
-    const tipos = [...new Set(nfInfo.map((n) => n.tipoNf))];
-    const tipoLabel = tipos.length === 1 ? (tipos[0] ?? "NF-e") : "NF-e / NFS-e";
-    const nomeItemNf = numeros.length > 0
-      ? `${tipoLabel} ${numeros.map((num) => `#${num}`).join(", ")}`.slice(0, 255)
-      : tipoLabel;
+    // Um item EFI por nota fiscal com seu valor individual
+    const nfMap = new Map<string, { tipoNf: string; numeroNf: string | null; idcontasReceber: number[] }>();
+    for (const nf of nfInfo) {
+      const key = `${nf.tipoNf ?? "NF"}-${nf.numeroNf ?? ""}`;
+      if (!nfMap.has(key)) {
+        nfMap.set(key, { tipoNf: nf.tipoNf ?? "NF", numeroNf: nf.numeroNf, idcontasReceber: [] });
+      }
+      nfMap.get(key)!.idcontasReceber.push(nf.idcontareceber);
+    }
+    const efiItems = [...nfMap.values()].map((nf) => {
+      const valorNf = titulosFiltrados
+        .filter((t) => nf.idcontasReceber.includes(t.idcontareceber))
+        .reduce((acc, t) => acc + Number(t.valor), 0);
+      const name = nf.numeroNf
+        ? `${nf.tipoNf} #${nf.numeroNf}`.slice(0, 255)
+        : nf.tipoNf.slice(0, 255);
+      return { name, value: Math.round(Number(valorNf.toFixed(2)) * 100), amount: 1 };
+    });
 
     const totalValorRaw = titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0);
     const totalValor = Number(totalValorRaw.toFixed(2));
@@ -176,13 +186,7 @@ export class CobrancaService {
       : undefined;
 
     const body: Record<string, unknown> = {
-      items: [
-        {
-          name: nomeItemNf,
-          value: valorCentavos,
-          amount: 1,
-        },
-      ],
+      items: efiItems,
       payment: {
         banking_billet: {
           expire_at: dto.expireAt,
