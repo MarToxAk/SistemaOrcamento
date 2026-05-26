@@ -1881,8 +1881,7 @@ export class AthosService {
     try {
       const result = await client.query(
         `SELECT cr.idcontareceber,
-                n.numero,
-                COALESCE(n.valortotal, 0) AS valor_nota
+                n.numero
          FROM conta_receber cr
          JOIN venda_nota vn ON vn.idvenda = cr.idvenda
          JOIN nota n ON n.idnota = vn.idnota
@@ -1892,10 +1891,10 @@ export class AthosService {
          ORDER BY cr.idcontareceber, n.idnota`,
         [idcontasReceber],
       );
-      return (result.rows as Array<{ idcontareceber: unknown; numero: unknown; valor_nota: unknown }>).map((r) => ({
+      return (result.rows as Array<{ idcontareceber: unknown; numero: unknown }>).map((r) => ({
         idcontareceber: Number(r["idcontareceber"]),
         numero: String(r["numero"] ?? "").trim(),
-        valorNota: Number(r["valor_nota"] ?? 0),
+        valorNota: 0, // distribuição proporcional indisponível — usa divisão igual entre NF-es
       }));
     } catch (err) {
       this.logger.warn(`buscarTodasNfesParaTitulos: ${err instanceof Error ? err.message : String(err)}`);

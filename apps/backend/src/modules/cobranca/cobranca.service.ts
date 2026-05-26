@@ -316,6 +316,13 @@ export class CobrancaService {
       this.logger.error(
         `Falha ao criar boleto na EFI. status=${status} detalhe=${JSON.stringify(detail)}`,
       );
+      const efiCode = (detail as { code?: string | number })?.code;
+      if (String(efiCode) === "4600210") {
+        throw new BadRequestException(
+          "A EFI bloqueou a emissão: muitas tentativas com os mesmos dados (cliente + valor + vencimento). " +
+          "Aguarde alguns minutos e tente novamente com uma data de vencimento diferente, ou entre em contato com o suporte da EFI.",
+        );
+      }
       throw new InternalServerErrorException("Não foi possível gerar o boleto na EFI.");
     }
 
