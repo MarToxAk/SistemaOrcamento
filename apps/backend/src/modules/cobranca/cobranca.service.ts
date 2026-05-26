@@ -678,11 +678,13 @@ export class CobrancaService {
   }
 
   /**
-   * Monta os itens EFI agregados por tipo de Nota Fiscal.
-   * Para cada título: usa venda_item.tipoFisico (mesma lógica do NFS-e) para
-   * separar valor de serviço (→ item NFS-e #<num>) e valor de produto (→ item NF-e #<num>).
-   * Para títulos parciais: aplica fator (Σ valor_titulos_da_venda / valortotal_venda) sobre o
-   * split serviço/produto da venda. Garante Σ valueCentavos == round(totalValor * 100).
+   * Monta os itens EFI com UM item por Nota Fiscal (cada NFS-e e cada NF-e).
+   * Para cada título:
+   *  - Split serviço/produto via venda_item.tipoFisico (mesma lógica do NFS-e).
+   *  - Parte de serviço alocada à(s) NFS-e do título (uma por número).
+   *  - Parte de produto alocada à(s) NF-e do título (distribuição igual entre NF-es do mesmo venda).
+   * Resultado: Map<numeroNF, item>, agregando o mesmo número que apareça em vários títulos.
+   * Garante Σ valueCentavos == round(totalValor * 100) aplicando delta de arredondamento no último item.
    */
   private async montarItensEfiPorVendaItem(
     titulos: Array<{ idcontareceber: number; idvenda: number | null; valor: number }>,
@@ -690,16 +692,21 @@ export class CobrancaService {
   ): Promise<Map<string, { name: string; valueCentavos: number; amount: number }>> {
     const idsContas = titulos.map((t) => t.idcontareceber);
 
-    // Busca números de NFS-e (do nosso banco) e NF-e (do Athos) por idcontareceber
+    // Busca números de NFS-e (do nosso banco) por idcontareceber — múltiplas possíveis
     const nfseRows = await this.prisma.nfseEmitidaTitulo.findMany({
       where: { idcontareceber: { in: idsContas }, nfseEmitida: { numeroNfse: { not: null } } },
       select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true } } },
     });
-    const nfseNumPorTitulo = new Map<number, string>();
+    const nfseNumsPorTitulo = new Map<number, string[]>();
     for (const row of nfseRows) {
       const num = row.nfseEmitida.numeroNfse;
-      if (num) nfseNumPorTitulo.set(row.idcontareceber, num);
+      if (!num) continue;
+      const arr = nfseNumsPorTitulo.get(row.idcontareceber) ?? [];
+      if (!arr.includes(num)) arr.push(num);
+      nfseNumsPorTitulo.set(row.idcontareceber, arr);
     }
+
+    // Busca números de NF-e (do Athos) por idcontareceber
     const nfesRows = await this.athosService.buscarTodasNfesParaTitulos(idsContas);
     const nfeNumsPorTitulo = new Map<number, string[]>();
     for (const r of nfesRows) {
@@ -709,21 +716,14 @@ export class CobrancaService {
       nfeNumsPorTitulo.set(r.idcontareceber, arr);
     }
 
-    // Agrupa títulos por idvenda + busca itens da venda (com tipoFisico) e valortotal
-    const titulosPorVenda = new Map<number | null, typeof titulos>();
-    for (const t of titulos) {
-      const key = t.idvenda ?? null;
-      const arr = titulosPorVenda.get(key) ?? [];
-      arr.push(t);
-      titulosPorVenda.set(key, arr);
-    }
-    const vendasComIdv = [...titulosPorVenda.keys()].filter((v): v is number => v != null);
+    // Agrupa títulos por idvenda + busca venda_item (com tipoFisico) e valortotal
+    const vendasUnicas = [...new Set(titulos.map((t) => t.idvenda).filter((v): v is number => v != null))];
     const dadosPorVenda = new Map<number, {
       itens: Array<{ nome: string; quantidade: number; valor: number; tipoFisico: boolean; sequencia: number }>;
       valorTotal: number;
     }>();
     await Promise.all(
-      vendasComIdv.map(async (idv) => {
+      vendasUnicas.map(async (idv) => {
         const [itens, valorTotal] = await Promise.all([
           this.athosService.buscarItensVenda(idv),
           this.athosService.buscarValorTotalVenda(idv),
@@ -732,11 +732,9 @@ export class CobrancaService {
       }),
     );
 
-    // Acumuladores por título (centavos)
-    let centavosServicoTotal = 0;
-    let centavosProdutoTotal = 0;
-    const numerosNfse = new Set<string>();
-    const numerosNfe = new Set<string>();
+    // Acumuladores por número de NF (centavos)
+    const acumNfse = new Map<string, number>();
+    const acumNfe = new Map<string, number>();
 
     for (const titulo of titulos) {
       const valorTituloCent = Math.round(Number(titulo.valor) * 100);
@@ -744,68 +742,71 @@ export class CobrancaService {
       const itensVenda = dados?.itens ?? [];
       const valorTotalVenda = dados?.valorTotal ?? 0;
 
-      // Coleta números de NF do título (se existirem)
-      const nfseNum = nfseNumPorTitulo.get(titulo.idcontareceber);
+      const nfseNums = nfseNumsPorTitulo.get(titulo.idcontareceber) ?? [];
       const nfeNums = nfeNumsPorTitulo.get(titulo.idcontareceber) ?? [];
-      if (nfseNum) numerosNfse.add(nfseNum);
-      for (const n of nfeNums) numerosNfe.add(n);
 
+      // Calcula split serviço/produto para este título
       let servCent = 0;
       let prodCent = 0;
-
       if (itensVenda.length > 0 && valorTotalVenda > 0) {
-        // Split via venda_item: separa por tipoFisico (mesma lógica do NFS-e)
         const fator = Number(titulo.valor) / valorTotalVenda;
-        const totalSrv = itensVenda
-          .filter((i) => !i.tipoFisico)
-          .reduce((s, i) => s + i.valor, 0);
-        const totalPrd = itensVenda
-          .filter((i) => i.tipoFisico)
-          .reduce((s, i) => s + i.valor, 0);
+        const totalSrv = itensVenda.filter((i) => !i.tipoFisico).reduce((s, i) => s + i.valor, 0);
+        const totalPrd = itensVenda.filter((i) => i.tipoFisico).reduce((s, i) => s + i.valor, 0);
         servCent = Math.round(totalSrv * fator * 100);
         prodCent = Math.round(totalPrd * fator * 100);
-        // Ajuste de arredondamento: garante servCent + prodCent === valorTituloCent
         const delta = valorTituloCent - (servCent + prodCent);
         if (delta !== 0) {
           if (prodCent > 0) prodCent += delta;
           else servCent += delta;
         }
       } else {
-        // Fallback: sem venda_item disponível. Aloca conforme NF existente.
-        if (nfseNum && nfeNums.length === 0) {
-          servCent = valorTituloCent;
-        } else if (!nfseNum && nfeNums.length > 0) {
-          prodCent = valorTituloCent;
-        } else {
-          // Ambas (ou nenhuma) — sem split conhecido, joga tudo em produto
-          // para preservar o invariante. NFS-e quando emitida sozinha cai no ramo acima.
-          prodCent = valorTituloCent;
-        }
+        // Fallback: sem venda_item — aloca pelo tipo de NF que o título tem
+        if (nfseNums.length > 0 && nfeNums.length === 0) servCent = valorTituloCent;
+        else if (nfseNums.length === 0 && nfeNums.length > 0) prodCent = valorTituloCent;
+        else prodCent = valorTituloCent; // ambos ou nenhum → cai em produto
       }
 
-      centavosServicoTotal += servCent;
-      centavosProdutoTotal += prodCent;
+      // Distribui serviço entre NFS-e do título (igual entre números)
+      if (servCent > 0 && nfseNums.length > 0) {
+        let restante = servCent;
+        nfseNums.forEach((num, idx) => {
+          const parte = idx === nfseNums.length - 1
+            ? restante
+            : Math.round(servCent / nfseNums.length);
+          restante -= parte;
+          acumNfse.set(num, (acumNfse.get(num) ?? 0) + parte);
+        });
+      } else if (servCent > 0) {
+        // Sem número de NFS-e → vai para chave "servicos"
+        acumNfse.set("__servicos__", (acumNfse.get("__servicos__") ?? 0) + servCent);
+      }
+
+      // Distribui produto entre NF-es do título (igual entre números)
+      if (prodCent > 0 && nfeNums.length > 0) {
+        let restante = prodCent;
+        nfeNums.forEach((num, idx) => {
+          const parte = idx === nfeNums.length - 1
+            ? restante
+            : Math.round(prodCent / nfeNums.length);
+          restante -= parte;
+          acumNfe.set(num, (acumNfe.get(num) ?? 0) + parte);
+        });
+      } else if (prodCent > 0) {
+        acumNfe.set("__produtos__", (acumNfe.get("__produtos__") ?? 0) + prodCent);
+      }
     }
 
-    // Constrói os itens EFI
+    // Constrói o itemMap: 1 item por NF
     const itemMap = new Map<string, { name: string; valueCentavos: number; amount: number }>();
-    if (centavosServicoTotal > 0) {
-      const nums = [...numerosNfse];
-      const name = nums.length === 0
-        ? "Serviços"
-        : nums.length === 1
-        ? `NFS-e #${nums[0]}`
-        : `NFS-e #${nums.join(", #")}`;
-      itemMap.set("servico", { name, valueCentavos: centavosServicoTotal, amount: 1 });
+    for (const [num, cent] of acumNfse.entries()) {
+      if (cent <= 0) continue;
+      const name = num === "__servicos__" ? "Serviços" : `NFS-e #${num}`;
+      itemMap.set(`NFS-e-${num}`, { name, valueCentavos: cent, amount: 1 });
     }
-    if (centavosProdutoTotal > 0) {
-      const nums = [...numerosNfe];
-      const name = nums.length === 0
-        ? "Produtos"
-        : nums.length === 1
-        ? `NF-e #${nums[0]}`
-        : `NF-e #${nums.join(", #")}`;
-      itemMap.set("produto", { name, valueCentavos: centavosProdutoTotal, amount: 1 });
+    for (const [num, cent] of acumNfe.entries()) {
+      if (cent <= 0) continue;
+      const name = num === "__produtos__" ? "Produtos" : `NF-e #${num}`;
+      itemMap.set(`NF-e-${num}`, { name, valueCentavos: cent, amount: 1 });
     }
 
     // Ajuste final: garante Σ items.value === round(totalValor * 100)
@@ -813,13 +814,10 @@ export class CobrancaService {
     const soma = [...itemMap.values()].reduce((s, i) => s + i.valueCentavos, 0);
     const diff = target - soma;
     if (diff !== 0) {
-      // Aplica delta no produto se existir, senão no serviço, senão cria um item de cobrança.
-      if (itemMap.has("produto")) {
-        const it = itemMap.get("produto")!;
-        itemMap.set("produto", { ...it, valueCentavos: it.valueCentavos + diff });
-      } else if (itemMap.has("servico")) {
-        const it = itemMap.get("servico")!;
-        itemMap.set("servico", { ...it, valueCentavos: it.valueCentavos + diff });
+      if (itemMap.size > 0) {
+        const ultimaKey = [...itemMap.keys()].pop()!;
+        const it = itemMap.get(ultimaKey)!;
+        itemMap.set(ultimaKey, { ...it, valueCentavos: it.valueCentavos + diff });
       } else if (target > 0) {
         itemMap.set("cobranca", { name: "Cobrança", valueCentavos: target, amount: 1 });
       }
