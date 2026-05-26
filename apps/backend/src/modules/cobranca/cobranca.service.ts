@@ -197,6 +197,8 @@ export class CobrancaService {
       },
     };
 
+    this.logger.log(`EFI boleto payload: items=${JSON.stringify(body.items)} valorCentavos=${valorCentavos}`);
+
     let chargeId: number;
     let linkBoleto: string;
     let barcode: string;
