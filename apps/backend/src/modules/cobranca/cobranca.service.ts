@@ -194,12 +194,6 @@ export class CobrancaService {
         });
       }
     }
-    const efiItems = [...itemMap.values()].map((item) => ({
-      name: item.name.slice(0, 255),
-      value: item.valueCentavos,
-      amount: 1 as const,
-    }));
-
     const totalValorRaw = titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0);
     const totalValor = Number(totalValorRaw.toFixed(2));
 
@@ -233,6 +227,14 @@ export class CobrancaService {
       this.logger.warn(`Não foi possível buscar documento do cliente ${dto.idclienteAthos}: ${String(err)}`);
     }
 
+    // Montar item EFI: nome do cliente + valor total (identificação clara na cobrança)
+    const valorCentavos = Math.round(totalValor * 100);
+    const efiItems = [{
+      name: nomeCliente.trim().toUpperCase().slice(0, 80),
+      value: valorCentavos,
+      amount: 1 as const,
+    }];
+
     // Passo 6: Criar boleto na EFI
     const baseUrl =
       this.config.get<string>("EFI_COBRANCA_BASE_URL") ??
@@ -259,8 +261,6 @@ export class CobrancaService {
       this.logger.error(`Falha ao autenticar na API Cobranças EFI: ${JSON.stringify(detail)}`);
       throw new InternalServerErrorException("Não foi possível autenticar na API Cobranças EFI.");
     }
-
-    const valorCentavos = Math.round(Number(totalValor.toFixed(2)) * 100);
 
     const webhookBase =
       process.env["WEBHOOK_BASE_URL"] ?? process.env["APP_URL"] ?? "";
