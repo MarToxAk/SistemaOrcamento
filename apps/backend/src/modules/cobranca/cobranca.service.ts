@@ -678,19 +678,38 @@ export class CobrancaService {
   }
 
   /**
-   * Monta os itens EFI a partir de venda_item do Athos.
-   * Estratégia: por venda selecionada, busca seus itens; aplica fator de proporção
-   * (Σ valor dos títulos da venda / valortotal da venda) para títulos parciais.
-   * Fallback: se venda sem itens ou erro, gera 1 item agregando os títulos daquela venda.
-   * Garante Σ valueCentavos == round(totalValor * 100) ajustando o último item.
+   * Monta os itens EFI agregados por tipo de Nota Fiscal.
+   * Para cada título: usa venda_item.tipoFisico (mesma lógica do NFS-e) para
+   * separar valor de serviço (→ item NFS-e #<num>) e valor de produto (→ item NF-e #<num>).
+   * Para títulos parciais: aplica fator (Σ valor_titulos_da_venda / valortotal_venda) sobre o
+   * split serviço/produto da venda. Garante Σ valueCentavos == round(totalValor * 100).
    */
   private async montarItensEfiPorVendaItem(
     titulos: Array<{ idcontareceber: number; idvenda: number | null; valor: number }>,
     totalValor: number,
   ): Promise<Map<string, { name: string; valueCentavos: number; amount: number }>> {
-    const itemMap = new Map<string, { name: string; valueCentavos: number; amount: number }>();
+    const idsContas = titulos.map((t) => t.idcontareceber);
 
-    // Agrupa títulos por idvenda
+    // Busca números de NFS-e (do nosso banco) e NF-e (do Athos) por idcontareceber
+    const nfseRows = await this.prisma.nfseEmitidaTitulo.findMany({
+      where: { idcontareceber: { in: idsContas }, nfseEmitida: { numeroNfse: { not: null } } },
+      select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true } } },
+    });
+    const nfseNumPorTitulo = new Map<number, string>();
+    for (const row of nfseRows) {
+      const num = row.nfseEmitida.numeroNfse;
+      if (num) nfseNumPorTitulo.set(row.idcontareceber, num);
+    }
+    const nfesRows = await this.athosService.buscarTodasNfesParaTitulos(idsContas);
+    const nfeNumsPorTitulo = new Map<number, string[]>();
+    for (const r of nfesRows) {
+      if (!r.numero) continue;
+      const arr = nfeNumsPorTitulo.get(r.idcontareceber) ?? [];
+      if (!arr.includes(r.numero)) arr.push(r.numero);
+      nfeNumsPorTitulo.set(r.idcontareceber, arr);
+    }
+
+    // Agrupa títulos por idvenda + busca itens da venda (com tipoFisico) e valortotal
     const titulosPorVenda = new Map<number | null, typeof titulos>();
     for (const t of titulos) {
       const key = t.idvenda ?? null;
@@ -698,8 +717,6 @@ export class CobrancaService {
       arr.push(t);
       titulosPorVenda.set(key, arr);
     }
-
-    // Para cada venda: busca itens + valortotal em paralelo
     const vendasComIdv = [...titulosPorVenda.keys()].filter((v): v is number => v != null);
     const dadosPorVenda = new Map<number, {
       itens: Array<{ nome: string; quantidade: number; valor: number; tipoFisico: boolean; sequencia: number }>;
@@ -715,61 +732,97 @@ export class CobrancaService {
       }),
     );
 
-    // Constrói itens por venda
-    for (const [idvenda, titulosDaVenda] of titulosPorVenda.entries()) {
-      const somaTitulos = titulosDaVenda.reduce((s, t) => s + Number(t.valor), 0);
-      const dados = idvenda != null ? dadosPorVenda.get(idvenda) : undefined;
+    // Acumuladores por título (centavos)
+    let centavosServicoTotal = 0;
+    let centavosProdutoTotal = 0;
+    const numerosNfse = new Set<string>();
+    const numerosNfe = new Set<string>();
+
+    for (const titulo of titulos) {
+      const valorTituloCent = Math.round(Number(titulo.valor) * 100);
+      const dados = titulo.idvenda != null ? dadosPorVenda.get(titulo.idvenda) : undefined;
       const itensVenda = dados?.itens ?? [];
       const valorTotalVenda = dados?.valorTotal ?? 0;
 
-      if (idvenda == null || itensVenda.length === 0 || valorTotalVenda <= 0) {
-        // Fallback: 1 item agregando os títulos desta venda
-        const key = `fallback-${idvenda ?? "sem-venda"}`;
-        const name = idvenda != null ? `Venda #${idvenda}` : "Cobrança";
-        itemMap.set(key, {
-          name,
-          valueCentavos: Math.round(somaTitulos * 100),
-          amount: 1,
-        });
-        continue;
+      // Coleta números de NF do título (se existirem)
+      const nfseNum = nfseNumPorTitulo.get(titulo.idcontareceber);
+      const nfeNums = nfeNumsPorTitulo.get(titulo.idcontareceber) ?? [];
+      if (nfseNum) numerosNfse.add(nfseNum);
+      for (const n of nfeNums) numerosNfe.add(n);
+
+      let servCent = 0;
+      let prodCent = 0;
+
+      if (itensVenda.length > 0 && valorTotalVenda > 0) {
+        // Split via venda_item: separa por tipoFisico (mesma lógica do NFS-e)
+        const fator = Number(titulo.valor) / valorTotalVenda;
+        const totalSrv = itensVenda
+          .filter((i) => !i.tipoFisico)
+          .reduce((s, i) => s + i.valor, 0);
+        const totalPrd = itensVenda
+          .filter((i) => i.tipoFisico)
+          .reduce((s, i) => s + i.valor, 0);
+        servCent = Math.round(totalSrv * fator * 100);
+        prodCent = Math.round(totalPrd * fator * 100);
+        // Ajuste de arredondamento: garante servCent + prodCent === valorTituloCent
+        const delta = valorTituloCent - (servCent + prodCent);
+        if (delta !== 0) {
+          if (prodCent > 0) prodCent += delta;
+          else servCent += delta;
+        }
+      } else {
+        // Fallback: sem venda_item disponível. Aloca conforme NF existente.
+        if (nfseNum && nfeNums.length === 0) {
+          servCent = valorTituloCent;
+        } else if (!nfseNum && nfeNums.length > 0) {
+          prodCent = valorTituloCent;
+        } else {
+          // Ambas (ou nenhuma) — sem split conhecido, joga tudo em produto
+          // para preservar o invariante. NFS-e quando emitida sozinha cai no ramo acima.
+          prodCent = valorTituloCent;
+        }
       }
 
-      const fator = somaTitulos / valorTotalVenda;
-      const targetCentavos = Math.round(somaTitulos * 100);
-
-      // Calcula centavos por item e ajusta o último para bater o total da venda
-      const itensCalc = itensVenda.map((it) => ({
-        nome: it.nome,
-        quantidade: Math.max(1, Math.round(it.quantidade)),
-        valueCentavos: Math.round(it.valor * fator * 100),
-        sequencia: it.sequencia,
-      }));
-      const somaCentavos = itensCalc.reduce((s, i) => s + i.valueCentavos, 0);
-      const delta = targetCentavos - somaCentavos;
-      if (itensCalc.length > 0 && delta !== 0) {
-        itensCalc[itensCalc.length - 1].valueCentavos += delta;
-      }
-
-      for (const ic of itensCalc) {
-        if (ic.valueCentavos <= 0) continue;
-        const key = `${idvenda}-${ic.sequencia}`;
-        const prev = itemMap.get(key);
-        itemMap.set(key, {
-          name: ic.nome.slice(0, 255),
-          valueCentavos: (prev?.valueCentavos ?? 0) + ic.valueCentavos,
-          amount: prev?.amount ?? ic.quantidade,
-        });
-      }
+      centavosServicoTotal += servCent;
+      centavosProdutoTotal += prodCent;
     }
 
-    // Ajuste global final para garantir invariante EFI Σ items.value === total
+    // Constrói os itens EFI
+    const itemMap = new Map<string, { name: string; valueCentavos: number; amount: number }>();
+    if (centavosServicoTotal > 0) {
+      const nums = [...numerosNfse];
+      const name = nums.length === 0
+        ? "Serviços"
+        : nums.length === 1
+        ? `NFS-e #${nums[0]}`
+        : `NFS-e #${nums.join(", #")}`;
+      itemMap.set("servico", { name, valueCentavos: centavosServicoTotal, amount: 1 });
+    }
+    if (centavosProdutoTotal > 0) {
+      const nums = [...numerosNfe];
+      const name = nums.length === 0
+        ? "Produtos"
+        : nums.length === 1
+        ? `NF-e #${nums[0]}`
+        : `NF-e #${nums.join(", #")}`;
+      itemMap.set("produto", { name, valueCentavos: centavosProdutoTotal, amount: 1 });
+    }
+
+    // Ajuste final: garante Σ items.value === round(totalValor * 100)
     const target = Math.round(totalValor * 100);
     const soma = [...itemMap.values()].reduce((s, i) => s + i.valueCentavos, 0);
     const diff = target - soma;
-    if (diff !== 0 && itemMap.size > 0) {
-      const ultimaKey = [...itemMap.keys()].pop()!;
-      const ultimo = itemMap.get(ultimaKey)!;
-      itemMap.set(ultimaKey, { ...ultimo, valueCentavos: ultimo.valueCentavos + diff });
+    if (diff !== 0) {
+      // Aplica delta no produto se existir, senão no serviço, senão cria um item de cobrança.
+      if (itemMap.has("produto")) {
+        const it = itemMap.get("produto")!;
+        itemMap.set("produto", { ...it, valueCentavos: it.valueCentavos + diff });
+      } else if (itemMap.has("servico")) {
+        const it = itemMap.get("servico")!;
+        itemMap.set("servico", { ...it, valueCentavos: it.valueCentavos + diff });
+      } else if (target > 0) {
+        itemMap.set("cobranca", { name: "Cobrança", valueCentavos: target, amount: 1 });
+      }
     }
 
     return itemMap;
