@@ -692,18 +692,23 @@ export class CobrancaService {
   ): Promise<Map<string, { name: string; valueCentavos: number; amount: number }>> {
     const idsContas = titulos.map((t) => t.idcontareceber);
 
-    // Busca números de NFS-e (do nosso banco) por idcontareceber — múltiplas possíveis
+    // Busca NFS-e do nosso banco — inclui valorServico (fonte autoritativa do valor de serviço)
     const nfseRows = await this.prisma.nfseEmitidaTitulo.findMany({
       where: { idcontareceber: { in: idsContas }, nfseEmitida: { numeroNfse: { not: null } } },
-      select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true } } },
+      select: {
+        idcontareceber: true,
+        nfseEmitida: { select: { numeroNfse: true, valorServico: true } },
+      },
     });
-    const nfseNumsPorTitulo = new Map<number, string[]>();
+    const nfseInfoPorTitulo = new Map<number, Array<{ numero: string; valorServico: number }>>();
     for (const row of nfseRows) {
       const num = row.nfseEmitida.numeroNfse;
       if (!num) continue;
-      const arr = nfseNumsPorTitulo.get(row.idcontareceber) ?? [];
-      if (!arr.includes(num)) arr.push(num);
-      nfseNumsPorTitulo.set(row.idcontareceber, arr);
+      const arr = nfseInfoPorTitulo.get(row.idcontareceber) ?? [];
+      if (!arr.find((x) => x.numero === num)) {
+        arr.push({ numero: num, valorServico: Number(row.nfseEmitida.valorServico ?? 0) });
+      }
+      nfseInfoPorTitulo.set(row.idcontareceber, arr);
     }
 
     // Busca números de NF-e (do Athos) por idcontareceber
@@ -742,13 +747,23 @@ export class CobrancaService {
       const itensVenda = dados?.itens ?? [];
       const valorTotalVenda = dados?.valorTotal ?? 0;
 
-      const nfseNums = nfseNumsPorTitulo.get(titulo.idcontareceber) ?? [];
+      const nfseInfos = nfseInfoPorTitulo.get(titulo.idcontareceber) ?? [];
       const nfeNums = nfeNumsPorTitulo.get(titulo.idcontareceber) ?? [];
 
-      // Calcula split serviço/produto para este título
+      // Determina centavos de serviço deste título.
+      // Prioridade 1: valorServico real das NFS-e emitidas (limitado ao valor do título).
+      // Prioridade 2: split via venda_item.tipoFisico × fator (quando não há NFS-e no banco).
+      // Fallback: aloca pelo tipo de NF que o título tem.
+      const somaValorServicoNfse = nfseInfos.reduce((s, n) => s + n.valorServico, 0);
+
       let servCent = 0;
       let prodCent = 0;
-      if (itensVenda.length > 0 && valorTotalVenda > 0) {
+
+      if (nfseInfos.length > 0 && somaValorServicoNfse > 0) {
+        // Usa valorServico da(s) NFS-e — fonte autoritativa do valor emitido.
+        servCent = Math.min(Math.round(somaValorServicoNfse * 100), valorTituloCent);
+        prodCent = valorTituloCent - servCent;
+      } else if (itensVenda.length > 0 && valorTotalVenda > 0) {
         const fator = Number(titulo.valor) / valorTotalVenda;
         const totalSrv = itensVenda.filter((i) => !i.tipoFisico).reduce((s, i) => s + i.valor, 0);
         const totalPrd = itensVenda.filter((i) => i.tipoFisico).reduce((s, i) => s + i.valor, 0);
@@ -760,24 +775,27 @@ export class CobrancaService {
           else servCent += delta;
         }
       } else {
-        // Fallback: sem venda_item — aloca pelo tipo de NF que o título tem
-        if (nfseNums.length > 0 && nfeNums.length === 0) servCent = valorTituloCent;
-        else if (nfseNums.length === 0 && nfeNums.length > 0) prodCent = valorTituloCent;
-        else prodCent = valorTituloCent; // ambos ou nenhum → cai em produto
+        if (nfseInfos.length > 0 && nfeNums.length === 0) servCent = valorTituloCent;
+        else if (nfseInfos.length === 0 && nfeNums.length > 0) prodCent = valorTituloCent;
+        else prodCent = valorTituloCent;
       }
 
-      // Distribui serviço entre NFS-e do título (igual entre números)
-      if (servCent > 0 && nfseNums.length > 0) {
+      // Distribui serviço entre NFS-e do título — proporcional ao valorServico de cada uma
+      // (quando disponível), senão igual entre números.
+      if (servCent > 0 && nfseInfos.length > 0) {
         let restante = servCent;
-        nfseNums.forEach((num, idx) => {
-          const parte = idx === nfseNums.length - 1
+        const usaProporcional = somaValorServicoNfse > 0;
+        nfseInfos.forEach((nfse, idx) => {
+          const frac = usaProporcional
+            ? nfse.valorServico / somaValorServicoNfse
+            : 1 / nfseInfos.length;
+          const parte = idx === nfseInfos.length - 1
             ? restante
-            : Math.round(servCent / nfseNums.length);
+            : Math.round(servCent * frac);
           restante -= parte;
-          acumNfse.set(num, (acumNfse.get(num) ?? 0) + parte);
+          acumNfse.set(nfse.numero, (acumNfse.get(nfse.numero) ?? 0) + parte);
         });
       } else if (servCent > 0) {
-        // Sem número de NFS-e → vai para chave "servicos"
         acumNfse.set("__servicos__", (acumNfse.get("__servicos__") ?? 0) + servCent);
       }
 
