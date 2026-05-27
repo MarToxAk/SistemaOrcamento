@@ -21,7 +21,7 @@ describe("CobrancaService.buscarNfseEmitidaCliente", () => {
         id: 10,
         numeroNfse: "42",
         numeroRps: 42,
-        valorServico: { toNumber: () => 250.0 } as any,
+        valorServico: { valueOf: () => 250.0, toString: () => "250.0" } as any,
         linkNfse: "https://nfse.example.com/42",
         dataEmissao: new Date("2026-05-01T10:00:00Z"),
         titulos: [
@@ -33,7 +33,7 @@ describe("CobrancaService.buscarNfseEmitidaCliente", () => {
         id: 11,
         numeroNfse: "43",
         numeroRps: 43,
-        valorServico: { toNumber: () => 100.5 } as any,
+        valorServico: { valueOf: () => 100.5, toString: () => "100.5" } as any,
         linkNfse: null,
         dataEmissao: new Date("2026-04-20T10:00:00Z"),
         titulos: [
@@ -83,7 +83,7 @@ describe("CobrancaService.buscarNfseEmitidaCliente", () => {
   });
 
   it("deve converter valorServico de Decimal para Number", async () => {
-    const decimalMock = { toNumber: () => 999 } as any;
+    const decimalMock = { valueOf: () => 999, toString: () => "999" } as any;
     prisma.nfseEmitida.findMany.mockResolvedValue([
       {
         id: 1,
