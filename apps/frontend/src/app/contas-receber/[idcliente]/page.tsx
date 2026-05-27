@@ -140,15 +140,15 @@ export default function ClienteDetalhePage({
 
   const checkboxRef = useRef<HTMLInputElement>(null);
 
-  const allSelected = titulos.length > 0 && selectedIds.size === titulos.length;
-  const someSelected = selectedIds.size > 0 && selectedIds.size < titulos.length;
-
   const totalSelecionado = titulos
     .filter((t) => selectedIds.has(t.idcontareceber))
     .reduce((acc, t) => acc + t.valor, 0);
 
   // Separar títulos: com boleto (agrupados) vs livres
   const titulosLivres = titulos.filter((t) => !t.boletoAtivo);
+
+  const allSelected = titulosLivres.length > 0 && titulosLivres.every((t) => selectedIds.has(t.idcontareceber));
+  const someSelected = selectedIds.size > 0 && !titulosLivres.every((t) => selectedIds.has(t.idcontareceber));
   const boletoGrupos = new Map<number, { boleto: NonNullable<typeof titulos[0]["boletoAtivo"]>; titulos: typeof titulos }>();
   for (const t of titulos) {
     if (t.boletoAtivo) {
@@ -371,10 +371,10 @@ export default function ClienteDetalhePage({
   }
 
   function handleToggleAll() {
-    if (selectedIds.size === titulos.length) {
+    if (titulosLivres.every((t) => selectedIds.has(t.idcontareceber))) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(titulos.map((t) => t.idcontareceber)));
+      setSelectedIds(new Set(titulosLivres.map((t) => t.idcontareceber)));
     }
   }
 
@@ -860,6 +860,7 @@ export default function ClienteDetalhePage({
                                               alert((d as { error?: string }).error ?? "Erro ao remover NFS-e.");
                                             } else {
                                               setRefetchKey((k) => k + 1);
+                                              setNfseCarregada(false); // força reload da seção NFS-e Emitidas
                                             }
                                           } catch {
                                             alert("Falha na conexão.");
