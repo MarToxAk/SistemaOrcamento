@@ -4,14 +4,14 @@ milestone: v2.1
 milestone_name: Cobrança e Fiscal do Cliente
 current_phase: 30
 status: executing
-last_updated: "2026-05-26T18:00:00.000Z"
-last_activity: 2026-05-26 -- Completed quick task 260526-kqd: boleto EFI itens por venda_item
+last_updated: "2026-05-27T15:53:00.228Z"
+last_activity: 2026-05-23 -- Phase 30 execution started
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
-  percent: 80
+  total_phases: 4
+  completed_phases: 3
+  total_plans: 8
+  completed_plans: 8
+  percent: 75
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
