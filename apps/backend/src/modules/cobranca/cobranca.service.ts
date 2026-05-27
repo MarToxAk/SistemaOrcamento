@@ -721,6 +721,17 @@ export class CobrancaService {
       nfeNumsPorTitulo.set(r.idcontareceber, arr);
     }
 
+    // LOG: todos os títulos recebidos e suas notas associadas
+    {
+      const debugTitulos = titulos.map(t => ({
+        id: t.idcontareceber,
+        valor: t.valor,
+        nfse: (nfseInfoPorTitulo.get(t.idcontareceber) ?? []).map(n => n.numero),
+        nfe: nfeNumsPorTitulo.get(t.idcontareceber) ?? [],
+      }));
+      this.logger.log(`[SPLIT-BOLETO-TITULOS-RECEBIDOS] ${JSON.stringify(debugTitulos)}`);
+    }
+
     // Agrupa títulos por idvenda + busca venda_item (com tipoFisico) e valortotal
     const vendasUnicas = [...new Set(titulos.map((t) => t.idvenda).filter((v): v is number => v != null))];
     const dadosPorVenda = new Map<number, {
@@ -737,30 +748,24 @@ export class CobrancaService {
       }),
     );
 
-    // Acumuladores por número de NF (centavos)
-    const acumNfse = new Map<string, number>();
-    const acumNfe = new Map<string, number>();
-
+    // Novo: 1 item por nota fiscal, mas só valor de produto (NF-e) ou serviço (NFS-e) conforme o tipo
+    const notaToCentavos = new Map<string, number>();
+    const notaToLabel = new Map<string, string>();
+    let totalCentavos = 0;
     for (const titulo of titulos) {
       const valorTituloCent = Math.round(Number(titulo.valor) * 100);
+      totalCentavos += valorTituloCent;
       const dados = titulo.idvenda != null ? dadosPorVenda.get(titulo.idvenda) : undefined;
       const itensVenda = dados?.itens ?? [];
       const valorTotalVenda = dados?.valorTotal ?? 0;
-
       const nfseInfos = nfseInfoPorTitulo.get(titulo.idcontareceber) ?? [];
       const nfeNums = nfeNumsPorTitulo.get(titulo.idcontareceber) ?? [];
 
-      // Determina centavos de serviço deste título.
-      // Prioridade 1: split real via venda_item.tipoFisico × fator (natureza dos produtos da venda).
-      // Prioridade 2: valorServico da(s) NFS-e emitidas (quando não há venda_item disponível).
-      // Fallback: aloca pelo tipo de NF que o título tem.
+      // Split produto/serviço igual ao anterior
       const somaValorServicoNfse = nfseInfos.reduce((s, n) => s + n.valorServico, 0);
-
       let servCent = 0;
       let prodCent = 0;
-
       if (itensVenda.length > 0 && valorTotalVenda > 0) {
-        // Split pela natureza real dos itens da venda — independe de como a NFS-e foi emitida
         const fator = Number(titulo.valor) / valorTotalVenda;
         const totalSrv = itensVenda.filter((i) => !i.tipoFisico).reduce((s, i) => s + i.valor, 0);
         const totalPrd = itensVenda.filter((i) => i.tipoFisico).reduce((s, i) => s + i.valor, 0);
@@ -780,8 +785,14 @@ export class CobrancaService {
         else prodCent = valorTituloCent;
       }
 
-      // Distribui serviço entre NFS-e do título — proporcional ao valorServico de cada uma
-      // (quando disponível), senão igual entre números.
+      // LOG: detalhes do split por título
+      this.logger.log(
+        `[SPLIT-BOLETO-TITULO] idcontareceber=${titulo.idcontareceber} valor=${valorTituloCent}` +
+        ` NF-es=[${nfeNums.join(",")}] NFS-es=[${nfseInfos.map(n => n.numero).join(",")}]` +
+        ` prodCent=${prodCent} servCent=${servCent}`,
+      );
+
+      // Serviço vai para cada NFS-e do título
       if (servCent > 0 && nfseInfos.length > 0) {
         let restante = servCent;
         const usaProporcional = somaValorServicoNfse > 0;
@@ -793,38 +804,46 @@ export class CobrancaService {
             ? restante
             : Math.round(servCent * frac);
           restante -= parte;
-          acumNfse.set(nfse.numero, (acumNfse.get(nfse.numero) ?? 0) + parte);
+          const key = `NFS-e-${nfse.numero}`;
+          notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + parte);
+          notaToLabel.set(key, `Nota fiscal de serviço #${nfse.numero}`);
         });
-      } else if (servCent > 0) {
-        acumNfse.set("__servicos__", (acumNfse.get("__servicos__") ?? 0) + servCent);
       }
 
-      // Distribui produto entre NF-es do título (igual entre números)
-      if (prodCent > 0 && nfeNums.length > 0) {
-        let restante = prodCent;
-        nfeNums.forEach((num, idx) => {
-          const parte = idx === nfeNums.length - 1
-            ? restante
-            : Math.round(prodCent / nfeNums.length);
-          restante -= parte;
-          acumNfe.set(num, (acumNfe.get(num) ?? 0) + parte);
-        });
-      } else if (prodCent > 0) {
-        acumNfe.set("__produtos__", (acumNfe.get("__produtos__") ?? 0) + prodCent);
+      // Produto vai para cada NF-e do título (sempre distribui entre todas as NF-es associadas)
+      if (prodCent > 0) {
+        if (nfeNums.length > 0) {
+          let restante = prodCent;
+          nfeNums.forEach((num, idx) => {
+            const parte = idx === nfeNums.length - 1
+              ? restante
+              : Math.round(prodCent / nfeNums.length);
+            restante -= parte;
+            const key = `NF-e-${num}`;
+            notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + parte);
+            notaToLabel.set(key, `Nota fiscal de produto #${num}`);
+          });
+        } else {
+          // Se não tem NF-e, mas tem produto, agrupa em "Produtos"
+          const key = `PRODUTOS-TIT-${titulo.idcontareceber}`;
+          notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + prodCent);
+          notaToLabel.set(key, "Produtos");
+        }
+      }
+
+      // Se não tem nota nenhuma, agrupa em "Outros"
+      if (nfseInfos.length === 0 && nfeNums.length === 0 && prodCent === 0 && servCent === 0) {
+        const key = `OUTROS-TIT-${titulo.idcontareceber}`;
+        notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + valorTituloCent);
+        notaToLabel.set(key, "Outros");
       }
     }
 
-    // Constrói o itemMap: 1 item por NF
+    // Monta o itemMap final
     const itemMap = new Map<string, { name: string; valueCentavos: number; amount: number }>();
-    for (const [num, cent] of acumNfse.entries()) {
+    for (const [key, cent] of notaToCentavos.entries()) {
       if (cent <= 0) continue;
-      const name = num === "__servicos__" ? "Serviços" : `NFS-e #${num}`;
-      itemMap.set(`NFS-e-${num}`, { name, valueCentavos: cent, amount: 1 });
-    }
-    for (const [num, cent] of acumNfe.entries()) {
-      if (cent <= 0) continue;
-      const name = num === "__produtos__" ? "Produtos" : `NF-e #${num}`;
-      itemMap.set(`NF-e-${num}`, { name, valueCentavos: cent, amount: 1 });
+      itemMap.set(key, { name: notaToLabel.get(key)!, valueCentavos: cent, amount: 1 });
     }
 
     // Ajuste final: garante Σ items.value === round(totalValor * 100)
@@ -840,6 +859,9 @@ export class CobrancaService {
         itemMap.set("cobranca", { name: "Cobrança", valueCentavos: target, amount: 1 });
       }
     }
+
+    // LOG DETALHADO DO RESULTADO FINAL
+    this.logger.log(`[SPLIT-BOLETO-FINAL] Itens do boleto: ${JSON.stringify([...itemMap.values()])}`);
 
     return itemMap;
   }
