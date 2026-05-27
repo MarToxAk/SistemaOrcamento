@@ -333,7 +333,10 @@ export class CobrancaService {
     // Salvar linkNfse via raw SQL — coluna adicionada em migração; Prisma client pode estar
     // desatualizado em ambientes onde o DLL engine está em uso e prisma generate não foi rodado.
     if (resultado.link) {
-      await this.prisma.$executeRaw`UPDATE "NfseEmitida" SET "linkNfse" = ${resultado.link} WHERE id = ${nfseEmitida.id}`;
+      const updated = await this.prisma.$executeRaw`UPDATE "NfseEmitida" SET "linkNfse" = ${resultado.link} WHERE id = ${nfseEmitida.id}`;
+      if (updated === 0) {
+        this.logger.warn(`linkNfse não persistido para NfseEmitida ${nfseEmitida.id} — coluna inexistente ou migração pendente.`);
+      }
     }
 
     // Passo 5: Retornar resposta
@@ -656,10 +659,12 @@ export class CobrancaService {
       ? await this.prisma.nfseEmitida.findMany({ where: { numeroNfse }, select: { id: true } })
       : [{ id: nfseEmitidaId }];
 
-    for (const r of registros) {
-      await this.prisma.nfseEmitidaTitulo.deleteMany({ where: { nfseEmitidaId: r.id } });
-      await this.prisma.nfseEmitida.delete({ where: { id: r.id } });
-    }
+    await this.prisma.$transaction(async (tx) => {
+      for (const r of registros) {
+        await tx.nfseEmitidaTitulo.deleteMany({ where: { nfseEmitidaId: r.id } });
+        await tx.nfseEmitida.delete({ where: { id: r.id } });
+      }
+    });
 
     this.logger.log(`NFS-e #${numeroNfse ?? "?"} removida: ${registros.length} registro(s).`);
 
