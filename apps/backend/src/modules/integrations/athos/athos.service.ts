@@ -1873,7 +1873,7 @@ export class AthosService {
    * com número e valor de cada nota. Usado pelo boleto para criar um item por NF-e.
    */
   async buscarTodasNfesParaTitulos(idcontasReceber: number[]): Promise<
-    Array<{ idcontareceber: number; numero: string; valorNota: number }>
+    Array<{ idcontareceber: number; numero: string; valorNota: 0 }>
   > {
     if (idcontasReceber.length === 0) return [];
     const pool = this.getPool();
@@ -1894,7 +1894,8 @@ export class AthosService {
       return (result.rows as Array<{ idcontareceber: unknown; numero: unknown }>).map((r) => ({
         idcontareceber: Number(r["idcontareceber"]),
         numero: String(r["numero"] ?? "").trim(),
-        valorNota: 0, // distribuição proporcional indisponível — usa divisão igual entre NF-es
+        /** @deprecated valorNota é sempre 0 — distribuição proporcional indisponível neste endpoint */
+        valorNota: 0 as const,
       }));
     } catch (err) {
       this.logger.warn(`buscarTodasNfesParaTitulos: ${err instanceof Error ? err.message : String(err)}`);
