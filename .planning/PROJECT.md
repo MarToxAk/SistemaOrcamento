@@ -19,9 +19,11 @@ Entregas principais:
 - Pagina /status redesenhada como Kanban 3 colunas (design system BomCusto)
 - Dashboard /contas-receber com Top Cards, filtros AVC/VEN/REC/CAN, accordion lazy
 
-## Current Milestone: v2.1 - Cobrança e Fiscal do Cliente
+## Current Milestone: v2.1 - Cobrança e Fiscal do Cliente — COMPLETO
 
 **Goal:** A partir do dashboard de contas a receber, permitir ao operador acessar o detalhe de um cliente, selecionar títulos e tomar ações de cobrança: gerar boleto consolidado via EFI Bank ou emitir NFS-e com valor ajustável.
+
+**Status:** Phase 31 completa em 2026-05-27 — milestone v2.1 finalizado.
 
 **Target features:**
 - Página de detalhe do cliente acessível de /contas-receber
@@ -61,12 +63,12 @@ Entregas principais:
 - checkmark AthosListenerService hardened + API Contas a Pagar + Upload SMB -- v2.0
 - checkmark Dashboard /contas-receber com filtros e accordion lazy -- v2.0
 
-### Active
+### Active → Validated in v2.1
 
-- [ ] CLI-01..03: Pagina de Detalhe do Cliente (v2.1)
-- [ ] BOL-01..03: Boleto Consolidado via EFI Bank (v2.1)
-- [ ] NFR-01..05: Emissao NFS-e a partir de titulos (v2.1)
-- [ ] NFAT-01..02: Consulta de NF no Athos (v2.1)
+- checkmark CLI-01..03: Pagina de Detalhe do Cliente -- v2.1
+- checkmark BOL-01..03: Boleto Consolidado via EFI Bank -- v2.1
+- checkmark NFR-01..05: Emissao NFS-e a partir de titulos (banco proprio Prisma) -- v2.1
+- checkmark NFAT-01..02: Consulta de NF no Athos + historico NFS-e emitidas -- v2.1
 
 ### Out of Scope
 
