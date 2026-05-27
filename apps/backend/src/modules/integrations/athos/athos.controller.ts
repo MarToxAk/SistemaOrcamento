@@ -330,4 +330,25 @@ export class AthosController {
     }
     return this.athosService.verificarTipoProdutoVenda(id);
   }
+
+  @ApiOperation({ summary: "Notas fiscais (NF-e) do cliente no Athos" })
+  @ApiParam({ name: "idcliente", example: "123", description: "ID do cliente no Athos" })
+  @ApiQuery({ name: "numero", required: false, description: "Número exato da nota (match server-side)" })
+  @ApiOkResponse({ description: "Array de notas fiscais NF-e do cliente (até 50 registros)" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("clientes/:idcliente/notas-fiscais")
+  async notasFiscaisCliente(
+    @Param("idcliente") idcliente: string,
+    @Query("numero") numero?: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idcliente);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException("idcliente inválido");
+    }
+    const numeroTratado = numero?.trim() || undefined;
+    return this.athosService.buscarNotasFiscaisCliente(id, numeroTratado);
+  }
 }
