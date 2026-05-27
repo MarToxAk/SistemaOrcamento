@@ -318,7 +318,7 @@ export class CobrancaService {
         numeroRps: resultado.numeroRps,
         idclienteAthos: dto.idclienteAthos,
         valorServico: dto.valor,
-        idvenda: idvenda,
+        idvenda: idvendasUnicas[0] ?? null,
         titulos: {
           createMany: {
             data: titulosFiltrados.map((t) => ({
