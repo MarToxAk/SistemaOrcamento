@@ -24,13 +24,6 @@ jest.mock("node:fs/promises", () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pgMock = require("pg");
 
-async function getClient() {
-  const pool = pgMock.Pool.mock.results[0]?.value;
-  if (!pool) throw new Error("Pool mock not initialized");
-  const client = await pool.connect();
-  return client;
-}
-
 describe("AthosService - buscarNotasFiscaisCliente", () => {
   let service: AthosService;
 
@@ -52,8 +45,19 @@ describe("AthosService - buscarNotasFiscaisCliente", () => {
 
   afterEach(() => jest.clearAllMocks());
 
+  /**
+   * Cria um client mock independente e conecta o pool a ele.
+   * Padrão idêntico ao athos.service.test.ts (L89-91).
+   */
+  function makeClient() {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+    return client;
+  }
+
   it("(a) lista com 3 notas ativas mapeadas corretamente", async () => {
-    const client = await getClient();
+    const client = makeClient();
     const dataFixa = new Date("2024-03-15T00:00:00.000Z");
     client.query.mockResolvedValueOnce({
       rows: [
@@ -87,7 +91,7 @@ describe("AthosService - buscarNotasFiscaisCliente", () => {
   });
 
   it("(b) com numero passa 2 params e filtra por numero exato", async () => {
-    const client = await getClient();
+    const client = makeClient();
     const dataFixa = new Date("2024-06-20T00:00:00.000Z");
     client.query.mockResolvedValueOnce({
       rows: [
@@ -101,14 +105,14 @@ describe("AthosService - buscarNotasFiscaisCliente", () => {
     expect(result[0].numero).toBe("12345");
 
     // Verifica que a query foi chamada com 2 parâmetros (idcliente + numero)
-    const queryCall = client.query.mock.calls[0];
+    const queryCall = client.query.mock.calls[0] as [string, unknown[]];
     expect(queryCall[1]).toEqual([99, "12345"]);
     // E que o SQL contém o filtro de numero
     expect(queryCall[0]).toContain("n.numero = $2");
   });
 
   it("(c) sem resultado retorna array vazio []", async () => {
-    const client = await getClient();
+    const client = makeClient();
     client.query.mockResolvedValueOnce({ rows: [] });
 
     const result = await service.buscarNotasFiscaisCliente(777, "99999");
@@ -117,12 +121,12 @@ describe("AthosService - buscarNotasFiscaisCliente", () => {
   });
 
   it("(d) LIMIT 50 presente no SQL da query", async () => {
-    const client = await getClient();
+    const client = makeClient();
     client.query.mockResolvedValueOnce({ rows: [] });
 
     await service.buscarNotasFiscaisCliente(1);
 
-    const queryCall = client.query.mock.calls[0];
+    const queryCall = client.query.mock.calls[0] as [string, unknown[]];
     expect(queryCall[0]).toContain("LIMIT 50");
   });
 });
