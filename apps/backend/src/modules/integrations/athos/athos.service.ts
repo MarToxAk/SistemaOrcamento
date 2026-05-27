@@ -1944,13 +1944,20 @@ export class AthosService {
     }
   }
 
-  /** Retorna valortotal da venda (denominador para distribuir itens em títulos parciais). */
+  /**
+   * Retorna valor total da venda calculado a partir da soma dos venda_item.
+   * Usa SUM(vendavalorfinalitem) ao invés de coluna "valortotal" da tabela venda,
+   * que não existe em todas as versões do Athos.
+   */
   async buscarValorTotalVenda(idvenda: number): Promise<number> {
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
     try {
       const result = await client.query<{ valortotal: unknown }>(
-        "SELECT valortotal FROM venda WHERE idvenda = $1 LIMIT 1",
+        `SELECT COALESCE(SUM(vi.vendavalorfinalitem), 0) AS valortotal
+         FROM venda_item vi
+         WHERE vi.idvenda = $1
+           AND COALESCE(vi.vendavalorfinalitem, 0) > 0`,
         [idvenda],
       );
       const raw = result.rows[0]?.valortotal;

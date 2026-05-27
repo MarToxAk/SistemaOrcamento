@@ -700,6 +700,12 @@ export class CobrancaService {
         nfseEmitida: { select: { numeroNfse: true, valorServico: true } },
       },
     });
+    this.logger.log(
+      `[SPLIT-BOLETO-RAW-NFSE-DB] ${JSON.stringify(
+        nfseRows.map(r => ({ idcr: r.idcontareceber, nfse: r.nfseEmitida.numeroNfse, valorServico: Number(r.nfseEmitida.valorServico ?? 0) }))
+      )}`,
+    );
+
     const nfseInfoPorTitulo = new Map<number, Array<{ numero: string; valorServico: number }>>();
     for (const row of nfseRows) {
       const num = row.nfseEmitida.numeroNfse;
@@ -713,6 +719,8 @@ export class CobrancaService {
 
     // Busca números de NF-e (do Athos) por idcontareceber
     const nfesRows = await this.athosService.buscarTodasNfesParaTitulos(idsContas);
+    this.logger.log(`[SPLIT-BOLETO-RAW-NFE-ATHOS] ${JSON.stringify(nfesRows)}`);
+
     const nfeNumsPorTitulo = new Map<number, string[]>();
     for (const r of nfesRows) {
       if (!r.numero) continue;
@@ -721,10 +729,11 @@ export class CobrancaService {
       nfeNumsPorTitulo.set(r.idcontareceber, arr);
     }
 
-    // LOG: todos os títulos recebidos e suas notas associadas
+    // LOG: resumo por título — id, idvenda, valor, nfse[], nfe[]
     {
       const debugTitulos = titulos.map(t => ({
         id: t.idcontareceber,
+        idvenda: t.idvenda,
         valor: t.valor,
         nfse: (nfseInfoPorTitulo.get(t.idcontareceber) ?? []).map(n => n.numero),
         nfe: nfeNumsPorTitulo.get(t.idcontareceber) ?? [],
@@ -740,10 +749,10 @@ export class CobrancaService {
     }>();
     await Promise.all(
       vendasUnicas.map(async (idv) => {
-        const [itens, valorTotal] = await Promise.all([
-          this.athosService.buscarItensVenda(idv),
-          this.athosService.buscarValorTotalVenda(idv),
-        ]);
+        const itens = await this.athosService.buscarItensVenda(idv);
+        // Calcula valorTotal direto da soma dos itens — evita dependência
+        // de coluna "valortotal" que não existe em todas as versões do Athos.
+        const valorTotal = itens.reduce((s, i) => s + i.valor, 0);
         dadosPorVenda.set(idv, { itens, valorTotal });
       }),
     );
