@@ -3,6 +3,16 @@
 import { use, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 
+interface NfseEmitidaCliente {
+  id: number;
+  numeroNfse: string | null;
+  numeroRps: number;
+  valorServico: number;
+  linkNfse: string | null;
+  dataEmissao: string;
+  titulos: number[];
+}
+
 interface DadosCliente {
   idcliente: number;
   nome_cliente: string;
@@ -102,6 +112,13 @@ export default function ClienteDetalhePage({
 
   // Refetch key for triggering title list reload
   const [refetchKey, setRefetchKey] = useState(0);
+
+  // Seção NFS-e Emitidas
+  const [nfseAberta, setNfseAberta] = useState(false);
+  const [nfseCarregada, setNfseCarregada] = useState(false);
+  const [nfseEmitidas, setNfseEmitidas] = useState<NfseEmitidaCliente[]>([]);
+  const [loadingNfse, setLoadingNfse] = useState(false);
+  const nfseRef = useRef<HTMLDivElement>(null);
 
   const checkboxRef = useRef<HTMLInputElement>(null);
 
@@ -252,6 +269,32 @@ export default function ClienteDetalhePage({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nfseModalState]);
+
+  async function carregarNfseEmitidas() {
+    setLoadingNfse(true);
+    try {
+      const res = await fetch(`/api/cobranca/nfse/cliente/${idcliente}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as NfseEmitidaCliente[];
+        setNfseEmitidas(data);
+      }
+    } catch { /* silently ignore */ }
+    finally {
+      setLoadingNfse(false);
+      setNfseCarregada(true);
+    }
+  }
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !nfseCarregada) {
+        void carregarNfseEmitidas();
+      }
+    });
+    if (nfseRef.current) observer.observe(nfseRef.current);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nfseAberta, nfseCarregada]);
 
   function handleToggle(id: number) {
     setSelectedIds((prev) => {
@@ -789,6 +832,112 @@ export default function ClienteDetalhePage({
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ─── SEÇÃO NFS-e Emitidas ─── */}
+      <div className="container mt-3">
+        <hr />
+        <div className="mt-2">
+          <button
+            className="btn btn-link p-0 text-decoration-none fw-semibold text-dark"
+            onClick={() => setNfseAberta(!nfseAberta)}
+            type="button"
+          >
+            {nfseAberta ? "▼" : "►"} NFS-e Emitidas
+          </button>
+          {nfseAberta && (
+            <div ref={nfseRef} className="mt-2">
+              {loadingNfse ? (
+                <div className="text-center py-3">
+                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                    <span className="visually-hidden">Carregando NFS-e...</span>
+                  </div>
+                </div>
+              ) : nfseCarregada && nfseEmitidas.length === 0 ? (
+                <p className="text-muted text-center py-3">Nenhuma NFS-e emitida para este cliente</p>
+              ) : nfseEmitidas.length > 0 ? (
+                <div className="table-responsive">
+                  <table className="table table-sm table-hover table-bordered">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Data emissão</th>
+                        <th>Nº NFS-e</th>
+                        <th>Nº RPS</th>
+                        <th>Valor</th>
+                        <th>Títulos vinculados</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nfseEmitidas.map((nfse) => (
+                        <tr key={nfse.id}>
+                          <td className="small">{formatDate(nfse.dataEmissao)}</td>
+                          <td className="small">{nfse.numeroNfse ?? "—"}</td>
+                          <td className="small">{nfse.numeroRps}</td>
+                          <td className="small fw-semibold">{formatBRL(nfse.valorServico)}</td>
+                          <td className="small">
+                            {nfse.titulos.length > 0
+                              ? nfse.titulos.map((tid, i) => (
+                                  <span key={tid}>
+                                    <span className="badge bg-secondary">{tid}</span>
+                                    {i < nfse.titulos.length - 1 && " "}
+                                  </span>
+                                ))
+                              : <span className="text-muted">—</span>}
+                          </td>
+                          <td>
+                            <div className="d-flex gap-2 align-items-center">
+                              {nfse.linkNfse && (
+                                <a
+                                  href={nfse.linkNfse}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-sm btn-outline-success"
+                                  title="Baixar PDF da NFS-e"
+                                >
+                                  <i className="bi bi-file-earmark-arrow-down" />
+                                </a>
+                              )}
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-danger"
+                                title="Remove do sistema. O cancelamento na prefeitura pode não ser suportado."
+                                onClick={async () => {
+                                  if (
+                                    !confirm(
+                                      `Cancelar NFS-e ${nfse.numeroNfse ? `#${nfse.numeroNfse}` : `(ID ${nfse.id})`}?\n\nO cancelamento na prefeitura pode não ser suportado. O registro será removido do banco local.`,
+                                    )
+                                  )
+                                    return;
+                                  try {
+                                    const res = await fetch(`/api/cobranca/nfse/${nfse.id}`, {
+                                      method: "DELETE",
+                                    });
+                                    if (!res.ok) {
+                                      const d = await res.json().catch(() => ({}));
+                                      alert((d as { error?: string }).error ?? "Erro ao cancelar NFS-e.");
+                                    } else {
+                                      setNfseEmitidas((prev) => prev.filter((n) => n.id !== nfse.id));
+                                      setRefetchKey((k) => k + 1);
+                                    }
+                                  } catch {
+                                    alert("Falha na conexão.");
+                                  }
+                                }}
+                              >
+                                Cancelar ⓘ
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
 
