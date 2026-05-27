@@ -282,12 +282,12 @@ export class CobrancaService {
     }
 
     // Passo 2: Verificação de duplicidade por idvenda (D-08, D-09, D-10)
-    const idvenda = titulosFiltrados[0]?.idvenda ?? null;
-    if (idvenda !== null) {
+    const idvendasUnicas = [...new Set(titulosFiltrados.map((t) => t.idvenda).filter((v): v is number => v != null))];
+    for (const idvenda of idvendasUnicas) {
       const existente = await this.prisma.nfseEmitida.findFirst({ where: { idvenda } });
       if (existente) {
         throw new BadRequestException(
-          `NFS-e já emitida para esta venda (Nº ${existente.numeroNfse})`,
+          `NFS-e já emitida para venda ${idvenda} (Nº ${existente.numeroNfse})`,
         );
       }
     }
@@ -524,23 +524,29 @@ export class CobrancaService {
     if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
     if (!cobranca.txidEfi) return { status: cobranca.status, atualizado: false };
 
-    const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
-    const basic = Buffer.from(`${this.getRequiredConfig("EFI_CLIENT_ID")}:${this.getRequiredConfig("EFI_CLIENT_SECRET")}`).toString("base64");
-    const cli = axios.create({ baseURL: baseUrl, timeout: 15_000 });
-    const authResp = await cli.post("/v1/authorize", { grant_type: "client_credentials" }, {
-      headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
-    });
-    const token: string = authResp.data?.access_token;
+    try {
+      const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
+      const basic = Buffer.from(`${this.getRequiredConfig("EFI_CLIENT_ID")}:${this.getRequiredConfig("EFI_CLIENT_SECRET")}`).toString("base64");
+      const cli = axios.create({ baseURL: baseUrl, timeout: 15_000 });
+      const authResp = await cli.post("/v1/authorize", { grant_type: "client_credentials" }, {
+        headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
+      });
+      const token: string = authResp.data?.access_token;
+      if (!token) throw new Error("Token não retornado pela EFI");
 
-    const resp = await cli.get(`/v1/charge/${cobranca.txidEfi}`, { headers: { Authorization: `Bearer ${token}` } });
-    const efiStatus: string = resp.data?.data?.status ?? resp.data?.data?.[0]?.status ?? "desconhecido";
-    const novoStatus = efiStatus === "paid" ? "pago" : efiStatus === "canceled" ? "cancelado" : cobranca.status;
+      const resp = await cli.get(`/v1/charge/${cobranca.txidEfi}`, { headers: { Authorization: `Bearer ${token}` } });
+      const efiStatus: string = resp.data?.data?.status ?? resp.data?.data?.[0]?.status ?? "desconhecido";
+      const novoStatus = efiStatus === "paid" ? "pago" : efiStatus === "canceled" ? "cancelado" : cobranca.status;
 
-    if (novoStatus !== cobranca.status) {
-      await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: novoStatus } });
-      return { status: novoStatus, atualizado: true };
+      if (novoStatus !== cobranca.status) {
+        await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: novoStatus } });
+        return { status: novoStatus, atualizado: true };
+      }
+      return { status: novoStatus, atualizado: false };
+    } catch (err) {
+      this.logger.error(`Erro ao verificar pagamento do boleto ${cobrancaId} na EFI: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException(`Erro ao verificar pagamento na EFI: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return { status: novoStatus, atualizado: false };
   }
 
   /** Remove boleto do banco (cleanup) — libera títulos para novo boleto */
