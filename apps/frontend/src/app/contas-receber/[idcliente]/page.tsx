@@ -13,6 +13,13 @@ interface NfseEmitidaCliente {
   titulos: number[];
 }
 
+interface NotaFiscalAthos {
+  numero: string;
+  dataemissao: string | null;
+  valor: number;
+  tipo: string;
+}
+
 interface DadosCliente {
   idcliente: number;
   nome_cliente: string;
@@ -119,6 +126,16 @@ export default function ClienteDetalhePage({
   const [nfseEmitidas, setNfseEmitidas] = useState<NfseEmitidaCliente[]>([]);
   const [loadingNfse, setLoadingNfse] = useState(false);
   const nfseRef = useRef<HTMLDivElement>(null);
+
+  // Seção Notas Fiscais Athos
+  const [nfatAberta, setNfatAberta] = useState(false);
+  const [nfatCarregada, setNfatCarregada] = useState(false);
+  const [notasFiscaisAthos, setNotasFiscaisAthos] = useState<NotaFiscalAthos[]>([]);
+  const [loadingNfat, setLoadingNfat] = useState(false);
+  const [buscaNumeroNf, setBuscaNumeroNf] = useState("");
+  const [resultadoBuscaNf, setResultadoBuscaNf] = useState<NotaFiscalAthos[] | null>(null);
+  const [buscandoNf, setBuscandoNf] = useState(false);
+  const nfatRef = useRef<HTMLDivElement>(null);
 
   const checkboxRef = useRef<HTMLInputElement>(null);
 
@@ -295,6 +312,50 @@ export default function ClienteDetalhePage({
     return () => observer.disconnect();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nfseAberta, nfseCarregada]);
+
+  async function carregarNotasFiscaisAthos() {
+    setLoadingNfat(true);
+    try {
+      const res = await fetch(`/api/athos/clientes/${idcliente}/notas-fiscais`, { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as NotaFiscalAthos[];
+        setNotasFiscaisAthos(data);
+      }
+    } catch { /* silently ignore */ }
+    finally {
+      setLoadingNfat(false);
+      setNfatCarregada(true);
+    }
+  }
+
+  async function buscarNotaPorNumero() {
+    if (!buscaNumeroNf.trim()) return;
+    setBuscandoNf(true);
+    try {
+      const res = await fetch(
+        `/api/athos/clientes/${idcliente}/notas-fiscais?numero=${encodeURIComponent(buscaNumeroNf.trim())}`,
+        { cache: "no-store" },
+      );
+      if (res.ok) {
+        const data = (await res.json()) as NotaFiscalAthos[];
+        setResultadoBuscaNf(data);
+      }
+    } catch { /* silently ignore */ }
+    finally {
+      setBuscandoNf(false);
+    }
+  }
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !nfatCarregada) {
+        void carregarNotasFiscaisAthos();
+      }
+    });
+    if (nfatRef.current) observer.observe(nfatRef.current);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nfatAberta, nfatCarregada]);
 
   function handleToggle(id: number) {
     setSelectedIds((prev) => {
@@ -930,6 +991,122 @@ export default function ClienteDetalhePage({
                               </button>
                             </div>
                           </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── SEÇÃO Notas Fiscais Athos ─── */}
+      <div className="container mt-2 mb-3">
+        <hr />
+        <div className="mt-2">
+          <button
+            className="btn btn-link p-0 text-decoration-none fw-semibold text-dark"
+            onClick={() => setNfatAberta(!nfatAberta)}
+            type="button"
+          >
+            {nfatAberta ? "▼" : "►"} Notas Fiscais Athos
+          </button>
+          {nfatAberta && (
+            <div ref={nfatRef} className="mt-2">
+              {/* Campo de busca por número */}
+              <div className="d-flex gap-2 mb-3">
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  style={{ maxWidth: "240px" }}
+                  placeholder="Buscar por número da nota"
+                  value={buscaNumeroNf}
+                  onChange={(e) => setBuscaNumeroNf(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void buscarNotaPorNumero(); }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => void buscarNotaPorNumero()}
+                  disabled={buscandoNf || !buscaNumeroNf.trim()}
+                >
+                  {buscandoNf ? (
+                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                  ) : "Buscar"}
+                </button>
+                {resultadoBuscaNf !== null && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => { setResultadoBuscaNf(null); setBuscaNumeroNf(""); }}
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+
+              {/* Resultado da busca — acima da lista (D-16) */}
+              {resultadoBuscaNf !== null && (
+                <div className="alert alert-info mb-3">
+                  <strong>Resultado da busca — Nota Nº {buscaNumeroNf}:</strong>
+                  {resultadoBuscaNf.length === 0 ? (
+                    <span className="ms-1">Nenhuma nota encontrada com este número.</span>
+                  ) : (
+                    <div className="table-responsive mt-2">
+                      <table className="table table-sm mb-0">
+                        <thead>
+                          <tr>
+                            <th>Nº da nota</th>
+                            <th>Data emissão</th>
+                            <th>Valor</th>
+                            <th>Tipo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {resultadoBuscaNf.map((nf) => (
+                            <tr key={nf.numero}>
+                              <td className="small">{nf.numero}</td>
+                              <td className="small">{nf.dataemissao ? formatDate(nf.dataemissao) : "—"}</td>
+                              <td className="small fw-semibold">{formatBRL(nf.valor)}</td>
+                              <td className="small"><span className="badge bg-primary">{nf.tipo}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Lista geral de até 50 notas — sempre visível (D-15) */}
+              {loadingNfat ? (
+                <div className="text-center py-3">
+                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                    <span className="visually-hidden">Carregando notas fiscais...</span>
+                  </div>
+                </div>
+              ) : nfatCarregada && notasFiscaisAthos.length === 0 ? (
+                <p className="text-muted text-center py-3">Nenhuma nota fiscal encontrada no Athos</p>
+              ) : notasFiscaisAthos.length > 0 ? (
+                <div className="table-responsive">
+                  <table className="table table-sm table-hover table-bordered">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Nº da nota</th>
+                        <th>Data emissão</th>
+                        <th>Valor</th>
+                        <th>Tipo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {notasFiscaisAthos.map((nf) => (
+                        <tr key={nf.numero}>
+                          <td className="small">{nf.numero}</td>
+                          <td className="small">{nf.dataemissao ? formatDate(nf.dataemissao) : "—"}</td>
+                          <td className="small fw-semibold">{formatBRL(nf.valor)}</td>
+                          <td className="small"><span className="badge bg-primary">{nf.tipo}</span></td>
                         </tr>
                       ))}
                     </tbody>
