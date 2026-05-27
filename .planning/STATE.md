@@ -4,14 +4,14 @@ milestone: v2.1
 milestone_name: Cobrança e Fiscal do Cliente
 current_phase: 30
 status: executing
-last_updated: "2026-05-23T19:17:42.024Z"
-last_activity: 2026-05-23 -- Phase 30 execution started
+last_updated: "2026-05-26T18:00:00.000Z"
+last_activity: 2026-05-26 -- Completed quick task 260526-kqd: boleto EFI itens por venda_item
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 10
-  completed_plans: 9
-  percent: 60
+  completed_plans: 10
+  percent: 80
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -169,3 +169,4 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 | 260524-qaa | NFS-e: salvar linkNfse no banco, retornar no response, exibir botao download no modal | 2026-05-24 | 3e9022c | [260524-qaa-nfse-save-link-titulos](./quick/260524-qaa-nfse-save-link-titulos/) |
 | 260524-qab | NFS-e: badge na tabela de titulos + botao cancelar emissao para re-emissao | 2026-05-24 | e4fcbab | [260524-qab-nfse-cancel-badge-titulos](./quick/260524-qab-nfse-cancel-badge-titulos/) |
 | 260524-qac | NFS-e: cancelamento SOAP CancelarNfse ABRASF 2.04 + cancela todos com mesmo numero | 2026-05-24 | 5189653 | [260524-qac-nfse-soap-cancelar](./quick/260524-qac-nfse-soap-cancelar/) |
+| 260526-kqd | Boleto EFI: itens gerados a partir de venda_item (1 item por produto/servico) seguindo logica NFS-e | 2026-05-26 | 5de96dc | [260526-kqd-arrumar-emissao-boleto-efi-criar-1-item-](./quick/260526-kqd-arrumar-emissao-boleto-efi-criar-1-item-/) |

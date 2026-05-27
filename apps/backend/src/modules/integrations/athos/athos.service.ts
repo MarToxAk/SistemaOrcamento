@@ -1868,6 +1868,111 @@ export class AthosService {
    * Pitfall 4: aggregate functions retornam NULL para conjunto vazio — tratado com ?? false / ?? true
    * Nota: filtro vi.cancelada removido — coluna pode não existir ou ter tipo não-boolean no Athos.
    */
+  /**
+   * Para cada idcontareceber, retorna TODAS as NF-es ativas do venda associado,
+   * com número e valor de cada nota. Usado pelo boleto para criar um item por NF-e.
+   */
+  async buscarTodasNfesParaTitulos(idcontasReceber: number[]): Promise<
+    Array<{ idcontareceber: number; numero: string; valorNota: number }>
+  > {
+    if (idcontasReceber.length === 0) return [];
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT cr.idcontareceber,
+                n.numero
+         FROM conta_receber cr
+         JOIN venda_nota vn ON vn.idvenda = cr.idvenda
+         JOIN nota n ON n.idnota = vn.idnota
+         WHERE cr.idcontareceber = ANY($1)
+           AND COALESCE(n.cancelada, false) = false
+           AND n.nfechaveacesso IS NOT NULL
+         ORDER BY cr.idcontareceber, n.idnota`,
+        [idcontasReceber],
+      );
+      return (result.rows as Array<{ idcontareceber: unknown; numero: unknown }>).map((r) => ({
+        idcontareceber: Number(r["idcontareceber"]),
+        numero: String(r["numero"] ?? "").trim(),
+        valorNota: 0, // distribuição proporcional indisponível — usa divisão igual entre NF-es
+      }));
+    } catch (err) {
+      this.logger.warn(`buscarTodasNfesParaTitulos: ${err instanceof Error ? err.message : String(err)}`);
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Retorna TODOS os itens (produto físico + serviço) de uma venda, com flag tipoFisico.
+   * Usado pelo boleto EFI para criar 1 item por venda_item.
+   */
+  async buscarItensVenda(idvenda: number): Promise<
+    Array<{ nome: string; quantidade: number; valor: number; tipoFisico: boolean; sequencia: number }>
+  > {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT p.descricaoproduto AS nome,
+                vi.quantidadeitem AS quantidade,
+                vi.vendavalorfinalitem AS valor,
+                COALESCE(p.tipoproduto, false) AS tipo_fisico,
+                vi.sequenciaitem AS sequencia
+         FROM venda_item vi
+         JOIN produto p ON p.idproduto = vi.idproduto
+         WHERE vi.idvenda = $1
+           AND COALESCE(vi.vendavalorfinalitem, 0) > 0
+         ORDER BY vi.sequenciaitem`,
+        [idvenda],
+      );
+      return result.rows.map((r) => ({
+        nome: String(r["nome"] ?? "").trim() || `Item ${r["sequencia"] ?? "?"}`,
+        quantidade: Number(r["quantidade"] ?? 1) || 1,
+        valor: Number(r["valor"] ?? 0),
+        tipoFisico: Boolean(r["tipo_fisico"]),
+        sequencia: Number(r["sequencia"] ?? 0),
+      }));
+    } catch (err) {
+      this.logger.warn(
+        `buscarItensVenda idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Retorna valor total da venda calculado a partir da soma dos venda_item.
+   * Usa SUM(vendavalorfinalitem) ao invés de coluna "valortotal" da tabela venda,
+   * que não existe em todas as versões do Athos.
+   */
+  async buscarValorTotalVenda(idvenda: number): Promise<number> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query<{ valortotal: unknown }>(
+        `SELECT COALESCE(SUM(vi.vendavalorfinalitem), 0) AS valortotal
+         FROM venda_item vi
+         WHERE vi.idvenda = $1
+           AND COALESCE(vi.vendavalorfinalitem, 0) > 0`,
+        [idvenda],
+      );
+      const raw = result.rows[0]?.valortotal;
+      const v = Number(raw);
+      return Number.isFinite(v) && v > 0 ? v : 0;
+    } catch (err) {
+      this.logger.warn(
+        `buscarValorTotalVenda idvenda=${idvenda}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return 0;
+    } finally {
+      client.release();
+    }
+  }
+
   async verificarTipoProdutoVenda(idvenda: number): Promise<{
     temProdutoFisico: boolean;
     todosServico: boolean;

@@ -25,7 +25,7 @@ interface TituloReceber {
   tipoNf?: string | null;
   numeroNf?: string | null;
   boletoAtivo?: { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null } | null;
-  nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null } | null;
+  nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null } | null;
 }
 
 function formatBRL(value: number): string {
@@ -77,6 +77,11 @@ export default function ClienteDetalhePage({
   const [boletoErro, setBoletoErro] = useState("");
   const [boletoErroDetalhe, setBoletoErroDetalhe] = useState("");
   const [copiado, setCopiado] = useState(false);
+  const [boletoPreview, setBoletoPreview] = useState<{
+    nomeCliente: string; total: number;
+    itens: Array<{ nome: string; valor: number; quantidade?: number }>;
+  } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   // Modal NFS-e states
   const [nfseModalState, setNfseModalState] = useState<"idle" | "confirm" | "loading" | "success" | "error">("idle");
@@ -169,7 +174,7 @@ export default function ClienteDetalhePage({
                 } catch { /* silently ignore */ }
 
                 // Verificar NFS-e emitidas no nosso banco para os mesmos títulos
-                let nfseMap = new Map<number, { nfseEmitidaId: number; numeroNfse: string | null }>();
+                let nfseMap = new Map<number, { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null }>();
                 try {
                   const nfseRes = await fetch("/api/cobranca/nfse/titulos-em-uso", {
                     method: "POST",
@@ -178,8 +183,8 @@ export default function ClienteDetalhePage({
                     cache: "no-store",
                   });
                   if (nfseRes.ok) {
-                    const nfseData = (await nfseRes.json()) as Array<{ idcontareceber: number; nfseEmitidaId: number; numeroNfse: string | null }>;
-                    nfseMap = new Map(nfseData.map((n) => [n.idcontareceber, { nfseEmitidaId: n.nfseEmitidaId, numeroNfse: n.numeroNfse }]));
+                    const nfseData = (await nfseRes.json()) as Array<{ idcontareceber: number; nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null }>;
+                    nfseMap = new Map(nfseData.map((n) => [n.idcontareceber, { nfseEmitidaId: n.nfseEmitidaId, numeroNfse: n.numeroNfse, linkNfse: n.linkNfse }]));
                   }
                 } catch { /* silently ignore */ }
 
@@ -268,7 +273,7 @@ export default function ClienteDetalhePage({
     }
   }
 
-  function abreBoletoModal() {
+  async function abreBoletoModal() {
     const titulosSelecionados = titulos.filter((t) => selectedIds.has(t.idcontareceber));
     const datas = new Set(titulosSelecionados.map((t) => t.datavencimento?.slice(0, 10)));
     if (datas.size === 1) {
@@ -282,7 +287,21 @@ export default function ClienteDetalhePage({
         "Os títulos selecionados possuem datas de vencimento diferentes. Informe a data de vencimento manualmente.",
       );
     }
+    setBoletoPreview(null);
     setBoletoModalState("confirm");
+    setLoadingPreview(true);
+    try {
+      const res = await fetch("/api/cobranca/boleto/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idclienteAthos: Number(idcliente),
+          idcontasReceber: titulosSelecionados.map((t) => t.idcontareceber),
+        }),
+      });
+      if (res.ok) setBoletoPreview(await res.json());
+    } catch { /* silently ignore */ }
+    finally { setLoadingPreview(false); }
   }
 
   async function confirmarGerarBoleto() {
@@ -326,6 +345,7 @@ export default function ClienteDetalhePage({
     setBoletoErro("");
     setBoletoErroDetalhe("");
     setCopiado(false);
+    setBoletoPreview(null);
   }
 
   async function abreNfseModal() {
@@ -634,9 +654,23 @@ export default function ClienteDetalhePage({
                                     <td className="small fw-semibold">{formatBRL(t.valor)}</td>
                                     <td>
                                       {t.tipoNf ? (
-                                            <span className={`badge ${badgeClassName(t.tipoNf)}`}>
-                                              {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
-                                            </span>
+                                        <span className="d-inline-flex align-items-center gap-1">
+                                          <span className={`badge ${badgeClassName(t.tipoNf)}`}>
+                                            {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
+                                          </span>
+                                          {t.nfseAtivo?.linkNfse && (
+                                            <a
+                                              href={t.nfseAtivo.linkNfse}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="btn btn-link btn-sm p-0 text-success"
+                                              title="Baixar PDF da NFS-e"
+                                              style={{ lineHeight: 1 }}
+                                            >
+                                              <i className="bi bi-file-earmark-arrow-down" />
+                                            </a>
+                                          )}
+                                        </span>
                                       ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
                                     </td>
                                   </tr>
@@ -694,6 +728,18 @@ export default function ClienteDetalhePage({
                                       title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
                                       {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
                                     </span>
+                                    {titulo.nfseAtivo?.linkNfse && (
+                                      <a
+                                        href={titulo.nfseAtivo.linkNfse}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="btn btn-link btn-sm p-0 text-success"
+                                        title="Baixar PDF da NFS-e"
+                                        style={{ lineHeight: 1 }}
+                                      >
+                                        <i className="bi bi-file-earmark-arrow-down" />
+                                      </a>
+                                    )}
                                     {titulo.nfseAtivo && (
                                       <button
                                         type="button"
@@ -851,6 +897,30 @@ export default function ClienteDetalhePage({
                         ))}
                       </ul>
                     </div>
+                  </div>
+
+                  {/* Preview itens EFI */}
+                  <div className="mb-3">
+                    <div className="text-muted small fw-semibold mb-1">Itens da cobrança (EFI)</div>
+                    {loadingPreview ? (
+                      <div className="text-center py-2">
+                        <div className="spinner-border spinner-border-sm text-secondary" role="status" />
+                      </div>
+                    ) : boletoPreview?.itens?.length ? (
+                      <ul className="list-group list-group-flush border rounded">
+                        {boletoPreview.itens.map((item, i) => (
+                          <li key={i} className="list-group-item d-flex justify-content-between px-3 py-2 small">
+                            <span className="text-muted">
+                              {item.nome}
+                              {item.quantidade && item.quantidade > 1 ? (
+                                <span className="text-secondary ms-1">×{item.quantidade}</span>
+                              ) : null}
+                            </span>
+                            <span className="fw-semibold">{formatBRL(item.valor)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
 
                   {/* Alert datas divergentes */}
