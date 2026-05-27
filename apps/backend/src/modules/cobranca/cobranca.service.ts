@@ -593,6 +593,28 @@ export class CobrancaService {
     }));
   }
 
+  /** Busca todas as NFS-e emitidas de um cliente com seus títulos vinculados */
+  async buscarNfseEmitidaCliente(idclienteAthos: number): Promise<Array<{
+    id: number; numeroNfse: string | null; numeroRps: number;
+    valorServico: number; linkNfse: string | null; dataEmissao: Date;
+    titulos: number[];
+  }>> {
+    const nfses = await this.prisma.nfseEmitida.findMany({
+      where: { idclienteAthos },
+      orderBy: { dataEmissao: "desc" },
+      include: { titulos: { select: { idcontareceber: true } } },
+    });
+    return nfses.map((n) => ({
+      id: n.id,
+      numeroNfse: n.numeroNfse ?? null,
+      numeroRps: n.numeroRps,
+      valorServico: Number(n.valorServico),
+      linkNfse: n.linkNfse ?? null,
+      dataEmissao: n.dataEmissao,
+      titulos: n.titulos.map((t) => t.idcontareceber),
+    }));
+  }
+
   /**
    * Cancela NFS-e na prefeitura (SOAP CancelarNfse) e remove todos os registros
    * com o mesmo numeroNfse do nosso banco — segurança: notas com mesmo número cancelam juntas.

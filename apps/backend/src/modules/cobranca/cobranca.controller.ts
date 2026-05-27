@@ -57,6 +57,12 @@ export class CobrancaController {
     return this.cobrancaService.cancelarNfseEmitida(id);
   }
 
+  /** Lista NFS-e emitidas de um cliente com títulos vinculados */
+  @Get("nfse/cliente/:idclienteAthos")
+  async nfseCliente(@Param("idclienteAthos", ParseIntPipe) idclienteAthos: number) {
+    return this.cobrancaService.buscarNfseEmitidaCliente(idclienteAthos);
+  }
+
   /** Lista boletos de um cliente com títulos vinculados */
   @Get("boleto/cliente/:idcliente")
   async boletosCliente(@Param("idcliente", ParseIntPipe) idcliente: number) {
