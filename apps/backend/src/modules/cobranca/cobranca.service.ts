@@ -815,7 +815,7 @@ export class CobrancaService {
           restante -= parte;
           const key = `NFS-e-${nfse.numero}`;
           notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + parte);
-          notaToLabel.set(key, `Nota fiscal de serviço #${nfse.numero}`);
+          notaToLabel.set(key, `NFS-e #${nfse.numero}`);
         });
       }
 
@@ -830,7 +830,7 @@ export class CobrancaService {
             restante -= parte;
             const key = `NF-e-${num}`;
             notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + parte);
-            notaToLabel.set(key, `Nota fiscal de produto #${num}`);
+            notaToLabel.set(key, `NF-e #${num}`);
           });
         } else {
           // Se não tem NF-e, mas tem produto, agrupa em "Produtos"

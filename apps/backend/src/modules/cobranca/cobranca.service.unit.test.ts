@@ -12,17 +12,17 @@ describe("montarItensEfiPorVendaItem", () => {
     (service as any).athosService = {
       buscarTodasNfesParaTitulos: jest.fn(),
       buscarItensVenda: jest.fn(),
-      // buscarValorTotalVenda não é mais chamado — valorTotal calculado dos itens
+      // buscarValorTotalVenda nao e mais chamado -- valorTotal calculado dos itens
     };
   });
 
   /**
-   * CENÁRIO DO BUG REAL — cliente 2708:
-   * 6 títulos, sendo um deles (867) com AMBOS NFS-e #171 E NF-e #440.
-   * venda_item desse título tem 1 item serviço (R$23,25) + 1 item produto (R$30,00).
-   * Bug anterior: buscarValorTotalVenda falhava → prodCent=0 → NF-e #440 sumia.
+   * CENARIO DO BUG REAL -- cliente 2708:
+   * 6 titulos, sendo um deles (867) com AMBOS NFS-e #171 E NF-e #440.
+   * venda_item desse titulo tem 1 item servico (R$23,25) + 1 item produto (R$30,00).
+   * Bug anterior: buscarValorTotalVenda falhava -> prodCent=0 -> NF-e #440 sumia.
    */
-  it("deve gerar 3 itens (NFS-e #171, NF-e #440, NF-e #420) para o cenário real do cliente 2708", async () => {
+  it("deve gerar 3 itens (NFS-e #171, NF-e #440, NF-e #420) para o cenario real do cliente 2708", async () => {
     const titulos = [
       { idcontareceber: 865, idvenda: 19846, valor: 56.70 },  // NFS-e #171 pura
       { idcontareceber: 867, idvenda: 19848, valor: 53.25 },  // NFS-e #171 + NF-e #440 (misto)
@@ -32,7 +32,6 @@ describe("montarItensEfiPorVendaItem", () => {
       { idcontareceber: 928, idvenda: 21641, valor: 52.10 },  // NFS-e #171 pura
     ];
 
-    // NFS-e do nosso banco: 4 títulos ligados à mesma NFS-e #171
     ((service as any).prisma.nfseEmitidaTitulo.findMany as jest.Mock).mockResolvedValue([
       { idcontareceber: 865, nfseEmitida: { numeroNfse: "171", valorServico: 184.25 } },
       { idcontareceber: 867, nfseEmitida: { numeroNfse: "171", valorServico: 184.25 } },
@@ -40,24 +39,22 @@ describe("montarItensEfiPorVendaItem", () => {
       { idcontareceber: 928, nfseEmitida: { numeroNfse: "171", valorServico: 184.25 } },
     ]);
 
-    // NF-e do Athos: título 867 tem #440; títulos 876 e 890 têm #420
     ((service as any).athosService.buscarTodasNfesParaTitulos as jest.Mock).mockResolvedValue([
       { idcontareceber: 867, numero: "440", valorNota: 0 },
       { idcontareceber: 876, numero: "420", valorNota: 0 },
       { idcontareceber: 890, numero: "420", valorNota: 0 },
     ]);
 
-    // venda_item por idvenda
     ((service as any).athosService.buscarItensVenda as jest.Mock).mockImplementation((idv: number) => {
-      if (idv === 19846) return Promise.resolve([{ nome: "Serviço", quantidade: 1, valor: 56.70,  tipoFisico: false, sequencia: 1 }]);
+      if (idv === 19846) return Promise.resolve([{ nome: "Servico", quantidade: 1, valor: 56.70,  tipoFisico: false, sequencia: 1 }]);
       if (idv === 19848) return Promise.resolve([
-        { nome: "Serviço", quantidade: 1, valor: 23.25, tipoFisico: false, sequencia: 1 }, // serviço
-        { nome: "Produto", quantidade: 1, valor: 30.00, tipoFisico: true,  sequencia: 2 }, // produto
+        { nome: "Servico", quantidade: 1, valor: 23.25, tipoFisico: false, sequencia: 1 },
+        { nome: "Produto", quantidade: 1, valor: 30.00, tipoFisico: true,  sequencia: 2 },
       ]);
-      if (idv === 20003) return Promise.resolve([{ nome: "Produto", quantidade: 1, valor: 62.00,  tipoFisico: true, sequencia: 1 }]);
-      if (idv === 20448) return Promise.resolve([{ nome: "Produto", quantidade: 1, valor: 343.00, tipoFisico: true, sequencia: 1 }]);
-      if (idv === 20498) return Promise.resolve([{ nome: "Serviço", quantidade: 1, valor: 52.20,  tipoFisico: false, sequencia: 1 }]);
-      if (idv === 21641) return Promise.resolve([{ nome: "Serviço", quantidade: 1, valor: 52.10,  tipoFisico: false, sequencia: 1 }]);
+      if (idv === 20003) return Promise.resolve([{ nome: "Produto", quantidade: 1, valor: 62.00,  tipoFisico: true,  sequencia: 1 }]);
+      if (idv === 20448) return Promise.resolve([{ nome: "Produto", quantidade: 1, valor: 343.00, tipoFisico: true,  sequencia: 1 }]);
+      if (idv === 20498) return Promise.resolve([{ nome: "Servico", quantidade: 1, valor: 52.20,  tipoFisico: false, sequencia: 1 }]);
+      if (idv === 21641) return Promise.resolve([{ nome: "Servico", quantidade: 1, valor: 52.10,  tipoFisico: false, sequencia: 1 }]);
       return Promise.resolve([]);
     });
 
@@ -65,27 +62,24 @@ describe("montarItensEfiPorVendaItem", () => {
     const itemMap = await service["montarItensEfiPorVendaItem"](titulos, totalValor);
     const itens = Array.from(itemMap.values());
 
-    // Deve haver 3 itens — não 2
     expect(itens).toHaveLength(3);
 
     expect(itens).toEqual(
       expect.arrayContaining([
         // NFS-e #171: 23.25 (867) + 56.70 (865) + 52.20 (891) + 52.10 (928) = 184.25
-        expect.objectContaining({ name: "Nota fiscal de serviço #171", valueCentavos: 18425 }),
-        // NF-e #440: 30.00 (867) — produto do título misto
-        expect.objectContaining({ name: "Nota fiscal de produto #440", valueCentavos: 3000 }),
+        expect.objectContaining({ name: "NFS-e #171", valueCentavos: 18425 }),
+        // NF-e #440: 30.00 (867) -- produto do titulo misto
+        expect.objectContaining({ name: "NF-e #440", valueCentavos: 3000 }),
         // NF-e #420: 62.00 (876) + 343.00 (890) = 405.00
-        expect.objectContaining({ name: "Nota fiscal de produto #420", valueCentavos: 40500 }),
+        expect.objectContaining({ name: "NF-e #420", valueCentavos: 40500 }),
       ]),
     );
 
-    // Σ deve bater com o total
     const soma = itens.reduce((acc, i) => acc + i.valueCentavos, 0);
     expect(soma).toBe(Math.round(totalValor * 100)); // 61925
   });
 
-  it("deve gerar 1 item por nota fiscal com valor correto (NFS-e + 2×NF-e — fallback sem venda_item)", async () => {
-    // Sem itens de venda → usa fallback por tipo de nota (cada título tem só 1 nota)
+  it("deve gerar 1 item por nota fiscal com valor correto (NFS-e + 2xNF-e -- fallback sem venda_item)", async () => {
     const titulos = [
       { idcontareceber: 1, idvenda: 10, valor: 184.25 }, // NFS-e #171
       { idcontareceber: 2, idvenda: 20, valor: 405.00 }, // NF-e #420
@@ -107,9 +101,9 @@ describe("montarItensEfiPorVendaItem", () => {
 
     expect(itens).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Nota fiscal de serviço #171", valueCentavos: 18425 }),
-        expect.objectContaining({ name: "Nota fiscal de produto #420", valueCentavos: 40500 }),
-        expect.objectContaining({ name: "Nota fiscal de produto #440", valueCentavos: 3000 }),
+        expect.objectContaining({ name: "NFS-e #171", valueCentavos: 18425 }),
+        expect.objectContaining({ name: "NF-e #420", valueCentavos: 40500 }),
+        expect.objectContaining({ name: "NF-e #440", valueCentavos: 3000 }),
       ]),
     );
 
@@ -117,7 +111,7 @@ describe("montarItensEfiPorVendaItem", () => {
     expect(soma).toBe(Math.round(totalValor * 100));
   });
 
-  it("deve gerar item único quando título tem apenas NFS-e", async () => {
+  it("deve gerar item unico quando titulo tem apenas NFS-e", async () => {
     const titulos = [{ idcontareceber: 10, idvenda: 1, valor: 100.00 }];
 
     ((service as any).prisma.nfseEmitidaTitulo.findMany as jest.Mock).mockResolvedValue([
@@ -130,10 +124,10 @@ describe("montarItensEfiPorVendaItem", () => {
     const itens = Array.from(itemMap.values());
 
     expect(itens).toHaveLength(1);
-    expect(itens[0]).toMatchObject({ name: "Nota fiscal de serviço #999", valueCentavos: 10000 });
+    expect(itens[0]).toMatchObject({ name: "NFS-e #999", valueCentavos: 10000 });
   });
 
-  it("deve gerar item único quando título tem apenas NF-e", async () => {
+  it("deve gerar item unico quando titulo tem apenas NF-e", async () => {
     const titulos = [{ idcontareceber: 20, idvenda: 2, valor: 250.00 }];
 
     ((service as any).prisma.nfseEmitidaTitulo.findMany as jest.Mock).mockResolvedValue([]);
@@ -146,10 +140,10 @@ describe("montarItensEfiPorVendaItem", () => {
     const itens = Array.from(itemMap.values());
 
     expect(itens).toHaveLength(1);
-    expect(itens[0]).toMatchObject({ name: "Nota fiscal de produto #555", valueCentavos: 25000 });
+    expect(itens[0]).toMatchObject({ name: "NF-e #555", valueCentavos: 25000 });
   });
 
-  it("deve dividir via venda_item.tipoFisico quando há itens de venda", async () => {
+  it("deve dividir via venda_item.tipoFisico quando ha itens de venda", async () => {
     const titulos = [{ idcontareceber: 30, idvenda: 5, valor: 100.00 }];
 
     ((service as any).prisma.nfseEmitidaTitulo.findMany as jest.Mock).mockResolvedValue([
@@ -159,7 +153,7 @@ describe("montarItensEfiPorVendaItem", () => {
       { idcontareceber: 30, numero: "300" },
     ]);
     ((service as any).athosService.buscarItensVenda as jest.Mock).mockResolvedValue([
-      { nome: "Serviço X", quantidade: 1, valor: 50.00, tipoFisico: false, sequencia: 1 },
+      { nome: "Servico X", quantidade: 1, valor: 50.00, tipoFisico: false, sequencia: 1 },
       { nome: "Produto Y", quantidade: 1, valor: 50.00, tipoFisico: true,  sequencia: 2 },
     ]);
 
@@ -168,8 +162,8 @@ describe("montarItensEfiPorVendaItem", () => {
 
     expect(itens).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Nota fiscal de serviço #200", valueCentavos: 5000 }),
-        expect.objectContaining({ name: "Nota fiscal de produto #300", valueCentavos: 5000 }),
+        expect.objectContaining({ name: "NFS-e #200", valueCentavos: 5000 }),
+        expect.objectContaining({ name: "NF-e #300", valueCentavos: 5000 }),
       ]),
     );
 
