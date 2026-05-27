@@ -2,6 +2,7 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import Script from "next/script";
+import { safeHttpUrl } from "@/lib/safe-url";
 
 interface NfseEmitidaCliente {
   id: number;
@@ -764,7 +765,7 @@ export default function ClienteDetalhePage({
                                           </span>
                                           {t.nfseAtivo?.linkNfse && (
                                             <a
-                                              href={t.nfseAtivo.linkNfse}
+                                              href={safeHttpUrl(t.nfseAtivo.linkNfse) ?? undefined}
                                               target="_blank"
                                               rel="noopener noreferrer"
                                               className="btn btn-link btn-sm p-0 text-success"
@@ -834,7 +835,7 @@ export default function ClienteDetalhePage({
                                     </span>
                                     {titulo.nfseAtivo?.linkNfse && (
                                       <a
-                                        href={titulo.nfseAtivo.linkNfse}
+                                        href={safeHttpUrl(titulo.nfseAtivo.linkNfse) ?? undefined}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="btn btn-link btn-sm p-0 text-success"
@@ -951,7 +952,7 @@ export default function ClienteDetalhePage({
                             <div className="d-flex gap-2 align-items-center">
                               {nfse.linkNfse && (
                                 <a
-                                  href={nfse.linkNfse}
+                                  href={safeHttpUrl(nfse.linkNfse) ?? undefined}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="btn btn-sm btn-outline-success"
@@ -1647,7 +1648,7 @@ export default function ClienteDetalhePage({
                   {nfseResult.linkNfse && (
                     <div className="text-center">
                       <a
-                        href={nfseResult.linkNfse}
+                        href={safeHttpUrl(nfseResult.linkNfse) ?? undefined}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn btn-outline-primary btn-sm"
