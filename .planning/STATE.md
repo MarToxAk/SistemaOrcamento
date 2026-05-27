@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Cobrança e Fiscal do Cliente
-current_phase: 30
+current_phase: 31
 status: executing
-last_updated: "2026-05-27T16:46:43.285Z"
-last_activity: 2026-05-27 -- Phase 31 planning complete
+last_updated: "2026-05-27T16:48:46.148Z"
+last_activity: 2026-05-27 -- Phase 31 execution started
 progress:
   total_phases: 32
   completed_phases: 26
@@ -17,17 +17,17 @@ progress:
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-22 — Phase 29 Plan 02 completo (modal boleto frontend + Route Handler)
-Current phase: 30
+Current phase: 31
 Milestone: v2.1 — Cobranca e Fiscal do Cliente
 
 ---
 
 ## Current Position
 
-Phase: 30 (emissao-nfse-titulos) — EXECUTING
+Phase: 31 (hist-rico-nfs-e-consulta-nf-athos) — EXECUTING
 Plan: 1 of 4
-Status: Ready to execute
-Last activity: 2026-05-27 -- Phase 31 planning complete
+Status: Executing Phase 31
+Last activity: 2026-05-27 -- Phase 31 execution started
 
 Progress: [####------] 40% (Phase 28 completa + Phase 29 Plans 01+02 completos)
 
