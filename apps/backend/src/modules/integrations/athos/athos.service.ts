@@ -2024,4 +2024,59 @@ export class AthosService {
     }
   }
 
+
+  /**
+   * Retorna notas fiscais nao-servico (NF-e) de um cliente do Athos via query read-only.
+   * Lista ate 50 registros ordenados por data de emissao DESC.
+   * Quando  e fornecido, aplica filtro WHERE n.numero = $2 (match exato, server-side).
+   * Notas canceladas sao excluidas (COALESCE(n.cancelada, false) = false).
+   * Em caso de erro de query, loga com warn e retorna [] sem quebrar o endpoint.
+   * NFAT-01 (lista) e NFAT-02 (busca por numero) — D-09 a D-14.
+   */
+  async buscarNotasFiscaisCliente(
+    idcliente: number,
+    numero?: string,
+  ): Promise<Array<{ numero: string; dataemissao: string | null; valor: number; tipo: string }>> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const temNumero = typeof numero === 'string' && numero.trim() !== '';
+      const params: Array<number | string> = temNumero ? [idcliente, numero!.trim()] : [idcliente];
+      const filtroNumero = temNumero ? ' AND n.numero = $2' : '';
+      const result = await client.query(
+        `SELECT n.numero, n.dataemissao, n.valornota, 'NF-e' AS tipo
+         FROM venda v
+         JOIN venda_nota vn ON vn.idvenda = v.idvenda
+         JOIN nota n ON n.idnota = vn.idnota
+         WHERE v.idcliente = $1
+           AND COALESCE(n.cancelada, false) = false
+           AND n.nfechaveacesso IS NOT NULL${filtroNumero}
+         ORDER BY n.dataemissao DESC
+         LIMIT 50`,
+        params,
+      );
+      return (result.rows as Array<{ numero: unknown; dataemissao: unknown; valornota: unknown; tipo: unknown }>).map(
+        (row) => {
+          const dataemis = row['dataemissao'];
+          return {
+            numero: String(row['numero'] ?? '').trim(),
+            dataemissao:
+              dataemis instanceof Date
+                ? dataemis.toISOString().slice(0, 10)
+                : typeof dataemis === 'string' && dataemis.trim()
+                ? dataemis.trim()
+                : null,
+            valor: Number(row['valornota'] ?? 0),
+            tipo: 'NF-e',
+          };
+        },
+      );
+    } catch (err) {
+      this.logger.warn(`buscarNotasFiscaisCliente idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`);
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
 }
