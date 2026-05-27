@@ -716,7 +716,7 @@ export class AthosService {
         conditions.push(`statusconta = $${params.length}`);
       }
 
-      const query = `SELECT * FROM ${table.tableName} WHERE ${conditions.join(" AND ")} ORDER BY CAST(${dateColumn} AS timestamp) DESC`;
+      const query = `SELECT * FROM "${table.tableName}" WHERE ${conditions.join(" AND ")} ORDER BY CAST("${dateColumn}" AS timestamp) DESC`;
 
       const result = await client.query(query, params);
 
