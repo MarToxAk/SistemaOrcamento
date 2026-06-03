@@ -176,6 +176,7 @@ export class CobrancaService {
           customer: cpfOuCnpj && "juridical_person" in cpfOuCnpj
             ? cpfOuCnpj  // PJ: { juridical_person: { corporate_name, cnpj } }
             : { name: nomeCliente.slice(0, 80), ...cpfOuCnpj }, // PF ou sem doc
+          ...(dto.observacao?.trim() ? { message: dto.observacao.trim().slice(0, 255) } : {}),
         },
       },
       metadata: {

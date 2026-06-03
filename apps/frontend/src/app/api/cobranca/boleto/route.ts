@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Body inválido ou ausente." }, { status: 400 });
   }
 
-  const { idclienteAthos, idcontasReceber, expireAt } = body as Record<string, unknown>;
+  const { idclienteAthos, idcontasReceber, expireAt, observacao } = body as Record<string, unknown>;
 
   if (typeof idclienteAthos !== "number" || !Number.isFinite(idclienteAthos) || idclienteAthos <= 0) {
     return NextResponse.json({ error: "idclienteAthos inválido ou ausente." }, { status: 400 });
@@ -31,9 +31,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const payload: Record<string, unknown> = { idclienteAthos, idcontasReceber, expireAt };
+    if (typeof observacao === "string" && observacao.trim()) payload.observacao = observacao.trim();
+
     const res = await backendFetch("/cobranca/boleto", {
       method: "POST",
-      body: JSON.stringify({ idclienteAthos, idcontasReceber, expireAt }),
+      body: JSON.stringify(payload),
       headers: { "Content-Type": "application/json" },
     });
 

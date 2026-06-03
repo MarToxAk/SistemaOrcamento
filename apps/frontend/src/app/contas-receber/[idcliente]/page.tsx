@@ -82,6 +82,7 @@ export default function ClienteDetalhePage({
   >("idle");
   const [expireAt, setExpireAt] = useState("");
   const [expireAtReadonly, setExpireAtReadonly] = useState(false);
+  const [observacaoBoleto, setObservacaoBoleto] = useState("");
   const [erroDatasModal, setErroDatasModal] = useState("");
   const [boletoResult, setBoletoResult] = useState<{
     cobrancaId: number;
@@ -420,6 +421,7 @@ export default function ClienteDetalhePage({
           idclienteAthos: Number(idcliente),
           idcontasReceber: titulosSelecionados.map((t) => t.idcontareceber),
           expireAt,
+          ...(observacaoBoleto.trim() ? { observacao: observacaoBoleto.trim() } : {}),
         }),
       });
       const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
@@ -451,6 +453,7 @@ export default function ClienteDetalhePage({
     setBoletoErroDetalhe("");
     setCopiado(false);
     setBoletoPreview(null);
+    setObservacaoBoleto("");
   }
 
   async function abreNfseModal() {
@@ -1285,6 +1288,26 @@ export default function ClienteDetalhePage({
                     {expireAt && expireAt < hoje && (
                       <div className="invalid-feedback">
                         A data de vencimento não pode ser no passado.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Campo de observação */}
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold small">
+                      Observação <span className="text-muted fw-normal">(opcional)</span>
+                    </label>
+                    <textarea
+                      className="form-control"
+                      rows={2}
+                      maxLength={255}
+                      placeholder="Ex: Ref. pedido 1234 — aparece no boleto"
+                      value={observacaoBoleto}
+                      onChange={(e) => setObservacaoBoleto(e.target.value)}
+                    />
+                    {observacaoBoleto.length > 0 && (
+                      <div className="text-end mt-1">
+                        <small className="text-muted">{observacaoBoleto.length}/255</small>
                       </div>
                     )}
                   </div>
