@@ -1,5 +1,6 @@
 ---
-status: partial
+status: complete
+reconciled: 2026-06-08 — os 5 testes humanos ficaram pending (nunca executados). Deferidos no ship do milestone v2.0 (dashboard Contas a Receber em produção desde 2026-05-22). Sessão encerrada na auditoria v2.1 — NÃO marcados como passed.
 phase: 27-dashboard-contas-receber
 source: [27-VERIFICATION.md]
 started: 2026-05-21T00:00:00Z

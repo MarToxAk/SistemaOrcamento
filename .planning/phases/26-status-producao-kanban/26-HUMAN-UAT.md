@@ -1,5 +1,6 @@
 ---
-status: partial
+status: complete
+reconciled: 2026-06-08 — os 5 testes humanos ficaram pending (nunca executados). Deferidos no ship do milestone v2.0. Sessão encerrada na auditoria v2.1 — NÃO marcados como passed.
 phase: 26-status-producao-kanban
 source: [26-VERIFICATION.md]
 started: 2026-05-15

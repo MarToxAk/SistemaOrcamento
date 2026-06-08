@@ -1,5 +1,6 @@
-﻿---
-status: diagnosed
+---
+status: complete
+reconciled: 2026-06-08 — os 4 gaps diagnosticados foram fechados pelo gap-closure plan 18-02 (remoção do +1 do RPS via AUXILIARRPS, fallback de tomador por nome) e verificados em produção (commit 14f1317 "verificacao aprovada em producao — RPS e tomador OK"). Milestone v1.7 shipado.
 phase: 18-correcoes-nfse-rps-tomador
 source: [18-01-SUMMARY.md]
 started: 2026-05-04T00:00:00Z

@@ -1,5 +1,5 @@
-﻿---
-status: completed
+---
+status: complete
 phase: 19-api-de-busca-de-cliente-athos
 source: [19-01-SUMMARY.md]
 started: 2026-05-05T00:08:52.9585554-03:00

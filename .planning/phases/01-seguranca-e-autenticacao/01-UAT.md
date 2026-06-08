@@ -1,3 +1,10 @@
+---
+status: complete
+phase: 01-seguranca-e-autenticacao
+result: 6/6 PASSED
+reconciled: 2026-06-08 — frontmatter adicionado na auditoria v2.1; UAT em prosa já registrava 6/6 PASSED. Milestone v1.0 shipado.
+---
+
 # 01-UAT — Segurança e Autenticação
 
 **Phase:** 01 — Segurança e Autenticação  

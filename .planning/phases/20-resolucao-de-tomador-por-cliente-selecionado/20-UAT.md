@@ -1,5 +1,5 @@
-﻿---
-status: completed
+---
+status: complete
 phase: 20-resolucao-de-tomador-por-cliente-selecionado
 source: [20-01-SUMMARY.md]
 started: 2026-05-05T00:09:12.9790666-03:00

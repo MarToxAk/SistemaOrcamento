@@ -1,7 +1,8 @@
 ---
 phase: 31-hist-rico-nfs-e-consulta-nf-athos
 verified: 2026-05-27T18:30:00Z
-status: human_needed
+status: passed
+reconciled: 2026-06-08 — promovido de human_needed para passed na auditoria do milestone v2.1. O único item de runtime (verificação visual E2E das duas seções) foi explicitamente aprovado pelo operador no checkpoint humano 31-04 (31-04-SUMMARY.md: "Aprovado — operador confirmou funcionamento end-to-end de todos os critérios D-01 a D-16. Self-Check: PASSED").
 score: 12/12 must-haves verified
 overrides_applied: 1
 overrides:
@@ -19,7 +20,7 @@ human_verification:
 
 **Phase Goal:** Histórico NFS-e + Consulta NF Athos — expor histórico de NFS-e emitidas (banco próprio) e consulta de NF-e do Athos na página de detalhe do cliente, com lazy load, cancelamento com aviso e busca por número.
 **Verified:** 2026-05-27T18:30:00Z
-**Status:** human_needed
+**Status:** passed (reconciliado 2026-06-08 — runtime aprovado no checkpoint humano 31-04; ver `reconciled` no frontmatter)
 **Re-verification:** Não — verificação inicial
 
 ---

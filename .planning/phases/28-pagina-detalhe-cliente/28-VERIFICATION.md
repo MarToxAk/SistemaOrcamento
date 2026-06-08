@@ -1,7 +1,8 @@
 ---
 phase: 28-pagina-detalhe-cliente
 verified: 2026-05-22T17:30:00Z
-status: human_needed
+status: passed
+reconciled: 2026-06-08 — promovido de human_needed para passed na auditoria do milestone v2.1. Os itens de runtime (página de detalhe, tabela de títulos, checkboxes, barra de ações) foram exercitados ao vivo durante o UAT completo da Fase 29 (14/14 passou, 2026-05-23), que navega a mesma página /contas-receber/[idcliente]. O item "onClick vazio" tornou-se obsoleto após as Fases 29 e 30 conectarem os botões.
 score: 5/5 must-haves verified
 overrides_applied: 0
 re_verification: false
@@ -30,7 +31,7 @@ human_verification:
 
 **Phase Goal:** Operador acessa dados completos de um cliente e seus títulos em aberto a partir do dashboard, com a estrutura de banco de dados pronta para cobrança e NFS-e.
 **Verified:** 2026-05-22T17:30:00Z
-**Status:** human_needed
+**Status:** passed (reconciliado 2026-06-08 — runtime confirmado via UAT da Fase 29; ver `reconciled` no frontmatter)
 **Re-verification:** Não — verificação inicial
 
 ---

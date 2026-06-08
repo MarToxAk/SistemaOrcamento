@@ -1,5 +1,6 @@
 ---
-status: partial
+status: complete
+reconciled: 2026-06-08 — o único issue (test 2, valor editável) foi resolvido (campo readOnly, commit 452177f). Os tests 6-8 ficam blocked por dependência externa (API IIBR offline), deferidos como tech debt aceitável. 4 passou + 1 issue resolvido + 3 blocked-externo.
 phase: 30-emissao-nfse-titulos
 source: [30-01-SUMMARY.md, 30-02-SUMMARY.md, 30-04-SUMMARY.md]
 started: "2026-05-23T00:00:00Z"

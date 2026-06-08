@@ -1,3 +1,10 @@
+---
+status: complete
+phase: 03-correcoes-de-fluxo-e-qualidade-de-dados
+result: 4/4 PASSED (1 gap fixed)
+reconciled: 2026-06-08 — frontmatter adicionado na auditoria v2.1; UAT em prosa já registrava ALL PASSED. Milestone v1.0 shipado.
+---
+
 # UAT — Phase 3: Correções de Fluxo e Qualidade de Dados
 
 **Date:** 2025-01-30

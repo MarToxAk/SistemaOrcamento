@@ -1,3 +1,10 @@
+---
+status: complete
+phase: 10-operacao-segura-de-update
+result: T-01..T-05 PASS
+reconciled: 2026-06-08 — frontmatter adicionado na auditoria v2.1; corpo já indicava Status COMPLETE. Milestone v1.3 shipado.
+---
+
 # UAT — Phase 10: Operação Segura de Update
 
 **Status:** COMPLETE
