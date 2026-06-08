@@ -2,6 +2,24 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import Script from "next/script";
+import { safeHttpUrl } from "@/lib/safe-url";
+
+interface NfseEmitidaCliente {
+  id: number;
+  numeroNfse: string | null;
+  numeroRps: number;
+  valorServico: number;
+  linkNfse: string | null;
+  dataEmissao: string;
+  titulos: number[];
+}
+
+interface NotaFiscalAthos {
+  numero: string;
+  dataemissao: string | null;
+  valor: number;
+  tipo: string;
+}
 
 interface DadosCliente {
   idcliente: number;
@@ -25,7 +43,7 @@ interface TituloReceber {
   tipoNf?: string | null;
   numeroNf?: string | null;
   boletoAtivo?: { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null } | null;
-  nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null } | null;
+  nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null } | null;
 }
 
 function formatBRL(value: number): string {
@@ -64,6 +82,7 @@ export default function ClienteDetalhePage({
   >("idle");
   const [expireAt, setExpireAt] = useState("");
   const [expireAtReadonly, setExpireAtReadonly] = useState(false);
+  const [observacaoBoleto, setObservacaoBoleto] = useState("");
   const [erroDatasModal, setErroDatasModal] = useState("");
   const [boletoResult, setBoletoResult] = useState<{
     cobrancaId: number;
@@ -77,6 +96,11 @@ export default function ClienteDetalhePage({
   const [boletoErro, setBoletoErro] = useState("");
   const [boletoErroDetalhe, setBoletoErroDetalhe] = useState("");
   const [copiado, setCopiado] = useState(false);
+  const [boletoPreview, setBoletoPreview] = useState<{
+    nomeCliente: string; total: number;
+    itens: Array<{ nome: string; valor: number; quantidade?: number }>;
+  } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   // Modal NFS-e states
   const [nfseModalState, setNfseModalState] = useState<"idle" | "confirm" | "loading" | "success" | "error">("idle");
@@ -98,10 +122,24 @@ export default function ClienteDetalhePage({
   // Refetch key for triggering title list reload
   const [refetchKey, setRefetchKey] = useState(0);
 
-  const checkboxRef = useRef<HTMLInputElement>(null);
+  // Seção NFS-e Emitidas
+  const [nfseAberta, setNfseAberta] = useState(false);
+  const [nfseCarregada, setNfseCarregada] = useState(false);
+  const [nfseEmitidas, setNfseEmitidas] = useState<NfseEmitidaCliente[]>([]);
+  const [loadingNfse, setLoadingNfse] = useState(false);
+  const nfseRef = useRef<HTMLDivElement>(null);
 
-  const allSelected = titulos.length > 0 && selectedIds.size === titulos.length;
-  const someSelected = selectedIds.size > 0 && selectedIds.size < titulos.length;
+  // Seção Notas Fiscais Athos
+  const [nfatAberta, setNfatAberta] = useState(false);
+  const [nfatCarregada, setNfatCarregada] = useState(false);
+  const [notasFiscaisAthos, setNotasFiscaisAthos] = useState<NotaFiscalAthos[]>([]);
+  const [loadingNfat, setLoadingNfat] = useState(false);
+  const [buscaNumeroNf, setBuscaNumeroNf] = useState("");
+  const [resultadoBuscaNf, setResultadoBuscaNf] = useState<NotaFiscalAthos[] | null>(null);
+  const [buscandoNf, setBuscandoNf] = useState(false);
+  const nfatRef = useRef<HTMLDivElement>(null);
+
+  const checkboxRef = useRef<HTMLInputElement>(null);
 
   const totalSelecionado = titulos
     .filter((t) => selectedIds.has(t.idcontareceber))
@@ -109,6 +147,9 @@ export default function ClienteDetalhePage({
 
   // Separar títulos: com boleto (agrupados) vs livres
   const titulosLivres = titulos.filter((t) => !t.boletoAtivo);
+
+  const allSelected = titulosLivres.length > 0 && titulosLivres.every((t) => selectedIds.has(t.idcontareceber));
+  const someSelected = selectedIds.size > 0 && !titulosLivres.every((t) => selectedIds.has(t.idcontareceber));
   const boletoGrupos = new Map<number, { boleto: NonNullable<typeof titulos[0]["boletoAtivo"]>; titulos: typeof titulos }>();
   for (const t of titulos) {
     if (t.boletoAtivo) {
@@ -169,7 +210,7 @@ export default function ClienteDetalhePage({
                 } catch { /* silently ignore */ }
 
                 // Verificar NFS-e emitidas no nosso banco para os mesmos títulos
-                let nfseMap = new Map<number, { nfseEmitidaId: number; numeroNfse: string | null }>();
+                let nfseMap = new Map<number, { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null }>();
                 try {
                   const nfseRes = await fetch("/api/cobranca/nfse/titulos-em-uso", {
                     method: "POST",
@@ -178,8 +219,8 @@ export default function ClienteDetalhePage({
                     cache: "no-store",
                   });
                   if (nfseRes.ok) {
-                    const nfseData = (await nfseRes.json()) as Array<{ idcontareceber: number; nfseEmitidaId: number; numeroNfse: string | null }>;
-                    nfseMap = new Map(nfseData.map((n) => [n.idcontareceber, { nfseEmitidaId: n.nfseEmitidaId, numeroNfse: n.numeroNfse }]));
+                    const nfseData = (await nfseRes.json()) as Array<{ idcontareceber: number; nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null }>;
+                    nfseMap = new Map(nfseData.map((n) => [n.idcontareceber, { nfseEmitidaId: n.nfseEmitidaId, numeroNfse: n.numeroNfse, linkNfse: n.linkNfse }]));
                   }
                 } catch { /* silently ignore */ }
 
@@ -248,6 +289,76 @@ export default function ClienteDetalhePage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nfseModalState]);
 
+  async function carregarNfseEmitidas() {
+    setLoadingNfse(true);
+    try {
+      const res = await fetch(`/api/cobranca/nfse/cliente/${idcliente}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as NfseEmitidaCliente[];
+        setNfseEmitidas(data);
+      }
+    } catch { /* silently ignore */ }
+    finally {
+      setLoadingNfse(false);
+      setNfseCarregada(true);
+    }
+  }
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !nfseCarregada) {
+        void carregarNfseEmitidas();
+      }
+    });
+    if (nfseRef.current) observer.observe(nfseRef.current);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nfseAberta, nfseCarregada]);
+
+  async function carregarNotasFiscaisAthos() {
+    setLoadingNfat(true);
+    try {
+      const res = await fetch(`/api/athos/clientes/${idcliente}/notas-fiscais`, { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as NotaFiscalAthos[];
+        setNotasFiscaisAthos(data);
+      }
+    } catch { /* silently ignore */ }
+    finally {
+      setLoadingNfat(false);
+      setNfatCarregada(true);
+    }
+  }
+
+  async function buscarNotaPorNumero() {
+    if (!buscaNumeroNf.trim()) return;
+    setBuscandoNf(true);
+    try {
+      const res = await fetch(
+        `/api/athos/clientes/${idcliente}/notas-fiscais?numero=${encodeURIComponent(buscaNumeroNf.trim())}`,
+        { cache: "no-store" },
+      );
+      if (res.ok) {
+        const data = (await res.json()) as NotaFiscalAthos[];
+        setResultadoBuscaNf(data);
+      }
+    } catch { /* silently ignore */ }
+    finally {
+      setBuscandoNf(false);
+    }
+  }
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !nfatCarregada) {
+        void carregarNotasFiscaisAthos();
+      }
+    });
+    if (nfatRef.current) observer.observe(nfatRef.current);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nfatAberta, nfatCarregada]);
+
   function handleToggle(id: number) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -261,14 +372,14 @@ export default function ClienteDetalhePage({
   }
 
   function handleToggleAll() {
-    if (selectedIds.size === titulos.length) {
+    if (titulosLivres.every((t) => selectedIds.has(t.idcontareceber))) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(titulos.map((t) => t.idcontareceber)));
+      setSelectedIds(new Set(titulosLivres.map((t) => t.idcontareceber)));
     }
   }
 
-  function abreBoletoModal() {
+  async function abreBoletoModal() {
     const titulosSelecionados = titulos.filter((t) => selectedIds.has(t.idcontareceber));
     const datas = new Set(titulosSelecionados.map((t) => t.datavencimento?.slice(0, 10)));
     if (datas.size === 1) {
@@ -282,7 +393,21 @@ export default function ClienteDetalhePage({
         "Os títulos selecionados possuem datas de vencimento diferentes. Informe a data de vencimento manualmente.",
       );
     }
+    setBoletoPreview(null);
     setBoletoModalState("confirm");
+    setLoadingPreview(true);
+    try {
+      const res = await fetch("/api/cobranca/boleto/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idclienteAthos: Number(idcliente),
+          idcontasReceber: titulosSelecionados.map((t) => t.idcontareceber),
+        }),
+      });
+      if (res.ok) setBoletoPreview(await res.json());
+    } catch { /* silently ignore */ }
+    finally { setLoadingPreview(false); }
   }
 
   async function confirmarGerarBoleto() {
@@ -296,6 +421,7 @@ export default function ClienteDetalhePage({
           idclienteAthos: Number(idcliente),
           idcontasReceber: titulosSelecionados.map((t) => t.idcontareceber),
           expireAt,
+          ...(observacaoBoleto.trim() ? { observacao: observacaoBoleto.trim() } : {}),
         }),
       });
       const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
@@ -326,6 +452,8 @@ export default function ClienteDetalhePage({
     setBoletoErro("");
     setBoletoErroDetalhe("");
     setCopiado(false);
+    setBoletoPreview(null);
+    setObservacaoBoleto("");
   }
 
   async function abreNfseModal() {
@@ -634,9 +762,23 @@ export default function ClienteDetalhePage({
                                     <td className="small fw-semibold">{formatBRL(t.valor)}</td>
                                     <td>
                                       {t.tipoNf ? (
-                                            <span className={`badge ${badgeClassName(t.tipoNf)}`}>
-                                              {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
-                                            </span>
+                                        <span className="d-inline-flex align-items-center gap-1">
+                                          <span className={`badge ${badgeClassName(t.tipoNf)}`}>
+                                            {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
+                                          </span>
+                                          {t.nfseAtivo?.linkNfse && (
+                                            <a
+                                              href={safeHttpUrl(t.nfseAtivo.linkNfse) ?? undefined}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="btn btn-link btn-sm p-0 text-success"
+                                              title="Baixar PDF da NFS-e"
+                                              style={{ lineHeight: 1 }}
+                                            >
+                                              <i className="bi bi-file-earmark-arrow-down" />
+                                            </a>
+                                          )}
+                                        </span>
                                       ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
                                     </td>
                                   </tr>
@@ -694,6 +836,18 @@ export default function ClienteDetalhePage({
                                       title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
                                       {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
                                     </span>
+                                    {titulo.nfseAtivo?.linkNfse && (
+                                      <a
+                                        href={safeHttpUrl(titulo.nfseAtivo.linkNfse) ?? undefined}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="btn btn-link btn-sm p-0 text-success"
+                                        title="Baixar PDF da NFS-e"
+                                        style={{ lineHeight: 1 }}
+                                      >
+                                        <i className="bi bi-file-earmark-arrow-down" />
+                                      </a>
+                                    )}
                                     {titulo.nfseAtivo && (
                                       <button
                                         type="button"
@@ -709,6 +863,7 @@ export default function ClienteDetalhePage({
                                               alert((d as { error?: string }).error ?? "Erro ao remover NFS-e.");
                                             } else {
                                               setRefetchKey((k) => k + 1);
+                                              setNfseCarregada(false); // força reload da seção NFS-e Emitidas
                                             }
                                           } catch {
                                             alert("Falha na conexão.");
@@ -743,6 +898,228 @@ export default function ClienteDetalhePage({
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ─── SEÇÃO NFS-e Emitidas ─── */}
+      <div className="container mt-3">
+        <hr />
+        <div className="mt-2">
+          <button
+            className="btn btn-link p-0 text-decoration-none fw-semibold text-dark"
+            onClick={() => setNfseAberta(!nfseAberta)}
+            type="button"
+          >
+            {nfseAberta ? "▼" : "►"} NFS-e Emitidas
+          </button>
+          {nfseAberta && (
+            <div ref={nfseRef} className="mt-2">
+              {loadingNfse ? (
+                <div className="text-center py-3">
+                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                    <span className="visually-hidden">Carregando NFS-e...</span>
+                  </div>
+                </div>
+              ) : nfseCarregada && nfseEmitidas.length === 0 ? (
+                <p className="text-muted text-center py-3">Nenhuma NFS-e emitida para este cliente</p>
+              ) : nfseEmitidas.length > 0 ? (
+                <div className="table-responsive">
+                  <table className="table table-sm table-hover table-bordered">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Data emissão</th>
+                        <th>Nº NFS-e</th>
+                        <th>Nº RPS</th>
+                        <th>Valor</th>
+                        <th>Títulos vinculados</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nfseEmitidas.map((nfse) => (
+                        <tr key={nfse.id}>
+                          <td className="small">{formatDate(nfse.dataEmissao)}</td>
+                          <td className="small">{nfse.numeroNfse ?? "—"}</td>
+                          <td className="small">{nfse.numeroRps}</td>
+                          <td className="small fw-semibold">{formatBRL(nfse.valorServico)}</td>
+                          <td className="small">
+                            {nfse.titulos.length > 0
+                              ? nfse.titulos.map((tid, i) => (
+                                  <span key={tid}>
+                                    <span className="badge bg-secondary">{tid}</span>
+                                    {i < nfse.titulos.length - 1 && " "}
+                                  </span>
+                                ))
+                              : <span className="text-muted">—</span>}
+                          </td>
+                          <td>
+                            <div className="d-flex gap-2 align-items-center">
+                              {nfse.linkNfse && (
+                                <a
+                                  href={safeHttpUrl(nfse.linkNfse) ?? undefined}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-sm btn-outline-success"
+                                  title="Baixar PDF da NFS-e"
+                                >
+                                  <i className="bi bi-file-earmark-arrow-down" />
+                                </a>
+                              )}
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-danger"
+                                title="Remove do sistema. O cancelamento na prefeitura pode não ser suportado."
+                                onClick={async () => {
+                                  if (
+                                    !confirm(
+                                      `Cancelar NFS-e ${nfse.numeroNfse ? `#${nfse.numeroNfse}` : `(ID ${nfse.id})`}?\n\nO cancelamento na prefeitura pode não ser suportado. O registro será removido do banco local.`,
+                                    )
+                                  )
+                                    return;
+                                  try {
+                                    const res = await fetch(`/api/cobranca/nfse/${nfse.id}`, {
+                                      method: "DELETE",
+                                    });
+                                    if (!res.ok) {
+                                      const d = await res.json().catch(() => ({}));
+                                      alert((d as { error?: string }).error ?? "Erro ao cancelar NFS-e.");
+                                    } else {
+                                      setNfseEmitidas((prev) => prev.filter((n) => n.id !== nfse.id));
+                                      setRefetchKey((k) => k + 1);
+                                    }
+                                  } catch {
+                                    alert("Falha na conexão.");
+                                  }
+                                }}
+                              >
+                                Cancelar ⓘ
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── SEÇÃO Notas Fiscais Athos ─── */}
+      <div className="container mt-2 mb-3">
+        <hr />
+        <div className="mt-2">
+          <button
+            className="btn btn-link p-0 text-decoration-none fw-semibold text-dark"
+            onClick={() => setNfatAberta(!nfatAberta)}
+            type="button"
+          >
+            {nfatAberta ? "▼" : "►"} Notas Fiscais Athos
+          </button>
+          {nfatAberta && (
+            <div ref={nfatRef} className="mt-2">
+              {/* Campo de busca por número */}
+              <div className="d-flex gap-2 mb-3">
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  style={{ maxWidth: "240px" }}
+                  placeholder="Buscar por número da nota"
+                  value={buscaNumeroNf}
+                  onChange={(e) => setBuscaNumeroNf(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void buscarNotaPorNumero(); }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => void buscarNotaPorNumero()}
+                  disabled={buscandoNf || !buscaNumeroNf.trim()}
+                >
+                  {buscandoNf ? (
+                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                  ) : "Buscar"}
+                </button>
+                {resultadoBuscaNf !== null && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => { setResultadoBuscaNf(null); setBuscaNumeroNf(""); }}
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+
+              {/* Resultado da busca — acima da lista (D-16) */}
+              {resultadoBuscaNf !== null && (
+                <div className="alert alert-info mb-3">
+                  <strong>Resultado da busca — Nota Nº {buscaNumeroNf}:</strong>
+                  {resultadoBuscaNf.length === 0 ? (
+                    <span className="ms-1">Nenhuma nota encontrada com este número.</span>
+                  ) : (
+                    <div className="table-responsive mt-2">
+                      <table className="table table-sm mb-0">
+                        <thead>
+                          <tr>
+                            <th>Nº da nota</th>
+                            <th>Data emissão</th>
+                            <th>Valor</th>
+                            <th>Tipo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {resultadoBuscaNf.map((nf) => (
+                            <tr key={nf.numero}>
+                              <td className="small">{nf.numero}</td>
+                              <td className="small">{nf.dataemissao ? formatDate(nf.dataemissao) : "—"}</td>
+                              <td className="small fw-semibold">{formatBRL(nf.valor)}</td>
+                              <td className="small"><span className="badge bg-primary">{nf.tipo}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Lista geral de até 50 notas — sempre visível (D-15) */}
+              {loadingNfat ? (
+                <div className="text-center py-3">
+                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                    <span className="visually-hidden">Carregando notas fiscais...</span>
+                  </div>
+                </div>
+              ) : nfatCarregada && notasFiscaisAthos.length === 0 ? (
+                <p className="text-muted text-center py-3">Nenhuma nota fiscal encontrada no Athos</p>
+              ) : notasFiscaisAthos.length > 0 ? (
+                <div className="table-responsive">
+                  <table className="table table-sm table-hover table-bordered">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Nº da nota</th>
+                        <th>Data emissão</th>
+                        <th>Valor</th>
+                        <th>Tipo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {notasFiscaisAthos.map((nf) => (
+                        <tr key={nf.numero}>
+                          <td className="small">{nf.numero}</td>
+                          <td className="small">{nf.dataemissao ? formatDate(nf.dataemissao) : "—"}</td>
+                          <td className="small fw-semibold">{formatBRL(nf.valor)}</td>
+                          <td className="small"><span className="badge bg-primary">{nf.tipo}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
 
@@ -853,6 +1230,30 @@ export default function ClienteDetalhePage({
                     </div>
                   </div>
 
+                  {/* Preview itens EFI */}
+                  <div className="mb-3">
+                    <div className="text-muted small fw-semibold mb-1">Itens da cobrança (EFI)</div>
+                    {loadingPreview ? (
+                      <div className="text-center py-2">
+                        <div className="spinner-border spinner-border-sm text-secondary" role="status" />
+                      </div>
+                    ) : boletoPreview?.itens?.length ? (
+                      <ul className="list-group list-group-flush border rounded">
+                        {boletoPreview.itens.map((item, i) => (
+                          <li key={i} className="list-group-item d-flex justify-content-between px-3 py-2 small">
+                            <span className="text-muted">
+                              {item.nome}
+                              {item.quantidade && item.quantidade > 1 ? (
+                                <span className="text-secondary ms-1">×{item.quantidade}</span>
+                              ) : null}
+                            </span>
+                            <span className="fw-semibold">{formatBRL(item.valor)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+
                   {/* Alert datas divergentes */}
                   {erroDatasModal && (
                     <div className="alert alert-danger d-flex gap-2 mb-3" role="alert">
@@ -887,6 +1288,26 @@ export default function ClienteDetalhePage({
                     {expireAt && expireAt < hoje && (
                       <div className="invalid-feedback">
                         A data de vencimento não pode ser no passado.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Campo de observação */}
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold small">
+                      Observação <span className="text-muted fw-normal">(opcional)</span>
+                    </label>
+                    <textarea
+                      className="form-control"
+                      rows={2}
+                      maxLength={255}
+                      placeholder="Ex: Ref. pedido 1234 — aparece no boleto"
+                      value={observacaoBoleto}
+                      onChange={(e) => setObservacaoBoleto(e.target.value)}
+                    />
+                    {observacaoBoleto.length > 0 && (
+                      <div className="text-end mt-1">
+                        <small className="text-muted">{observacaoBoleto.length}/255</small>
                       </div>
                     )}
                   </div>
@@ -1251,7 +1672,7 @@ export default function ClienteDetalhePage({
                   {nfseResult.linkNfse && (
                     <div className="text-center">
                       <a
-                        href={nfseResult.linkNfse}
+                        href={safeHttpUrl(nfseResult.linkNfse) ?? undefined}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn btn-outline-primary btn-sm"

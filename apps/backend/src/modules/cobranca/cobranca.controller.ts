@@ -35,6 +35,11 @@ export class CobrancaController {
    * Retorna quais idcontareceber já possuem boleto pendente ou pago.
    * Usado pelo frontend para desabilitar seleção e mostrar aviso.
    */
+  @Post("boleto/preview")
+  async previewBoleto(@Body() body: { idclienteAthos: number; idcontasReceber: number[] }) {
+    return this.cobrancaService.previewBoleto(body.idclienteAthos, body.idcontasReceber ?? []);
+  }
+
   @Post("boleto/titulos-em-uso")
   async titulosEmUso(@Body() body: { idcontasReceber: number[] }) {
     return this.cobrancaService.buscarTitulosComBoletoAtivo(body.idcontasReceber ?? []);
@@ -50,6 +55,12 @@ export class CobrancaController {
   @Delete("nfse/:id")
   async cancelarNfse(@Param("id", ParseIntPipe) id: number) {
     return this.cobrancaService.cancelarNfseEmitida(id);
+  }
+
+  /** Lista NFS-e emitidas de um cliente com títulos vinculados */
+  @Get("nfse/cliente/:idclienteAthos")
+  async nfseCliente(@Param("idclienteAthos", ParseIntPipe) idclienteAthos: number) {
+    return this.cobrancaService.buscarNfseEmitidaCliente(idclienteAthos);
   }
 
   /** Lista boletos de um cliente com títulos vinculados */

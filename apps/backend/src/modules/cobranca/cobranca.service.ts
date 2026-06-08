@@ -67,28 +67,21 @@ export class CobrancaService {
       );
     }
 
-    // Passo 4: Validar NF e calcular total
+    // Passo 4: Validar NF emitida (mantém regra "boleto requer NF" mesmo com itens vindos de venda_item)
     const nfInfo = await this.athosService.verificarNFTitulos(dto.idcontasReceber);
-
-    // Complementar com NFS-e emitidas pelo nosso sistema (não refletidas no Athos)
-    const semNfAthos = nfInfo.filter((n) => n.tipoNf === null);
-    if (semNfAthos.length > 0) {
-      const nfseNossas = await this.prisma.nfseEmitidaTitulo.findMany({
-        where: {
-          idcontareceber: { in: semNfAthos.map((n) => n.idcontareceber) },
-          nfseEmitida: { numeroNfse: { not: null } },
-        },
-        select: { idcontareceber: true, nfseEmitida: { select: { numeroNfse: true } } },
-      });
-      const cobertosPorNfse = new Map(nfseNossas.map((t) => [t.idcontareceber, t.nfseEmitida.numeroNfse]));
-      for (const item of nfInfo) {
-        if (item.tipoNf === null && cobertosPorNfse.has(item.idcontareceber)) {
-          item.tipoNf = "NFS-e";
-          item.numeroNf = cobertosPorNfse.get(item.idcontareceber) ?? null;
-        }
+    const nfseEmitidasTitulos = await this.prisma.nfseEmitidaTitulo.findMany({
+      where: {
+        idcontareceber: { in: dto.idcontasReceber },
+        nfseEmitida: { numeroNfse: { not: null } },
+      },
+      select: { idcontareceber: true },
+    });
+    const titulosComNfseLocal = new Set(nfseEmitidasTitulos.map((t) => t.idcontareceber));
+    for (const item of nfInfo) {
+      if (item.tipoNf === null && titulosComNfseLocal.has(item.idcontareceber)) {
+        item.tipoNf = "NFS-e";
       }
     }
-
     const semNf = nfInfo.filter((n) => n.tipoNf === null);
     if (semNf.length > 0) {
       throw new BadRequestException(
@@ -97,17 +90,11 @@ export class CobrancaService {
       );
     }
 
-    // Determinar tipo de NF para o item EFI
-    // Montar nome do item com tipo + números das NFs (ex: "NF-e #308, #398")
-    const numeros = [...new Set(nfInfo.map((n) => n.numeroNf).filter(Boolean))];
-    const tipos = [...new Set(nfInfo.map((n) => n.tipoNf))];
-    const tipoLabel = tipos.length === 1 ? (tipos[0] ?? "NF-e") : "NF-e / NFS-e";
-    const nomeItemNf = numeros.length > 0
-      ? `${tipoLabel} ${numeros.map((num) => `#${num}`).join(", ")}`.slice(0, 255)
-      : tipoLabel;
-
     const totalValorRaw = titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0);
     const totalValor = Number(totalValorRaw.toFixed(2));
+
+    // Montar itens EFI a partir de venda_item do Athos (1 EFI item por produto/serviço da venda)
+    const itemMap = await this.montarItensEfiPorVendaItem(titulosFiltrados, totalValor);
 
     // Passo 4: Validar expireAt
     const hoje = new Date().toISOString().slice(0, 10);
@@ -139,6 +126,14 @@ export class CobrancaService {
       this.logger.warn(`Não foi possível buscar documento do cliente ${dto.idclienteAthos}: ${String(err)}`);
     }
 
+    // Montar itens EFI a partir dos venda_item do Athos
+    const valorCentavos = Math.round(totalValor * 100);
+    const efiItems = [...itemMap.values()].map((item) => ({
+      name: item.name.slice(0, 255),
+      value: item.valueCentavos,
+      amount: item.amount,
+    }));
+
     // Passo 6: Criar boleto na EFI
     const baseUrl =
       this.config.get<string>("EFI_COBRANCA_BASE_URL") ??
@@ -166,8 +161,6 @@ export class CobrancaService {
       throw new InternalServerErrorException("Não foi possível autenticar na API Cobranças EFI.");
     }
 
-    const valorCentavos = Math.round(Number(totalValor.toFixed(2)) * 100);
-
     const webhookBase =
       process.env["WEBHOOK_BASE_URL"] ?? process.env["APP_URL"] ?? "";
     const isPublicUrl = webhookBase.length > 0 && !/localhost|127\.0\.0\.1/.test(webhookBase);
@@ -176,19 +169,14 @@ export class CobrancaService {
       : undefined;
 
     const body: Record<string, unknown> = {
-      items: [
-        {
-          name: nomeItemNf,
-          value: valorCentavos,
-          amount: 1,
-        },
-      ],
+      items: efiItems,
       payment: {
         banking_billet: {
           expire_at: dto.expireAt,
           customer: cpfOuCnpj && "juridical_person" in cpfOuCnpj
             ? cpfOuCnpj  // PJ: { juridical_person: { corporate_name, cnpj } }
             : { name: nomeCliente.slice(0, 80), ...cpfOuCnpj }, // PF ou sem doc
+          ...(dto.observacao?.trim() ? { message: dto.observacao.trim().slice(0, 255) } : {}),
         },
       },
       metadata: {
@@ -196,6 +184,8 @@ export class CobrancaService {
         ...(notificationUrl ? { notification_url: notificationUrl } : {}),
       },
     };
+
+    this.logger.log(`EFI boleto payload: items=${JSON.stringify(body.items)} valorCentavos=${valorCentavos}`);
 
     let chargeId: number;
     let linkBoleto: string;
@@ -226,6 +216,13 @@ export class CobrancaService {
       this.logger.error(
         `Falha ao criar boleto na EFI. status=${status} detalhe=${JSON.stringify(detail)}`,
       );
+      const efiCode = (detail as { code?: string | number })?.code;
+      if (String(efiCode) === "4600210") {
+        throw new BadRequestException(
+          "A EFI bloqueou a emissão: muitas tentativas com os mesmos dados (cliente + valor + vencimento). " +
+          "Aguarde alguns minutos e tente novamente com uma data de vencimento diferente, ou entre em contato com o suporte da EFI.",
+        );
+      }
       throw new InternalServerErrorException("Não foi possível gerar o boleto na EFI.");
     }
 
@@ -286,12 +283,12 @@ export class CobrancaService {
     }
 
     // Passo 2: Verificação de duplicidade por idvenda (D-08, D-09, D-10)
-    const idvenda = titulosFiltrados[0]?.idvenda ?? null;
-    if (idvenda !== null) {
+    const idvendasUnicas = [...new Set(titulosFiltrados.map((t) => t.idvenda).filter((v): v is number => v != null))];
+    for (const idvenda of idvendasUnicas) {
       const existente = await this.prisma.nfseEmitida.findFirst({ where: { idvenda } });
       if (existente) {
         throw new BadRequestException(
-          `NFS-e já emitida para esta venda (Nº ${existente.numeroNfse})`,
+          `NFS-e já emitida para venda ${idvenda} (Nº ${existente.numeroNfse})`,
         );
       }
     }
@@ -322,7 +319,7 @@ export class CobrancaService {
         numeroRps: resultado.numeroRps,
         idclienteAthos: dto.idclienteAthos,
         valorServico: dto.valor,
-        idvenda: idvenda,
+        idvenda: idvendasUnicas[0] ?? null,
         titulos: {
           createMany: {
             data: titulosFiltrados.map((t) => ({
@@ -337,7 +334,10 @@ export class CobrancaService {
     // Salvar linkNfse via raw SQL — coluna adicionada em migração; Prisma client pode estar
     // desatualizado em ambientes onde o DLL engine está em uso e prisma generate não foi rodado.
     if (resultado.link) {
-      await this.prisma.$executeRaw`UPDATE "NfseEmitida" SET "linkNfse" = ${resultado.link} WHERE id = ${nfseEmitida.id}`;
+      const updated = await this.prisma.$executeRaw`UPDATE "NfseEmitida" SET "linkNfse" = ${resultado.link} WHERE id = ${nfseEmitida.id}`;
+      if (updated === 0) {
+        this.logger.warn(`linkNfse não persistido para NfseEmitida ${nfseEmitida.id} — coluna inexistente ou migração pendente.`);
+      }
     }
 
     // Passo 5: Retornar resposta
@@ -525,23 +525,29 @@ export class CobrancaService {
     if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
     if (!cobranca.txidEfi) return { status: cobranca.status, atualizado: false };
 
-    const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
-    const basic = Buffer.from(`${this.getRequiredConfig("EFI_CLIENT_ID")}:${this.getRequiredConfig("EFI_CLIENT_SECRET")}`).toString("base64");
-    const cli = axios.create({ baseURL: baseUrl, timeout: 15_000 });
-    const authResp = await cli.post("/v1/authorize", { grant_type: "client_credentials" }, {
-      headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
-    });
-    const token: string = authResp.data?.access_token;
+    try {
+      const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
+      const basic = Buffer.from(`${this.getRequiredConfig("EFI_CLIENT_ID")}:${this.getRequiredConfig("EFI_CLIENT_SECRET")}`).toString("base64");
+      const cli = axios.create({ baseURL: baseUrl, timeout: 15_000 });
+      const authResp = await cli.post("/v1/authorize", { grant_type: "client_credentials" }, {
+        headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
+      });
+      const token: string = authResp.data?.access_token;
+      if (!token) throw new Error("Token não retornado pela EFI");
 
-    const resp = await cli.get(`/v1/charge/${cobranca.txidEfi}`, { headers: { Authorization: `Bearer ${token}` } });
-    const efiStatus: string = resp.data?.data?.status ?? resp.data?.data?.[0]?.status ?? "desconhecido";
-    const novoStatus = efiStatus === "paid" ? "pago" : efiStatus === "canceled" ? "cancelado" : cobranca.status;
+      const resp = await cli.get(`/v1/charge/${cobranca.txidEfi}`, { headers: { Authorization: `Bearer ${token}` } });
+      const efiStatus: string = resp.data?.data?.status ?? resp.data?.data?.[0]?.status ?? "desconhecido";
+      const novoStatus = efiStatus === "paid" ? "pago" : efiStatus === "canceled" ? "cancelado" : cobranca.status;
 
-    if (novoStatus !== cobranca.status) {
-      await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: novoStatus } });
-      return { status: novoStatus, atualizado: true };
+      if (novoStatus !== cobranca.status) {
+        await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: novoStatus } });
+        return { status: novoStatus, atualizado: true };
+      }
+      return { status: novoStatus, atualizado: false };
+    } catch (err) {
+      this.logger.error(`Erro ao verificar pagamento do boleto ${cobrancaId} na EFI: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException(`Erro ao verificar pagamento na EFI: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return { status: novoStatus, atualizado: false };
   }
 
   /** Remove boleto do banco (cleanup) — libera títulos para novo boleto */
@@ -578,6 +584,7 @@ export class CobrancaService {
     idcontareceber: number;
     nfseEmitidaId: number;
     numeroNfse: string | null;
+    linkNfse: string | null;
   }>> {
     if (idcontasReceber.length === 0) return [];
     const rows = await this.prisma.nfseEmitidaTitulo.findMany({
@@ -585,13 +592,36 @@ export class CobrancaService {
       select: {
         idcontareceber: true,
         nfseEmitidaId: true,
-        nfseEmitida: { select: { numeroNfse: true } },
+        nfseEmitida: { select: { numeroNfse: true, linkNfse: true } },
       },
     });
     return rows.map((r) => ({
       idcontareceber: r.idcontareceber,
       nfseEmitidaId: r.nfseEmitidaId,
       numeroNfse: r.nfseEmitida.numeroNfse ?? null,
+      linkNfse: r.nfseEmitida.linkNfse ?? null,
+    }));
+  }
+
+  /** Busca todas as NFS-e emitidas de um cliente com seus títulos vinculados */
+  async buscarNfseEmitidaCliente(idclienteAthos: number): Promise<Array<{
+    id: number; numeroNfse: string | null; numeroRps: number;
+    valorServico: number; linkNfse: string | null; dataEmissao: Date;
+    titulos: number[];
+  }>> {
+    const nfses = await this.prisma.nfseEmitida.findMany({
+      where: { idclienteAthos },
+      orderBy: { dataEmissao: "desc" },
+      include: { titulos: { select: { idcontareceber: true } } },
+    });
+    return nfses.map((n) => ({
+      id: n.id,
+      numeroNfse: n.numeroNfse ?? null,
+      numeroRps: n.numeroRps,
+      valorServico: Number(n.valorServico),
+      linkNfse: n.linkNfse ?? null,
+      dataEmissao: n.dataEmissao,
+      titulos: n.titulos.map((t) => t.idcontareceber),
     }));
   }
 
@@ -636,10 +666,12 @@ export class CobrancaService {
       ? await this.prisma.nfseEmitida.findMany({ where: { numeroNfse }, select: { id: true } })
       : [{ id: nfseEmitidaId }];
 
-    for (const r of registros) {
-      await this.prisma.nfseEmitidaTitulo.deleteMany({ where: { nfseEmitidaId: r.id } });
-      await this.prisma.nfseEmitida.delete({ where: { id: r.id } });
-    }
+    await this.prisma.$transaction(async (tx) => {
+      for (const r of registros) {
+        await tx.nfseEmitidaTitulo.deleteMany({ where: { nfseEmitidaId: r.id } });
+        await tx.nfseEmitida.delete({ where: { id: r.id } });
+      }
+    });
 
     this.logger.log(`NFS-e #${numeroNfse ?? "?"} removida: ${registros.length} registro(s).`);
 
@@ -651,6 +683,230 @@ export class CobrancaService {
       mensagem: `NFS-e #${numeroNfse ?? nfseEmitidaId}: ${registros.length} registro(s) removido(s) do banco.${aviso}`,
       soapErros: soapErros.length > 0 ? soapErros : undefined,
     };
+  }
+
+  /** Calcula os itens que serão enviados à EFI sem criar o boleto — usado para preview no frontend. */
+  async previewBoleto(idclienteAthos: number, idcontasReceber: number[]): Promise<{
+    nomeCliente: string;
+    total: number;
+    itens: Array<{ nome: string; valor: number; quantidade: number }>;
+  }> {
+    const todosTitulos = await this.athosService.buscarTitulosClienteContasReceber(idclienteAthos);
+    const titulosFiltrados = todosTitulos.filter(t => idcontasReceber.includes(t.idcontareceber));
+
+    const total = Number(titulosFiltrados.reduce((acc, t) => acc + Number(t.valor), 0).toFixed(2));
+    const itemMap = await this.montarItensEfiPorVendaItem(titulosFiltrados, total);
+
+    const dadosCliente = await this.athosService.buscarDadosClienteContasReceber(idclienteAthos);
+    const nomeCliente = dadosCliente?.nome_cliente ?? `Cliente ${idclienteAthos}`;
+
+    return {
+      nomeCliente,
+      total,
+      itens: [...itemMap.values()].map(item => ({
+        nome: item.name,
+        valor: item.valueCentavos / 100,
+        quantidade: item.amount,
+      })),
+    };
+  }
+
+  /**
+   * Monta os itens EFI com UM item por Nota Fiscal (cada NFS-e e cada NF-e).
+   * Para cada título:
+   *  - Split serviço/produto via venda_item.tipoFisico (mesma lógica do NFS-e).
+   *  - Parte de serviço alocada à(s) NFS-e do título (uma por número).
+   *  - Parte de produto alocada à(s) NF-e do título (distribuição igual entre NF-es do mesmo venda).
+   * Resultado: Map<numeroNF, item>, agregando o mesmo número que apareça em vários títulos.
+   * Garante Σ valueCentavos == round(totalValor * 100) aplicando delta de arredondamento no último item.
+   */
+  private async montarItensEfiPorVendaItem(
+    titulos: Array<{ idcontareceber: number; idvenda: number | null; valor: number }>,
+    totalValor: number,
+  ): Promise<Map<string, { name: string; valueCentavos: number; amount: number }>> {
+    const idsContas = titulos.map((t) => t.idcontareceber);
+
+    // Busca NFS-e do nosso banco — inclui valorServico (fonte autoritativa do valor de serviço)
+    const nfseRows = await this.prisma.nfseEmitidaTitulo.findMany({
+      where: { idcontareceber: { in: idsContas }, nfseEmitida: { numeroNfse: { not: null } } },
+      select: {
+        idcontareceber: true,
+        nfseEmitida: { select: { numeroNfse: true, valorServico: true } },
+      },
+    });
+    this.logger.log(
+      `[SPLIT-BOLETO-RAW-NFSE-DB] ${JSON.stringify(
+        nfseRows.map(r => ({ idcr: r.idcontareceber, nfse: r.nfseEmitida.numeroNfse, valorServico: Number(r.nfseEmitida.valorServico ?? 0) }))
+      )}`,
+    );
+
+    const nfseInfoPorTitulo = new Map<number, Array<{ numero: string; valorServico: number }>>();
+    for (const row of nfseRows) {
+      const num = row.nfseEmitida.numeroNfse;
+      if (!num) continue;
+      const arr = nfseInfoPorTitulo.get(row.idcontareceber) ?? [];
+      if (!arr.find((x) => x.numero === num)) {
+        arr.push({ numero: num, valorServico: Number(row.nfseEmitida.valorServico ?? 0) });
+      }
+      nfseInfoPorTitulo.set(row.idcontareceber, arr);
+    }
+
+    // Busca números de NF-e (do Athos) por idcontareceber
+    const nfesRows = await this.athosService.buscarTodasNfesParaTitulos(idsContas);
+    this.logger.log(`[SPLIT-BOLETO-RAW-NFE-ATHOS] ${JSON.stringify(nfesRows)}`);
+
+    const nfeNumsPorTitulo = new Map<number, string[]>();
+    for (const r of nfesRows) {
+      if (!r.numero) continue;
+      const arr = nfeNumsPorTitulo.get(r.idcontareceber) ?? [];
+      if (!arr.includes(r.numero)) arr.push(r.numero);
+      nfeNumsPorTitulo.set(r.idcontareceber, arr);
+    }
+
+    // LOG: resumo por título — id, idvenda, valor, nfse[], nfe[]
+    {
+      const debugTitulos = titulos.map(t => ({
+        id: t.idcontareceber,
+        idvenda: t.idvenda,
+        valor: t.valor,
+        nfse: (nfseInfoPorTitulo.get(t.idcontareceber) ?? []).map(n => n.numero),
+        nfe: nfeNumsPorTitulo.get(t.idcontareceber) ?? [],
+      }));
+      this.logger.log(`[SPLIT-BOLETO-TITULOS-RECEBIDOS] ${JSON.stringify(debugTitulos)}`);
+    }
+
+    // Agrupa títulos por idvenda + busca venda_item (com tipoFisico) e valortotal
+    const vendasUnicas = [...new Set(titulos.map((t) => t.idvenda).filter((v): v is number => v != null))];
+    const dadosPorVenda = new Map<number, {
+      itens: Array<{ nome: string; quantidade: number; valor: number; tipoFisico: boolean; sequencia: number }>;
+      valorTotal: number;
+    }>();
+    await Promise.all(
+      vendasUnicas.map(async (idv) => {
+        const itens = await this.athosService.buscarItensVenda(idv);
+        // Calcula valorTotal direto da soma dos itens — evita dependência
+        // de coluna "valortotal" que não existe em todas as versões do Athos.
+        const valorTotal = itens.reduce((s, i) => s + i.valor, 0);
+        dadosPorVenda.set(idv, { itens, valorTotal });
+      }),
+    );
+
+    // Novo: 1 item por nota fiscal, mas só valor de produto (NF-e) ou serviço (NFS-e) conforme o tipo
+    const notaToCentavos = new Map<string, number>();
+    const notaToLabel = new Map<string, string>();
+    let totalCentavos = 0;
+    for (const titulo of titulos) {
+      const valorTituloCent = Math.round(Number(titulo.valor) * 100);
+      totalCentavos += valorTituloCent;
+      const dados = titulo.idvenda != null ? dadosPorVenda.get(titulo.idvenda) : undefined;
+      const itensVenda = dados?.itens ?? [];
+      const valorTotalVenda = dados?.valorTotal ?? 0;
+      const nfseInfos = nfseInfoPorTitulo.get(titulo.idcontareceber) ?? [];
+      const nfeNums = nfeNumsPorTitulo.get(titulo.idcontareceber) ?? [];
+
+      // Split produto/serviço igual ao anterior
+      const somaValorServicoNfse = nfseInfos.reduce((s, n) => s + n.valorServico, 0);
+      let servCent = 0;
+      let prodCent = 0;
+      if (itensVenda.length > 0 && valorTotalVenda > 0) {
+        const fator = Number(titulo.valor) / valorTotalVenda;
+        const totalSrv = itensVenda.filter((i) => !i.tipoFisico).reduce((s, i) => s + i.valor, 0);
+        const totalPrd = itensVenda.filter((i) => i.tipoFisico).reduce((s, i) => s + i.valor, 0);
+        servCent = Math.round(totalSrv * fator * 100);
+        prodCent = Math.round(totalPrd * fator * 100);
+        const delta = valorTituloCent - (servCent + prodCent);
+        if (delta !== 0) {
+          if (prodCent > 0) prodCent += delta;
+          else servCent += delta;
+        }
+      } else if (nfseInfos.length > 0 && somaValorServicoNfse > 0) {
+        servCent = Math.min(Math.round(somaValorServicoNfse * 100), valorTituloCent);
+        prodCent = valorTituloCent - servCent;
+      } else {
+        if (nfseInfos.length > 0 && nfeNums.length === 0) servCent = valorTituloCent;
+        else if (nfseInfos.length === 0 && nfeNums.length > 0) prodCent = valorTituloCent;
+        else prodCent = valorTituloCent;
+      }
+
+      // LOG: detalhes do split por título
+      this.logger.log(
+        `[SPLIT-BOLETO-TITULO] idcontareceber=${titulo.idcontareceber} valor=${valorTituloCent}` +
+        ` NF-es=[${nfeNums.join(",")}] NFS-es=[${nfseInfos.map(n => n.numero).join(",")}]` +
+        ` prodCent=${prodCent} servCent=${servCent}`,
+      );
+
+      // Serviço vai para cada NFS-e do título
+      if (servCent > 0 && nfseInfos.length > 0) {
+        let restante = servCent;
+        const usaProporcional = somaValorServicoNfse > 0;
+        nfseInfos.forEach((nfse, idx) => {
+          const frac = usaProporcional
+            ? nfse.valorServico / somaValorServicoNfse
+            : 1 / nfseInfos.length;
+          const parte = idx === nfseInfos.length - 1
+            ? restante
+            : Math.round(servCent * frac);
+          restante -= parte;
+          const key = `NFS-e-${nfse.numero}`;
+          notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + parte);
+          notaToLabel.set(key, `NFS-e #${nfse.numero}`);
+        });
+      }
+
+      // Produto vai para cada NF-e do título (sempre distribui entre todas as NF-es associadas)
+      if (prodCent > 0) {
+        if (nfeNums.length > 0) {
+          let restante = prodCent;
+          nfeNums.forEach((num, idx) => {
+            const parte = idx === nfeNums.length - 1
+              ? restante
+              : Math.round(prodCent / nfeNums.length);
+            restante -= parte;
+            const key = `NF-e-${num}`;
+            notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + parte);
+            notaToLabel.set(key, `NF-e #${num}`);
+          });
+        } else {
+          // Se não tem NF-e, mas tem produto, agrupa em "Produtos"
+          const key = `PRODUTOS-TIT-${titulo.idcontareceber}`;
+          notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + prodCent);
+          notaToLabel.set(key, "Produtos");
+        }
+      }
+
+      // Se não tem nota nenhuma, agrupa em "Outros"
+      if (nfseInfos.length === 0 && nfeNums.length === 0 && prodCent === 0 && servCent === 0) {
+        const key = `OUTROS-TIT-${titulo.idcontareceber}`;
+        notaToCentavos.set(key, (notaToCentavos.get(key) ?? 0) + valorTituloCent);
+        notaToLabel.set(key, "Outros");
+      }
+    }
+
+    // Monta o itemMap final
+    const itemMap = new Map<string, { name: string; valueCentavos: number; amount: number }>();
+    for (const [key, cent] of notaToCentavos.entries()) {
+      if (cent <= 0) continue;
+      itemMap.set(key, { name: notaToLabel.get(key)!, valueCentavos: cent, amount: 1 });
+    }
+
+    // Ajuste final: garante Σ items.value === round(totalValor * 100)
+    const target = Math.round(totalValor * 100);
+    const soma = [...itemMap.values()].reduce((s, i) => s + i.valueCentavos, 0);
+    const diff = target - soma;
+    if (diff !== 0) {
+      if (itemMap.size > 0) {
+        const ultimaKey = [...itemMap.keys()].pop()!;
+        const it = itemMap.get(ultimaKey)!;
+        itemMap.set(ultimaKey, { ...it, valueCentavos: it.valueCentavos + diff });
+      } else if (target > 0) {
+        itemMap.set("cobranca", { name: "Cobrança", valueCentavos: target, amount: 1 });
+      }
+    }
+
+    // LOG DETALHADO DO RESULTADO FINAL
+    this.logger.log(`[SPLIT-BOLETO-FINAL] Itens do boleto: ${JSON.stringify([...itemMap.values()])}`);
+
+    return itemMap;
   }
 
   private getRequiredConfig(key: string): string {

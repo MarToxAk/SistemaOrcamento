@@ -1,4 +1,4 @@
-﻿---
+---
 status: complete
 phase: 08-ux-paginas-publicas-do-cliente
 source:

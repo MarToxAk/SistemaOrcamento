@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsDateString, IsInt, IsPositive } from "class-validator";
+import { ArrayMinSize, IsArray, IsDateString, IsInt, IsOptional, IsPositive, IsString, MaxLength } from "class-validator";
 
 export class CriarBoletoDto {
   @IsInt()
@@ -13,4 +13,9 @@ export class CriarBoletoDto {
 
   @IsDateString()
   expireAt!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  observacao?: string;
 }

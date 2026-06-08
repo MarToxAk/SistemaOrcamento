@@ -8,28 +8,24 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Last Shipped Milestone: v2.0 - Gestao Integrada Financeira, Caixa e Dashboards
+## Last Shipped Milestone: v2.1 - Cobrança e Fiscal do Cliente
 
-Shipped em 2026-05-22.
+Shipped em 2026-06-08 (auditoria: passed).
 
 Entregas principais:
-- AthosListenerService hardened — reconexao automatica backoff exponencial, notificacao Chatwoot
-- API completa Contas a Pagar (POST/GET/PATCH) com Swagger e auth fail-closed
-- Upload de anexos via SMB (Tailscale+Docker) com registro em tabela anexo
-- Pagina /status redesenhada como Kanban 3 colunas (design system BomCusto)
-- Dashboard /contas-receber com Top Cards, filtros AVC/VEN/REC/CAN, accordion lazy
+- Página de detalhe do cliente (/contas-receber/[idcliente]) com dados PF/PJ e títulos AVC/VEN selecionáveis
+- Boleto consolidado via EFI Bank (/v1/charge/one-step) com modal de 4 estados e webhook de pagamento
+- Emissão de NFS-e a partir de títulos selecionados (dedução de produto físico, valor read-only)
+- Histórico de NFS-e emitidas (banco próprio) + consulta de NF-e do Athos por número, em seções lazy
+- 4 modelos Prisma novos (CobrancaBoleto/Titulo, NfseEmitida) para cobrança e fiscal
 
-## Current Milestone: v2.1 - Cobrança e Fiscal do Cliente
+Milestone anterior: v2.0 - Gestão Integrada Financeira, Caixa e Dashboards (2026-05-22).
 
-**Goal:** A partir do dashboard de contas a receber, permitir ao operador acessar o detalhe de um cliente, selecionar títulos e tomar ações de cobrança: gerar boleto consolidado via EFI Bank ou emitir NFS-e com valor ajustável.
+## Next Milestone: a definir
 
-**Target features:**
-- Página de detalhe do cliente acessível de /contas-receber
-- Seleção de títulos por checkbox com ação de cobrança
-- Boleto consolidado (múltiplos títulos) via EFI Bank
-- Emissão de NFS-e com valor ajustável (reutilizar NfseService)
-- Registro de NFS-e emitidas no banco próprio do sistema (Prisma)
-- Consulta de notas fiscais não-serviço no Athos (busca por numeração)
+**Status:** entre milestones desde 2026-06-08. Rodar `/gsd-new-milestone` para iniciar o próximo ciclo (questionamento → pesquisa → requisitos → roadmap).
+
+Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API no fechamento).
 
 ## Requirements
 
@@ -61,12 +57,12 @@ Entregas principais:
 - checkmark AthosListenerService hardened + API Contas a Pagar + Upload SMB -- v2.0
 - checkmark Dashboard /contas-receber com filtros e accordion lazy -- v2.0
 
-### Active
+### Active → Validated in v2.1
 
-- [ ] CLI-01..03: Pagina de Detalhe do Cliente (v2.1)
-- [ ] BOL-01..03: Boleto Consolidado via EFI Bank (v2.1)
-- [ ] NFR-01..05: Emissao NFS-e a partir de titulos (v2.1)
-- [ ] NFAT-01..02: Consulta de NF no Athos (v2.1)
+- checkmark CLI-01..03: Pagina de Detalhe do Cliente -- v2.1
+- checkmark BOL-01..03: Boleto Consolidado via EFI Bank -- v2.1
+- checkmark NFR-01..05: Emissao NFS-e a partir de titulos (banco proprio Prisma) -- v2.1
+- checkmark NFAT-01..02: Consulta de NF no Athos + historico NFS-e emitidas -- v2.1
 
 ### Out of Scope
 

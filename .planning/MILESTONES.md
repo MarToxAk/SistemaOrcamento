@@ -1,4 +1,4 @@
-﻿# Milestones - Sistema de Orcamento BomCusto
+# Milestones - Sistema de Orcamento BomCusto
 
 ---
 
@@ -111,6 +111,7 @@ Git range: v1.9..HEAD (~159 commits) | 203 files, +25164/-2371 linhas
 Delivered: Hardening do AthosListenerService com reconexão e notificação Chatwoot, API completa de Contas a Pagar (POST/GET/PATCH com Swagger), upload de anexos via SMB (Tailscale+Docker), redesign da página de status como Kanban 3 colunas, e dashboard analítico de Contas a Receber com filtros por status AVC/VEN/REC/CAN e accordion lazy de títulos.
 
 Key Accomplishments:
+
 1. AthosListenerService hardened — reconexão automática backoff exponencial, notificação Chatwoot no pagamento
 2. API Contas a Pagar — inserção/listagem/liquidação direta no banco Athos com autenticação fail-closed
 3. Upload SMB — gravação em \\192.168.3.203 via Docker+Tailscale com validação e registro em tabela anexo
@@ -118,3 +119,24 @@ Key Accomplishments:
 5. Dashboard Contas a Receber — /contas-receber com Top Cards, Grid, Accordion lazy e filtros por status
 
 Archive: .planning/milestones/v2.0-ROADMAP.md
+
+---
+
+## v2.1 - Cobrança e Fiscal do Cliente
+
+Shipped: 2026-06-08
+Phases: 28-31 | Plans: 12 | Tasks: 12
+
+Delivered: Página de detalhe do cliente com títulos em aberto, geração de boleto consolidado via EFI Bank, emissão de NFS-e a partir de títulos selecionados, e histórico de NFS-e emitidas + consulta de NF-e do Athos — fechando o ciclo de cobrança e fiscal a partir da área do cliente.
+
+Key Accomplishments:
+
+1. Página de detalhe (Fase 28) — /contas-receber/[idcliente] com dados cadastrais PF/PJ, tabela de títulos AVC/VEN com checkboxes e barra de ações sticky; 4 modelos Prisma para boleto/NFS-e
+2. Boleto consolidado EFI (Fase 29) — CobrancaModule com /v1/charge/one-step, modal React de 4 estados, linha digitável copiável, persistência CobrancaBoleto/CobrancaBoletoTitulo e webhook de pagamento (UAT 14/14)
+3. Emissão de NFS-e de títulos (Fase 30) — modal com tipo de serviço, dedução de produto físico em venda mista, valor read-only e persistência NfseEmitida com idvenda
+4. Histórico NFS-e + NF Athos (Fase 31) — seções lazy na página de detalhe: NFS-e emitidas (banco próprio) e busca de NF-e do Athos por número exato (checkpoint humano 31-04 aprovado)
+
+Known deferred items at close: 16 quick_tasks (todos concluídos — falso-positivo de ferramenta; ver STATE.md Deferred Items). Tech debt: testes de integração com API live IIBR (Fase 30).
+
+Audit: passed (.planning/milestones/v2.1-MILESTONE-AUDIT.md)
+Archive: .planning/milestones/v2.1-ROADMAP.md

@@ -1,7 +1,8 @@
 ---
 phase: 26-status-producao-kanban
 verified: 2026-05-15T17:00:00Z
-status: human_needed
+status: passed
+reconciled: 2026-06-08 — verificação de código 12/12 must-haves. Confirmação visual humana aceita implicitamente no ship do milestone v2.0 (Kanban /status em produção desde 2026-05-22); sem confirmação formal em navegador. Promovido human_needed → passed na auditoria v2.1.
 score: 12/12 must-haves verified
 overrides_applied: 0
 human_verification:

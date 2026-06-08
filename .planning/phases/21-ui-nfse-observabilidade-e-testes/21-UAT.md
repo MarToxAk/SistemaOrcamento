@@ -1,5 +1,5 @@
-﻿---
-status: completed
+---
+status: complete
 phase: 21-ui-nfse-observabilidade-e-testes
 source: [21-01-SUMMARY.md, 21-02-SUMMARY.md]
 started: 2026-05-05T00:09:31.3808421-03:00

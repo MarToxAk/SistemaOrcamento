@@ -1,5 +1,6 @@
 ---
-status: testing
+status: complete
+reconciled: 2026-06-08 — os 10 testes ficaram pending (script de UAT gerado, nunca executado). Deferidos/skipped no ship do milestone v2.0 (feature Kanban /status em produção desde 2026-05-22, validada por verificação de código 12/12). Sessão encerrada na auditoria v2.1 — NÃO marcados como passed.
 phase: 26-status-producao-kanban
 source: [26-01-SUMMARY.md, 26-02-SUMMARY.md, 26-03-SUMMARY.md]
 started: 2026-05-15

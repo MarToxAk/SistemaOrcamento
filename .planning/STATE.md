@@ -2,36 +2,32 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Cobrança e Fiscal do Cliente
-current_phase: 30
-status: executing
-last_updated: "2026-05-23T19:17:42.024Z"
-last_activity: 2026-05-23 -- Phase 30 execution started
+current_phase: 31
+status: Awaiting next milestone
+last_updated: "2026-06-08T14:42:57.950Z"
+last_activity: 2026-06-08 — Milestone v2.1 completed and archived
 progress:
-  total_phases: 5
-  completed_phases: 3
-  total_plans: 10
-  completed_plans: 9
-  percent: 60
+  total_phases: 32
+  completed_phases: 27
+  total_plans: 59
+  completed_plans: 57
+  percent: 84
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-05-22 — Phase 29 Plan 02 completo (modal boleto frontend + Route Handler)
-Current phase: 30
+Current phase: 31
 Milestone: v2.1 — Cobranca e Fiscal do Cliente
 
 ---
 
 ## Current Position
 
-Phase: 30 (emissao-nfse-titulos) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 30
-Last activity: 2026-05-23 -- Phase 30 execution started
-
-Progress: [####------] 40% (Phase 28 completa + Phase 29 Plans 01+02 completos)
-
----
+Phase: Milestone v2.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-08 — Milestone v2.1 completed and archived
 
 ## Project Status
 
@@ -169,3 +165,39 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 | 260524-qaa | NFS-e: salvar linkNfse no banco, retornar no response, exibir botao download no modal | 2026-05-24 | 3e9022c | [260524-qaa-nfse-save-link-titulos](./quick/260524-qaa-nfse-save-link-titulos/) |
 | 260524-qab | NFS-e: badge na tabela de titulos + botao cancelar emissao para re-emissao | 2026-05-24 | e4fcbab | [260524-qab-nfse-cancel-badge-titulos](./quick/260524-qab-nfse-cancel-badge-titulos/) |
 | 260524-qac | NFS-e: cancelamento SOAP CancelarNfse ABRASF 2.04 + cancela todos com mesmo numero | 2026-05-24 | 5189653 | [260524-qac-nfse-soap-cancelar](./quick/260524-qac-nfse-soap-cancelar/) |
+| 260526-kqd | Boleto EFI: itens gerados a partir de venda_item (1 item por produto/servico) seguindo logica NFS-e | 2026-05-26 | 5de96dc | [260526-kqd-arrumar-emissao-boleto-efi-criar-1-item-](./quick/260526-kqd-arrumar-emissao-boleto-efi-criar-1-item-/) |
+
+---
+
+## Deferred Items
+
+Itens reconhecidos (acknowledged) e deferidos no fechamento do milestone v2.1 em 2026-06-08:
+
+**16 quick_tasks sinalizados como `missing` pelo `audit-open`** — todos efetivamente **concluídos** (cada um possui `SUMMARY.md` com `status: complete` e/ou commit registrado na tabela de quick tasks acima). A sinalização é **falso-positivo de ferramenta**: o SDK procura `SUMMARY.md` exato, mas estas tarefas usam nome prefixado (`{slug}-SUMMARY.md`) ou têm `PLAN.md` com status stale. Nenhum representa trabalho real pendente.
+
+| Categoria | Item | Status real |
+|-----------|------|-------------|
+| quick_task | download-nfse-contas-receber | complete (falso-positivo SDK) |
+| quick_task | 260506-001-frontend-pagamento-pedido-visual | complete (falso-positivo SDK) |
+| quick_task | 260506-002-frontend-pago-no-caixa-numeroordem | complete (falso-positivo SDK) |
+| quick_task | 260506-003-lista-orcamento-numero-pedido-pagamento | complete (falso-positivo SDK) |
+| quick_task | 260511-swg-swagger-contas-pagar-anexos | complete (falso-positivo SDK) |
+| quick_task | 260514-001-approval-link-correcao-envio | complete (falso-positivo SDK) |
+| quick_task | 260514-002-notificacao-caixa-pix-chatwoot | complete (falso-positivo SDK) |
+| quick_task | 260514-003-status-page-realtime-dashboard | complete (falso-positivo SDK) |
+| quick_task | 260515-001-remover-edicao-status-pagina-publica | complete (falso-positivo SDK) |
+| quick_task | 260515-002-menu-carimbos-status-page | complete (falso-positivo SDK) |
+| quick_task | 260515-003-filtro-carimbo-somente | complete (SUMMARY complete; PLAN stale) |
+| quick_task | 260515-004-security-webhook-token-fixes | complete (SUMMARY complete; PLAN stale) |
+| quick_task | 260518-001-docker-smb-mount-fix | complete (SUMMARY complete; PLAN stale) |
+| quick_task | 260521-bdu-corrigir-geracao-pdf-template-novo | complete (falso-positivo SDK) |
+| quick_task | 260521-bkl-remover-redundancia-geracao-pdf | complete (falso-positivo SDK) |
+| quick_task | 260521-bqc-refatorar-status-page-kanban-3-colunas | complete (falso-positivo SDK) |
+| quick_task | 260524-qaa-nfse-save-link-titulos | complete (SUMMARY complete; PLAN stale) |
+| quick_task | 260526-kqd-arrumar-emissao-boleto-efi | complete (falso-positivo SDK) |
+
+Tech debt aceitável remanescente (não bloqueia): testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API).
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

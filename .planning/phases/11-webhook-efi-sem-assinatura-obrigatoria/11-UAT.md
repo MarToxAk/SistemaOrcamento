@@ -1,3 +1,10 @@
+---
+status: complete
+phase: 11-webhook-efi-sem-assinatura-obrigatoria
+result: Overall PASS
+reconciled: 2026-06-08 — frontmatter adicionado na auditoria v2.1; corpo já indicava Overall PASS. Milestone v1.4 shipado.
+---
+
 # 11-UAT - Webhook EFI sem assinatura obrigatoria
 
 Verified: 2026-05-04

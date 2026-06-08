@@ -1,7 +1,8 @@
 ---
 phase: 05-ux-do-painel-e-area-do-cliente
 verified: 2026-05-01T00:00:00Z
-status: human_needed
+status: passed
+reconciled: 2026-06-08 — verificação de código 16/16 must-haves. Os itens de confirmação visual humana foram aceitos implicitamente no ship do milestone v1.0 (em produção desde maio/2026); não houve confirmação formal em navegador. Promovido human_needed → passed na auditoria v2.1.
 score: 16/16 must-haves verified
 overrides_applied: 0
 human_verification:

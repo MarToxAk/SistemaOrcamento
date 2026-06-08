@@ -1,7 +1,8 @@
 ---
 phase: 29-boleto-consolidado-efi
 verified: 2026-05-22T03:00:00Z
-status: human_needed
+status: passed
+reconciled: 2026-06-08 — promovido de human_needed para passed na auditoria do milestone v2.1. Os 6 itens de runtime foram confirmados pelo UAT completo 29-UAT.md (status complete, 14/14 testes passou, 2026-05-23), que cobre modal de datas, validação, loading, sucesso + linha digitável copiável, verificação de pagamento EFI e registro no banco.
 score: 7/7 must-haves verified
 overrides_applied: 0
 human_verification:
@@ -29,7 +30,7 @@ human_verification:
 
 **Phase Goal:** Operador gera boleto bancário consolidado via EFI Bank, obtém link PDF + linha digitável, e a cobrança fica registrada no banco.
 **Verificado:** 2026-05-22T03:00:00Z
-**Status:** human_needed
+**Status:** passed (reconciliado 2026-06-08 — runtime confirmado via 29-UAT.md 14/14; ver `reconciled` no frontmatter)
 **Re-verificação:** Não — verificação inicial
 
 ---
