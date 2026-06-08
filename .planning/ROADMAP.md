@@ -1,17 +1,28 @@
-**Plans**: 4 plans
+# Roadmap — Sistema de Orçamento BomCusto
 
-Plans:
-- [x] 31-01-PLAN.md — Backend NFS-e histórico: CobrancaService.buscarNfseEmitidaCliente() + GET /cobranca/nfse/cliente/:idclienteAthos + testes (wave 1)
-- [x] 31-02-PLAN.md — Backend NFAT: AthosService.buscarNotasFiscaisCliente() + GET /athos/clientes/:idcliente/notas-fiscais?numero=X + testes (wave 1)
-- [x] 31-03-PLAN.md — Frontend: 2 Route Handlers + 2 seções colapsáveis lazy (NFS-e Emitidas + Notas Fiscais Athos) em /contas-receber/[idcliente] (wave 2)
-- [x] 31-04-PLAN.md — Checkpoint humano: verificação visual das duas seções end-to-end (wave 3)
-**UI hint**: yes
+## Milestones
 
-### Progress Table
+- ✅ **v1.0 MVP** — Segurança, Confiabilidade e UX — Fases 1-5 (shipped 2026-05-02)
+- ✅ **v1.1 Aprovação Athos** — Fase 6 (shipped 2026-05-02)
+- ✅ **v1.2 Chatwoot + UX Público** — Fases 7-8 (shipped)
+- ✅ **v1.3 Migration/Update** — Fases 9-10 (shipped)
+- ✅ **v1.4 Conciliação Athos + NFS-e** — Fases 11-14 (shipped)
+- ✅ **v1.5 Encoding NFS-e + UI desconto** — Fases 15-16 (shipped)
+- ✅ **v1.6 Cálculo de desconto** — Fase 17 (shipped)
+- ✅ **v1.7 RPS e Tomador** — Fase 18 (shipped 2026-05-04)
+- ✅ **v1.8 Busca de Cliente Athos** — Fases 19-21 (shipped 2026-05-05)
+- ✅ **v2.0 Gestão Financeira, Caixa e Dashboards** — Fases 23-27 (shipped 2026-05-22)
+- ✅ **v2.1 Cobrança e Fiscal do Cliente** — Fases 28-31 (shipped 2026-06-08)
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 28. Página de Detalhe do Cliente + Schema Prisma | 2/2 | Complete | 2026-05-22 |
-| 29. Boleto Consolidado via EFI Bank | 1/2 | In Progress | - |
-| 30. Emissão de NFS-e a partir de Títulos | 3/4 | In Progress|  |
-| 31. Histórico NFS-e + Consulta NF Athos | 4/4 | Complete    | 2026-05-27 |
+## Estado atual
+
+**Entre milestones.** O milestone v2.1 foi arquivado em 2026-06-08.
+
+Próximo passo: `/gsd-new-milestone` — questionamento → pesquisa → requisitos → roadmap do próximo ciclo.
+
+## Histórico arquivado
+
+Cada milestone tem roadmap e requisitos completos em `.planning/milestones/`:
+- `v{X.Y}-ROADMAP.md` — fases, planos e critérios de sucesso
+- `v{X.Y}-REQUIREMENTS.md` — requisitos com rastreabilidade
+- `v2.1-MILESTONE-AUDIT.md` — auditoria de fechamento (status: passed)
