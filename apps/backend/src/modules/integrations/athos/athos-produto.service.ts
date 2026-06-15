@@ -107,8 +107,6 @@ export class AthosProdutoService {
         "descontomaximo",
         "tipoproduto",
         "controlaestoque",
-        "vendeproduto",
-        "statusproduto",
       ];
 
       for (const field of optionalFields) {
@@ -193,8 +191,16 @@ export class AthosProdutoService {
       setClauses.push(`idusuarioalteracao = $${paramIndex++}`);
       params.push(sistemaUsuarioId);
 
+      // Allowlist explícita — evita identifier injection mesmo que o ValidationPipe seja contornado
+      const ALLOWED_UPDATE_FIELDS = new Set([
+        "descricaoproduto", "descricaocurta", "codigobarra1", "codigobarra2", "referencia",
+        "ncm", "informacaoadicional", "observacao", "idunidade", "iddepartamento", "idgrupo",
+        "idmarca", "idfornecedor", "valorvenda1", "valorvenda2", "valorvenda3", "valorvenda4",
+        "valorvenda5", "valorvenda6", "valorvendapromocao", "valorvendaatacado1",
+        "valorcustounitario", "descontomaximo", "tipoproduto", "controlaestoque",
+      ]);
       for (const [key, value] of Object.entries(dto)) {
-        if (value !== undefined) {
+        if (value !== undefined && ALLOWED_UPDATE_FIELDS.has(key)) {
           setClauses.push(`"${key}" = $${paramIndex++}`);
           params.push(value);
         }

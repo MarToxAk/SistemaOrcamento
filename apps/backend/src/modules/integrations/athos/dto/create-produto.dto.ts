@@ -156,13 +156,4 @@ export class CreateProdutoDto {
   @IsBoolean()
   controlaestoque?: boolean;
 
-  @ApiPropertyOptional({ example: true, description: "Indica se o produto pode ser vendido" })
-  @IsOptional()
-  @IsBoolean()
-  vendeproduto?: boolean;
-
-  @ApiPropertyOptional({ example: true, description: "Status ativo/inativo do produto" })
-  @IsOptional()
-  @IsBoolean()
-  statusproduto?: boolean;
 }

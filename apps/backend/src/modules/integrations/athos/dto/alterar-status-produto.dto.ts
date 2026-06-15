@@ -1,9 +1,9 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsBoolean, IsNotEmpty } from "class-validator";
+import { IsBoolean, IsDefined } from "class-validator";
 
 export class AlterarStatusProdutoDto {
   @ApiProperty({ example: true, description: "true reativa o produto, false desativa" })
+  @IsDefined()
   @IsBoolean()
-  @IsNotEmpty()
   ativo!: boolean;
 }
