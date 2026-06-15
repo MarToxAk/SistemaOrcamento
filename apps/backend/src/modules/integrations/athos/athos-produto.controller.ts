@@ -1,13 +1,17 @@
 import {
+  Body,
   Controller,
   Get,
   Logger,
   NotFoundException,
   Param,
   ParseIntPipe,
+  Patch,
+  Post,
   Query,
 } from "@nestjs/common";
 import {
+  ApiBody,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -16,6 +20,10 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { AthosService } from "./athos.service";
+import { AthosProdutoService } from "./athos-produto.service";
+import { CreateProdutoDto } from "./dto/create-produto.dto";
+import { UpdateProdutoDto } from "./dto/update-produto.dto";
+import { AlterarStatusProdutoDto } from "./dto/alterar-status-produto.dto";
 
 @ApiTags("Athos")
 @ApiSecurity("InternalApiKey")
@@ -23,7 +31,10 @@ import { AthosService } from "./athos.service";
 export class ProdutoController {
   private readonly logger = new Logger(ProdutoController.name);
 
-  constructor(private readonly athosService: AthosService) {}
+  constructor(
+    private readonly athosService: AthosService,
+    private readonly athosProdutoService: AthosProdutoService,
+  ) {}
 
   // Rotas estáticas declaradas ANTES da rota paramétrica (:idproduto)
   // para evitar que NestJS tente parsear "lookup" como inteiro (Pitfall 2)
@@ -50,6 +61,43 @@ export class ProdutoController {
   async lookupMarcas() {
     this.logger.log("lookupMarcas");
     return this.athosService.buscarMarcas();
+  }
+
+  @ApiOperation({ summary: "Criar produto no Athos" })
+  @ApiBody({ type: CreateProdutoDto })
+  @ApiOkResponse({ description: "{ idproduto: number }" })
+  @Post()
+  async criarProduto(@Body() dto: CreateProdutoDto) {
+    this.logger.log(`criarProduto descricao="${dto.descricaoproduto}"`);
+    return this.athosProdutoService.criarProduto(dto);
+  }
+
+  // PATCH :idproduto/status DEVE vir ANTES de PATCH :idproduto
+  // (segmento literal "status" capturado antes do paramétrico — Pitfall 1)
+  @ApiOperation({ summary: "Desativar ou reativar produto no Athos" })
+  @ApiParam({ name: "idproduto", example: "123" })
+  @ApiBody({ type: AlterarStatusProdutoDto })
+  @ApiOkResponse({ description: "{ idproduto: number, ativo: boolean }" })
+  @Patch(":idproduto/status")
+  async alterarStatusProduto(
+    @Param("idproduto", ParseIntPipe) id: number,
+    @Body() body: AlterarStatusProdutoDto,
+  ) {
+    this.logger.log(`alterarStatusProduto idproduto=${id} ativo=${body.ativo}`);
+    return this.athosProdutoService.alterarStatusProduto(id, body.ativo);
+  }
+
+  @ApiOperation({ summary: "Editar produto no Athos (partial update)" })
+  @ApiParam({ name: "idproduto", example: "123" })
+  @ApiBody({ type: UpdateProdutoDto })
+  @ApiOkResponse({ description: "{ idproduto: number }" })
+  @Patch(":idproduto")
+  async editarProduto(
+    @Param("idproduto", ParseIntPipe) id: number,
+    @Body() dto: UpdateProdutoDto,
+  ) {
+    this.logger.log(`editarProduto idproduto=${id}`);
+    return this.athosProdutoService.editarProduto(id, dto);
   }
 
   @ApiOperation({ summary: "Consultar produto por ID no Athos" })
