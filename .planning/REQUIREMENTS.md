@@ -10,11 +10,11 @@ Requisitos do milestone v2.2. Cada um mapeia para uma fase do roadmap.
 
 ### Busca de Produtos (BPROD)
 
-- [ ] **BPROD-01**: Operador pode buscar produtos por descrição (descricaoproduto/descricaocurta), parcial e sem diferenciar maiúsculas
-- [ ] **BPROD-02**: Operador pode buscar produtos por código de barras (codigobarra1/codigobarra2)
-- [ ] **BPROD-03**: Operador pode filtrar produtos por departamento, grupo e marca
-- [ ] **BPROD-04**: Busca retorna a linha completa do produto (todos os campos) com paginação
-- [ ] **BPROD-05**: Operador pode consultar um produto específico por idproduto
+- [x] **BPROD-01**: Operador pode buscar produtos por descrição (descricaoproduto/descricaocurta), parcial e sem diferenciar maiúsculas
+- [x] **BPROD-02**: Operador pode buscar produtos por código de barras (codigobarra1/codigobarra2)
+- [x] **BPROD-03**: Operador pode filtrar produtos por departamento, grupo e marca
+- [x] **BPROD-04**: Busca retorna a linha completa do produto (todos os campos) com paginação
+- [x] **BPROD-05**: Operador pode consultar um produto específico por idproduto
 
 ### Cadastro de Produto (CPROD)
 
@@ -39,7 +39,7 @@ Requisitos do milestone v2.2. Cada um mapeia para uma fase do roadmap.
 ### Integridade e Segurança (SPROD)
 
 - [ ] **SPROD-01**: Escrita no Athos é permitida exclusivamente na tabela produto; demais tabelas permanecem read-only
-- [ ] **SPROD-02**: Endpoints de produto exigem autenticação interna (x-internal-api-key), igual ao restante da API
+- [x] **SPROD-02**: Endpoints de produto exigem autenticação interna (x-internal-api-key), igual ao restante da API
 - [ ] **SPROD-03**: Operações de escrita registradas em log estruturado (quem, quando, o quê)
 - [ ] **SPROD-04**: Endpoints documentados no Swagger
 
@@ -78,11 +78,11 @@ Quais fases cobrem quais requisitos. Preenchido durante a criação do roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BPROD-01 | Phase 32 | Pending |
-| BPROD-02 | Phase 32 | Pending |
-| BPROD-03 | Phase 32 | Pending |
-| BPROD-04 | Phase 32 | Pending |
-| BPROD-05 | Phase 32 | Pending |
+| BPROD-01 | Phase 32 | Complete |
+| BPROD-02 | Phase 32 | Complete |
+| BPROD-03 | Phase 32 | Complete |
+| BPROD-04 | Phase 32 | Complete |
+| BPROD-05 | Phase 32 | Complete |
 | CPROD-01 | Phase 33 | Pending |
 | CPROD-02 | Phase 33 | Pending |
 | CPROD-03 | Phase 33 | Pending |
@@ -95,7 +95,7 @@ Quais fases cobrem quais requisitos. Preenchido durante a criação do roadmap.
 | DPROD-02 | Phase 33 | Pending |
 | DPROD-03 | Phase 33 | Pending |
 | SPROD-01 | Phase 33 | Pending |
-| SPROD-02 | Phase 32 | Pending |
+| SPROD-02 | Phase 32 | Complete |
 | SPROD-03 | Phase 33 | Pending |
 | SPROD-04 | Phase 33 | Pending |
 | UPROD-01 | Phase 34 | Pending |
