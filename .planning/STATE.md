@@ -2,9 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Gestão de Produtos do Athos
-status: roadmap-defined
-last_updated: "2026-06-15T00:00:00.000Z"
-last_activity: 2026-06-15
+current_phase: 32 (não iniciada)
+status: Roadmap definido — aguardando /gsd-plan-phase 32
+last_updated: "2026-06-15T16:20:28.470Z"
+last_activity: 2026-06-15 — Roadmap v2.2 criado
 progress:
   total_phases: 3
   completed_phases: 0
