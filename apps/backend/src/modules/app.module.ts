@@ -26,6 +26,7 @@ const REQUIRED_ENV_VARS = [
   "CHATWOOT_API_TOKEN",
   "CHATWOOT_ACCOUNT_ID",
   "NFSE_TOKEN",
+  "ATHOS_SISTEMA_USUARIO_ID",
 ] as const;
 
 function validateEnv(config: Record<string, unknown>) {
