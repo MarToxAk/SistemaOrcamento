@@ -70,7 +70,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 32. API de Busca de Produto | 1/1 | Complete   | 2026-06-15 |
+| 32. API de Busca de Produto | 1/1 | Complete    | 2026-06-15 |
 | 33. API de Escrita de Produto | 0/? | Not started | - |
 | 34. Frontend de Gestão de Produtos | 0/? | Not started | - |
 
