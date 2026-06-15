@@ -23,6 +23,8 @@ Milestone anterior: v2.0 - Gestão Integrada Financeira, Caixa e Dashboards (202
 
 ## Current Milestone: v2.2 Gestão de Produtos do Athos (CRUD)
 
+**Phase 32 complete (2026-06-15):** ProdutoController read-only sob /athos/produtos com busca paginada, lookups e consulta por id. 184/184 testes verdes.
+
 **Goal:** Permitir buscar, criar, editar e desativar produtos da tabela `produto` do Athos pelo Sistema de Orçamento, via endpoint REST + tela no frontend, com escrita controlada e sem exclusão física.
 
 **Target features:**
