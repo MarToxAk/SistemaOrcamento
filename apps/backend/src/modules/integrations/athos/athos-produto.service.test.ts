@@ -199,4 +199,166 @@ describe("AthosProdutoService", () => {
       ).rejects.toThrow("connection refused");
     });
   });
+
+  describe("editarProduto", () => {
+    it("edita precos parciais gerando UPDATE correto (EPROD-01)", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      // [0] SELECT 1 (existência) → produto existe
+      // [1] UPDATE → rowCount: 1
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(7, { valorvenda1: 9.9, valorvendapromocao: 8.5 });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      expect(updateSql).toMatch(/"valorvenda1"/);
+      expect(updateSql).toMatch(/"valorvendapromocao"/);
+    });
+
+    it("edita campos de cadastro parciais (EPROD-02)", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(10, { descricaoproduto: "Novo", ncm: "48025590" });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      expect(updateSql).toMatch(/"descricaoproduto"/);
+      expect(updateSql).toMatch(/"ncm"/);
+    });
+
+    it("inclui idusuarioalteracao no SET sempre — com campo e com DTO vazio (EPROD-03)", async () => {
+      // Caso A: DTO com um campo
+      {
+        const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+        const client = { query: jest.fn(), release: jest.fn() };
+        pool.connect = jest.fn().mockResolvedValue(client);
+
+        client.query
+          .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+          .mockResolvedValueOnce({ rowCount: 1 });
+
+        await service.editarProduto(5, { referencia: "REF1" });
+
+        const allCalls = client.query.mock.calls;
+        const updateCall = allCalls.find(([sql]: [string]) =>
+          String(sql).toUpperCase().includes("UPDATE"),
+        );
+        expect(updateCall).toBeDefined();
+        const updateSql = String(updateCall![0]);
+        const updateParams = updateCall![1] as unknown[];
+        expect(updateSql).toMatch(/idusuarioalteracao/);
+        expect(updateParams).toContain(1); // ATHOS_SISTEMA_USUARIO_ID = "1"
+      }
+
+      // Caso B: DTO vazio — idusuarioalteracao ainda deve estar no SET
+      {
+        const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+        const client = { query: jest.fn(), release: jest.fn() };
+        pool.connect = jest.fn().mockResolvedValue(client);
+
+        client.query
+          .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+          .mockResolvedValueOnce({ rowCount: 1 });
+
+        await service.editarProduto(5, {});
+
+        const allCalls = client.query.mock.calls;
+        const updateCall = allCalls.find(([sql]: [string]) =>
+          String(sql).toUpperCase().includes("UPDATE"),
+        );
+        expect(updateCall).toBeDefined();
+        const updateSql = String(updateCall![0]);
+        const updateParams = updateCall![1] as unknown[];
+        expect(updateSql).toMatch(/idusuarioalteracao/);
+        expect(updateParams).toContain(1);
+      }
+    });
+
+    it("nunca envia dataultimaalteracao nem horaultimaalteracao (EPROD-03)", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(3, { descricaoproduto: "Teste" });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      expect(updateSql).not.toMatch(/dataultimaalteracao/i);
+      expect(updateSql).not.toMatch(/horaultimaalteracao/i);
+    });
+
+    it("produto inexistente lanca NotFoundException (404) e nao emite UPDATE", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      // SELECT 1 retorna rows vazio → produto não encontrado
+      client.query.mockResolvedValueOnce({ rows: [] });
+
+      await expect(
+        service.editarProduto(999, { descricaoproduto: "X" }),
+      ).rejects.toThrow("Produto 999 nao encontrado");
+
+      expect(client.release).toHaveBeenCalled();
+
+      // Nenhum UPDATE deve ter sido emitido
+      const allCalls = client.query.mock.calls;
+      const updateCalls = allCalls.filter(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCalls).toHaveLength(0);
+    });
+
+    it("escreve apenas na tabela produto — UPDATE com alvo produto literal (EPROD-04)", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(1, { descricaoproduto: "Check" });
+
+      const allCalls = client.query.mock.calls;
+      // Queries de write (UPDATE) devem ter alvo apenas produto
+      const writeCalls = allCalls.filter(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(writeCalls.length).toBeGreaterThan(0);
+      writeCalls.forEach(([sql]: [string]) => {
+        expect(String(sql).toUpperCase()).toMatch(/UPDATE PRODUTO SET/);
+      });
+      // Nenhuma query deve conter DELETE
+      const allSqls = allCalls.map(([sql]: [string]) => String(sql).toUpperCase());
+      expect(allSqls.every((sql) => !sql.includes("DELETE"))).toBe(true);
+    });
+  });
 });
