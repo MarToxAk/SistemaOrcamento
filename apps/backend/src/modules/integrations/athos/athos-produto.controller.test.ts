@@ -10,6 +10,11 @@ describe("ProdutoController", () => {
     buscarGrupos: jest.Mock;
     buscarMarcas: jest.Mock;
   };
+  let athosProdutoServiceMock: {
+    criarProduto: jest.Mock;
+    editarProduto: jest.Mock;
+    alterarStatusProduto: jest.Mock;
+  };
 
   beforeEach(() => {
     athosServiceMock = {
@@ -19,7 +24,12 @@ describe("ProdutoController", () => {
       buscarGrupos: jest.fn(),
       buscarMarcas: jest.fn(),
     };
-    controller = new ProdutoController(athosServiceMock as any);
+    athosProdutoServiceMock = {
+      criarProduto: jest.fn(),
+      editarProduto: jest.fn(),
+      alterarStatusProduto: jest.fn(),
+    };
+    controller = new ProdutoController(athosServiceMock as any, athosProdutoServiceMock as any);
   });
 
   afterEach(() => {
@@ -142,6 +152,45 @@ describe("ProdutoController", () => {
 
       expect(athosServiceMock.buscarMarcas).toHaveBeenCalledTimes(1);
       expect(result).toBe(mockMarcas);
+    });
+  });
+
+  describe("criarProduto", () => {
+    it("POST delega a criarProduto", async () => {
+      const dto = { descricaoproduto: "Papel A4 75g" };
+      const mockResult = { idproduto: 42 };
+      athosProdutoServiceMock.criarProduto.mockResolvedValue(mockResult);
+
+      const result = await controller.criarProduto(dto as any);
+
+      expect(athosProdutoServiceMock.criarProduto).toHaveBeenCalledWith(dto);
+      expect(result).toBe(mockResult);
+    });
+  });
+
+  describe("editarProduto", () => {
+    it("PATCH :idproduto delega a editarProduto", async () => {
+      const dto = { descricaoproduto: "Papel A4 90g" };
+      const mockResult = { idproduto: 5 };
+      athosProdutoServiceMock.editarProduto.mockResolvedValue(mockResult);
+
+      const result = await controller.editarProduto(5, dto as any);
+
+      expect(athosProdutoServiceMock.editarProduto).toHaveBeenCalledWith(5, dto);
+      expect(result).toBe(mockResult);
+    });
+  });
+
+  describe("alterarStatusProduto", () => {
+    it("PATCH :idproduto/status delega a alterarStatusProduto com ativo boolean", async () => {
+      const body = { ativo: false };
+      const mockResult = { idproduto: 5, ativo: false };
+      athosProdutoServiceMock.alterarStatusProduto.mockResolvedValue(mockResult);
+
+      const result = await controller.alterarStatusProduto(5, body as any);
+
+      expect(athosProdutoServiceMock.alterarStatusProduto).toHaveBeenCalledWith(5, false);
+      expect(result).toBe(mockResult);
     });
   });
 });
