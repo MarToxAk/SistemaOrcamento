@@ -78,36 +78,36 @@ Quais fases cobrem quais requisitos. Preenchido durante a criação do roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BPROD-01 | TBD | Pending |
-| BPROD-02 | TBD | Pending |
-| BPROD-03 | TBD | Pending |
-| BPROD-04 | TBD | Pending |
-| BPROD-05 | TBD | Pending |
-| CPROD-01 | TBD | Pending |
-| CPROD-02 | TBD | Pending |
-| CPROD-03 | TBD | Pending |
-| CPROD-04 | TBD | Pending |
-| EPROD-01 | TBD | Pending |
-| EPROD-02 | TBD | Pending |
-| EPROD-03 | TBD | Pending |
-| EPROD-04 | TBD | Pending |
-| DPROD-01 | TBD | Pending |
-| DPROD-02 | TBD | Pending |
-| DPROD-03 | TBD | Pending |
-| SPROD-01 | TBD | Pending |
-| SPROD-02 | TBD | Pending |
-| SPROD-03 | TBD | Pending |
-| SPROD-04 | TBD | Pending |
-| UPROD-01 | TBD | Pending |
-| UPROD-02 | TBD | Pending |
-| UPROD-03 | TBD | Pending |
-| UPROD-04 | TBD | Pending |
+| BPROD-01 | Phase 32 | Pending |
+| BPROD-02 | Phase 32 | Pending |
+| BPROD-03 | Phase 32 | Pending |
+| BPROD-04 | Phase 32 | Pending |
+| BPROD-05 | Phase 32 | Pending |
+| CPROD-01 | Phase 33 | Pending |
+| CPROD-02 | Phase 33 | Pending |
+| CPROD-03 | Phase 33 | Pending |
+| CPROD-04 | Phase 33 | Pending |
+| EPROD-01 | Phase 33 | Pending |
+| EPROD-02 | Phase 33 | Pending |
+| EPROD-03 | Phase 33 | Pending |
+| EPROD-04 | Phase 33 | Pending |
+| DPROD-01 | Phase 33 | Pending |
+| DPROD-02 | Phase 33 | Pending |
+| DPROD-03 | Phase 33 | Pending |
+| SPROD-01 | Phase 33 | Pending |
+| SPROD-02 | Phase 32 | Pending |
+| SPROD-03 | Phase 33 | Pending |
+| SPROD-04 | Phase 33 | Pending |
+| UPROD-01 | Phase 34 | Pending |
+| UPROD-02 | Phase 34 | Pending |
+| UPROD-03 | Phase 34 | Pending |
+| UPROD-04 | Phase 34 | Pending |
 
 **Coverage:**
 - v1 requirements: 24 total
-- Mapped to phases: 0 (a definir no roadmap)
-- Unmapped: 24 ⚠️
+- Mapped to phases: 24 (Phase 32: 6, Phase 33: 14, Phase 34: 4)
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-06-15*
-*Last updated: 2026-06-15 after milestone v2.2 definition*
+*Last updated: 2026-06-15 — traceability filled after roadmap v2.2 creation*

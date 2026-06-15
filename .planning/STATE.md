@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Gestão de Produtos do Athos
-status: planning
-last_updated: "2026-06-15T15:08:21.315Z"
+status: roadmap-defined
+last_updated: "2026-06-15T00:00:00.000Z"
 last_activity: 2026-06-15
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -15,18 +15,18 @@ progress:
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-22 — Phase 29 Plan 02 completo (modal boleto frontend + Route Handler)
-Current phase: 31
-Milestone: v2.1 — Cobranca e Fiscal do Cliente
+Last updated: 2026-06-15 — Roadmap v2.2 definido (Fases 32-34)
+Current phase: 32 (não iniciada)
+Milestone: v2.2 — Gestão de Produtos do Athos (CRUD)
 
 ---
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 32 — API de Busca de Produto (não iniciada)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-15 — Milestone v2.2 started
+Status: Roadmap definido — aguardando /gsd-plan-phase 32
+Last activity: 2026-06-15 — Roadmap v2.2 criado
 
 ## Project Status
 
@@ -60,9 +60,12 @@ Last activity: 2026-06-15 — Milestone v2.2 started
 | 26 | Status Pagina Producao — Layout Kanban 3 colunas | complete (v2.0) |
 | 27 | Dashboard de Contas a Receber — Read-Only | complete (v2.0) |
 | 28 | Pagina de Detalhe do Cliente + Schema Prisma | complete (v2.1) |
-| 29 | Boleto Consolidado via EFI Bank | in-progress (v2.1) — Plans 01+02 completos, checkpoint pendente |
-| 30 | Emissao de NFS-e a partir de Titulos | pending (v2.1) |
-| 31 | Historico NFS-e + Consulta NF Athos | pending (v2.1) |
+| 29 | Boleto Consolidado via EFI Bank | complete (v2.1) |
+| 30 | Emissao de NFS-e a partir de Titulos | complete (v2.1) |
+| 31 | Historico NFS-e + Consulta NF Athos | complete (v2.1) |
+| 32 | API de Busca de Produto | not-started (v2.2) |
+| 33 | API de Escrita de Produto | not-started (v2.2) |
+| 34 | Frontend de Gestao de Produtos | not-started (v2.2) |
 
 ## Milestones Archived
 
@@ -77,22 +80,25 @@ Last activity: 2026-06-15 — Milestone v2.2 started
 - v1.8 — phases 19-21 (.planning/milestones/v1.8-ROADMAP.md)
 - v1.9 — phase 22
 - v2.0 — phases 23-27 (.planning/milestones/v2.0-ROADMAP.md)
+- v2.1 — phases 28-31 (.planning/milestones/v2.1-ROADMAP.md)
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-22)
+See: .planning/PROJECT.md (updated 2026-06-15)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
+Current focus: v2.2 - Gestao de Produtos do Athos CRUD (phases 32-34)
 
 ## Active Context
 
-- Milestone ativo: v2.1 (iniciado 2026-05-22)
-- Proximo passo: /gsd:plan-phase 29 (boleto-consolidado)
+- Milestone ativo: v2.2 (iniciado 2026-06-15)
+- Proximo passo: /gsd-plan-phase 32 (API de busca de produto)
 - Stack: NestJS + Next.js + Prisma + PostgreSQL
-- Athos: somente leitura — nunca gravar
-- NfseModule existente em apps/backend/src/modules/integrations/nfse/ — reutilizar
-- EFI integration existente — reutilizar para boleto consolidado
-- Phases 28 e 30 requerem Prisma migrations
+- Athos write path: EXCECAO controlada — somente tabela `produto` (INSERT/UPDATE); todo o resto permanece read-only
+- Pattern backend: espelhar AthosController/AthosService existente em apps/backend/src/modules/integrations/athos/ — novo path write-capable scoped a produto
+- Pattern frontend: Route Handler proxy + backendFetch com x-internal-api-key (padrao estabelecido)
+- Trigger: tg_alterarproduto (BEFORE INSERT/UPDATE) e rules atualizardatahora* NUNCA podem ser desabilitados
+- Soft-delete: statusproduto/vendeproduto = false — NUNCA DELETE fisico
+- Phases 32-33 sao backend-only; Phase 34 e frontend
 
 ## Decisions Log
 
@@ -136,11 +142,16 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 | 2026-05-22 | backendFetch ja injeta x-internal-api-key — Route Handler /api/cobranca/boleto nao duplica header | internalHeaders() em backend-client.ts cobre a injecao server-side automaticamente |
 | 2026-05-22 | void navigator.clipboard.writeText() no botao Copiar da linha digitavel | Suprimir aviso de floating Promise no TypeScript strict sem quebrar o comportamento |
 | 2026-05-22 | Modal boleto sem Bootstrap Modal JS — React state overlay padrao pdf-modal-backdrop | Consistencia com padrao existente em orcamento/[id]/page.tsx; sem dependencia de Bootstrap JS |
+| 2026-06-15 | Liberar escrita no Athos APENAS na tabela produto (excecao controlada) | Necessidade de cadastrar/editar produtos pelo sistema sem abrir o Athos diretamente |
+| 2026-06-15 | Soft-delete de produto via statusproduto/vendeproduto=false — nunca DELETE fisico | Preservar integridade referencial (venda_item etc.) e historico completo |
+| 2026-06-15 | SPROD-02 (auth) atribuido a Phase 32 (primeiro endpoint) | Auth estabelecida desde o inicio; nao diferida para a fase de escrita |
+| 2026-06-15 | SPROD-04 (Swagger) atribuido a Phase 33 (write phase) | Documentacao cobre a superficie completa da API apos write endpoints existirem |
 
 ## Notes
 
 - Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
 - Recomendada auditoria consolidada no inicio do proximo ciclo.
+- Tech debt remanescente: testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API).
 
 ### Quick Tasks Completed
 
@@ -199,4 +210,4 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Executar: /gsd-plan-phase 32
