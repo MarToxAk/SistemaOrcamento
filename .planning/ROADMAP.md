@@ -22,7 +22,7 @@
 ### Phases
 
 - [x] **Phase 32: API de Busca de Produto** - Endpoint read com filtros, paginação e autenticação (completed 2026-06-15)
-- [ ] **Phase 33: API de Escrita de Produto** - Create, edit e soft-delete na tabela produto com trigger/constraint/log
+- [x] **Phase 33: API de Escrita de Produto** - Create, edit e soft-delete na tabela produto com trigger/constraint/log (completed 2026-06-15)
 - [ ] **Phase 34: Frontend de Gestao de Produtos** - Tela de busca, formulários de criação/edição e ação de desativar/reativar
 
 ### Phase Details
@@ -71,7 +71,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 32. API de Busca de Produto | 1/1 | Complete    | 2026-06-15 |
-| 33. API de Escrita de Produto | 3/4 | In Progress|  |
+| 33. API de Escrita de Produto | 4/4 | Complete   | 2026-06-15 |
 | 34. Frontend de Gestão de Produtos | 0/? | Not started | - |
 
 ---
