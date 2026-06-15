@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: Cobrança e Fiscal do Cliente
-current_phase: 31
-status: Awaiting next milestone
-last_updated: "2026-06-08T14:42:57.950Z"
-last_activity: 2026-06-08 — Milestone v2.1 completed and archived
+milestone: v2.2
+milestone_name: Gestão de Produtos do Athos
+status: planning
+last_updated: "2026-06-15T15:08:21.315Z"
+last_activity: 2026-06-15
 progress:
-  total_phases: 32
-  completed_phases: 27
-  total_plans: 59
-  completed_plans: 57
-  percent: 84
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -24,10 +23,10 @@ Milestone: v2.1 — Cobranca e Fiscal do Cliente
 
 ## Current Position
 
-Phase: Milestone v2.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-08 — Milestone v2.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-15 — Milestone v2.2 started
 
 ## Project Status
 

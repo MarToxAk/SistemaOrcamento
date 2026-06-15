@@ -21,9 +21,16 @@ Entregas principais:
 
 Milestone anterior: v2.0 - Gestão Integrada Financeira, Caixa e Dashboards (2026-05-22).
 
-## Next Milestone: a definir
+## Current Milestone: v2.2 Gestão de Produtos do Athos (CRUD)
 
-**Status:** entre milestones desde 2026-06-08. Rodar `/gsd-new-milestone` para iniciar o próximo ciclo (questionamento → pesquisa → requisitos → roadmap).
+**Goal:** Permitir buscar, criar, editar e desativar produtos da tabela `produto` do Athos pelo Sistema de Orçamento, via endpoint REST + tela no frontend, com escrita controlada e sem exclusão física.
+
+**Target features:**
+- Buscar/listar produtos com filtros (descrição, código de barras, departamento/grupo/marca), retornando a linha completa
+- Criar produto no Athos respeitando idproduto serial, datacadastro, idusuariocadastro, trigger tg_alterarproduto e rules
+- Editar preço e informações de cadastro do produto
+- Desativar produto (soft-delete via statusproduto/vendeproduto = false) — sem DELETE físico
+- Tela de busca e gestão de produtos no frontend Next.js
 
 Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API no fechamento).
 
@@ -90,7 +97,9 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferido
 - Operacao: Solucao deve funcionar com docker compose pull/up sem passos manuais ocultos
 - Seguranca: Sem segredos em codigo
 - Integracao: Fluxo deve ficar 100% no backend desta aplicacao (sem n8n)
-- Athos: Somente leitura — nunca gravar no banco Athos
+- Athos: Read-only por padrao — EXCECAO controlada (v2.2): escrita permitida APENAS na tabela `produto` (insert/update). Todo o resto do Athos permanece somente leitura
+- Produto: Nunca apagar fisicamente (sem DELETE) — "remover" = desativar via statusproduto/vendeproduto = false
+- Produto: Escrita deve respeitar trigger tg_alterarproduto, rules atualizardatahora* e FKs/constraints existentes
 
 ## Key Decisions
 
@@ -102,10 +111,12 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferido
 | clienteAthosId com prioridade na resolucao do tomador | Previsibilidade de emissao | checkmark Validado -- v1.8 |
 | NFS-e emitidas registradas no banco proprio (nao Athos) | Athos e read-only; historico proprio evita dependencia | Em validacao -- v2.1 |
 | Boleto consolidado (multiplos titulos) em vez de por titulo | Reduz numero de boletos e simplifica cobranca | Em validacao -- v2.1 |
+| Liberar escrita no Athos APENAS na tabela `produto` (excecao a regra read-only) | Necessidade de cadastrar/editar produtos pelo sistema sem trocar de ferramenta | Planejado -- v2.2 |
+| Soft-delete de produto (statusproduto/vendeproduto=false), nunca DELETE fisico | Preservar integridade referencial (venda_item etc.) e historico | Planejado -- v2.2 |
 
 ## Evolution
 
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-05-22 after v2.0 — v2.1 started*
+*Last updated: 2026-06-15 after v2.1 — v2.2 started*
