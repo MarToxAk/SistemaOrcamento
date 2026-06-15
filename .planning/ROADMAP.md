@@ -23,7 +23,7 @@
 
 - [ ] **Phase 32: API de Busca de Produto** - Endpoint read com filtros, paginação e autenticação
 - [ ] **Phase 33: API de Escrita de Produto** - Create, edit e soft-delete na tabela produto com trigger/constraint/log
-- [ ] **Phase 34: Frontend de Gestão de Produtos** - Tela de busca, formulários de criação/edição e ação de desativar/reativar
+- [ ] **Phase 34: Frontend de Gestao de Produtos** - Tela de busca, formulários de criação/edição e ação de desativar/reativar
 
 ### Phase Details
 
@@ -37,7 +37,8 @@
   3. Operador pode filtrar produtos combinando departamento, grupo e/ou marca
   4. Operador pode consultar um produto específico por idproduto e receber todos os campos
   5. Qualquer requisição sem x-internal-api-key válida retorna 401 — o mesmo guard do restante da API
-**Plans**: TBD
+**Plans**: 1 plano
+- [ ] 32-01-PLAN.md — ProdutoController (busca/id/lookups) + métodos de leitura no AthosService + tipos verificados + testes BPROD-01..05
 
 #### Phase 33: API de Escrita de Produto
 **Goal**: Operador pode criar, editar e desativar produtos no Athos de forma segura, com escrita restrita à tabela produto, trigger respeitado e todas as operações registradas em log
@@ -69,7 +70,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 32. API de Busca de Produto | 0/? | Not started | - |
+| 32. API de Busca de Produto | 0/1 | Planned | - |
 | 33. API de Escrita de Produto | 0/? | Not started | - |
 | 34. Frontend de Gestão de Produtos | 0/? | Not started | - |
 
@@ -77,9 +78,9 @@
 
 ## Estado atual
 
-**Milestone v2.2 em planejamento.** Roadmap definido em 2026-06-15.
+**Milestone v2.2 em planejamento.** Roadmap definido em 2026-06-15. Fase 32 planejada (1 plano).
 
-Próximo passo: `/gsd-plan-phase 32`
+Próximo passo: `/gsd-execute-phase 32`
 
 ## Histórico arquivado
 
