@@ -25,6 +25,8 @@ Milestone anterior: v2.0 - Gestão Integrada Financeira, Caixa e Dashboards (202
 
 **Phase 32 complete (2026-06-15):** ProdutoController read-only sob /athos/produtos com busca paginada, lookups e consulta por id. 184/184 testes verdes.
 
+**Phase 33 complete (2026-06-16):** API de escrita de produto (POST /athos/produtos, PATCH /athos/produtos/:id, PATCH /athos/produtos/:id/status) com AthosProdutoService, DTOs validados, 22 testes unitários (19 service + 3 controller). 206/206 testes verdes.
+
 **Goal:** Permitir buscar, criar, editar e desativar produtos da tabela `produto` do Athos pelo Sistema de Orçamento, via endpoint REST + tela no frontend, com escrita controlada e sem exclusão física.
 
 **Target features:**
@@ -113,12 +115,12 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferido
 | clienteAthosId com prioridade na resolucao do tomador | Previsibilidade de emissao | checkmark Validado -- v1.8 |
 | NFS-e emitidas registradas no banco proprio (nao Athos) | Athos e read-only; historico proprio evita dependencia | Em validacao -- v2.1 |
 | Boleto consolidado (multiplos titulos) em vez de por titulo | Reduz numero de boletos e simplifica cobranca | Em validacao -- v2.1 |
-| Liberar escrita no Athos APENAS na tabela `produto` (excecao a regra read-only) | Necessidade de cadastrar/editar produtos pelo sistema sem trocar de ferramenta | Planejado -- v2.2 |
-| Soft-delete de produto (statusproduto/vendeproduto=false), nunca DELETE fisico | Preservar integridade referencial (venda_item etc.) e historico | Planejado -- v2.2 |
+| Liberar escrita no Athos APENAS na tabela `produto` (excecao a regra read-only) | Necessidade de cadastrar/editar produtos pelo sistema sem trocar de ferramenta | checkmark Validado -- v2.2 (fase 33) |
+| Soft-delete de produto (statusproduto/vendeproduto=false), nunca DELETE fisico | Preservar integridade referencial (venda_item etc.) e historico | checkmark Validado -- v2.2 (fase 33) |
 
 ## Evolution
 
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-06-15 after v2.1 — v2.2 started*
+*Last updated: 2026-06-16 — Phase 33 complete (API de Escrita de Produto)*
