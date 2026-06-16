@@ -18,30 +18,30 @@ Requisitos do milestone v2.2. Cada um mapeia para uma fase do roadmap.
 
 ### Cadastro de Produto (CPROD)
 
-- [ ] **CPROD-01**: Operador pode criar um novo produto informando os campos de cadastro
-- [ ] **CPROD-02**: idproduto é gerado pelo Athos (serial/next id); datacadastro e idusuariocadastro preenchidos automaticamente
-- [ ] **CPROD-03**: Criação dispara/respeita o trigger tg_alterarproduto e as rules atualizardatahora* (sem desabilitá-los)
-- [ ] **CPROD-04**: Criação valida constraints (ex.: descontomaximo 0–100, FKs de departamento/grupo/marca) e retorna erro claro quando inválido
+- [x] **CPROD-01**: Operador pode criar um novo produto informando os campos de cadastro
+- [x] **CPROD-02**: idproduto é gerado pelo Athos (serial/next id); datacadastro e idusuariocadastro preenchidos automaticamente
+- [x] **CPROD-03**: Criação dispara/respeita o trigger tg_alterarproduto e as rules atualizardatahora* (sem desabilitá-los)
+- [x] **CPROD-04**: Criação valida constraints (ex.: descontomaximo 0–100, FKs de departamento/grupo/marca) e retorna erro claro quando inválido
 
 ### Edição de Produto (EPROD)
 
-- [ ] **EPROD-01**: Operador pode editar preços de venda (valorvenda1..6, promoção, atacado)
-- [ ] **EPROD-02**: Operador pode editar informações de cadastro (descrição, NCM, unidade, referência, etc.)
-- [ ] **EPROD-03**: dataultimaalteracao/idusuarioalteracao atualizados a cada edição
-- [ ] **EPROD-04**: Edição persiste exclusivamente na tabela produto (nenhuma outra tabela do Athos é gravada)
+- [x] **EPROD-01**: Operador pode editar preços de venda (valorvenda1..6, promoção, atacado)
+- [x] **EPROD-02**: Operador pode editar informações de cadastro (descrição, NCM, unidade, referência, etc.)
+- [x] **EPROD-03**: dataultimaalteracao/idusuarioalteracao atualizados a cada edição
+- [x] **EPROD-04**: Edição persiste exclusivamente na tabela produto (nenhuma outra tabela do Athos é gravada)
 
 ### Desativação de Produto (DPROD)
 
-- [ ] **DPROD-01**: Operador pode desativar um produto (statusproduto/vendeproduto = false) — sem DELETE físico
-- [ ] **DPROD-02**: Operador pode reativar um produto desativado
-- [ ] **DPROD-03**: Sistema nunca executa DELETE físico na tabela produto
+- [x] **DPROD-01**: Operador pode desativar um produto (statusproduto/vendeproduto = false) — sem DELETE físico
+- [x] **DPROD-02**: Operador pode reativar um produto desativado
+- [x] **DPROD-03**: Sistema nunca executa DELETE físico na tabela produto
 
 ### Integridade e Segurança (SPROD)
 
-- [ ] **SPROD-01**: Escrita no Athos é permitida exclusivamente na tabela produto; demais tabelas permanecem read-only
+- [x] **SPROD-01**: Escrita no Athos é permitida exclusivamente na tabela produto; demais tabelas permanecem read-only
 - [x] **SPROD-02**: Endpoints de produto exigem autenticação interna (x-internal-api-key), igual ao restante da API
-- [ ] **SPROD-03**: Operações de escrita registradas em log estruturado (quem, quando, o quê)
-- [ ] **SPROD-04**: Endpoints documentados no Swagger
+- [x] **SPROD-03**: Operações de escrita registradas em log estruturado (quem, quando, o quê)
+- [x] **SPROD-04**: Endpoints documentados no Swagger
 
 ### Frontend de Gestão (UPROD)
 
@@ -83,21 +83,21 @@ Quais fases cobrem quais requisitos. Preenchido durante a criação do roadmap.
 | BPROD-03 | Phase 32 | Complete |
 | BPROD-04 | Phase 32 | Complete |
 | BPROD-05 | Phase 32 | Complete |
-| CPROD-01 | Phase 33 | Pending |
-| CPROD-02 | Phase 33 | Pending |
-| CPROD-03 | Phase 33 | Pending |
-| CPROD-04 | Phase 33 | Pending |
-| EPROD-01 | Phase 33 | Pending |
-| EPROD-02 | Phase 33 | Pending |
-| EPROD-03 | Phase 33 | Pending |
-| EPROD-04 | Phase 33 | Pending |
-| DPROD-01 | Phase 33 | Pending |
-| DPROD-02 | Phase 33 | Pending |
-| DPROD-03 | Phase 33 | Pending |
-| SPROD-01 | Phase 33 | Pending |
+| CPROD-01 | Phase 33 | Complete |
+| CPROD-02 | Phase 33 | Complete |
+| CPROD-03 | Phase 33 | Complete |
+| CPROD-04 | Phase 33 | Complete |
+| EPROD-01 | Phase 33 | Complete |
+| EPROD-02 | Phase 33 | Complete |
+| EPROD-03 | Phase 33 | Complete |
+| EPROD-04 | Phase 33 | Complete |
+| DPROD-01 | Phase 33 | Complete |
+| DPROD-02 | Phase 33 | Complete |
+| DPROD-03 | Phase 33 | Complete |
+| SPROD-01 | Phase 33 | Complete |
 | SPROD-02 | Phase 32 | Complete |
-| SPROD-03 | Phase 33 | Pending |
-| SPROD-04 | Phase 33 | Pending |
+| SPROD-03 | Phase 33 | Complete |
+| SPROD-04 | Phase 33 | Complete |
 | UPROD-01 | Phase 34 | Pending |
 | UPROD-02 | Phase 34 | Pending |
 | UPROD-03 | Phase 34 | Pending |
