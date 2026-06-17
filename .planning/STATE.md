@@ -2,32 +2,32 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Gestão de Produtos do Athos
-current_phase: 34
-status: planning
-last_updated: "2026-06-16T16:24:26.417Z"
-last_activity: 2026-06-16
+current_phase: 33
+status: complete
+last_updated: "2026-06-17T00:00:00.000Z"
+last_activity: 2026-06-17
 progress:
   total_phases: 3
   completed_phases: 2
+  skipped_phases: 1
   total_plans: 5
   completed_plans: 5
-  percent: 67
+  percent: 100
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-06-15 — Roadmap v2.2 definido (Fases 32-34)
-Current phase: 34
-Milestone: v2.2 — Gestão de Produtos do Athos (CRUD)
+Last updated: 2026-06-17 — Milestone v2.2 concluído (API-only; Phase 34 frontend descartada)
+Current phase: 33
+Milestone: v2.2 — Gestão de Produtos do Athos (API)
 
 ---
 
 ## Current Position
 
-Phase: 33 (api-de-escrita-de-produto) — EXECUTING
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-06-16
+Phase: 33 (api-de-escrita-de-produto) — COMPLETE
+Status: Milestone v2.2 encerrado. Phase 34 descartada por decisão do operador (API-only).
+Last activity: 2026-06-17
 
 ## Project Status
 
@@ -64,9 +64,9 @@ Last activity: 2026-06-16
 | 29 | Boleto Consolidado via EFI Bank | complete (v2.1) |
 | 30 | Emissao de NFS-e a partir de Titulos | complete (v2.1) |
 | 31 | Historico NFS-e + Consulta NF Athos | complete (v2.1) |
-| 32 | API de Busca de Produto | not-started (v2.2) |
-| 33 | API de Escrita de Produto | not-started (v2.2) |
-| 34 | Frontend de Gestao de Produtos | not-started (v2.2) |
+| 32 | API de Busca de Produto | complete (v2.2) |
+| 33 | API de Escrita de Produto | complete (v2.2) |
+| 34 | Frontend de Gestao de Produtos | skipped — decisão API-only (2026-06-17) |
 
 ## Milestones Archived
 
@@ -91,15 +91,10 @@ Current focus: v2.2 - Gestao de Produtos do Athos CRUD (phases 32-34)
 
 ## Active Context
 
-- Milestone ativo: v2.2 (iniciado 2026-06-15)
-- Proximo passo: /gsd-plan-phase 32 (API de busca de produto)
+- Milestone v2.2 CONCLUÍDO (2026-06-17) — API de Gestão de Produtos entregue (Fases 32 e 33)
+- Phase 34 (Frontend) descartada: operador optou por API-only
 - Stack: NestJS + Next.js + Prisma + PostgreSQL
-- Athos write path: EXCECAO controlada — somente tabela `produto` (INSERT/UPDATE); todo o resto permanece read-only
-- Pattern backend: espelhar AthosController/AthosService existente em apps/backend/src/modules/integrations/athos/ — novo path write-capable scoped a produto
-- Pattern frontend: Route Handler proxy + backendFetch com x-internal-api-key (padrao estabelecido)
-- Trigger: tg_alterarproduto (BEFORE INSERT/UPDATE) e rules atualizardatahora* NUNCA podem ser desabilitados
-- Soft-delete: statusproduto/vendeproduto = false — NUNCA DELETE fisico
-- Phases 32-33 sao backend-only; Phase 34 e frontend
+- Proximo passo: /gsd-new-milestone para v2.3
 
 ## Decisions Log
 
@@ -147,6 +142,7 @@ Current focus: v2.2 - Gestao de Produtos do Athos CRUD (phases 32-34)
 | 2026-06-15 | Soft-delete de produto via statusproduto/vendeproduto=false — nunca DELETE fisico | Preservar integridade referencial (venda_item etc.) e historico completo |
 | 2026-06-15 | SPROD-02 (auth) atribuido a Phase 32 (primeiro endpoint) | Auth estabelecida desde o inicio; nao diferida para a fase de escrita |
 | 2026-06-15 | SPROD-04 (Swagger) atribuido a Phase 33 (write phase) | Documentacao cobre a superficie completa da API apos write endpoints existirem |
+| 2026-06-17 | Phase 34 (Frontend de Gestao de Produtos) descartada — entrega API-only | Operador decidiu que a API REST de produtos e suficiente; UI nao necessaria para esta iteracao |
 
 ## Notes
 
@@ -211,4 +207,4 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 
 ## Operator Next Steps
 
-- Executar: /gsd-plan-phase 32
+- Milestone v2.2 encerrado. Iniciar próximo ciclo: `/gsd-new-milestone`

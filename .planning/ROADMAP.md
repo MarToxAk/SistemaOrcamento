@@ -13,7 +13,7 @@
 - ✅ **v1.8 Busca de Cliente Athos** — Fases 19-21 (shipped 2026-05-05)
 - ✅ **v2.0 Gestão Financeira, Caixa e Dashboards** — Fases 23-27 (shipped 2026-05-22)
 - ✅ **v2.1 Cobrança e Fiscal do Cliente** — Fases 28-31 (shipped 2026-06-08)
-- 🔄 **v2.2 Gestão de Produtos do Athos (CRUD)** — Fases 32-34 (em andamento)
+- ✅ **v2.2 Gestão de Produtos do Athos (API)** — Fases 32-33 (shipped 2026-06-17) — Phase 34 descartada (decisão: API-only)
 
 ---
 
@@ -23,7 +23,7 @@
 
 - [x] **Phase 32: API de Busca de Produto** - Endpoint read com filtros, paginação e autenticação (completed 2026-06-15)
 - [x] **Phase 33: API de Escrita de Produto** - Create, edit e soft-delete na tabela produto com trigger/constraint/log (completed 2026-06-15)
-- [ ] **Phase 34: Frontend de Gestao de Produtos** - Tela de busca, formulários de criação/edição e ação de desativar/reativar
+- ~~[ ] **Phase 34: Frontend de Gestao de Produtos**~~ — **DESCARTADA** (2026-06-17): API-only foi suficiente; nenhum frontend planejado para esta entrega
 
 ### Phase Details
 
@@ -72,15 +72,15 @@
 |-------|----------------|--------|-----------|
 | 32. API de Busca de Produto | 1/1 | Complete    | 2026-06-15 |
 | 33. API de Escrita de Produto | 4/4 | Complete    | 2026-06-16 |
-| 34. Frontend de Gestão de Produtos | 0/? | Not started | - |
+| 34. Frontend de Gestão de Produtos | — | **Descartada** (API-only) | 2026-06-17 |
 
 ---
 
 ## Estado atual
 
-**Milestone v2.2 em planejamento.** Roadmap definido em 2026-06-15. Fase 32 planejada (1 plano).
+**Milestone v2.2 concluído (2026-06-17).** Fases 32 e 33 entregues (API de busca + escrita de produto). Phase 34 (Frontend) descartada por decisão: API-only é suficiente para a entrega atual.
 
-Próximo passo: `/gsd-execute-phase 32`
+Próximo passo: `/gsd-new-milestone` para iniciar v2.3
 
 ## Histórico arquivado
 
