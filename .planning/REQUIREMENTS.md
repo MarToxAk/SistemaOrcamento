@@ -1,113 +1,78 @@
-# Requirements: Sistema de Orcamento BomCusto — Milestone v2.2
+# Requirements: Sistema de Orcamento BomCusto — Milestone v2.3
 
-**Defined:** 2026-06-15
-**Milestone:** v2.2 — Gestão de Produtos do Athos (CRUD)
+**Defined:** 2026-06-17
+**Milestone:** v2.3 — White-Label Multi-Empresa
 **Core Value:** Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
 ## v1 Requirements
 
-Requisitos do milestone v2.2. Cada um mapeia para uma fase do roadmap.
+Requisitos do milestone v2.3. Sistema configurável por empresa via variáveis de ambiente — sem editar código, sem banco de dados novo. Deploy separado por empresa com `.env` próprio.
 
-### Busca de Produtos (BPROD)
+### Configuração da Empresa (CFG)
 
-- [x] **BPROD-01**: Operador pode buscar produtos por descrição (descricaoproduto/descricaocurta), parcial e sem diferenciar maiúsculas
-- [x] **BPROD-02**: Operador pode buscar produtos por código de barras (codigobarra1/codigobarra2)
-- [x] **BPROD-03**: Operador pode filtrar produtos por departamento, grupo e marca
-- [x] **BPROD-04**: Busca retorna a linha completa do produto (todos os campos) com paginação
-- [x] **BPROD-05**: Operador pode consultar um produto específico por idproduto
+- [ ] **CFG-01**: `.env.example` documenta todas as variáveis novas com valores BomCusto como defaults e comentários explicativos
+- [ ] **CFG-02**: `EMPRESA_LOGO_URL` — URL pública do logo da empresa, usada no frontend e no PDF
+- [ ] **CFG-03**: `EMPRESA_NOME`, `EMPRESA_CNPJ`, `EMPRESA_ENDERECO` — dados textuais exibidos no frontend, PDF e assinaturas
+- [ ] **CFG-04**: `EMPRESA_MUNICIPIO_IBGE` — código IBGE do município do prestador, substitui `"3520400"` hardcoded no NFS-e
+- [ ] **CFG-05**: `EMPRESA_COR_PRIMARIA` (hex, ex: `#0d6efd`) — cor primária da marca aplicada via CSS custom property
 
-### Cadastro de Produto (CPROD)
+### Frontend Dinâmico (FRONT)
 
-- [x] **CPROD-01**: Operador pode criar um novo produto informando os campos de cadastro
-- [x] **CPROD-02**: idproduto é gerado pelo Athos (serial/next id); datacadastro e idusuariocadastro preenchidos automaticamente
-- [x] **CPROD-03**: Criação dispara/respeita o trigger tg_alterarproduto e as rules atualizardatahora* (sem desabilitá-los)
-- [x] **CPROD-04**: Criação valida constraints (ex.: descontomaximo 0–100, FKs de departamento/grupo/marca) e retorna erro claro quando inválido
+- [ ] **FRONT-01**: `layout.tsx` usa `EMPRESA_NOME` no `metadata.title` em vez de "BomCusto Orcamento" hardcoded
+- [ ] **FRONT-02**: 5 páginas internas (`orcamento/page`, `orcamento/novo`, `orcamento/[id]`, `contas-receber/page`, `contas-receber/[idcliente]`) exibem logo/nome/CNPJ/endereço lidos das env vars
+- [ ] **FRONT-03**: 2 páginas públicas (`orcamento/[id]/approve`, `orcamento/[id]/status`) exibem logo e nome lidos das env vars
+- [ ] **FRONT-04**: Cor primária (`EMPRESA_COR_PRIMARIA`) injetada como CSS custom property no `layout.tsx`, substituindo cores hardcoded de branding
 
-### Edição de Produto (EPROD)
+### PDF Dinâmico e Customizável (PDF)
 
-- [x] **EPROD-01**: Operador pode editar preços de venda (valorvenda1..6, promoção, atacado)
-- [x] **EPROD-02**: Operador pode editar informações de cadastro (descrição, NCM, unidade, referência, etc.)
-- [x] **EPROD-03**: dataultimaalteracao/idusuarioalteracao atualizados a cada edição
-- [x] **EPROD-04**: Edição persiste exclusivamente na tabela produto (nenhuma outra tabela do Athos é gravada)
+- [ ] **PDF-01**: Backend passa `EMPRESA_NOME`, `EMPRESA_CNPJ`, `EMPRESA_ENDERECO` e `EMPRESA_LOGO_URL` ao renderizador do template PDF via env vars
+- [ ] **PDF-02**: Template padrão usa as variáveis de empresa em vez de texto hardcoded (nome, CNPJ, endereço, assinatura "equipe X", logo)
+- [ ] **PDF-03**: Template PDF extraído de string inline em TypeScript para arquivo `.hbs` externo em `apps/backend/templates/quote-default.hbs`
+- [ ] **PDF-04**: `EMPRESA_PDF_TEMPLATE_PATH` (opcional) aponta para template customizado — fallback para o template padrão do sistema se ausente; template customizado pode ser montado via volume Docker
+- [ ] **PDF-05**: Template padrão documenta via comentários Handlebars todas as variáveis disponíveis (dados da empresa, cliente, itens, totais, carimbos)
 
-### Desativação de Produto (DPROD)
+### NFS-e Dinâmico (NFSE)
 
-- [x] **DPROD-01**: Operador pode desativar um produto (statusproduto/vendeproduto = false) — sem DELETE físico
-- [x] **DPROD-02**: Operador pode reativar um produto desativado
-- [x] **DPROD-03**: Sistema nunca executa DELETE físico na tabela produto
-
-### Integridade e Segurança (SPROD)
-
-- [x] **SPROD-01**: Escrita no Athos é permitida exclusivamente na tabela produto; demais tabelas permanecem read-only
-- [x] **SPROD-02**: Endpoints de produto exigem autenticação interna (x-internal-api-key), igual ao restante da API
-- [x] **SPROD-03**: Operações de escrita registradas em log estruturado (quem, quando, o quê)
-- [x] **SPROD-04**: Endpoints documentados no Swagger
-
-### Frontend de Gestão (UPROD)
-
-- [ ] **UPROD-01**: Tela de busca de produtos com filtros (descrição / código de barras / departamento-grupo-marca)
-- [ ] **UPROD-02**: Formulário para criar produto
-- [ ] **UPROD-03**: Tela para editar preço e cadastro de produto
-- [ ] **UPROD-04**: Ação para desativar/reativar produto
+- [ ] **NFSE-01**: `CODIGO_MUNICIPIO` no `NfseService` (`"3520400"` hardcoded na linha 60) lido de `EMPRESA_MUNICIPIO_IBGE` via `ConfigService`
 
 ## v2 Requirements
 
 Reconhecidos, porém deferidos — não entram no roadmap atual.
 
-### Produto Avançado
+### Produto Avançado (carregado de v2.2)
 
 - **PADV-01**: Gestão de grade de produto (usagrade/utilizagrade)
 - **PADV-02**: Gestão de produto composto e controle de série
-- **PADV-03**: Importação/edição em massa de produtos
+
+### Frontend de Gestão de Produtos (carregado de v2.2)
+
+- **UPROD-01**: Tela de busca de produtos com filtros
+- **UPROD-02**: Formulário para criar produto
+- **UPROD-03**: Tela para editar preço e cadastro de produto
+- **UPROD-04**: Ação para desativar/reativar produto
+
+### White-Label Avançado (futuro)
+
+- **WL-01**: Painel admin no sistema para editar configurações sem acessar o servidor
+- **WL-02**: Upload de logo pelo sistema (MinIO) sem editar `.env`
+- **WL-03**: Templates PDF gerenciados pelo painel admin (upload/preview/ativação)
 
 ## Out of Scope
 
-Exclusões explícitas para evitar scope creep.
-
-| Feature | Reason |
-|---------|--------|
-| DELETE físico de produto | Decisão B (revisada): nunca apagar — preserva integridade referencial (venda_item etc.) e histórico |
-| Escrita em qualquer outra tabela do Athos | Exceção controlada cobre apenas a tabela produto; resto permanece read-only |
-| Gestão de grade/composição/série | Complexidade alta, não essencial para o CRUD básico de produto |
-| Importação em massa de produtos | Fora do foco desta etapa; risco operacional alto |
-| Sincronização reversa para o banco próprio (Prisma) | Produto vive no Athos; sem espelho local nesta etapa |
+- Credenciais de integração no painel admin (Athos DB, EFI, Chatwoot, iiBrasil permanecem em env vars por segurança)
+- Multi-tenant (shared deploy para múltiplas empresas) — modelo é deploy separado por empresa
+- Editor visual de template PDF (WYSIWYG)
+- Reintroduzir n8n para roteamento de pagamentos
+- Recalculo retroativo de NFS-e já emitida
+- Troca de ORM (Prisma permanece)
+- Mudança de provedor de banco
+- Pagamento por cartão de crédito
 
 ## Traceability
 
-Quais fases cobrem quais requisitos. Preenchido durante a criação do roadmap.
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| BPROD-01 | Phase 32 | Complete |
-| BPROD-02 | Phase 32 | Complete |
-| BPROD-03 | Phase 32 | Complete |
-| BPROD-04 | Phase 32 | Complete |
-| BPROD-05 | Phase 32 | Complete |
-| CPROD-01 | Phase 33 | Complete |
-| CPROD-02 | Phase 33 | Complete |
-| CPROD-03 | Phase 33 | Complete |
-| CPROD-04 | Phase 33 | Complete |
-| EPROD-01 | Phase 33 | Complete |
-| EPROD-02 | Phase 33 | Complete |
-| EPROD-03 | Phase 33 | Complete |
-| EPROD-04 | Phase 33 | Complete |
-| DPROD-01 | Phase 33 | Complete |
-| DPROD-02 | Phase 33 | Complete |
-| DPROD-03 | Phase 33 | Complete |
-| SPROD-01 | Phase 33 | Complete |
-| SPROD-02 | Phase 32 | Complete |
-| SPROD-03 | Phase 33 | Complete |
-| SPROD-04 | Phase 33 | Complete |
-| UPROD-01 | Phase 34 | Pending |
-| UPROD-02 | Phase 34 | Pending |
-| UPROD-03 | Phase 34 | Pending |
-| UPROD-04 | Phase 34 | Pending |
-
-**Coverage:**
-- v1 requirements: 24 total
-- Mapped to phases: 24 (Phase 32: 6, Phase 33: 14, Phase 34: 4)
-- Unmapped: 0 ✓
-
----
-*Requirements defined: 2026-06-15*
-*Last updated: 2026-06-15 — traceability filled after roadmap v2.2 creation*
+| REQ-ID | Phase | Plan |
+|--------|-------|------|
+| CFG-01..05 | 35 | TBD |
+| NFSE-01 | 35 | TBD |
+| PDF-01..05 | 35 | TBD |
+| FRONT-01..04 | 36 | TBD |

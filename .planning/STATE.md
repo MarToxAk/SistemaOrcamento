@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: White-Label Multi-Empresa
-current_phase: 0
+current_phase: 35
 status: planning
 last_updated: "2026-06-17T00:00:00.000Z"
 last_activity: 2026-06-17
 progress:
-  total_phases: 0
+  total_phases: 2
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -16,18 +16,18 @@ progress:
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-06-17 — Milestone v2.3 iniciado (White-Label Multi-Empresa)
-Current phase: —
+Last updated: 2026-06-17 — Roadmap v2.3 definido (White-Label Multi-Empresa)
+Current phase: 35 (not started)
 Milestone: v2.3 — White-Label Multi-Empresa
 
 ---
 
 ## Current Position
 
-Phase: Not started (definindo roadmap)
+Phase: 35 — Backend White-Label (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-17 — Milestone v2.3 started
+Status: Roadmap defined — ready for planning
+Last activity: 2026-06-17 — Roadmap v2.3 criado (2 fases, 15 requisitos mapeados)
 
 ## Project Status
 
@@ -67,6 +67,8 @@ Last activity: 2026-06-17 — Milestone v2.3 started
 | 32 | API de Busca de Produto | complete (v2.2) |
 | 33 | API de Escrita de Produto | complete (v2.2) |
 | 34 | Frontend de Gestao de Produtos | skipped — decisão API-only (2026-06-17) |
+| 35 | Backend White-Label | not-started (v2.3) |
+| 36 | Frontend White-Label | not-started (v2.3) |
 
 ## Milestones Archived
 
@@ -85,16 +87,19 @@ Last activity: 2026-06-17 — Milestone v2.3 started
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-15)
+See: .planning/PROJECT.md (updated 2026-06-17)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v2.2 - Gestao de Produtos do Athos CRUD (phases 32-34)
+Current focus: v2.3 - White-Label Multi-Empresa (phases 35-36)
 
 ## Active Context
 
 - Milestone v2.3 iniciado (2026-06-17): White-Label Multi-Empresa
-- Escopo: empresa_config (Prisma) + logo upload (MinIO) + painel /admin + frontend/PDF/NFS-e dinâmicos
-- Fora do escopo: credenciais de integração (ficam em env vars); multi-tenant (deploy separado por empresa)
+- Escopo: env vars EMPRESA_* documentadas + PDF extraído para .hbs + NFS-e dehardcoded + frontend 8 arquivos dehardcoded + CSS theming
+- Fora do escopo: painel admin no sistema (WL-01), upload de logo via UI (WL-02), templates PDF gerenciados por UI (WL-03), credenciais de integração, multi-tenant
 - Stack: NestJS + Next.js + Prisma + PostgreSQL
+- Arquitetura PDF: template inline em quotes-pdf.template.ts → extrair para apps/backend/templates/quote-default.hbs
+- NFS-e: "3520400" hardcoded na linha 60 de nfse.service.ts → EMPRESA_MUNICIPIO_IBGE via ConfigService
+- Frontend: 8 arquivos para dehardcode (layout.tsx + 5 páginas internas + 2 páginas públicas)
 - Proximo passo: /gsd-plan-phase 35
 
 ## Decisions Log
@@ -144,6 +149,8 @@ Current focus: v2.2 - Gestao de Produtos do Athos CRUD (phases 32-34)
 | 2026-06-15 | SPROD-02 (auth) atribuido a Phase 32 (primeiro endpoint) | Auth estabelecida desde o inicio; nao diferida para a fase de escrita |
 | 2026-06-15 | SPROD-04 (Swagger) atribuido a Phase 33 (write phase) | Documentacao cobre a superficie completa da API apos write endpoints existirem |
 | 2026-06-17 | Phase 34 (Frontend de Gestao de Produtos) descartada — entrega API-only | Operador decidiu que a API REST de produtos e suficiente; UI nao necessaria para esta iteracao |
+| 2026-06-17 | v2.3 usa env vars (.env por deploy) em vez de tabela empresa_config no banco | Abordagem mais simples; sem Prisma migration, sem MinIO, sem painel admin — deploy separado por empresa com .env próprio |
+| 2026-06-17 | EMPRESA_PDF_TEMPLATE_PATH com fallback para template padrão .hbs — template customizado montado via volume Docker | Permite white-label de PDF sem rebuild da imagem; padrão funciona out-of-the-box |
 
 ## Notes
 
@@ -208,4 +215,4 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 
 ## Operator Next Steps
 
-- Milestone v2.3 em planejamento. Próximo passo: `/gsd-plan-phase 35`
+- Roadmap v2.3 definido (2026-06-17). Próximo passo: `/gsd-plan-phase 35`

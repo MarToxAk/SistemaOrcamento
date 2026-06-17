@@ -76,11 +76,52 @@
 
 ---
 
+## v2.3 — White-Label Multi-Empresa
+
+### Phases
+
+- [ ] **Phase 35: Backend White-Label** - Env vars documentadas, NFS-e dehardcoded, template PDF extraído para .hbs e variáveis de empresa passadas ao renderer
+- [ ] **Phase 36: Frontend White-Label** - 8 arquivos frontend dehardcoded; nome, logo, CNPJ, endereço e cor lidos de env vars; CSS theming via custom property
+
+### Phase Details
+
+#### Phase 35: Backend White-Label
+**Goal**: Sistema backend completamente configurável por empresa via env vars — dados fiscais e PDF apontam para a empresa do deploy, não para BomCusto hardcoded
+**Depends on**: Phase 34 (fundação v2.2 completa)
+**Requirements**: CFG-01, CFG-02, CFG-03, CFG-04, CFG-05, PDF-01, PDF-02, PDF-03, PDF-04, PDF-05, NFSE-01
+**Success Criteria** (what must be TRUE):
+  1. Ao copiar `.env.example` e preencher as variáveis `EMPRESA_*`, um novo deploy do backend exibe nos PDFs gerados o nome, CNPJ, endereço e logo da nova empresa — sem editar nenhum arquivo TypeScript
+  2. PDF gerado usa o template `.hbs` externo em `apps/backend/templates/quote-default.hbs`; ao definir `EMPRESA_PDF_TEMPLATE_PATH` apontando para um `.hbs` customizado montado via volume Docker, o PDF usa esse template alternativo
+  3. NFS-e emitida usa o código IBGE do município lido de `EMPRESA_MUNICIPIO_IBGE` — a string `"3520400"` não existe mais no código-fonte
+  4. `.env.example` lista todas as variáveis `EMPRESA_*` com os valores atuais da BomCusto como defaults e comentários explicativos para cada uma
+**Plans**: TBD
+
+#### Phase 36: Frontend White-Label
+**Goal**: Todas as páginas do sistema exibem nome, logo, CNPJ, endereço e cor da empresa a partir de env vars — nenhuma referência a "BomCusto" permanece hardcoded no frontend
+**Depends on**: Phase 35
+**Requirements**: FRONT-01, FRONT-02, FRONT-03, FRONT-04
+**Success Criteria** (what must be TRUE):
+  1. Ao definir `EMPRESA_NOME=Outra Empresa` e restartar o servidor Next.js, a aba do navegador, o cabeçalho das 5 páginas internas e as 2 páginas públicas exibem "Outra Empresa" — sem nenhum "BomCusto" visível
+  2. Logo exibida em todas as páginas internas e públicas vem de `EMPRESA_LOGO_URL`, não do arquivo estático `/media/logo-primary.png`
+  3. Ao definir `EMPRESA_COR_PRIMARIA=#e63946`, todos os elementos de branding (botões primários, bordas de destaque, links de ação) assumem a nova cor — a troca afeta o sistema inteiro via CSS custom property sem editar CSS
+  4. Páginas públicas de aprovação e status (`/orcamento/[id]/approve` e `/orcamento/[id]/status`) exibem o logo e o nome corretos da empresa mesmo sem autenticação
+**Plans**: TBD
+**UI hint**: yes
+
+### Progress Table
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 35. Backend White-Label | 0/? | Not started | - |
+| 36. Frontend White-Label | 0/? | Not started | - |
+
+---
+
 ## Estado atual
 
-**Milestone v2.2 concluído (2026-06-17).** Fases 32 e 33 entregues (API de busca + escrita de produto). Phase 34 (Frontend) descartada por decisão: API-only é suficiente para a entrega atual.
+**Milestone v2.3 em andamento.** Roadmap definido em 2026-06-17. Fases 35-36 pendentes de planejamento e execução.
 
-Próximo passo: `/gsd-new-milestone` para iniciar v2.3
+Próximo passo: `/gsd-plan-phase 35`
 
 ## Histórico arquivado
 
