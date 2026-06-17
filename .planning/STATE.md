@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.2
-milestone_name: Gestão de Produtos do Athos
-current_phase: 33
-status: complete
+milestone: v2.3
+milestone_name: White-Label Multi-Empresa
+current_phase: 0
+status: planning
 last_updated: "2026-06-17T00:00:00.000Z"
 last_activity: 2026-06-17
 progress:
-  total_phases: 3
-  completed_phases: 2
-  skipped_phases: 1
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-06-17 — Milestone v2.2 concluído (API-only; Phase 34 frontend descartada)
-Current phase: 33
-Milestone: v2.2 — Gestão de Produtos do Athos (API)
+Last updated: 2026-06-17 — Milestone v2.3 iniciado (White-Label Multi-Empresa)
+Current phase: —
+Milestone: v2.3 — White-Label Multi-Empresa
 
 ---
 
 ## Current Position
 
-Phase: 33 (api-de-escrita-de-produto) — COMPLETE
-Status: Milestone v2.2 encerrado. Phase 34 descartada por decisão do operador (API-only).
-Last activity: 2026-06-17
+Phase: Not started (definindo roadmap)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-17 — Milestone v2.3 started
 
 ## Project Status
 
@@ -91,10 +91,11 @@ Current focus: v2.2 - Gestao de Produtos do Athos CRUD (phases 32-34)
 
 ## Active Context
 
-- Milestone v2.2 CONCLUÍDO (2026-06-17) — API de Gestão de Produtos entregue (Fases 32 e 33)
-- Phase 34 (Frontend) descartada: operador optou por API-only
+- Milestone v2.3 iniciado (2026-06-17): White-Label Multi-Empresa
+- Escopo: empresa_config (Prisma) + logo upload (MinIO) + painel /admin + frontend/PDF/NFS-e dinâmicos
+- Fora do escopo: credenciais de integração (ficam em env vars); multi-tenant (deploy separado por empresa)
 - Stack: NestJS + Next.js + Prisma + PostgreSQL
-- Proximo passo: /gsd-new-milestone para v2.3
+- Proximo passo: /gsd-plan-phase 35
 
 ## Decisions Log
 
@@ -207,4 +208,4 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 
 ## Operator Next Steps
 
-- Milestone v2.2 encerrado. Iniciar próximo ciclo: `/gsd-new-milestone`
+- Milestone v2.3 em planejamento. Próximo passo: `/gsd-plan-phase 35`

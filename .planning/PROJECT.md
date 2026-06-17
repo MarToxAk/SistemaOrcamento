@@ -21,22 +21,27 @@ Entregas principais:
 
 Milestone anterior: v2.0 - Gestão Integrada Financeira, Caixa e Dashboards (2026-05-22).
 
-## Current Milestone: v2.2 Gestão de Produtos do Athos (CRUD)
+## Last Shipped Milestone: v2.2 — Gestão de Produtos do Athos (API)
 
-**Phase 32 complete (2026-06-15):** ProdutoController read-only sob /athos/produtos com busca paginada, lookups e consulta por id. 184/184 testes verdes.
+Shipped: 2026-06-17. Fases 32-33 entregues (API de busca e escrita de produto via REST). Phase 34 (frontend) descartada por decisão: API-only foi suficiente.
 
-**Phase 33 complete (2026-06-16):** API de escrita de produto (POST /athos/produtos, PATCH /athos/produtos/:id, PATCH /athos/produtos/:id/status) com AthosProdutoService, DTOs validados, 22 testes unitários (19 service + 3 controller). 206/206 testes verdes.
+## Current Milestone: v2.3 — White-Label Multi-Empresa
 
-**Goal:** Permitir buscar, criar, editar e desativar produtos da tabela `produto` do Athos pelo Sistema de Orçamento, via endpoint REST + tela no frontend, com escrita controlada e sem exclusão física.
+**Goal:** Tornar o sistema implantável para qualquer empresa sem editar código — branding, dados fiscais e logo configuráveis via painel admin.
 
 **Target features:**
-- Buscar/listar produtos com filtros (descrição, código de barras, departamento/grupo/marca), retornando a linha completa
-- Criar produto no Athos respeitando idproduto serial, datacadastro, idusuariocadastro, trigger tg_alterarproduto e rules
-- Editar preço e informações de cadastro do produto
-- Desativar produto (soft-delete via statusproduto/vendeproduto = false) — sem DELETE físico
-- Tela de busca e gestão de produtos no frontend Next.js
+- Tabela `empresa_config` no banco (nome, CNPJ, endereço, cores, município NFS-e) com seed automático dos dados atuais da BomCusto
+- Upload de logo via painel admin → MinIO → URL salva no banco
+- Painel admin `/admin` com formulário completo e upload de logo com preview
+- Frontend dinâmico: título da aba, cabeçalho das páginas, logo lidos de `empresa_config`
+- PDF template: dehardcode nome/CNPJ/endereço/logo (usa `empresa_config`)
+- NFS-e: município/código prestador removidos do hardcode → lidos de `empresa_config`
 
-Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API no fechamento).
+**Fora do escopo:**
+- Credenciais de integração (Athos DB, EFI, Chatwoot, iiBrasil) — permanecem em env vars por segurança
+- Multi-tenant (shared deploy) — cada empresa tem seu próprio deploy com `.env` próprio
+
+Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API).
 
 ## Requirements
 
@@ -123,4 +128,4 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferido
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-06-16 — Phase 33 complete (API de Escrita de Produto)*
+*Last updated: 2026-06-17 — Milestone v2.3 iniciado (White-Label Multi-Empresa)*
