@@ -94,7 +94,10 @@
   2. PDF gerado usa o template `.hbs` externo em `apps/backend/templates/quote-default.hbs`; ao definir `EMPRESA_PDF_TEMPLATE_PATH` apontando para um `.hbs` customizado montado via volume Docker, o PDF usa esse template alternativo
   3. NFS-e emitida usa o código IBGE do município lido de `EMPRESA_MUNICIPIO_IBGE` — a string `"3520400"` não existe mais no código-fonte
   4. `.env.example` lista todas as variáveis `EMPRESA_*` com os valores atuais da BomCusto como defaults e comentários explicativos para cada uma
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 35-01-PLAN.md — NfseService: CODIGO_MUNICIPIO vira getter computado lendo EMPRESA_MUNICIPIO_IBGE (NFSE-01, CFG-04)
+- [ ] 35-02-PLAN.md — Template PDF extraído para quote-default.hbs com variáveis de empresa + COPY no Dockerfile (PDF-02/03/05, CFG-02/03/05)
+- [ ] 35-03-PLAN.md — renderHtml cadeia de fallback + dados de empresa, REQUIRED_ENV_VARS e .env.example (PDF-01/04, CFG-01..05)
 
 #### Phase 36: Frontend White-Label
 **Goal**: Todas as páginas do sistema exibem nome, logo, CNPJ, endereço e cor da empresa a partir de env vars — nenhuma referência a "BomCusto" permanece hardcoded no frontend
@@ -112,7 +115,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 35. Backend White-Label | 0/? | Not started | - |
+| 35. Backend White-Label | 0/3 | Planned | - |
 | 36. Frontend White-Label | 0/? | Not started | - |
 
 ---
