@@ -33,6 +33,7 @@ COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 COPY --from=build /app/apps/backend/package.json ./apps/backend/package.json
 COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
 COPY --from=build /app/apps/backend/scripts ./apps/backend/scripts
+COPY --from=build /app/apps/backend/templates ./apps/backend/templates
 COPY --from=build /app/package.json ./package.json
 
 RUN chmod +x ./apps/backend/scripts/bootstrap-runtime.sh
