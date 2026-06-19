@@ -13,7 +13,7 @@ Requisitos do milestone v2.3. Sistema configurável por empresa via variáveis d
 - [ ] **CFG-01**: `.env.example` documenta todas as variáveis novas com valores BomCusto como defaults e comentários explicativos
 - [ ] **CFG-02**: `EMPRESA_LOGO_URL` — URL pública do logo da empresa, usada no frontend e no PDF
 - [ ] **CFG-03**: `EMPRESA_NOME`, `EMPRESA_CNPJ`, `EMPRESA_ENDERECO` — dados textuais exibidos no frontend, PDF e assinaturas
-- [ ] **CFG-04**: `EMPRESA_MUNICIPIO_IBGE` — código IBGE do município do prestador, substitui `"3520400"` hardcoded no NFS-e
+- [x] **CFG-04**: `EMPRESA_MUNICIPIO_IBGE` — código IBGE do município do prestador, substitui `"3520400"` hardcoded no NFS-e
 - [ ] **CFG-05**: `EMPRESA_COR_PRIMARIA` (hex, ex: `#0d6efd`) — cor primária da marca aplicada via CSS custom property
 
 ### Frontend Dinâmico (FRONT)
@@ -33,7 +33,7 @@ Requisitos do milestone v2.3. Sistema configurável por empresa via variáveis d
 
 ### NFS-e Dinâmico (NFSE)
 
-- [ ] **NFSE-01**: `CODIGO_MUNICIPIO` no `NfseService` (`"3520400"` hardcoded na linha 60) lido de `EMPRESA_MUNICIPIO_IBGE` via `ConfigService`
+- [x] **NFSE-01**: `CODIGO_MUNICIPIO` no `NfseService` (`"3520400"` hardcoded na linha 60) lido de `EMPRESA_MUNICIPIO_IBGE` via `ConfigService`
 
 ## v2 Requirements
 

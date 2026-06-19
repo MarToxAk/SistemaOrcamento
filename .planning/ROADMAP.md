@@ -28,23 +28,29 @@
 ### Phase Details
 
 #### Phase 32: API de Busca de Produto
+
 **Goal**: Operador pode buscar e consultar produtos do Athos via API REST autenticada
 **Depends on**: Phase 31 (Athos read-path estabelecido)
 **Requirements**: BPROD-01, BPROD-02, BPROD-03, BPROD-04, BPROD-05, SPROD-02
 **Success Criteria** (what must be TRUE):
+
   1. Operador pode buscar produtos por descrição parcial (case-insensitive) e obter resultados paginados com a linha completa
   2. Operador pode buscar produtos por código de barras (codigobarra1/codigobarra2) e obter resultados paginados
   3. Operador pode filtrar produtos combinando departamento, grupo e/ou marca
   4. Operador pode consultar um produto específico por idproduto e receber todos os campos
   5. Qualquer requisição sem x-internal-api-key válida retorna 401 — o mesmo guard do restante da API
+
 **Plans**: 1 plano
+
 - [x] 32-01-PLAN.md — ProdutoController (busca/id/lookups) + métodos de leitura no AthosService + tipos verificados + testes BPROD-01..05
 
 #### Phase 33: API de Escrita de Produto
+
 **Goal**: Operador pode criar, editar e desativar produtos no Athos de forma segura, com escrita restrita à tabela produto, trigger respeitado e todas as operações registradas em log
 **Depends on**: Phase 32
 **Requirements**: CPROD-01, CPROD-02, CPROD-03, CPROD-04, EPROD-01, EPROD-02, EPROD-03, EPROD-04, DPROD-01, DPROD-02, DPROD-03, SPROD-01, SPROD-03, SPROD-04
 **Success Criteria** (what must be TRUE):
+
   1. Operador cria um produto: idproduto gerado pelo serial do Athos, datacadastro e idusuariocadastro preenchidos automaticamente, trigger tg_alterarproduto e rules atualizardatahora* disparados sem desabilitá-los
   2. Ao informar campo inválido (descontomaximo fora de 0–100, FK de departamento/grupo/marca inexistente), a API retorna erro 422 com mensagem clara — nenhum dado é gravado
   3. Operador edita preços (valorvenda1..6, promoção, atacado) e informações de cadastro; dataultimaalteracao e idusuarioalteracao são atualizados automaticamente pela trigger/rule
@@ -52,17 +58,21 @@
   5. Toda operação de escrita (create/edit/deactivate/reactivate) gera entrada de log estruturado com quem, quando e o quê foi alterado
   6. Nenhuma outra tabela do Athos além de produto recebe INSERT ou UPDATE em qualquer fluxo do sistema
   7. Todos os endpoints de produto estão documentados no Swagger com payloads de request e response
+
 **Plans**: TBD
 
 #### Phase 34: Frontend de Gestão de Produtos
+
 **Goal**: Operador pode buscar, criar, editar e desativar/reativar produtos diretamente pela interface do Sistema de Orçamento, sem abrir o Athos
 **Depends on**: Phase 33
 **Requirements**: UPROD-01, UPROD-02, UPROD-03, UPROD-04
 **Success Criteria** (what must be TRUE):
+
   1. Operador acessa a tela de produtos, digita uma descrição (ou código de barras, ou seleciona departamento/grupo/marca) e vê a lista paginada com os campos do produto
   2. Operador clica em "Novo produto", preenche o formulário e salva — o produto aparece na busca com os dados informados
   3. Operador seleciona um produto, edita preço ou informações de cadastro e confirma — as alterações são refletidas imediatamente na tela de detalhe
   4. Operador desativa um produto ativo e pode reativá-lo pela mesma interface; produto desativado fica visualmente diferenciado na listagem
+
 **Plans**: TBD
 **UI hint**: yes
 
@@ -86,28 +96,35 @@
 ### Phase Details
 
 #### Phase 35: Backend White-Label
+
 **Goal**: Sistema backend completamente configurável por empresa via env vars — dados fiscais e PDF apontam para a empresa do deploy, não para BomCusto hardcoded
 **Depends on**: Phase 34 (fundação v2.2 completa)
 **Requirements**: CFG-01, CFG-02, CFG-03, CFG-04, CFG-05, PDF-01, PDF-02, PDF-03, PDF-04, PDF-05, NFSE-01
 **Success Criteria** (what must be TRUE):
+
   1. Ao copiar `.env.example` e preencher as variáveis `EMPRESA_*`, um novo deploy do backend exibe nos PDFs gerados o nome, CNPJ, endereço e logo da nova empresa — sem editar nenhum arquivo TypeScript
   2. PDF gerado usa o template `.hbs` externo em `apps/backend/templates/quote-default.hbs`; ao definir `EMPRESA_PDF_TEMPLATE_PATH` apontando para um `.hbs` customizado montado via volume Docker, o PDF usa esse template alternativo
   3. NFS-e emitida usa o código IBGE do município lido de `EMPRESA_MUNICIPIO_IBGE` — a string `"3520400"` não existe mais no código-fonte
   4. `.env.example` lista todas as variáveis `EMPRESA_*` com os valores atuais da BomCusto como defaults e comentários explicativos para cada uma
-**Plans**: 3 plans
-- [ ] 35-01-PLAN.md — NfseService: CODIGO_MUNICIPIO vira getter computado lendo EMPRESA_MUNICIPIO_IBGE (NFSE-01, CFG-04)
+
+**Plans**: 1/3 plans executed
+
+- [x] 35-01-PLAN.md — NfseService: CODIGO_MUNICIPIO vira getter computado lendo EMPRESA_MUNICIPIO_IBGE (NFSE-01, CFG-04)
 - [ ] 35-02-PLAN.md — Template PDF extraído para quote-default.hbs com variáveis de empresa + COPY no Dockerfile (PDF-02/03/05, CFG-02/03/05)
 - [ ] 35-03-PLAN.md — renderHtml cadeia de fallback + dados de empresa, REQUIRED_ENV_VARS e .env.example (PDF-01/04, CFG-01..05)
 
 #### Phase 36: Frontend White-Label
+
 **Goal**: Todas as páginas do sistema exibem nome, logo, CNPJ, endereço e cor da empresa a partir de env vars — nenhuma referência a "BomCusto" permanece hardcoded no frontend
 **Depends on**: Phase 35
 **Requirements**: FRONT-01, FRONT-02, FRONT-03, FRONT-04
 **Success Criteria** (what must be TRUE):
+
   1. Ao definir `EMPRESA_NOME=Outra Empresa` e restartar o servidor Next.js, a aba do navegador, o cabeçalho das 5 páginas internas e as 2 páginas públicas exibem "Outra Empresa" — sem nenhum "BomCusto" visível
   2. Logo exibida em todas as páginas internas e públicas vem de `EMPRESA_LOGO_URL`, não do arquivo estático `/media/logo-primary.png`
   3. Ao definir `EMPRESA_COR_PRIMARIA=#e63946`, todos os elementos de branding (botões primários, bordas de destaque, links de ação) assumem a nova cor — a troca afeta o sistema inteiro via CSS custom property sem editar CSS
   4. Páginas públicas de aprovação e status (`/orcamento/[id]/approve` e `/orcamento/[id]/status`) exibem o logo e o nome corretos da empresa mesmo sem autenticação
+
 **Plans**: TBD
 **UI hint**: yes
 
@@ -115,7 +132,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 35. Backend White-Label | 0/3 | Planned | - |
+| 35. Backend White-Label | 1/3 | In Progress|  |
 | 36. Frontend White-Label | 0/? | Not started | - |
 
 ---
@@ -129,6 +146,7 @@ Próximo passo: `/gsd-plan-phase 35`
 ## Histórico arquivado
 
 Cada milestone tem roadmap e requisitos completos em `.planning/milestones/`:
+
 - `v{X.Y}-ROADMAP.md` — fases, planos e critérios de sucesso
 - `v{X.Y}-REQUIREMENTS.md` — requisitos com rastreabilidade
 - `v2.1-MILESTONE-AUDIT.md` — auditoria de fechamento (status: passed)
