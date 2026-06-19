@@ -90,7 +90,7 @@
 
 ### Phases
 
-- [ ] **Phase 35: Backend White-Label** - Env vars documentadas, NFS-e dehardcoded, template PDF extraído para .hbs e variáveis de empresa passadas ao renderer
+- [x] **Phase 35: Backend White-Label** - Env vars documentadas, NFS-e dehardcoded, template PDF extraído para .hbs e variáveis de empresa passadas ao renderer (completed 2026-06-19)
 - [ ] **Phase 36: Frontend White-Label** - 8 arquivos frontend dehardcoded; nome, logo, CNPJ, endereço e cor lidos de env vars; CSS theming via custom property
 
 ### Phase Details
@@ -107,11 +107,11 @@
   3. NFS-e emitida usa o código IBGE do município lido de `EMPRESA_MUNICIPIO_IBGE` — a string `"3520400"` não existe mais no código-fonte
   4. `.env.example` lista todas as variáveis `EMPRESA_*` com os valores atuais da BomCusto como defaults e comentários explicativos para cada uma
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 - [x] 35-01-PLAN.md — NfseService: CODIGO_MUNICIPIO vira getter computado lendo EMPRESA_MUNICIPIO_IBGE (NFSE-01, CFG-04)
 - [x] 35-02-PLAN.md — Template PDF extraído para quote-default.hbs com variáveis de empresa + COPY no Dockerfile (PDF-02/03/05, CFG-02/03/05)
-- [ ] 35-03-PLAN.md — renderHtml cadeia de fallback + dados de empresa, REQUIRED_ENV_VARS e .env.example (PDF-01/04, CFG-01..05)
+- [x] 35-03-PLAN.md — renderHtml cadeia de fallback + dados de empresa, REQUIRED_ENV_VARS e .env.example (PDF-01/04, CFG-01..05)
 
 #### Phase 36: Frontend White-Label
 
@@ -132,7 +132,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 35. Backend White-Label | 2/3 | In Progress|  |
+| 35. Backend White-Label | 3/3 | Complete   | 2026-06-19 |
 | 36. Frontend White-Label | 0/? | Not started | - |
 
 ---
