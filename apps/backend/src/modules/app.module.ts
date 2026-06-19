@@ -27,6 +27,10 @@ const REQUIRED_ENV_VARS = [
   "CHATWOOT_ACCOUNT_ID",
   "NFSE_TOKEN",
   "ATHOS_SISTEMA_USUARIO_ID",
+  "EMPRESA_NOME",
+  "EMPRESA_CNPJ",
+  "EMPRESA_ENDERECO",
+  "EMPRESA_MUNICIPIO_IBGE",
 ] as const;
 
 function validateEnv(config: Record<string, unknown>) {
@@ -36,7 +40,9 @@ function validateEnv(config: Record<string, unknown>) {
   });
 
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
+    throw new Error(
+      `Missing required environment variables: ${missing.join(", ")} — See .env.example for EMPRESA_* setup instructions`,
+    );
   }
 
   return config;
