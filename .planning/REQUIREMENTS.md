@@ -11,10 +11,10 @@ Requisitos do milestone v2.3. Sistema configurável por empresa via variáveis d
 ### Configuração da Empresa (CFG)
 
 - [ ] **CFG-01**: `.env.example` documenta todas as variáveis novas com valores BomCusto como defaults e comentários explicativos
-- [ ] **CFG-02**: `EMPRESA_LOGO_URL` — URL pública do logo da empresa, usada no frontend e no PDF
-- [ ] **CFG-03**: `EMPRESA_NOME`, `EMPRESA_CNPJ`, `EMPRESA_ENDERECO` — dados textuais exibidos no frontend, PDF e assinaturas
+- [x] **CFG-02**: `EMPRESA_LOGO_URL` — URL pública do logo da empresa, usada no frontend e no PDF
+- [x] **CFG-03**: `EMPRESA_NOME`, `EMPRESA_CNPJ`, `EMPRESA_ENDERECO` — dados textuais exibidos no frontend, PDF e assinaturas
 - [x] **CFG-04**: `EMPRESA_MUNICIPIO_IBGE` — código IBGE do município do prestador, substitui `"3520400"` hardcoded no NFS-e
-- [ ] **CFG-05**: `EMPRESA_COR_PRIMARIA` (hex, ex: `#0d6efd`) — cor primária da marca aplicada via CSS custom property
+- [x] **CFG-05**: `EMPRESA_COR_PRIMARIA` (hex, ex: `#0d6efd`) — cor primária da marca aplicada via CSS custom property
 
 ### Frontend Dinâmico (FRONT)
 
@@ -26,10 +26,10 @@ Requisitos do milestone v2.3. Sistema configurável por empresa via variáveis d
 ### PDF Dinâmico e Customizável (PDF)
 
 - [ ] **PDF-01**: Backend passa `EMPRESA_NOME`, `EMPRESA_CNPJ`, `EMPRESA_ENDERECO` e `EMPRESA_LOGO_URL` ao renderizador do template PDF via env vars
-- [ ] **PDF-02**: Template padrão usa as variáveis de empresa em vez de texto hardcoded (nome, CNPJ, endereço, assinatura "equipe X", logo)
-- [ ] **PDF-03**: Template PDF extraído de string inline em TypeScript para arquivo `.hbs` externo em `apps/backend/templates/quote-default.hbs`
+- [x] **PDF-02**: Template padrão usa as variáveis de empresa em vez de texto hardcoded (nome, CNPJ, endereço, assinatura "equipe X", logo)
+- [x] **PDF-03**: Template PDF extraído de string inline em TypeScript para arquivo `.hbs` externo em `apps/backend/templates/quote-default.hbs`
 - [ ] **PDF-04**: `EMPRESA_PDF_TEMPLATE_PATH` (opcional) aponta para template customizado — fallback para o template padrão do sistema se ausente; template customizado pode ser montado via volume Docker
-- [ ] **PDF-05**: Template padrão documenta via comentários Handlebars todas as variáveis disponíveis (dados da empresa, cliente, itens, totais, carimbos)
+- [x] **PDF-05**: Template padrão documenta via comentários Handlebars todas as variáveis disponíveis (dados da empresa, cliente, itens, totais, carimbos)
 
 ### NFS-e Dinâmico (NFSE)
 
