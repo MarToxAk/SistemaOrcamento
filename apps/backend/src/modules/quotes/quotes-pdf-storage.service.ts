@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import { Injectable, InternalServerErrorException, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Handlebars from "handlebars";
@@ -97,7 +100,37 @@ export class QuotesPdfStorageService {
   }
 
   private renderHtml(payload: QuotePdfData): string {
-    const template = Handlebars.compile(HTML_TEMPLATE);
+    // Template chain resolution (D-05/D-06):
+    // (1) EMPRESA_PDF_TEMPLATE_PATH defined -> use it (error if file missing)
+    // (2) apps/backend/templates/quote-default.hbs present -> use it
+    // (3) fallback -> inline QUOTES_PDF_HTML_TEMPLATE string (zero regression risk)
+    let templateSource: string;
+    const customPath = this.configService.get<string>("EMPRESA_PDF_TEMPLATE_PATH");
+
+    if (customPath) {
+      if (!existsSync(customPath)) {
+        throw new InternalServerErrorException(
+          `EMPRESA_PDF_TEMPLATE_PATH definida mas arquivo nao encontrado: ${customPath}`,
+        );
+      }
+      templateSource = readFileSync(customPath, "utf-8");
+    } else {
+      const defaultPath = path.resolve(process.cwd(), "apps/backend/templates/quote-default.hbs");
+      if (existsSync(defaultPath)) {
+        templateSource = readFileSync(defaultPath, "utf-8");
+      } else {
+        templateSource = QUOTES_PDF_HTML_TEMPLATE;
+      }
+    }
+
+    // Empresa data via ConfigService (D-07)
+    const empresaNome = this.configService.get<string>("EMPRESA_NOME") ?? "";
+    const empresaCnpj = this.configService.get<string>("EMPRESA_CNPJ") ?? "";
+    const empresaEndereco = this.configService.get<string>("EMPRESA_ENDERECO") ?? "";
+    const empresaLogoUrl = this.configService.get<string>("EMPRESA_LOGO_URL"); // undefined when absent (D-08 / Pitfall 3)
+    const empresaCor = this.configService.get<string>("EMPRESA_COR_PRIMARIA") ?? "#0d6efd";
+
+    const template = Handlebars.compile(templateSource);
 
     const itens = (payload.itens ?? []).map((item) => ({
       sequenciaitem: item.sequenciaitem ?? "-",
@@ -138,6 +171,11 @@ export class QuotesPdfStorageService {
         valor: this.formatCurrency(payload.totais?.valor ?? 0),
         desconto: this.formatCurrency(payload.totais?.desconto ?? 0),
       },
+      empresaNome,
+      empresaCnpj,
+      empresaEndereco,
+      empresaLogoUrl,
+      empresaCor,
     });
   }
 
