@@ -5,7 +5,8 @@ milestone_name: — White-Label Multi-Empresa
 current_phase: 36 — Frontend White-Label
 current_phase_name: backend-white-label
 status: verifying
-last_updated: "2026-06-19T12:23:04.159Z"
+stopped_at: Phase 36 context gathered
+last_updated: "2026-06-19T16:19:25.883Z"
 last_activity: 2026-06-19
 last_activity_desc: Phase 35 complete, transitioned to Phase 36
 progress:
@@ -225,3 +226,9 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 |-------|------|----------|-------|
 | Phase 35 P01 | 8min | 1 tasks | 2 files |
 | Phase 35 P02 | 8min | 2 tasks | 2 files |
+
+## Session
+
+**Last session:** 2026-06-19T16:19:25.832Z
+**Stopped at:** Phase 36 context gathered
+**Resume file:** .planning/phases/36-frontend-white-label/36-CONTEXT.md
