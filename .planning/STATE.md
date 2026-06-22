@@ -2,35 +2,35 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: — White-Label Multi-Empresa
-current_phase: 36 — Frontend White-Label
-current_phase_name: backend-white-label
-status: verifying
-stopped_at: Phase 36 context gathered
-last_updated: "2026-06-19T16:19:25.883Z"
-last_activity: 2026-06-19
-last_activity_desc: Phase 35 complete, transitioned to Phase 36
+current_phase: 36
+current_phase_name: frontend-white-label
+status: executing
+stopped_at: Phase 36 UI-SPEC approved
+last_updated: "2026-06-22T13:09:25.334Z"
+last_activity: 2026-06-22
+last_activity_desc: Phase 36 execution started
 progress:
   total_phases: 2
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
   percent: 50
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-06-17 — Roadmap v2.3 definido (White-Label Multi-Empresa)
-Current phase: 36 — Frontend White-Label
+Current phase: 36
 Milestone: v2.3 — White-Label Multi-Empresa
 
 ---
 
 ## Current Position
 
-Phase: 35 (backend-white-label) — EXECUTING
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-06-19 — Phase 35 complete, transitioned to Phase 36
+Phase: 36 (frontend-white-label) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-06-22 — Phase 36 execution started
 
 ## Project Status
 
@@ -226,9 +226,15 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 |-------|------|----------|-------|
 | Phase 35 P01 | 8min | 1 tasks | 2 files |
 | Phase 35 P02 | 8min | 2 tasks | 2 files |
+| Phase 36 P01 | 8min | 2 tasks | 4 files |
 
 ## Session
 
-**Last session:** 2026-06-19T16:19:25.832Z
-**Stopped at:** Phase 36 context gathered
-**Resume file:** .planning/phases/36-frontend-white-label/36-CONTEXT.md
+**Last session:** 2026-06-22T13:09:25.319Z
+**Stopped at:** Phase 36 UI-SPEC approved
+**Resume file:** .planning/phases/36-frontend-white-label/36-UI-SPEC.md
+
+## Decisions
+
+- [Phase 36]: Módulo empresa.ts usa nullish coalescing com fallbacks concretos — zero risco de undefined chegando ao JSX
+- [Phase 36]: CSS custom property --cor-primaria injetada no <head> via <style> inline — Server Component lê env var antes do HTML ser enviado ao cliente
