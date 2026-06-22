@@ -150,7 +150,7 @@ Plans:
 
 **Goal:** Permitir trocar o layout/template do PDF de orçamento a qualquer momento pelo próprio sistema (usuário final), sem alterar código/git nem reiniciar o servidor.
 **Requirements:** TBD (relacionados às ideias deferidas WL-01 painel admin e WL-03 templates PDF gerenciados, ver 36-CONTEXT.md)
-**Plans:** 0 plans
+**Plans:** 6 plans
 
 **Contexto / escopo capturado:**
 - **Backend:** armazenar templates Handlebars fora do código (MinIO ou tabela no banco) como single source of truth editável em runtime; endpoints para listar modelos, selecionar o template ativo, subir um novo e marcar qual está em uso; refatorar `renderHtml()` em `apps/backend/src/modules/quotes/quotes-pdf-storage.service.ts` (hoje lê `quote-default.hbs`/`EMPRESA_PDF_TEMPLATE_PATH` via `readFileSync` por requisição) para buscar o template ativo do storage.
@@ -160,7 +160,14 @@ Plans:
 - **Relação:** extensão das fases 35 (backend white-label) e 36 (frontend white-label).
 
 Plans:
-- [ ] TBD (promote with /gsd-review-backlog when ready)
+- [ ] 999.1-01-PLAN.md — Storage: modelo Prisma PdfTemplate + migration + seed dos 3 presets + scaffolds de teste (Wave 1)
+- [ ] 999.1-02-PLAN.md — AdminAuthGuard (x-admin-api-key) + @AdminOnly + env ADMIN_API_KEY (Wave 1)
+- [ ] 999.1-03-PLAN.md — Render seguro: renderHtml usa template ativo+fallback + hardening Handlebars/Puppeteer anti-SSRF (Wave 2)
+- [ ] 999.1-04-PLAN.md — 3 presets com fontes/ícones inline + dehardcode do contato (Wave 2)
+- [ ] 999.1-05-PLAN.md — Módulo backend: upload/validar/ativar/excluir/preview + checkpoint sanitize-html (Wave 3)
+- [ ] 999.1-06-PLAN.md — Frontend: tela de gerenciamento (galeria/upload/preview) + rotas proxy admin (Wave 4)
+
+**⚠ Follow-up obrigatório antes da execução:** `/gsd-secure-phase 999.1` — esta fase envia upload de template arbitrário; a postura `--no-sandbox`+root do Chromium (assunção A4, alto risco) fica explicitamente deferida para esse passo.
 
 ---
 
