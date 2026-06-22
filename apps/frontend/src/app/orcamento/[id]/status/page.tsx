@@ -3,6 +3,7 @@
 import Script from "next/script";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { EMPRESA_NOME, EMPRESA_LOGO_URL } from "@/lib/empresa";
 
 type StatusState = "loading" | "loaded" | "error";
 
@@ -103,11 +104,11 @@ export default function StatusPage() {
           <div className="status-header text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/media/logo-primary.png"
-              alt="Bom Custo Papelaria &amp; Gráfica Rápida"
+              src={EMPRESA_LOGO_URL}
+              alt={EMPRESA_NOME}
               style={{ maxWidth: 140, maxHeight: 80, background: "#fff", borderRadius: 8, padding: 6 }}
             />
-            <div className="mt-2 small text-muted">Bom Custo Papelaria &amp; Gráfica Rápida</div>
+            <div className="mt-2 small text-muted">{EMPRESA_NOME}</div>
           </div>
 
           <div className="p-4 text-center">
