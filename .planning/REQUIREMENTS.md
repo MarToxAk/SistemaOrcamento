@@ -19,7 +19,7 @@ Requisitos do milestone v2.3. Sistema configurável por empresa via variáveis d
 ### Frontend Dinâmico (FRONT)
 
 - [x] **FRONT-01**: `layout.tsx` usa `EMPRESA_NOME` no `metadata.title` em vez de "BomCusto Orcamento" hardcoded
-- [ ] **FRONT-02**: 5 páginas internas (`orcamento/page`, `orcamento/novo`, `orcamento/[id]`, `contas-receber/page`, `contas-receber/[idcliente]`) exibem logo/nome/CNPJ/endereço lidos das env vars
+- [x] **FRONT-02**: 5 páginas internas (`orcamento/page`, `orcamento/novo`, `orcamento/[id]`, `contas-receber/page`, `contas-receber/[idcliente]`) exibem logo/nome/CNPJ/endereço lidos das env vars
 - [ ] **FRONT-03**: 2 páginas públicas (`orcamento/[id]/approve`, `orcamento/[id]/status`) exibem logo e nome lidos das env vars
 - [x] **FRONT-04**: Cor primária (`EMPRESA_COR_PRIMARIA`) injetada como CSS custom property no `layout.tsx`, substituindo cores hardcoded de branding
 
