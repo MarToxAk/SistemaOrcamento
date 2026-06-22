@@ -125,7 +125,13 @@
   3. Ao definir `EMPRESA_COR_PRIMARIA=#e63946`, todos os elementos de branding (botões primários, bordas de destaque, links de ação) assumem a nova cor — a troca afeta o sistema inteiro via CSS custom property sem editar CSS
   4. Páginas públicas de aprovação e status (`/orcamento/[id]/approve` e `/orcamento/[id]/status`) exibem o logo e o nome corretos da empresa mesmo sem autenticação
 
-**Plans**: TBD
+**Plans**: 3 planos
+
+Plans:
+- [ ] 36-01-PLAN.md — empresa.ts + layout.tsx (generateMetadata + CSS var) + globals.css + .env.example
+- [ ] 36-02-PLAN.md — 5 páginas internas dehardcoded (logo/nome/CNPJ/endereço/email de empresa.ts)
+- [ ] 36-03-PLAN.md — 2 páginas públicas dehardcoded (logo + nome de empresa.ts)
+
 **UI hint**: yes
 
 ### Progress Table
@@ -133,7 +139,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 35. Backend White-Label | 3/3 | Complete    | 2026-06-19 |
-| 36. Frontend White-Label | 0/? | Not started | - |
+| 36. Frontend White-Label | 0/3 | Not started | - |
 
 ---
 
