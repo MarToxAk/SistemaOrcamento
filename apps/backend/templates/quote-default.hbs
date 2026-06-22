@@ -1,13 +1,16 @@
 {{!
-  Template PDF de orçamento BomCusto — quote-default.hbs
-  Versão: 2 (white-label · colorful edition)
+  Template PDF de orçamento — quote-default.hbs
+  Versão: 3 (white-label · colorful edition · contact dehardcoded D-07)
 
   Variáveis de empresa disponíveis neste template:
-    empresaNome     — ex: "Minha Empresa Grafica & Papelaria LTDA"
-    empresaCnpj     — ex: "00.000.000/0001-00"
-    empresaEndereco — ex: "Rua Principal, 100 — Centro · Cidade / SP · CEP 00000-000"
-    empresaLogoUrl  — URL pública do logo (ausente = sem tag <img>; nunca use fallback de URL externa)
-    empresaCor      — cor primária hex, ex: "#0d6efd" (sempre presente, fallback do serviço)
+    empresaNome       — ex: "Minha Empresa Grafica & Papelaria LTDA"
+    empresaCnpj       — ex: "00.000.000/0001-00"
+    empresaEndereco   — ex: "Rua Principal, 100 — Centro · Cidade / SP · CEP 00000-000"
+    empresaLogoUrl    — URL pública do logo (ausente = sem tag <img>; nunca use fallback de URL externa)
+    empresaCor        — cor primária hex, ex: "#0d6efd" (sempre presente, fallback do serviço)
+    empresaTelefones  — ex: "(12) 99999-9999 · (12) 3333-4444" (ausente = linha omitida)
+    empresaEmail      — ex: "orcamento@minhaempresa.com.br" (ausente = linha omitida)
+    empresaInstagram  — ex: "@minhaempresa" (ausente = linha omitida)
 
   Variáveis de orçamento:
     idorcamento, dataorcamento
@@ -22,8 +25,9 @@
   passe pencilsTopUrl e pencilsBottomUrl no contexto passado ao template.
   Sem elas o PDF renderiza limpo, sem as faixas decorativas.
 
-  Para customizar completamente este template (incluindo contato, e-mail, redes sociais),
-  crie um arquivo .hbs próprio e defina EMPRESA_PDF_TEMPLATE_PATH no .env do deploy.
+  Contato da empresa (D-07): empresaTelefones, empresaEmail, empresaInstagram são injetados
+  pelo serviço via EMPRESA_TELEFONES / EMPRESA_EMAIL / EMPRESA_INSTAGRAM no .env do deploy.
+  Linhas omitidas quando a variável estiver ausente/vazia.
 }}
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -171,12 +175,18 @@
       <div class="contact-list">
         <span class="icon ic-pin"><i class="bi bi-geo-alt-fill"></i></span>
         <span>{{empresaEndereco}}</span>
+        {{#if empresaTelefones}}
         <span class="icon ic-phone"><i class="bi bi-telephone-fill"></i></span>
-        <span>(12) 99648-4918 · (12) 3896-1474 · (12) 99678-2405</span>
+        <span>{{empresaTelefones}}</span>
+        {{/if}}
+        {{#if empresaEmail}}
         <span class="icon ic-mail"><i class="bi bi-envelope-fill"></i></span>
-        <span>orcamento@bomcustoilhabela.com.br</span>
+        <span>{{empresaEmail}}</span>
+        {{/if}}
+        {{#if empresaInstagram}}
         <span class="icon ic-insta"><i class="bi bi-instagram"></i></span>
-        <span>@bomcustopapelaria</span>
+        <span>{{empresaInstagram}}</span>
+        {{/if}}
       </div>
     </div>
 
