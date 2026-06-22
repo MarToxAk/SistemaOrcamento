@@ -5,15 +5,15 @@ milestone_name: — White-Label Multi-Empresa
 current_phase: 999.1
 current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
 status: executing
-stopped_at: 999.1-03 complete
-last_updated: "2026-06-22T19:38:52.635Z"
+stopped_at: 999.1-04 complete
+last_updated: "2026-06-22T19:54:56.319Z"
 last_activity: 2026-06-22
 last_activity_desc: Phase 999.1 execution started
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ Milestone: v2.3 — White-Label Multi-Empresa
 ## Current Position
 
 Phase: 999.1 (gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-06-22 — Phase 999.1 execution started
 
@@ -231,11 +231,12 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 | Phase 36 P03 | 6min | 1 tasks | 2 files |
 | Phase 999.1 P01 | 10min | 3 tasks | 7 files |
 | Phase 999.1 P03 | 25min | 2 tasks | 6 files |
+| Phase 999.1 P04 | 20min | 3 tasks | 4 files |
 
 ## Session
 
-**Last session:** 2026-06-22T19:38:52.619Z
-**Stopped at:** 999.1-03 complete
+**Last session:** 2026-06-22T19:54:56.303Z
+**Stopped at:** 999.1-04 complete
 **Resume file:** none
 
 ## Decisions
@@ -248,3 +249,5 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 - [Phase ?]: renderHtml tornado publico para preview (D-08)
 - [Phase ?]: shouldAllowRequest como funcao pura exportada (D-02 anti-SSRF, testavel sem Puppeteer)
 - [Phase ?]: Handlebars.create() por render isolado (Pitfall 3)
+- [Phase 999.1]: Os 3 presets PDF (D-06) compartilham exatamente o mesmo conjunto de variaveis Handlebars de empresa/orcamento — trocar de layout nao perde dados — Requisito explicito do plano 999.1-04 para permitir troca de preset em runtime sem reescrever orcamentos
+- [Phase 999.1]: Teste do seed de presets PDF mocka PrismaClient em vez de usar Postgres real — Docker indisponivel neste ambiente de execucao; logica de isActive=true unico e determinada pelos dados estaticos do array PRESETS, nao por comportamento do banco — mock valida a mesma asercao
