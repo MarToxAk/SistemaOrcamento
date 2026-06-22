@@ -2,35 +2,35 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: — White-Label Multi-Empresa
-current_phase: 36
-current_phase_name: frontend-white-label
-status: verifying
+current_phase: 999.1
+current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
+status: executing
 stopped_at: Phase 36 UI-SPEC approved
-last_updated: "2026-06-22T13:17:28.824Z"
+last_updated: "2026-06-22T19:21:23.594Z"
 last_activity: 2026-06-22
-last_activity_desc: Phase 36 execution started
+last_activity_desc: Phase 999.1 execution started
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 12
+  completed_plans: 7
+  percent: 58
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-06-17 — Roadmap v2.3 definido (White-Label Multi-Empresa)
-Current phase: 36
+Current phase: 999.1
 Milestone: v2.3 — White-Label Multi-Empresa
 
 ---
 
 ## Current Position
 
-Phase: 36 (frontend-white-label) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-06-22 — Phase 36 execution started
+Phase: 999.1 (gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-06-22 — Phase 999.1 execution started
 
 ## Project Status
 
@@ -229,10 +229,11 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 | Phase 36 P01 | 8min | 2 tasks | 4 files |
 | Phase 36 P02 | 6min | 2 tasks | 5 files |
 | Phase 36 P03 | 6min | 1 tasks | 2 files |
+| Phase 999.1 P01 | 10min | 3 tasks | 7 files |
 
 ## Session
 
-**Last session:** 2026-06-22T13:17:28.804Z
+**Last session:** 2026-06-22T19:21:23.578Z
 **Stopped at:** Phase 36 UI-SPEC approved
 **Resume file:** .planning/phases/36-frontend-white-label/36-UI-SPEC.md
 
@@ -240,3 +241,6 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 
 - [Phase 36]: Módulo empresa.ts usa nullish coalescing com fallbacks concretos — zero risco de undefined chegando ao JSX
 - [Phase 36]: CSS custom property --cor-primaria injetada no <head> via <style> inline — Server Component lê env var antes do HTML ser enviado ao cliente
+- [Phase ?]: storage banco vs MinIO
+- [Phase ?]: migration manual
+- [Phase ?]: seed incremental
