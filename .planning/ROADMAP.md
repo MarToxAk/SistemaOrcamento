@@ -144,6 +144,26 @@ Plans:
 
 ---
 
+## Backlog
+
+### Phase 999.1: Gerenciamento de layout do PDF de orçamento pela interface (BACKLOG)
+
+**Goal:** Permitir trocar o layout/template do PDF de orçamento a qualquer momento pelo próprio sistema (usuário final), sem alterar código/git nem reiniciar o servidor.
+**Requirements:** TBD (relacionados às ideias deferidas WL-01 painel admin e WL-03 templates PDF gerenciados, ver 36-CONTEXT.md)
+**Plans:** 0 plans
+
+**Contexto / escopo capturado:**
+- **Backend:** armazenar templates Handlebars fora do código (MinIO ou tabela no banco) como single source of truth editável em runtime; endpoints para listar modelos, selecionar o template ativo, subir um novo e marcar qual está em uso; refatorar `renderHtml()` em `apps/backend/src/modules/quotes/quotes-pdf-storage.service.ts` (hoje lê `quote-default.hbs`/`EMPRESA_PDF_TEMPLATE_PATH` via `readFileSync` por requisição) para buscar o template ativo do storage.
+- **Frontend:** tela de configuração com galeria de modelos prontos, botão "usar este", upload de `.hbs` e idealmente preview do PDF antes de salvar.
+- **Modelos prontos:** desenhar 2-3 layouts iniciais (colorido atual + minimalista + clássico) corrigindo o contato hardcoded da BomCusto que ainda existe em `quote-default.hbs` (telefones, email `orcamento@bomcustoilhabela.com.br`, `@bomcustopapelaria`).
+- **⚠ Segurança (requer /gsd-secure-phase):** upload de template arbitrário renderizado por Handlebars + Puppeteer abre risco de injeção de template, SSRF (PDF buscando URLs externas) e execução de conteúdo arbitrário no Chrome headless. Mitigações: sanitização, allowlist de helpers Handlebars, sandbox/flags do Puppeteer, restrição de fontes de rede.
+- **Relação:** extensão das fases 35 (backend white-label) e 36 (frontend white-label).
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+---
+
 ## Estado atual
 
 **Milestone v2.3 em andamento.** Roadmap definido em 2026-06-17. Fases 35-36 pendentes de planejamento e execução.
