@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { adminBackendFetch } from "@/lib/admin-backend-client";
+import { requireAdminSession } from "@/lib/admin-session";
 
-export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!requireAdminSession(req)) {
+    return NextResponse.json({ error: "Sessao expirada ou nao autenticada." }, { status: 401 });
+  }
   const { id: rawId } = await params;
   const id = rawId?.trim();
   if (!id) {

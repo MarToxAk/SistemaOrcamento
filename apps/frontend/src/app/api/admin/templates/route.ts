@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { adminBackendFetch } from "@/lib/admin-backend-client";
+import { requireAdminSession } from "@/lib/admin-session";
 
-export async function GET() {
+function unauthorized() {
+  return NextResponse.json({ error: "Sessao expirada ou nao autenticada." }, { status: 401 });
+}
+
+export async function GET(req: NextRequest) {
+  if (!requireAdminSession(req)) return unauthorized();
   try {
     const res = await adminBackendFetch("/pdf-templates");
     const data = await res.json().catch(() => ({ error: "Resposta invalida do backend." }));
@@ -14,6 +20,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!requireAdminSession(req)) return unauthorized();
   try {
     let body: unknown = undefined;
     try {
