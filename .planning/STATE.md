@@ -5,15 +5,15 @@ milestone_name: — White-Label Multi-Empresa
 current_phase: 999.1
 current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
 status: executing
-stopped_at: Phase 36 UI-SPEC approved
-last_updated: "2026-06-22T19:26:52.445Z"
+stopped_at: 999.1-03 complete
+last_updated: "2026-06-22T19:38:52.635Z"
 last_activity: 2026-06-22
 last_activity_desc: Phase 999.1 execution started
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 12
-  completed_plans: 8
+  completed_plans: 9
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ Milestone: v2.3 — White-Label Multi-Empresa
 ## Current Position
 
 Phase: 999.1 (gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-06-22 — Phase 999.1 execution started
 
@@ -230,12 +230,13 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 | Phase 36 P02 | 6min | 2 tasks | 5 files |
 | Phase 36 P03 | 6min | 1 tasks | 2 files |
 | Phase 999.1 P01 | 10min | 3 tasks | 7 files |
+| Phase 999.1 P03 | 25min | 2 tasks | 6 files |
 
 ## Session
 
-**Last session:** 2026-06-22T19:26:52.428Z
-**Stopped at:** Phase 36 UI-SPEC approved
-**Resume file:** .planning/phases/36-frontend-white-label/36-UI-SPEC.md
+**Last session:** 2026-06-22T19:38:52.619Z
+**Stopped at:** 999.1-03 complete
+**Resume file:** none
 
 ## Decisions
 
@@ -244,3 +245,6 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 - [Phase ?]: storage banco vs MinIO
 - [Phase ?]: migration manual
 - [Phase ?]: seed incremental
+- [Phase ?]: renderHtml tornado publico para preview (D-08)
+- [Phase ?]: shouldAllowRequest como funcao pura exportada (D-02 anti-SSRF, testavel sem Puppeteer)
+- [Phase ?]: Handlebars.create() por render isolado (Pitfall 3)
