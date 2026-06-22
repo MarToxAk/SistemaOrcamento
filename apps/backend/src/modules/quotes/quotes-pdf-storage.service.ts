@@ -96,6 +96,20 @@ export class QuotesPdfStorageService {
   }
 
   // ---------------------------------------------------------------------------
+  // renderPreviewPdf — D-08: preview server-side de um templateSource explícito.
+  //
+  // Usa exatamente o mesmo caminho hardened de generateAndStore (renderHtml +
+  // renderPdfBuffer — compile restrito + rede bloqueada), mas NUNCA persiste
+  // no MinIO. Usado pelo endpoint POST /pdf-templates/preview (Plano 05) para
+  // que o admin veja o resultado antes de ativar/salvar um template.
+  // ---------------------------------------------------------------------------
+  async renderPreviewPdf(payload: QuotePdfData, templateSource: string): Promise<Buffer> {
+    this.logger.log("Gerando preview de template — sem persistência");
+    const html = await this.renderHtml(payload, templateSource);
+    return this.renderPdfBuffer(html);
+  }
+
+  // ---------------------------------------------------------------------------
   // renderHtml — público para que PdfTemplatesModule (Plano 05) possa chamar
   // o render hardened no endpoint de preview (D-08).
   //

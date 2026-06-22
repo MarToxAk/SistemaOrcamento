@@ -13,6 +13,7 @@ import { AthosModule } from "./integrations/athos/athos.module";
 import { NfseModule } from "./integrations/nfse/nfse.module";
 import { PdvModule } from "./integrations/pdv/pdv.module";
 import { QuotesModule } from "./quotes/quotes.module";
+import { PdfTemplatesModule } from "./pdf-templates/pdf-templates.module";
 import { LoggingInterceptor } from "./common/logging.interceptor";
 import { InternalAuthGuard } from "./security/internal-auth.guard";
 import { SecurityModule } from "./security/security.module";
@@ -75,6 +76,7 @@ function validateEnv(config: Record<string, unknown>) {
     NfseModule,
     PdvModule,
     CobrancaModule,
+    PdfTemplatesModule,
   ],
   controllers: [HealthController],
   providers: [    {
