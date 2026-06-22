@@ -150,7 +150,7 @@ Plans:
 
 **Goal:** Permitir trocar o layout/template do PDF de orçamento a qualquer momento pelo próprio sistema (usuário final), sem alterar código/git nem reiniciar o servidor.
 **Requirements:** TBD (relacionados às ideias deferidas WL-01 painel admin e WL-03 templates PDF gerenciados, ver 36-CONTEXT.md)
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 **Contexto / escopo capturado:**
 
@@ -167,7 +167,7 @@ Plans:
 - [x] 999.1-03-PLAN.md — Render seguro: renderHtml usa template ativo+fallback + hardening Handlebars/Puppeteer anti-SSRF (Wave 2)
 - [x] 999.1-04-PLAN.md — 3 presets com fontes/ícones inline + dehardcode do contato (Wave 2)
 - [x] 999.1-05-PLAN.md — Módulo backend: upload/validar/ativar/excluir/preview + checkpoint sanitize-html (Wave 3)
-- [ ] 999.1-06-PLAN.md — Frontend: tela de gerenciamento (galeria/upload/preview) + rotas proxy admin (Wave 4)
+- [x] 999.1-06-PLAN.md — Frontend: tela de gerenciamento (galeria/upload/preview) + rotas proxy admin (Wave 4)
 
 **⚠ Follow-up obrigatório antes da execução:** `/gsd-secure-phase 999.1` — esta fase envia upload de template arbitrário; a postura `--no-sandbox`+root do Chromium (assunção A4, alto risco) fica explicitamente deferida para esse passo.
 

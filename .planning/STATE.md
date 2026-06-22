@@ -4,17 +4,17 @@ milestone: v2.3
 milestone_name: — White-Label Multi-Empresa
 current_phase: 999.1
 current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
-status: executing
-stopped_at: 999.1-05 complete
-last_updated: "2026-06-22T20:13:17.846Z"
+status: verifying
+stopped_at: 999.1-06 complete (fase pronta para verificacao)
+last_updated: "2026-06-22T20:52:11.569Z"
 last_activity: 2026-06-22
 last_activity_desc: Phase 999.1 execution started
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
-  completed_plans: 11
-  percent: 67
+  completed_plans: 12
+  percent: 100
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -29,7 +29,7 @@ Milestone: v2.3 — White-Label Multi-Empresa
 
 Phase: 999.1 (gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-22 — Phase 999.1 execution started
 
 ## Project Status
@@ -233,11 +233,12 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 | Phase 999.1 P03 | 25min | 2 tasks | 6 files |
 | Phase 999.1 P04 | 20min | 3 tasks | 4 files |
 | Phase 999.1 P05 | ~20min | 2 tasks | 6 files |
+| Phase 999.1 P06 | ~45min | 2 tasks | 12 files |
 
 ## Session
 
-**Last session:** 2026-06-22T20:13:17.825Z
-**Stopped at:** 999.1-05 complete
+**Last session:** 2026-06-22T20:52:11.553Z
+**Stopped at:** 999.1-06 complete (fase pronta para verificacao)
 **Resume file:** None
 
 ## Decisions
@@ -255,3 +256,6 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 - [Phase ?]: Checkpoint sanitize-html aprovado pelo orquestrador apos verificacao independente (apostrophecms oficial, ~9.8M downloads/semana) — falso positivo de recencia confirmado
 - [Phase ?]: renderPreviewPdf adicionado como novo metodo publico em QuotesPdfStorageService (Rule 2) — D-08 exigia preview via render hardened mas nenhum metodo combinava renderHtml+renderPdfBuffer sem persistir
 - [Phase ?]: validateUpload REJEITA (nao limpa) HTML perigoso — regex de padroes perigosos + sanitize-html como sinal adicional de divergencia >30%
+- [Phase ?]: [Phase 999.1]: adminBackendFetch injeta x-admin-api-key apenas server-side — segredo nunca chega ao browser (T-999.1-18)
+- [Phase ?]: [Phase 999.1]: gate de senha opcional em /configuracoes/* (Rule 4) — cookie httpOnly HMAC; falha fechada sem CONFIG_PANEL_PASSWORD (preserva D-03)
+- [Phase ?]: [Phase 999.1]: preview por templateId no backend (Rule 2) — galeria nao tinha como pre-visualizar template salvo sem o source
