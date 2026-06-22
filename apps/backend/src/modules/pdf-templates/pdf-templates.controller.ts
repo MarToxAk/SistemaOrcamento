@@ -81,15 +81,27 @@ export class PdfTemplatesController {
   // ---------------------------------------------------------------------------
   // POST /pdf-templates/preview — D-08
   //
-  // Renderiza um PDF a partir de um `source` Handlebars/HTML explícito,
-  // usando dados de orçamento MOCK. Usa o caminho de render hardened
-  // (compile restrito + rede bloqueada) — nunca persiste nada (sem MinIO,
-  // sem Prisma write).
+  // Renderiza um PDF a partir de um `source` Handlebars/HTML explícito OU de
+  // um `templateId` de um template já salvo (galeria), usando dados de
+  // orçamento MOCK. Usa o caminho de render hardened (compile restrito +
+  // rede bloqueada) — nunca persiste nada (sem MinIO, sem Prisma write).
   // ---------------------------------------------------------------------------
   @Post("preview")
   @AdminOnly()
-  async preview(@Body() body: { source: string }, @Res() res: ExpressResponse): Promise<void> {
-    const pdfBuffer = await this.quotesPdfStorageService.renderPreviewPdf(MOCK_QUOTE_PAYLOAD, body.source);
+  async preview(
+    @Body() body: { source?: string; templateId?: string },
+    @Res() res: ExpressResponse,
+  ): Promise<void> {
+    const source = body.templateId
+      ? await this.pdfTemplatesService.getSource(body.templateId)
+      : body.source;
+
+    if (!source) {
+      res.status(400).json({ error: "Informe 'source' ou 'templateId' para gerar o preview." });
+      return;
+    }
+
+    const pdfBuffer = await this.quotesPdfStorageService.renderPreviewPdf(MOCK_QUOTE_PAYLOAD, source);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Length", pdfBuffer.length);

@@ -20,6 +20,7 @@ function buildMockPdfTemplatesService() {
     create: jest.fn(),
     activate: jest.fn(),
     remove: jest.fn(),
+    getSource: jest.fn(),
   } as unknown as PdfTemplatesService;
 }
 
@@ -31,13 +32,16 @@ function buildMockQuotesPdfStorageService() {
 
 function buildMockResponse() {
   const headers: Record<string, unknown> = {};
-  return {
+  const res: Record<string, unknown> = {
     setHeader: jest.fn((key: string, value: unknown) => {
       headers[key] = value;
     }),
     send: jest.fn(),
+    json: jest.fn(),
     _headers: headers,
   };
+  res.status = jest.fn(() => res);
+  return res;
 }
 
 async function buildController(
@@ -98,6 +102,41 @@ describe("PdfTemplatesController", () => {
       expect(mockPayload).toHaveProperty("cliente");
       expect(mockPayload).toHaveProperty("itens");
       expect(Array.isArray(mockPayload.itens)).toBe(true);
+    });
+
+    it("preview com templateId busca o source salvo via getSource antes de renderizar", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      const quotesPdfStorageService = buildMockQuotesPdfStorageService();
+      (pdfTemplatesService.getSource as jest.Mock).mockResolvedValue("<html>preset salvo</html>");
+      (quotesPdfStorageService.renderPreviewPdf as jest.Mock).mockResolvedValue(Buffer.from("%PDF"));
+
+      const controller = await buildController(pdfTemplatesService, quotesPdfStorageService);
+      const res = buildMockResponse();
+
+      await controller.preview({ templateId: "template-123" }, res);
+
+      expect(pdfTemplatesService.getSource).toHaveBeenCalledWith("template-123");
+      expect(quotesPdfStorageService.renderPreviewPdf).toHaveBeenCalledWith(
+        expect.any(Object),
+        "<html>preset salvo</html>",
+      );
+      expect(res.send).toHaveBeenCalled();
+    });
+
+    it("preview sem source e sem templateId retorna 400 e nao chama o render", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      const quotesPdfStorageService = buildMockQuotesPdfStorageService();
+
+      const controller = await buildController(pdfTemplatesService, quotesPdfStorageService);
+      const res = buildMockResponse();
+
+      await controller.preview({}, res);
+
+      expect(quotesPdfStorageService.renderPreviewPdf).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.any(String) }),
+      );
     });
   });
 

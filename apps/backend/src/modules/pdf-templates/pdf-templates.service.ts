@@ -131,6 +131,19 @@ export class PdfTemplatesService {
   }
 
   /**
+   * Busca o `source` Handlebars/HTML de um template existente (usado pelo
+   * preview da galeria — D-08 — para pré-visualizar um preset/upload já
+   * salvo sem o admin precisar colar o conteúdo novamente).
+   */
+  async getSource(id: string): Promise<string> {
+    const template = await this.prisma.pdfTemplate.findUnique({ where: { id } });
+    if (!template) {
+      throw new NotFoundException(`Template ${id} não encontrado.`);
+    }
+    return template.source;
+  }
+
+  /**
    * Remove um template. Impede excluir o template ativo (precisa trocar
    * antes) — protege contra ficar sem nenhum ativo. CONTEXT: não destruir
    * para permitir rollback — aqui a guarda é apenas sobre o ativo; presets
