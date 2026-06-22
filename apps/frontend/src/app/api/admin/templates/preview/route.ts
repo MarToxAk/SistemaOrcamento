@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { adminBackendFetch } from "@/lib/admin-backend-client";
+import { requireAdminSession } from "@/lib/admin-session";
 
 export async function POST(req: NextRequest) {
+  if (!requireAdminSession(req)) {
+    return NextResponse.json({ error: "Sessao expirada ou nao autenticada." }, { status: 401 });
+  }
   try {
     let body: unknown = undefined;
     try {
