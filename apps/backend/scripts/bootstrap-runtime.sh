@@ -22,5 +22,9 @@ if ! npm --workspace @bomcusto/backend run prisma:deploy -- --schema prisma/sche
   exit 1
 fi
 
+echo "[bootstrap] seeding pdf templates"
+npx ts-node --project apps/backend/tsconfig.json apps/backend/scripts/seed-pdf-templates.ts \
+  || echo "[bootstrap] seed-pdf-templates falhou ou ts-node nao disponivel — rode manualmente"
+
 echo "[bootstrap] starting backend"
 npm --workspace @bomcusto/backend run start
