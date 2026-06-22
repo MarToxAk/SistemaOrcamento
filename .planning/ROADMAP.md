@@ -91,7 +91,7 @@
 ### Phases
 
 - [x] **Phase 35: Backend White-Label** - Env vars documentadas, NFS-e dehardcoded, template PDF extraído para .hbs e variáveis de empresa passadas ao renderer (completed 2026-06-19)
-- [ ] **Phase 36: Frontend White-Label** - 8 arquivos frontend dehardcoded; nome, logo, CNPJ, endereço e cor lidos de env vars; CSS theming via custom property
+- [x] **Phase 36: Frontend White-Label** - 8 arquivos frontend dehardcoded; nome, logo, CNPJ, endereço e cor lidos de env vars; CSS theming via custom property (completed 2026-06-22)
 
 ### Phase Details
 
@@ -125,13 +125,13 @@
   3. Ao definir `EMPRESA_COR_PRIMARIA=#e63946`, todos os elementos de branding (botões primários, bordas de destaque, links de ação) assumem a nova cor — a troca afeta o sistema inteiro via CSS custom property sem editar CSS
   4. Páginas públicas de aprovação e status (`/orcamento/[id]/approve` e `/orcamento/[id]/status`) exibem o logo e o nome corretos da empresa mesmo sem autenticação
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 Plans:
 
 - [x] 36-01-PLAN.md — empresa.ts + layout.tsx (generateMetadata + CSS var) + globals.css + .env.example
 - [x] 36-02-PLAN.md — 5 páginas internas dehardcoded (logo/nome/CNPJ/endereço/email de empresa.ts)
-- [ ] 36-03-PLAN.md — 2 páginas públicas dehardcoded (logo + nome de empresa.ts)
+- [x] 36-03-PLAN.md — 2 páginas públicas dehardcoded (logo + nome de empresa.ts)
 
 **UI hint**: yes
 
@@ -140,7 +140,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 35. Backend White-Label | 3/3 | Complete    | 2026-06-19 |
-| 36. Frontend White-Label | 2/3 | In Progress|  |
+| 36. Frontend White-Label | 3/3 | Complete   | 2026-06-22 |
 
 ---
 
