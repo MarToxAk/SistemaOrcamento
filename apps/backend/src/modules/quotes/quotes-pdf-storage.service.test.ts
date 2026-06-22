@@ -13,6 +13,7 @@ jest.mock("node:fs", () => ({
 // Import after mocks are registered
 import * as fs from "node:fs";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
+import { PdfTemplatesRepository } from "../pdf-templates/pdf-templates.repository";
 
 const mockExistsSync = fs.existsSync as jest.MockedFunction<typeof fs.existsSync>;
 const mockReadFileSync = fs.readFileSync as jest.MockedFunction<typeof fs.readFileSync>;
@@ -38,11 +39,18 @@ function buildMockConfig(vals: Record<string, string | undefined>) {
   };
 }
 
-async function buildService(configVals: Record<string, string | undefined>) {
+function buildMockPdfTemplatesRepository(activeSource: string | null = null) {
+  return {
+    getActiveSource: jest.fn().mockResolvedValue(activeSource),
+  } as unknown as PdfTemplatesRepository;
+}
+
+async function buildService(configVals: Record<string, string | undefined>, activeSource: string | null = null) {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       QuotesPdfStorageService,
       { provide: ConfigService, useValue: buildMockConfig(configVals) },
+      { provide: PdfTemplatesRepository, useValue: buildMockPdfTemplatesRepository(activeSource) },
     ],
   }).compile();
   return module.get<QuotesPdfStorageService>(QuotesPdfStorageService);
@@ -67,8 +75,8 @@ describe("QuotesPdfStorageService - cadeia de resolucao de template", () => {
       EMPRESA_ENDERECO: "Rua A, 1",
     });
 
-    // Access private renderHtml via cast to any
-    const html = (service as any).renderHtml(MINIMAL_PAYLOAD) as string;
+    // renderHtml é agora público e async
+    const html = await service.renderHtml(MINIMAL_PAYLOAD);
 
     expect(mockReadFileSync).toHaveBeenCalledWith(CUSTOM_PATH, "utf-8");
     expect(html).toContain("Empresa A");
@@ -86,8 +94,8 @@ describe("QuotesPdfStorageService - cadeia de resolucao de template", () => {
       EMPRESA_ENDERECO: "Rua B, 1",
     });
 
-    expect(() => (service as any).renderHtml(MINIMAL_PAYLOAD)).toThrow(InternalServerErrorException);
-    expect(() => (service as any).renderHtml(MINIMAL_PAYLOAD)).toThrow(CUSTOM_PATH);
+    await expect(service.renderHtml(MINIMAL_PAYLOAD)).rejects.toThrow(InternalServerErrorException);
+    await expect(service.renderHtml(MINIMAL_PAYLOAD)).rejects.toThrow(CUSTOM_PATH);
   });
 
   it("(c) sem EMPRESA_PDF_TEMPLATE_PATH + quote-default.hbs existente: usa o template padrao externo", async () => {
@@ -103,7 +111,7 @@ describe("QuotesPdfStorageService - cadeia de resolucao de template", () => {
       EMPRESA_ENDERECO: "Rua C, 3",
     });
 
-    const html = (service as any).renderHtml(MINIMAL_PAYLOAD) as string;
+    const html = await service.renderHtml(MINIMAL_PAYLOAD);
 
     // Deve ter lido o arquivo de template padrao
     expect(mockReadFileSync).toHaveBeenCalledTimes(1);
@@ -123,7 +131,7 @@ describe("QuotesPdfStorageService - cadeia de resolucao de template", () => {
       EMPRESA_ENDERECO: "Rua D, 4",
     });
 
-    const html = (service as any).renderHtml(MINIMAL_PAYLOAD) as string;
+    const html = await service.renderHtml(MINIMAL_PAYLOAD);
 
     // Nao deve ter chamado readFileSync (usa string TS embutida)
     expect(mockReadFileSync).not.toHaveBeenCalled();
@@ -145,7 +153,7 @@ describe("QuotesPdfStorageService - cadeia de resolucao de template", () => {
       EMPRESA_ENDERECO: "Rua E, 5",
     });
 
-    const html = (service as any).renderHtml(MINIMAL_PAYLOAD) as string;
+    const html = await service.renderHtml(MINIMAL_PAYLOAD);
 
     // Handlebars: {{#if undefined}} e false, entao nao deve renderizar a tag img
     expect(html).not.toContain("<img");
@@ -164,7 +172,7 @@ describe("QuotesPdfStorageService - cadeia de resolucao de template", () => {
       EMPRESA_ENDERECO: "Rua F, 6",
     });
 
-    const html = (service as any).renderHtml(MINIMAL_PAYLOAD) as string;
+    const html = await service.renderHtml(MINIMAL_PAYLOAD);
 
     expect(html).toContain("#0d6efd");
   });

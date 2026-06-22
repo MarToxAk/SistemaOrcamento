@@ -6,6 +6,7 @@ import { AthosModule } from "../integrations/athos/athos.module";
 import { ChatwootModule } from "../integrations/chatwoot/chatwoot.module";
 import { EfiModule } from "../integrations/efi/efi.module";
 import { EventsModule } from "../events/events.module";
+import { PdfTemplatesRepository } from "../pdf-templates/pdf-templates.repository";
 
 @Module({
   imports: [
@@ -15,7 +16,9 @@ import { EventsModule } from "../events/events.module";
     EventsModule,
   ],
   controllers: [QuotesController],
-  providers: [QuotesService, QuotesPdfStorageService],
-  exports: [QuotesService],
+  providers: [QuotesService, QuotesPdfStorageService, PdfTemplatesRepository],
+  // QuotesPdfStorageService exportado para que PdfTemplatesModule (Plano 05)
+  // importe QuotesModule e reutilize o render hardened no endpoint de preview (D-08).
+  exports: [QuotesService, QuotesPdfStorageService],
 })
 export class QuotesModule {}
