@@ -51,11 +51,11 @@ Reconhecidos, porém deferidos — não entram no roadmap atual.
 - **UPROD-03**: Tela para editar preço e cadastro de produto
 - **UPROD-04**: Ação para desativar/reativar produto
 
-### White-Label Avançado (futuro)
+### White-Label Avançado (parcialmente promovido para Fase 999.1)
 
-- **WL-01**: Painel admin no sistema para editar configurações sem acessar o servidor
-- **WL-02**: Upload de logo pelo sistema (MinIO) sem editar `.env`
-- **WL-03**: Templates PDF gerenciados pelo painel admin (upload/preview/ativação)
+- [x] **WL-01**: Painel admin no sistema para editar configurações sem acessar o servidor — endpoints protegidos por `AdminAuthGuard` (Fase 999.1)
+- **WL-02**: Upload de logo pelo sistema (MinIO) sem editar `.env` — deferido, fora do escopo da Fase 999.1
+- [x] **WL-03**: Templates PDF gerenciados pelo painel admin (upload/preview/ativação) — Fase 999.1
 
 ## Out of Scope
 
@@ -76,3 +76,4 @@ Reconhecidos, porém deferidos — não entram no roadmap atual.
 | NFSE-01 | 35 | TBD |
 | PDF-01..05 | 35 | TBD |
 | FRONT-01..04 | 36 | TBD |
+| WL-01, WL-03 | 999.1 | 02, 05 |

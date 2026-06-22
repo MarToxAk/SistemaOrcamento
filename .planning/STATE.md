@@ -5,15 +5,15 @@ milestone_name: — White-Label Multi-Empresa
 current_phase: 999.1
 current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
 status: executing
-stopped_at: 999.1-04 complete
-last_updated: "2026-06-22T19:54:56.319Z"
+stopped_at: 999.1-05 complete
+last_updated: "2026-06-22T20:13:17.846Z"
 last_activity: 2026-06-22
 last_activity_desc: Phase 999.1 execution started
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ Milestone: v2.3 — White-Label Multi-Empresa
 ## Current Position
 
 Phase: 999.1 (gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-06-22 — Phase 999.1 execution started
 
@@ -232,12 +232,13 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 | Phase 999.1 P01 | 10min | 3 tasks | 7 files |
 | Phase 999.1 P03 | 25min | 2 tasks | 6 files |
 | Phase 999.1 P04 | 20min | 3 tasks | 4 files |
+| Phase 999.1 P05 | ~20min | 2 tasks | 6 files |
 
 ## Session
 
-**Last session:** 2026-06-22T19:54:56.303Z
-**Stopped at:** 999.1-04 complete
-**Resume file:** none
+**Last session:** 2026-06-22T20:13:17.825Z
+**Stopped at:** 999.1-05 complete
+**Resume file:** None
 
 ## Decisions
 
@@ -251,3 +252,6 @@ Tech debt aceitável remanescente (não bloqueia): testes de integração com AP
 - [Phase ?]: Handlebars.create() por render isolado (Pitfall 3)
 - [Phase 999.1]: Os 3 presets PDF (D-06) compartilham exatamente o mesmo conjunto de variaveis Handlebars de empresa/orcamento — trocar de layout nao perde dados — Requisito explicito do plano 999.1-04 para permitir troca de preset em runtime sem reescrever orcamentos
 - [Phase 999.1]: Teste do seed de presets PDF mocka PrismaClient em vez de usar Postgres real — Docker indisponivel neste ambiente de execucao; logica de isActive=true unico e determinada pelos dados estaticos do array PRESETS, nao por comportamento do banco — mock valida a mesma asercao
+- [Phase ?]: Checkpoint sanitize-html aprovado pelo orquestrador apos verificacao independente (apostrophecms oficial, ~9.8M downloads/semana) — falso positivo de recencia confirmado
+- [Phase ?]: renderPreviewPdf adicionado como novo metodo publico em QuotesPdfStorageService (Rule 2) — D-08 exigia preview via render hardened mas nenhum metodo combinava renderHtml+renderPdfBuffer sem persistir
+- [Phase ?]: validateUpload REJEITA (nao limpa) HTML perigoso — regex de padroes perigosos + sanitize-html como sinal adicional de divergencia >30%
