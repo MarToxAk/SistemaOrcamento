@@ -7,6 +7,12 @@ import {
   issueSessionToken,
   isValidSessionToken,
 } from "@/lib/admin-session";
+import {
+  checkRateLimit,
+  clientKeyFromHeaders,
+  registerFailure,
+  resetRateLimit,
+} from "@/lib/login-rate-limit";
 
 /**
  * GET — informa se a sessao atual ja esta autenticada (a tela usa para
@@ -32,6 +38,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Rate-limit anti-brute-force (T-999.1-AUTH): bloqueia apos N falhas por IP.
+  const clientKey = clientKeyFromHeaders(req.headers);
+  const limit = checkRateLimit(clientKey);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Muitas tentativas. Tente novamente mais tarde." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    );
+  }
+
   let body: { password?: string } = {};
   try {
     body = (await req.json()) as { password?: string };
@@ -40,8 +56,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (!isCorrectPassword(body.password)) {
+    registerFailure(clientKey);
     return NextResponse.json({ error: "Senha incorreta." }, { status: 401 });
   }
+
+  // Sucesso: zera o contador de tentativas para este IP.
+  resetRateLimit(clientKey);
 
   const res = NextResponse.json({ authenticated: true });
   res.cookies.set({
