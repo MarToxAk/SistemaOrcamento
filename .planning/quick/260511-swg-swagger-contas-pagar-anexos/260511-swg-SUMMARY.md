@@ -1,4 +1,5 @@
 ---
+status: complete
 quick_id: 260511-swg
 slug: swagger-contas-pagar-anexos
 phase: quick
