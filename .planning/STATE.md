@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: — White-Label Multi-Empresa
 current_phase: 999.1
-current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
-status: complete
-stopped_at: 999.1 complete (verificada + segurança encerrada; milestone v2.3 100%)
-last_updated: "2026-06-23T00:38:30.167Z"
+status: Awaiting next milestone
+stopped_at: 999.1-06 complete (fase pronta para verificacao)
+last_updated: "2026-06-23T12:19:43.966Z"
 last_activity: 2026-06-23
-last_activity_desc: Phase 999.1 complete
+last_activity_desc: Milestone v2.3 completed and archived
 progress:
   total_phases: 3
   completed_phases: 3
   total_plans: 12
   completed_plans: 12
   percent: 100
+current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -27,10 +27,10 @@ Milestone: v2.3 — White-Label Multi-Empresa
 
 ## Current Position
 
-Phase: 999.1 (gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface) — COMPLETE
-Plan: 6/6 complete
-Status: Phase complete — verificada (PASSED) + segurança encerrada (threats_open 0). Milestone v2.3 100%.
-Last activity: 2026-06-23 — Phase 999.1 complete
+Phase: Milestone v2.3 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-23 — Milestone v2.3 completed and archived
 
 ## Project Status
 
@@ -70,8 +70,9 @@ Last activity: 2026-06-23 — Phase 999.1 complete
 | 32 | API de Busca de Produto | complete (v2.2) |
 | 33 | API de Escrita de Produto | complete (v2.2) |
 | 34 | Frontend de Gestao de Produtos | skipped — decisão API-only (2026-06-17) |
-| 35 | Backend White-Label | not-started (v2.3) |
-| 36 | Frontend White-Label | not-started (v2.3) |
+| 35 | Backend White-Label | complete (v2.3) |
+| 36 | Frontend White-Label | complete (v2.3) |
+| 999.1 | Gerenciamento de layout do PDF pela interface | complete (v2.3) |
 
 ## Milestones Archived
 
@@ -87,23 +88,22 @@ Last activity: 2026-06-23 — Phase 999.1 complete
 - v1.9 — phase 22
 - v2.0 — phases 23-27 (.planning/milestones/v2.0-ROADMAP.md)
 - v2.1 — phases 28-31 (.planning/milestones/v2.1-ROADMAP.md)
+- v2.2 — phases 32-33 (não arquivado separadamente; UAT/verificação diferidas — ver Deferred Items)
+- v2.3 — phases 35-36 + 999.1 (.planning/milestones/v2.3-ROADMAP.md)
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-06-17)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v2.3 - White-Label Multi-Empresa (phases 35-36)
+Current focus: v2.3 concluído — aguardando próximo milestone (/gsd-new-milestone)
 
 ## Active Context
 
-- Milestone v2.3 iniciado (2026-06-17): White-Label Multi-Empresa
-- Escopo: env vars EMPRESA_* documentadas + PDF extraído para .hbs + NFS-e dehardcoded + frontend 8 arquivos dehardcoded + CSS theming
-- Fora do escopo: painel admin no sistema (WL-01), upload de logo via UI (WL-02), templates PDF gerenciados por UI (WL-03), credenciais de integração, multi-tenant
+- Milestone v2.3 (White-Label Multi-Empresa) concluído e arquivado em 2026-06-23.
+- Entregue: env vars EMPRESA_* + PDF extraído para .hbs + NFS-e dehardcoded (Fase 35); frontend 8 arquivos dehardcoded + CSS theming (Fase 36); gerenciamento de templates PDF pela UI com upload/preview/ativação + render seguro (Fase 999.1, originalmente WL-01/WL-03 deferidos).
 - Stack: NestJS + Next.js + Prisma + PostgreSQL
-- Arquitetura PDF: template inline em quotes-pdf.template.ts → extrair para apps/backend/templates/quote-default.hbs
-- NFS-e: "3520400" hardcoded na linha 60 de nfse.service.ts → EMPRESA_MUNICIPIO_IBGE via ConfigService
-- Frontend: 8 arquivos para dehardcode (layout.tsx + 5 páginas internas + 2 páginas públicas)
-- Proximo passo: /gsd-plan-phase 35
+- Dívida diferida: UAT/verificação humana das Fases 32/33 (v2.2) — ver Deferred Items. Segurança v2.3: ação pré-deploy CR-01 (env vars do painel admin) — ver 999.1-SECURITY.md.
+- Próximo passo: /gsd-new-milestone
 
 ## Decisions Log
 
@@ -216,9 +216,26 @@ Itens reconhecidos (acknowledged) e deferidos no fechamento do milestone v2.1 em
 
 Tech debt aceitável remanescente (não bloqueia): testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API).
 
+---
+
+Itens reconhecidos (acknowledged) e deferidos no fechamento do milestone **v2.3** em 2026-06-23:
+
+**Dívida de UAT/verificação de milestone anterior (v2.2 — APIs de Produto), nunca fechada:**
+
+| Categoria | Item | Status |
+|-----------|------|--------|
+| uat | 32-HUMAN-UAT.md (API de Busca de Produto) | partial — 6 cenários pendentes (ciclo v2.2) |
+| uat | 33-HUMAN-UAT.md (API de Escrita de Produto) | partial — 4 cenários pendentes (ciclo v2.2) |
+| verification | 32-VERIFICATION.md | human_needed (ciclo v2.2) |
+| verification | 33-VERIFICATION.md | human_needed (ciclo v2.2) |
+
+Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São APIs de produto já em uso em produção; o UAT humano e a verificação ficaram pendentes mas não bloqueiam o White-Label. Tratar com `/gsd-audit-uat` num ciclo futuro de saneamento.
+
+**Dívida de segurança do v2.3 (documentada, deploy interno):** ver `999.1-SECURITY.md` — CR-01 (gate de senha fail-open, exige definir env vars antes do deploy), T-SANDBOX (Chromium --no-sandbox aceito p/ deploy interno).
+
 ## Operator Next Steps
 
-- Roadmap v2.3 definido (2026-06-17). Próximo passo: `/gsd-plan-phase 35`
+- Start the next milestone with /gsd-new-milestone
 
 ## Performance Metrics
 

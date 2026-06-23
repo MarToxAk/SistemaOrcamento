@@ -25,23 +25,25 @@ Milestone anterior: v2.0 - Gestão Integrada Financeira, Caixa e Dashboards (202
 
 Shipped: 2026-06-17. Fases 32-33 entregues (API de busca e escrita de produto via REST). Phase 34 (frontend) descartada por decisão: API-only foi suficiente.
 
-## Current Milestone: v2.3 — White-Label Multi-Empresa
+## Last Shipped Milestone: v2.3 — White-Label Multi-Empresa
 
-**Goal:** Tornar o sistema implantável para qualquer empresa sem editar código — branding, dados fiscais e logo configuráveis via painel admin.
+Shipped: 2026-06-23. Fases 35, 36 e 999.1 (12 planos). Arquivo: `.planning/milestones/v2.3-ROADMAP.md`.
 
-**Target features:**
-- Tabela `empresa_config` no banco (nome, CNPJ, endereço, cores, município NFS-e) com seed automático dos dados atuais da BomCusto
-- Upload de logo via painel admin → MinIO → URL salva no banco
-- Painel admin `/admin` com formulário completo e upload de logo com preview
-- Frontend dinâmico: título da aba, cabeçalho das páginas, logo lidos de `empresa_config`
-- PDF template: dehardcode nome/CNPJ/endereço/logo (usa `empresa_config`)
-- NFS-e: município/código prestador removidos do hardcode → lidos de `empresa_config`
+**Goal:** Tornar o sistema implantável para qualquer empresa sem editar código — branding, dados fiscais e layout do PDF configuráveis.
 
-**Fora do escopo:**
-- Credenciais de integração (Athos DB, EFI, Chatwoot, iiBrasil) — permanecem em env vars por segurança
-- Multi-tenant (shared deploy) — cada empresa tem seu próprio deploy com `.env` próprio
+**Entregue:**
+- **Configuração via env vars `EMPRESA_*`** (nome, CNPJ, endereço, logo, cor, município IBGE NFS-e) — abordagem por-deploy, em vez de tabela `empresa_config` no banco (ver decisão abaixo).
+- Frontend dinâmico: título da aba, cabeçalho das páginas internas e públicas, logo e cor lidos de env vars; CSS theming via custom property.
+- PDF e NFS-e dehardcoded: nome/CNPJ/endereço/logo e código IBGE vêm das env vars.
+- **Gerenciamento de layout do PDF pela interface (Fase 999.1):** tela `/configuracoes/templates` com galeria de 3 presets, upload de `.hbs`/HTML, preview server-side e troca do template ativo em runtime (sem reiniciar). Render endurecido (anti-SSRF, sanitização de upload, Handlebars restrito), rotas admin protegidas por API key + gate de senha com rate-limit.
 
-Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API).
+**Desvio do plano original:** o painel admin com tabela `empresa_config` + upload de logo para MinIO foi substituído por configuração via env vars (mais simples para o modelo single-deploy-por-empresa). O "painel admin" materializou-se como a tela de gerenciamento de templates PDF da Fase 999.1.
+
+**Segurança:** `999.1-SECURITY.md` — `threats_open: 0`. ⚠ Ação pré-deploy CR-01: definir `ADMIN_API_KEY`, `CONFIG_PANEL_PASSWORD`, `CONFIG_PANEL_SESSION_SECRET` (o gate do painel é fail-open sem elas).
+
+**Fora do escopo (mantido):** credenciais de integração permanecem em env vars; multi-tenant (cada empresa tem deploy próprio).
+
+Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/verificação humana das Fases 32/33 (v2.2) diferidos.
 
 ## Requirements
 
@@ -79,6 +81,18 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferido
 - checkmark BOL-01..03: Boleto Consolidado via EFI Bank -- v2.1
 - checkmark NFR-01..05: Emissao NFS-e a partir de titulos (banco proprio Prisma) -- v2.1
 - checkmark NFAT-01..02: Consulta de NF no Athos + historico NFS-e emitidas -- v2.1
+
+### Validated in v2.2
+
+- checkmark BPROD/SPROD: API de busca de produto (read autenticado, filtros, paginacao) -- v2.2 (fase 32)
+- checkmark CPROD/EPROD/DPROD: API de escrita de produto (create/edit/soft-delete, trigger respeitado, log) -- v2.2 (fase 33)
+
+### Validated in v2.3
+
+- checkmark CFG-01..05 / NFSE-01: Configuracao por empresa via env vars EMPRESA_* (dados fiscais, municipio IBGE) -- v2.3 (fase 35)
+- checkmark PDF-01..05: Template PDF externo (.hbs) com variaveis de empresa + cadeia de fallback -- v2.3 (fase 35)
+- checkmark FRONT-01..04: Frontend white-label (nome/logo/CNPJ/endereco/cor via env vars + CSS theming) -- v2.3 (fase 36)
+- checkmark Gerenciamento de layout do PDF pela interface (upload/preview/ativacao em runtime, render seguro) -- v2.3 (fase 999.1)
 
 ### Out of Scope
 
@@ -122,10 +136,13 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferido
 | Boleto consolidado (multiplos titulos) em vez de por titulo | Reduz numero de boletos e simplifica cobranca | Em validacao -- v2.1 |
 | Liberar escrita no Athos APENAS na tabela `produto` (excecao a regra read-only) | Necessidade de cadastrar/editar produtos pelo sistema sem trocar de ferramenta | checkmark Validado -- v2.2 (fase 33) |
 | Soft-delete de produto (statusproduto/vendeproduto=false), nunca DELETE fisico | Preservar integridade referencial (venda_item etc.) e historico | checkmark Validado -- v2.2 (fase 33) |
+| White-label via env vars EMPRESA_* (nao tabela empresa_config no banco) | Modelo single-deploy-por-empresa; mais simples que painel admin + DB | checkmark Validado -- v2.3 |
+| Templates PDF gerenciados em runtime pela UI (upload/preview/ativacao) com render endurecido | Trocar layout sem editar codigo/reiniciar; upload arbitrario exige anti-SSRF + sanitizacao | checkmark Validado -- v2.3 (fase 999.1) |
+| Painel admin protegido por API key server-side + senha (fail-open sem env vars) | Deploy interno; ⚠ exige definir env vars antes do deploy (CR-01) | Em validacao -- v2.3 |
 
 ## Evolution
 
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-06-17 — Milestone v2.3 iniciado (White-Label Multi-Empresa)*
+*Last updated: 2026-06-23 — Milestone v2.3 (White-Label Multi-Empresa) concluído e arquivado*
