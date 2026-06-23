@@ -204,3 +204,88 @@ describe("NfseService - resolucao de tomador por clienteAthosId", () => {
   });
 
 });
+
+describe("NfseService - getter CODIGO_MUNICIPIO (NFSE-01)", () => {
+  it("getter CODIGO_MUNICIPIO retorna EMPRESA_MUNICIPIO_IBGE quando definida", async () => {
+    const mocks = buildMocks();
+    mocks.mockConfig.get = jest.fn((key: string) => {
+      const vals: Record<string, string> = {
+        NFSE_TOKEN: "tok",
+        NFSE_CNPJ_PRESTADOR: "12345678000190",
+        NFSE_INSCRICAO_MUNICIPAL: "12345",
+        NFSE_SOAP_URL: "http://localhost/soap",
+        NFSE_AUX_URL: "http://localhost/aux",
+        EMPRESA_MUNICIPIO_IBGE: "3550308",
+      };
+      return vals[key] ?? undefined;
+    });
+    const service = await buildService(mocks);
+
+    // Acessa o getter privado via cast — verifica o valor direto sem passar pelo XML
+    const codigoMunicipio = (service as any).CODIGO_MUNICIPIO as string;
+    expect(codigoMunicipio).toBe("3550308");
+  });
+
+  it("getter CODIGO_MUNICIPIO retorna fallback 3520400 quando EMPRESA_MUNICIPIO_IBGE ausente", async () => {
+    const mocks = buildMocks();
+    mocks.mockConfig.get = jest.fn((key: string) => {
+      const vals: Record<string, string> = {
+        NFSE_TOKEN: "tok",
+        NFSE_CNPJ_PRESTADOR: "12345678000190",
+        NFSE_INSCRICAO_MUNICIPAL: "12345",
+        NFSE_SOAP_URL: "http://localhost/soap",
+        NFSE_AUX_URL: "http://localhost/aux",
+        // EMPRESA_MUNICIPIO_IBGE ausente — deve usar fallback 3520400
+      };
+      return vals[key] ?? undefined;
+    });
+    const service = await buildService(mocks);
+
+    // Acessa o getter privado via cast — verifica fallback quando env var ausente
+    const codigoMunicipio = (service as any).CODIGO_MUNICIPIO as string;
+    expect(codigoMunicipio).toBe("3520400");
+  });
+
+  it("XML do servico usa EMPRESA_MUNICIPIO_IBGE quando definida (integracao getter->buildRpsXml)", async () => {
+    const mocks = buildMocks();
+    mocks.mockConfig.get = jest.fn((key: string) => {
+      const vals: Record<string, string> = {
+        NFSE_TOKEN: "tok",
+        NFSE_CNPJ_PRESTADOR: "12345678000190",
+        NFSE_INSCRICAO_MUNICIPAL: "12345",
+        NFSE_SOAP_URL: "http://localhost/soap",
+        NFSE_AUX_URL: "http://localhost/aux",
+        EMPRESA_MUNICIPIO_IBGE: "9999999",
+      };
+      return vals[key] ?? undefined;
+    });
+    const service = await buildService(mocks);
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(
+        `<GerarNfseResposta><Nfse><InfNfse><NumeroNfse>2001</NumeroNfse><CodigoVerificacao>IBGE</CodigoVerificacao></InfNfse></Nfse></GerarNfseResposta>`,
+      );
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    // Usa CLIENTE_PF (codigoMunicipio=3520400) para que o tomador nao contamine a busca
+    const mocksMod = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValueOnce(CLIENTE_PF) });
+    mocksMod.mockConfig.get = mocks.mockConfig.get;
+    const serviceMod = await buildService(mocksMod);
+    jest.spyOn(serviceMod as any, "enviarSoap").mockResolvedValueOnce(
+      `<GerarNfseResposta><Nfse><InfNfse><NumeroNfse>2001</NumeroNfse><CodigoVerificacao>IBGE</CodigoVerificacao></InfNfse></Nfse></GerarNfseResposta>`,
+    );
+    jest.spyOn(serviceMod as any, "getInfoNfse").mockResolvedValue(null);
+
+    await serviceMod.emitir("q1", { clienteAthosId: 200 });
+
+    const soapSpyMod = (serviceMod as any).enviarSoap as jest.SpyInstance;
+    // O segundo argumento de enviarSoap e o XML "dados" com o <Servico>
+    const xmlSent: string = soapSpyMod.mock.calls[0][1];
+    // O XML deve conter o codigo 9999999 dentro de <Servico> — unico local onde nao vem do tomador
+    // Usa regex para garantir que e o CodigoMunicipio do Servico (entre </Discriminacao> e </Servico>)
+    const servicoMatch = xmlSent.match(/<Discriminacao>[\s\S]*?<CodigoMunicipio>(\d+)<\/CodigoMunicipio>/);
+    expect(servicoMatch).not.toBeNull();
+    expect(servicoMatch![1]).toBe("9999999");
+  });
+});

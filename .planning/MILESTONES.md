@@ -1,5 +1,24 @@
 # Milestones - Sistema de Orcamento BomCusto
 
+## v2.3 White-Label Multi-Empresa (Shipped: 2026-06-23)
+
+**Phases completed:** 3 phases (35, 36, 999.1), 12 plans
+
+**Delivered:** Sistema totalmente white-label (configurável por empresa via env vars) + gerenciamento de layout do PDF de orçamento pela própria interface, com upload/preview/ativação em runtime e render seguro.
+
+**Key accomplishments:**
+
+- **Fase 35 (Backend White-Label):** NFS-e dehardcoded (EMPRESA_MUNICIPIO_IBGE), template PDF extraído para `quote-default.hbs`, `renderHtml` com cadeia de fallback + variáveis de empresa, `.env.example` com todas as `EMPRESA_*`.
+- **Fase 36 (Frontend White-Label):** 8 arquivos dehardcoded (nome, logo, CNPJ, endereço, email lidos de env vars), CSS theming via custom property, renderização condicional de campos opcionais; páginas internas e públicas. UAT 6/6 aprovado.
+- **Fase 999.1 — Storage + render seguro:** modelo Prisma `PdfTemplate` + migration + seed idempotente dos 3 presets; `renderHtml` async resolvendo template ativo do banco; hardening Handlebars (`knownHelpersOnly`) + bloqueio total de rede no Puppeteer (anti-SSRF); variáveis de contato de empresa (D-07).
+- **Fase 999.1 — 3 presets:** colorido, minimalista P&B e clássico, com fontes/ícones 100% inline (sobrevivem ao bloqueio de rede) e contato dehardcoded.
+- **Fase 999.1 — Módulo backend:** `PdfTemplatesService` (validação que REJEITA HTML perigoso via `sanitize-html`, swap atômico do ativo via transação) + 5 endpoints `@AdminOnly()` (listar/upload/ativar/excluir/preview) + `renderPreviewPdf` server-side; `AdminAuthGuard` com `timingSafeEqual`.
+- **Fase 999.1 — Frontend:** tela `/configuracoes/templates` (galeria + upload + preview) consumindo os endpoints via rotas proxy que injetam `x-admin-api-key` só server-side + gate de senha com rate-limit — trocar o layout do PDF em runtime pela interface, sem editar código nem reiniciar o servidor.
+
+**Verificação:** 999.1-VERIFICATION.md PASSED (8/8). Segurança: 999.1-SECURITY.md `threats_open: 0` (risco T-SANDBOX aceito p/ deploy interno; ⚠ ação pré-deploy CR-01 — definir env vars do painel admin).
+
+**Known deferred items at close:** UAT/verificação humana das Fases 32/33 (ciclo v2.2) — ver STATE.md → Deferred Items.
+
 ---
 
 ## v1.0 - MVP: Seguranca, Confiabilidade e UX

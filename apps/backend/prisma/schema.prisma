@@ -278,3 +278,25 @@ model NfseEmitidaTitulo {
   @@index([nfseEmitidaId])
   @@index([idcontareceber])
 }
+
+enum PdfTemplateKind {
+  PRESET
+  CUSTOM
+}
+
+// PdfTemplate: armazena templates Handlebars/HTML para geração de PDF de orçamento.
+// Unicidade do ativo (no máximo um isActive=true por deploy) é garantida por transação
+// no serviço (Plano 05), não por constraint de banco — Postgres não tem partial unique
+// trivial via Prisma para campo boolean.
+model PdfTemplate {
+  id        String          @id @default(cuid())
+  name      String
+  slug      String          @unique
+  source    String          @db.Text
+  kind      PdfTemplateKind
+  isActive  Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([isActive])
+}

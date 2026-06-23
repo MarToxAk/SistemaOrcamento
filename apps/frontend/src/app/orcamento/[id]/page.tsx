@@ -3,6 +3,7 @@
 import Script from "next/script";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { EMPRESA_NOME, EMPRESA_CNPJ, EMPRESA_ENDERECO, EMPRESA_EMAIL, EMPRESA_LOGO_URL } from "@/lib/empresa";
 
 type QuoteItem = {
   sequenciaitem?: number;
@@ -526,15 +527,14 @@ export default function OrcamentoDetailPage() {
         <div className="container my-5">
           <div className="orcamento-header p-3 rounded-top" style={{background: "linear-gradient(135deg,#c5f2e8 0%,#cbe1f9 25%,#e7d8f9 50%,#f9e7f5 75%,#f0cacb 100%)", color: "#222"}}>
             <div className="header-left d-flex align-items-start gap-3 flex-grow-1">
-              <img src="/media/logo-primary.png" alt="Logo Bom Custo" className="me-3 logo-img" style={{maxWidth:140, maxHeight:100, background: "#fff", borderRadius:8, padding:6}} />
+              <img src={EMPRESA_LOGO_URL} alt={EMPRESA_NOME} className="me-3 logo-img" style={{maxWidth:140, maxHeight:100, background: "#fff", borderRadius:8, padding:6}} />
               <div className="header-info">
-                <h3 className="mb-0">Bom Custo Papelaria & Gráfica Rápida LTDA</h3>
-                <div className="small">CNPJ: 62.391.927/0001-57</div>
-                <div className="small">Rua Olímpio Leite da Silva, 39 - Loja 07, Perequê</div>
-                <div className="small">Ilhabela - SP, CEP: 11633-078</div>
+                <h3 className="mb-0">{EMPRESA_NOME}</h3>
+                {EMPRESA_CNPJ && <div className="small">CNPJ: {EMPRESA_CNPJ}</div>}
+                {EMPRESA_ENDERECO && <div className="small">{EMPRESA_ENDERECO}</div>}
                 <div className="small">
                   Telefones: (12) 99648-4918 / (12) 3896-1474 / (12) 99678-2405<br />
-                  E-mail: orcamento@bomcustoilhabela.com.br
+                  {EMPRESA_EMAIL && <>E-mail: {EMPRESA_EMAIL}</>}
                 </div>
               </div>
             </div>

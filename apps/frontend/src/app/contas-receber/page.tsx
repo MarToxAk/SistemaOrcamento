@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Script from "next/script";
+import { EMPRESA_NOME, EMPRESA_LOGO_URL } from "@/lib/empresa";
 
 interface DashboardSummary {
   total_a_receber: number;
@@ -105,8 +106,8 @@ export default function ContasReceberPage() {
         <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top">
           <div className="d-flex align-items-center gap-3 flex-wrap">
             <img
-              src="/media/logo-primary.png"
-              alt="Logo Bom Custo"
+              src={EMPRESA_LOGO_URL}
+              alt={EMPRESA_NOME}
               className="logo-img"
             />
             <div>

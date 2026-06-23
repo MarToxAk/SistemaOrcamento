@@ -1,33 +1,36 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: Cobrança e Fiscal do Cliente
-current_phase: 31
+milestone: v2.3
+milestone_name: — White-Label Multi-Empresa
+current_phase: 999.1
 status: Awaiting next milestone
-last_updated: "2026-06-08T14:42:57.950Z"
-last_activity: 2026-06-08 — Milestone v2.1 completed and archived
+stopped_at: 999.1-06 complete (fase pronta para verificacao)
+last_updated: "2026-06-23T12:19:43.966Z"
+last_activity: 2026-06-23
+last_activity_desc: Milestone v2.3 completed and archived
 progress:
-  total_phases: 32
-  completed_phases: 27
-  total_plans: 59
-  completed_plans: 57
-  percent: 84
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 12
+  completed_plans: 12
+  percent: 100
+current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-22 — Phase 29 Plan 02 completo (modal boleto frontend + Route Handler)
-Current phase: 31
-Milestone: v2.1 — Cobranca e Fiscal do Cliente
+Last updated: 2026-06-17 — Roadmap v2.3 definido (White-Label Multi-Empresa)
+Current phase: 999.1
+Milestone: v2.3 — White-Label Multi-Empresa
 
 ---
 
 ## Current Position
 
-Phase: Milestone v2.1 complete
+Phase: Milestone v2.3 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-06-08 — Milestone v2.1 completed and archived
+Last activity: 2026-06-23 — Milestone v2.3 completed and archived
 
 ## Project Status
 
@@ -61,9 +64,15 @@ Last activity: 2026-06-08 — Milestone v2.1 completed and archived
 | 26 | Status Pagina Producao — Layout Kanban 3 colunas | complete (v2.0) |
 | 27 | Dashboard de Contas a Receber — Read-Only | complete (v2.0) |
 | 28 | Pagina de Detalhe do Cliente + Schema Prisma | complete (v2.1) |
-| 29 | Boleto Consolidado via EFI Bank | in-progress (v2.1) — Plans 01+02 completos, checkpoint pendente |
-| 30 | Emissao de NFS-e a partir de Titulos | pending (v2.1) |
-| 31 | Historico NFS-e + Consulta NF Athos | pending (v2.1) |
+| 29 | Boleto Consolidado via EFI Bank | complete (v2.1) |
+| 30 | Emissao de NFS-e a partir de Titulos | complete (v2.1) |
+| 31 | Historico NFS-e + Consulta NF Athos | complete (v2.1) |
+| 32 | API de Busca de Produto | complete (v2.2) |
+| 33 | API de Escrita de Produto | complete (v2.2) |
+| 34 | Frontend de Gestao de Produtos | skipped — decisão API-only (2026-06-17) |
+| 35 | Backend White-Label | complete (v2.3) |
+| 36 | Frontend White-Label | complete (v2.3) |
+| 999.1 | Gerenciamento de layout do PDF pela interface | complete (v2.3) |
 
 ## Milestones Archived
 
@@ -78,22 +87,23 @@ Last activity: 2026-06-08 — Milestone v2.1 completed and archived
 - v1.8 — phases 19-21 (.planning/milestones/v1.8-ROADMAP.md)
 - v1.9 — phase 22
 - v2.0 — phases 23-27 (.planning/milestones/v2.0-ROADMAP.md)
+- v2.1 — phases 28-31 (.planning/milestones/v2.1-ROADMAP.md)
+- v2.2 — phases 32-33 (não arquivado separadamente; UAT/verificação diferidas — ver Deferred Items)
+- v2.3 — phases 35-36 + 999.1 (.planning/milestones/v2.3-ROADMAP.md)
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-22)
+See: .planning/PROJECT.md (updated 2026-06-17)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
+Current focus: v2.3 concluído — aguardando próximo milestone (/gsd-new-milestone)
 
 ## Active Context
 
-- Milestone ativo: v2.1 (iniciado 2026-05-22)
-- Proximo passo: /gsd:plan-phase 29 (boleto-consolidado)
+- Milestone v2.3 (White-Label Multi-Empresa) concluído e arquivado em 2026-06-23.
+- Entregue: env vars EMPRESA_* + PDF extraído para .hbs + NFS-e dehardcoded (Fase 35); frontend 8 arquivos dehardcoded + CSS theming (Fase 36); gerenciamento de templates PDF pela UI com upload/preview/ativação + render seguro (Fase 999.1, originalmente WL-01/WL-03 deferidos).
 - Stack: NestJS + Next.js + Prisma + PostgreSQL
-- Athos: somente leitura — nunca gravar
-- NfseModule existente em apps/backend/src/modules/integrations/nfse/ — reutilizar
-- EFI integration existente — reutilizar para boleto consolidado
-- Phases 28 e 30 requerem Prisma migrations
+- Dívida diferida: UAT/verificação humana das Fases 32/33 (v2.2) — ver Deferred Items. Segurança v2.3: ação pré-deploy CR-01 (env vars do painel admin) — ver 999.1-SECURITY.md.
+- Próximo passo: /gsd-new-milestone
 
 ## Decisions Log
 
@@ -137,11 +147,19 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 | 2026-05-22 | backendFetch ja injeta x-internal-api-key — Route Handler /api/cobranca/boleto nao duplica header | internalHeaders() em backend-client.ts cobre a injecao server-side automaticamente |
 | 2026-05-22 | void navigator.clipboard.writeText() no botao Copiar da linha digitavel | Suprimir aviso de floating Promise no TypeScript strict sem quebrar o comportamento |
 | 2026-05-22 | Modal boleto sem Bootstrap Modal JS — React state overlay padrao pdf-modal-backdrop | Consistencia com padrao existente em orcamento/[id]/page.tsx; sem dependencia de Bootstrap JS |
+| 2026-06-15 | Liberar escrita no Athos APENAS na tabela produto (excecao controlada) | Necessidade de cadastrar/editar produtos pelo sistema sem abrir o Athos diretamente |
+| 2026-06-15 | Soft-delete de produto via statusproduto/vendeproduto=false — nunca DELETE fisico | Preservar integridade referencial (venda_item etc.) e historico completo |
+| 2026-06-15 | SPROD-02 (auth) atribuido a Phase 32 (primeiro endpoint) | Auth estabelecida desde o inicio; nao diferida para a fase de escrita |
+| 2026-06-15 | SPROD-04 (Swagger) atribuido a Phase 33 (write phase) | Documentacao cobre a superficie completa da API apos write endpoints existirem |
+| 2026-06-17 | Phase 34 (Frontend de Gestao de Produtos) descartada — entrega API-only | Operador decidiu que a API REST de produtos e suficiente; UI nao necessaria para esta iteracao |
+| 2026-06-17 | v2.3 usa env vars (.env por deploy) em vez de tabela empresa_config no banco | Abordagem mais simples; sem Prisma migration, sem MinIO, sem painel admin — deploy separado por empresa com .env próprio |
+| 2026-06-17 | EMPRESA_PDF_TEMPLATE_PATH com fallback para template padrão .hbs — template customizado montado via volume Docker | Permite white-label de PDF sem rebuild da imagem; padrão funciona out-of-the-box |
 
 ## Notes
 
 - Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
 - Recomendada auditoria consolidada no inicio do proximo ciclo.
+- Tech debt remanescente: testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API).
 
 ### Quick Tasks Completed
 
@@ -198,6 +216,63 @@ Itens reconhecidos (acknowledged) e deferidos no fechamento do milestone v2.1 em
 
 Tech debt aceitável remanescente (não bloqueia): testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API).
 
+---
+
+Itens reconhecidos (acknowledged) e deferidos no fechamento do milestone **v2.3** em 2026-06-23:
+
+**Dívida de UAT/verificação de milestone anterior (v2.2 — APIs de Produto), nunca fechada:**
+
+| Categoria | Item | Status |
+|-----------|------|--------|
+| uat | 32-HUMAN-UAT.md (API de Busca de Produto) | partial — 6 cenários pendentes (ciclo v2.2) |
+| uat | 33-HUMAN-UAT.md (API de Escrita de Produto) | partial — 4 cenários pendentes (ciclo v2.2) |
+| verification | 32-VERIFICATION.md | human_needed (ciclo v2.2) |
+| verification | 33-VERIFICATION.md | human_needed (ciclo v2.2) |
+
+Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São APIs de produto já em uso em produção; o UAT humano e a verificação ficaram pendentes mas não bloqueiam o White-Label. Tratar com `/gsd-audit-uat` num ciclo futuro de saneamento.
+
+**Dívida de segurança do v2.3 (documentada, deploy interno):** ver `999.1-SECURITY.md` — CR-01 (gate de senha fail-open, exige definir env vars antes do deploy), T-SANDBOX (Chromium --no-sandbox aceito p/ deploy interno).
+
 ## Operator Next Steps
 
 - Start the next milestone with /gsd-new-milestone
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Notes |
+|-------|------|----------|-------|
+| Phase 35 P01 | 8min | 1 tasks | 2 files |
+| Phase 35 P02 | 8min | 2 tasks | 2 files |
+| Phase 36 P01 | 8min | 2 tasks | 4 files |
+| Phase 36 P02 | 6min | 2 tasks | 5 files |
+| Phase 36 P03 | 6min | 1 tasks | 2 files |
+| Phase 999.1 P01 | 10min | 3 tasks | 7 files |
+| Phase 999.1 P03 | 25min | 2 tasks | 6 files |
+| Phase 999.1 P04 | 20min | 3 tasks | 4 files |
+| Phase 999.1 P05 | ~20min | 2 tasks | 6 files |
+| Phase 999.1 P06 | ~45min | 2 tasks | 12 files |
+
+## Session
+
+**Last session:** 2026-06-22T20:52:11.553Z
+**Stopped at:** 999.1-06 complete (fase pronta para verificacao)
+**Resume file:** None
+
+## Decisions
+
+- [Phase 36]: Módulo empresa.ts usa nullish coalescing com fallbacks concretos — zero risco de undefined chegando ao JSX
+- [Phase 36]: CSS custom property --cor-primaria injetada no <head> via <style> inline — Server Component lê env var antes do HTML ser enviado ao cliente
+- [Phase ?]: storage banco vs MinIO
+- [Phase ?]: migration manual
+- [Phase ?]: seed incremental
+- [Phase ?]: renderHtml tornado publico para preview (D-08)
+- [Phase ?]: shouldAllowRequest como funcao pura exportada (D-02 anti-SSRF, testavel sem Puppeteer)
+- [Phase ?]: Handlebars.create() por render isolado (Pitfall 3)
+- [Phase 999.1]: Os 3 presets PDF (D-06) compartilham exatamente o mesmo conjunto de variaveis Handlebars de empresa/orcamento — trocar de layout nao perde dados — Requisito explicito do plano 999.1-04 para permitir troca de preset em runtime sem reescrever orcamentos
+- [Phase 999.1]: Teste do seed de presets PDF mocka PrismaClient em vez de usar Postgres real — Docker indisponivel neste ambiente de execucao; logica de isActive=true unico e determinada pelos dados estaticos do array PRESETS, nao por comportamento do banco — mock valida a mesma asercao
+- [Phase ?]: Checkpoint sanitize-html aprovado pelo orquestrador apos verificacao independente (apostrophecms oficial, ~9.8M downloads/semana) — falso positivo de recencia confirmado
+- [Phase ?]: renderPreviewPdf adicionado como novo metodo publico em QuotesPdfStorageService (Rule 2) — D-08 exigia preview via render hardened mas nenhum metodo combinava renderHtml+renderPdfBuffer sem persistir
+- [Phase ?]: validateUpload REJEITA (nao limpa) HTML perigoso — regex de padroes perigosos + sanitize-html como sinal adicional de divergencia >30%
+- [Phase ?]: [Phase 999.1]: adminBackendFetch injeta x-admin-api-key apenas server-side — segredo nunca chega ao browser (T-999.1-18)
+- [Phase ?]: [Phase 999.1]: gate de senha opcional em /configuracoes/* (Rule 4) — cookie httpOnly HMAC; falha fechada sem CONFIG_PANEL_PASSWORD (preserva D-03)
+- [Phase ?]: [Phase 999.1]: preview por templateId no backend (Rule 2) — galeria nao tinha como pre-visualizar template salvo sem o source

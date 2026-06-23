@@ -2080,4 +2080,148 @@ export class AthosService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Produtos — Phase 32 (read-only)
+  // ---------------------------------------------------------------------------
+
+  async buscarProdutos(params: {
+    descricao?: string;
+    codigobarra?: string;
+    iddepartamento?: number;
+    idgrupo?: number;
+    idmarca?: number;
+    page?: number;
+    take?: number;
+  }): Promise<{ total: number; page: number; take: number; items: import('./produto.types').Produto[] }> {
+    this.logger.log(
+      `buscarProdutos descricao="${params.descricao ?? ""}" codigobarra="${params.codigobarra ?? ""}" iddepartamento=${params.iddepartamento ?? ""} idgrupo=${params.idgrupo ?? ""} idmarca=${params.idmarca ?? ""}`,
+    );
+
+    const take = Math.min(Math.max(1, Number(params.take ?? 20) || 20), 50);
+    const page = Math.max(1, Number(params.page ?? 1) || 1);
+    const offset = (page - 1) * take;
+
+    const conditions: string[] = [];
+    const qParams: (string | number)[] = [];
+    let idx = 1;
+
+    if (params.descricao?.trim()) {
+      conditions.push(`(p.descricaoproduto ILIKE $${idx} OR p.descricaocurta ILIKE $${idx})`);
+      qParams.push(`%${params.descricao.trim()}%`);
+      idx++;
+    }
+    if (params.codigobarra?.trim()) {
+      conditions.push(`(p.codigobarra1 = $${idx} OR p.codigobarra2 = $${idx})`);
+      qParams.push(params.codigobarra.trim());
+      idx++;
+    }
+    if (params.iddepartamento) {
+      conditions.push(`p.iddepartamento = $${idx++}`);
+      qParams.push(params.iddepartamento);
+    }
+    if (params.idgrupo) {
+      conditions.push(`p.idgrupo = $${idx++}`);
+      qParams.push(params.idgrupo);
+    }
+    if (params.idmarca) {
+      conditions.push(`p.idmarca = $${idx++}`);
+      qParams.push(params.idmarca);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const countResult = await client.query(
+        `SELECT COUNT(*) AS total FROM produto p ${whereClause}`,
+        qParams,
+      );
+      const total = Number(countResult.rows[0]?.total ?? 0);
+
+      const dataResult = await client.query(
+        `SELECT p.*, NULL::bytea AS imagemproduto FROM produto p ${whereClause} ORDER BY p.descricaoproduto ASC LIMIT $${idx} OFFSET $${idx + 1}`,
+        [...qParams, take, offset],
+      );
+
+      return { total, page, take, items: dataResult.rows as import('./produto.types').Produto[] };
+    } catch (err) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
+      this.logger.warn(`buscarProdutos: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException("Erro ao buscar produtos no Athos.");
+    } finally {
+      client.release();
+    }
+  }
+
+  async buscarProdutoPorId(idproduto: number): Promise<import('./produto.types').Produto | null> {
+    this.logger.log(`buscarProdutoPorId idproduto=${idproduto}`);
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        "SELECT p.*, NULL::bytea AS imagemproduto FROM produto p WHERE p.idproduto = $1 LIMIT 1",
+        [idproduto],
+      );
+      return (result.rows[0] as import('./produto.types').Produto) ?? null;
+    } catch (err) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
+      this.logger.warn(`buscarProdutoPorId: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException("Erro ao buscar produto no Athos.");
+    } finally {
+      client.release();
+    }
+  }
+
+  async buscarDepartamentos(): Promise<import('./produto.types').LookupItem[]> {
+    this.logger.log("buscarDepartamentos");
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        "SELECT iddepartamento AS id, nome FROM produto_departamento ORDER BY nome ASC",
+      );
+      return result.rows as import('./produto.types').LookupItem[];
+    } catch (err) {
+      this.logger.warn(`buscarDepartamentos: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException("Erro ao buscar departamentos no Athos.");
+    } finally {
+      client.release();
+    }
+  }
+
+  async buscarGrupos(): Promise<import('./produto.types').LookupItem[]> {
+    this.logger.log("buscarGrupos");
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        "SELECT idgrupo AS id, nome FROM produto_grupo ORDER BY nome ASC",
+      );
+      return result.rows as import('./produto.types').LookupItem[];
+    } catch (err) {
+      this.logger.warn(`buscarGrupos: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException("Erro ao buscar grupos no Athos.");
+    } finally {
+      client.release();
+    }
+  }
+
+  async buscarMarcas(): Promise<import('./produto.types').LookupItem[]> {
+    this.logger.log("buscarMarcas");
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        "SELECT idmarca AS id, nome FROM produto_marca ORDER BY nome ASC",
+      );
+      return result.rows as import('./produto.types').LookupItem[];
+    } catch (err) {
+      this.logger.warn(`buscarMarcas: ${err instanceof Error ? err.message : String(err)}`);
+      throw new InternalServerErrorException("Erro ao buscar marcas no Athos.");
+    } finally {
+      client.release();
+    }
+  }
+
 }

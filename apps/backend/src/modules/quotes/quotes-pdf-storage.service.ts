@@ -1,9 +1,26 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import { Injectable, InternalServerErrorException, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Handlebars from "handlebars";
 import { Client as MinioClient } from "minio";
 import puppeteer from "puppeteer";
+
+import { PdfTemplatesRepository } from "../pdf-templates/pdf-templates.repository";
 import { QUOTES_PDF_HTML_TEMPLATE } from "./quotes-pdf.template";
+
+// ---------------------------------------------------------------------------
+// shouldAllowRequest — função pura exportável (testável sem instanciar Puppeteer)
+//
+// Retorna true APENAS para o documento inline (about:blank / data:).
+// Tudo o mais é bloqueado: http(s) externos, file://, fontes, imagens, CSS,
+// XHR, fetch — neutraliza SSRF (169.254.169.254, IPs internos) e exfiltração.
+// (D-02 / T-999.1-08 / T-999.1-09 / T-999.1-10)
+// ---------------------------------------------------------------------------
+export function shouldAllowRequest(url: string): boolean {
+  return url === "about:blank" || url.startsWith("data:");
+}
 
 type QuotePdfData = {
   idorcamento_interno: number;
@@ -36,13 +53,22 @@ type StoredPdfResult = {
   publicUrl: string | null;
 };
 
-const HTML_TEMPLATE = QUOTES_PDF_HTML_TEMPLATE;
+// ---------------------------------------------------------------------------
+// Helpers Handlebars permitidos (D-02 / T-999.1-07).
+// Listam apenas helpers *custom* registrados. Built-ins de bloco (#if, #each,
+// #unless, #with, lookup) NÃO precisam estar aqui — o compilador os conhece.
+// NAO adicionar helpers de I/O (require, fs, exec, eval).
+// ---------------------------------------------------------------------------
+const KNOWN_HELPERS: Record<string, boolean> = {};
 
 @Injectable()
 export class QuotesPdfStorageService {
   private readonly logger = new Logger(QuotesPdfStorageService.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly pdfTemplatesRepository: PdfTemplatesRepository,
+  ) {}
 
   async generateAndStore(payload: QuotePdfData): Promise<StoredPdfResult> {
     const contentType = "application/pdf";
@@ -50,8 +76,8 @@ export class QuotesPdfStorageService {
     const fileName = `Orçamento - ${quoteNumber}.pdf`;
     const objectName = `${this.getPathPrefix()}/${quoteNumber}/${fileName}`;
 
-    this.logger.log(`Gerando PDF — orçamento ${quoteNumber}, template v2 (${QUOTES_PDF_HTML_TEMPLATE.length} chars)`);
-    const html = this.renderHtml(payload);
+    this.logger.log(`Gerando PDF — orçamento ${quoteNumber}`);
+    const html = await this.renderHtml(payload);
     const pdfBuffer = await this.renderPdfBuffer(html);
     this.logger.log(`PDF gerado — ${pdfBuffer.length} bytes`);
 
@@ -69,35 +95,58 @@ export class QuotesPdfStorageService {
     };
   }
 
-  async downloadObjectBuffer(objectName: string): Promise<Buffer> {
-    const client = this.buildMinioClient();
-    const bucket = this.requireEnv("MINIO_BUCKET");
+  // ---------------------------------------------------------------------------
+  // renderPreviewPdf — D-08: preview server-side de um templateSource explícito.
+  //
+  // Usa exatamente o mesmo caminho hardened de generateAndStore (renderHtml +
+  // renderPdfBuffer — compile restrito + rede bloqueada), mas NUNCA persiste
+  // no MinIO. Usado pelo endpoint POST /pdf-templates/preview (Plano 05) para
+  // que o admin veja o resultado antes de ativar/salvar um template.
+  // ---------------------------------------------------------------------------
+  async renderPreviewPdf(payload: QuotePdfData, templateSource: string): Promise<Buffer> {
+    this.logger.log("Gerando preview de template — sem persistência");
+    const html = await this.renderHtml(payload, templateSource);
+    return this.renderPdfBuffer(html);
+  }
 
-    const stream = await client.getObject(bucket, objectName);
-    const chunks: Buffer[] = [];
+  // ---------------------------------------------------------------------------
+  // renderHtml — público para que PdfTemplatesModule (Plano 05) possa chamar
+  // o render hardened no endpoint de preview (D-08).
+  //
+  // @param payload     Dados do orçamento.
+  // @param templateSource (opcional) Source Handlebars explícito para preview
+  //                    server-side; quando fornecido, o repositório NÃO é
+  //                    consultado e o template não é persistido (D-08).
+  // ---------------------------------------------------------------------------
+  async renderHtml(payload: QuotePdfData, templateSource?: string): Promise<string> {
+    const src = await this.resolveTemplateSource(templateSource);
 
-    await new Promise<void>((resolve, reject) => {
-      stream.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-      stream.on("end", () => resolve());
-      stream.on("error", (error) => reject(error));
+    // Compilação Handlebars hardened (D-02 / T-999.1-07):
+    //   - knownHelpersOnly:true  → helpers fora de KNOWN_HELPERS causam erro de compile
+    //   - strict:false           → mantém compatibilidade com {{#if campo.ausente}}
+    //   - noEscape:false         → mantém escaping de HTML nas expressões {{ }}
+    //   - Handlebars.create()    → instância isolada por render (Pitfall 3)
+    //   - allowCallsToHelperMissing NÃO é true (default false — nunca ativar)
+    const hbs = Handlebars.create();
+    const template = hbs.compile(src, {
+      knownHelpers: KNOWN_HELPERS,
+      knownHelpersOnly: true,
+      strict: false,
+      noEscape: false,
     });
 
-    return Buffer.concat(chunks);
-  }
+    // Empresa data via ConfigService (D-07)
+    const empresaNome = this.configService.get<string>("EMPRESA_NOME") ?? "";
+    const empresaCnpj = this.configService.get<string>("EMPRESA_CNPJ") ?? "";
+    const empresaEndereco = this.configService.get<string>("EMPRESA_ENDERECO") ?? "";
+    const empresaLogoUrl = this.configService.get<string>("EMPRESA_LOGO_URL"); // undefined quando ausente (Pitfall 3)
+    const empresaCor = this.configService.get<string>("EMPRESA_COR_PRIMARIA") ?? "#0d6efd";
 
-  async objectExists(objectName: string): Promise<boolean> {
-    try {
-      const client = this.buildMinioClient();
-      const bucket = this.requireEnv("MINIO_BUCKET");
-      await client.statObject(bucket, objectName);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private renderHtml(payload: QuotePdfData): string {
-    const template = Handlebars.compile(HTML_TEMPLATE);
+    // Contato de empresa — dehardcode (D-07). Opcionais; sem elas a linha some no template.
+    // NAO entram em REQUIRED_ENV_VARS.
+    const empresaTelefones = this.configService.get<string>("EMPRESA_TELEFONES") ?? "";
+    const empresaEmail = this.configService.get<string>("EMPRESA_EMAIL") ?? "";
+    const empresaInstagram = this.configService.get<string>("EMPRESA_INSTAGRAM") ?? "";
 
     const itens = (payload.itens ?? []).map((item) => ({
       sequenciaitem: item.sequenciaitem ?? "-",
@@ -138,13 +187,77 @@ export class QuotesPdfStorageService {
         valor: this.formatCurrency(payload.totais?.valor ?? 0),
         desconto: this.formatCurrency(payload.totais?.desconto ?? 0),
       },
+      empresaNome,
+      empresaCnpj,
+      empresaEndereco,
+      empresaLogoUrl,
+      empresaCor,
+      // Contato (D-07)
+      empresaTelefones,
+      empresaEmail,
+      empresaInstagram,
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // resolveTemplateSource — D-05
+  //
+  // Cadeia de resolução (ordem decrescente de prioridade):
+  //   1. explicit (preview server-side — D-08)
+  //   2. PdfTemplate ativo no banco (isActive=true)
+  //   3. EMPRESA_PDF_TEMPLATE_PATH (env var, arquivo local)
+  //   4. apps/backend/templates/quote-default.hbs (bundled)
+  //   5. QUOTES_PDF_HTML_TEMPLATE (string embutida — fallback absoluto)
+  // ---------------------------------------------------------------------------
+  private async resolveTemplateSource(explicit?: string): Promise<string> {
+    if (explicit) return explicit; // preview server-side (D-08)
+
+    const active = await this.pdfTemplatesRepository.getActiveSource();
+    if (active) return active;
+
+    // Fallback existente (D-05 — manter cadeia original como rede de segurança)
+    const customPath = this.configService.get<string>("EMPRESA_PDF_TEMPLATE_PATH");
+    if (customPath) {
+      if (!existsSync(customPath)) {
+        throw new InternalServerErrorException(
+          `EMPRESA_PDF_TEMPLATE_PATH definida mas arquivo nao encontrado: ${customPath}`,
+        );
+      }
+      return readFileSync(customPath, "utf-8");
+    }
+
+    const defaultPath = path.resolve(process.cwd(), "apps/backend/templates/quote-default.hbs");
+    if (existsSync(defaultPath)) {
+      return readFileSync(defaultPath, "utf-8");
+    }
+
+    return QUOTES_PDF_HTML_TEMPLATE;
+  }
+
+  // ---------------------------------------------------------------------------
+  // renderPdfBuffer — D-02: hardened Puppeteer
+  //
+  // Segurança:
+  //   - page.setRequestInterception(true): toda requisição de rede é avaliada
+  //   - shouldAllowRequest(): apenas about:blank e data: passam (sem SSRF/exfil)
+  //   - timeout: 30 000 ms (reduzido de 60 000 — T-999.1-11)
+  //   - waitUntil: "load" (NÃO networkidle0 — Pitfall 6 / sem CDNs externas)
+  //
+  // ASSUNÇÃO DE SEGURANÇA A4 (alta criticidade — deferido para /gsd-secure-phase):
+  //   --no-sandbox é mantido porque o ambiente de deploy roda como root em container.
+  //   Postura compensatória: rede totalmente bloqueada (shouldAllowRequest) +
+  //   sanitização de upload (Plano 05) + compile Handlebars restrito (knownHelpersOnly).
+  //   Resolver em /gsd-secure-phase: usuário não-root no Dockerfile + sandbox seccomp
+  //   do Chromium (Pitfall 1).
+  // ---------------------------------------------------------------------------
   private async renderPdfBuffer(html: string): Promise<Buffer> {
     const browser = await puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      args: [
+        "--no-sandbox",           // ASSUNÇÃO A4: ver comentário acima
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+      ],
     });
 
     // A4 at 96 DPI: 794 x 1122 px
@@ -155,9 +268,19 @@ export class QuotesPdfStorageService {
       const page = await browser.newPage();
       await page.setViewport({ width: A4_WIDTH_PX, height: A4_HEIGHT_PX, deviceScaleFactor: 1 });
 
-      // "load" aguarda o evento load (CSS + fonts incluídas) sem travar em
-      // networkidle0 que pode timeout quando CDNs externas demoram.
-      await page.setContent(html, { waitUntil: "load", timeout: 60000 });
+      // Bloqueio total de rede (D-02 / anti-SSRF / T-999.1-08 / T-999.1-09 / T-999.1-10)
+      await page.setRequestInterception(true);
+      page.on("request", (req) => {
+        if (shouldAllowRequest(req.url())) {
+          req.continue();
+        } else {
+          req.abort();
+        }
+      });
+
+      // "load" aguarda o evento load sem travar em networkidle0
+      // (com rede bloqueada não há idle — Pitfall 6)
+      await page.setContent(html, { waitUntil: "load", timeout: 30000 });
 
       // Aguarda um tick extra para garantir que fontes web sejam aplicadas
       await new Promise((r) => setTimeout(r, 500));
@@ -176,6 +299,33 @@ export class QuotesPdfStorageService {
       );
     } finally {
       await browser.close();
+    }
+  }
+
+  async downloadObjectBuffer(objectName: string): Promise<Buffer> {
+    const client = this.buildMinioClient();
+    const bucket = this.requireEnv("MINIO_BUCKET");
+
+    const stream = await client.getObject(bucket, objectName);
+    const chunks: Buffer[] = [];
+
+    await new Promise<void>((resolve, reject) => {
+      stream.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      stream.on("end", () => resolve());
+      stream.on("error", (error) => reject(error));
+    });
+
+    return Buffer.concat(chunks);
+  }
+
+  async objectExists(objectName: string): Promise<boolean> {
+    try {
+      const client = this.buildMinioClient();
+      const bucket = this.requireEnv("MINIO_BUCKET");
+      await client.statObject(bucket, objectName);
+      return true;
+    } catch {
+      return false;
     }
   }
 

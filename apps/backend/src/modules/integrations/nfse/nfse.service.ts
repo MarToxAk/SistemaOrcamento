@@ -57,7 +57,7 @@ const IBS_RATE  = 0.001;  // 0.1%
 export class NfseService {
   private readonly logger = new Logger(NfseService.name);
 
-  private readonly CODIGO_MUNICIPIO  = "3520400";
+  private get CODIGO_MUNICIPIO() { return this.config.get<string>("EMPRESA_MUNICIPIO_IBGE") ?? "3520400"; }
   private readonly SERIE_RPS         = "RPS";
 
   private readonly DEFAULT_ENDPOINT = "https://ilhabela2.iibr.com.br/rps/3520400/1/soap/producao/rps";
