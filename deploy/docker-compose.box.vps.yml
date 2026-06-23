@@ -1,9 +1,9 @@
 # ============================================================
 # Stack dedicado: BOX PERSONALIZADO (2º tenant no mesmo VPS)
+# SEM Tailscale — o Athos é acessado por IP público e não há SMB.
 # Nomes/portas/rede distintos do stack BomCusto para nao colidir.
 #
-# Builda as imagens das fontes (as imagens ghcr do BomCusto sao
-# anteriores ao white-label/999.1). Subir com:
+# Subir:
 #   docker compose -f deploy/docker-compose.box.vps.yml --env-file deploy/box.env up -d --build
 #
 # IMPORTANTE: as NEXT_PUBLIC_* do frontend sao baked no build (args abaixo).
@@ -11,28 +11,6 @@
 # ============================================================
 
 services:
-  ts-box:
-    image: tailscale/tailscale:latest
-    container_name: box-ts-webserver
-    hostname: box-webserver
-    restart: always
-    environment:
-      TS_AUTHKEY: ${TS_AUTHKEY}
-      TS_EXTRA_ARGS: --accept-routes --advertise-tags=tag:container
-      TS_STATE_DIR: /var/lib/tailscale
-      TS_USERSPACE: false
-    volumes:
-      - box_tailscale_data:/var/lib/tailscale
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - box_net
-    ports:
-      - "4035:4000" # backend (compartilha este netns) exposto no host:4035
-
   postgres:
     image: postgres:16-alpine
     container_name: box-postgres
@@ -64,9 +42,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      ts-box:
-        condition: service_started
-    network_mode: service:ts-box
+    networks:
+      - box_net
+    ports:
+      - "4035:4000" # host:4035 -> backend:4000
     environment:
       NODE_ENV: ${NODE_ENV}
       PORT: ${PORT}
@@ -147,7 +126,6 @@ services:
       - "3035:3000"
 
 volumes:
-  box_tailscale_data:
   box_postgres_data:
 
 networks:
