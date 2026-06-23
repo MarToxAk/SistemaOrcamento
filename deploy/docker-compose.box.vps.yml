@@ -1,0 +1,130 @@
+# ============================================================
+# Stack dedicado: BOX PERSONALIZADO (2º tenant no mesmo VPS)
+# Nomes/portas/rede distintos do stack BomCusto para nao colidir.
+#
+# Builda as imagens das fontes (as imagens ghcr do BomCusto sao
+# anteriores ao white-label/999.1). Subir com:
+#   docker compose -f deploy/docker-compose.box.vps.yml --env-file deploy/box.env up -d --build
+#
+# IMPORTANTE: as NEXT_PUBLIC_* do frontend sao baked no build (args abaixo).
+# Trocou a marca? Rebuild: ... up -d --build
+# ============================================================
+
+services:
+  ts-box:
+    image: tailscale/tailscale:latest
+    container_name: box-ts-webserver
+    hostname: box-webserver
+    restart: always
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_EXTRA_ARGS: --accept-routes --advertise-tags=tag:container
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: false
+    volumes:
+      - box_tailscale_data:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    networks:
+      - box_net
+    ports:
+      - "4035:4000" # backend (compartilha este netns) exposto no host:4035
+
+  backend:
+    build:
+      context: ..
+      dockerfile: apps/backend/Dockerfile
+    image: boxpersonalizado-backend:latest
+    container_name: box-backend
+    restart: always
+    depends_on:
+      ts-box:
+        condition: service_started
+    network_mode: service:ts-box
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${PORT}
+      APP_BASE_URL: ${APP_BASE_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL}
+      CHATWOOT_API_TOKEN: ${CHATWOOT_API_TOKEN}
+      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID}
+      CHATWOOT_INBOX_ID: ${CHATWOOT_INBOX_ID}
+      ATHOS_PG_HOST: ${ATHOS_PG_HOST}
+      ATHOS_PG_DB: ${ATHOS_PG_DB}
+      ATHOS_PG_USER: ${ATHOS_PG_USER}
+      ATHOS_PG_PASS: ${ATHOS_PG_PASS}
+      ATHOS_PG_PORT: ${ATHOS_PG_PORT}
+      ATHOS_API_TOKEN: ${ATHOS_API_TOKEN}
+      ATHOS_SISTEMA_USUARIO_ID: ${ATHOS_SISTEMA_USUARIO_ID}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PORT: ${MINIO_PORT}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_REGION: ${MINIO_REGION}
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL}
+      MINIO_PATH_PREFIX: ${MINIO_PATH_PREFIX}
+      BACKEND_URL: ${BACKEND_URL}
+      EFI_BASE_URL: ${EFI_BASE_URL}
+      EFI_COBRANCA_BASE_URL: ${EFI_COBRANCA_BASE_URL}
+      EFI_CLIENT_ID: ${EFI_CLIENT_ID}
+      EFI_CLIENT_SECRET: ${EFI_CLIENT_SECRET}
+      EFI_PIX_KEY: ${EFI_PIX_KEY}
+      EFI_CERT_PEM: ${EFI_CERT_PEM}
+      EFI_KEY_PEM: ${EFI_KEY_PEM}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      EFI_WEBHOOK_SECRET: ${EFI_WEBHOOK_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      NFSE_TOKEN: ${NFSE_TOKEN}
+      NFSE_CNPJ_PRESTADOR: ${NFSE_CNPJ_PRESTADOR}
+      NFSE_INSCRICAO_MUNICIPAL: ${NFSE_INSCRICAO_MUNICIPAL}
+      NFSE_SOAP_URL: ${NFSE_SOAP_URL}
+      NFSE_AUX_URL: ${NFSE_AUX_URL}
+      EMPRESA_NOME: ${EMPRESA_NOME}
+      EMPRESA_CNPJ: ${EMPRESA_CNPJ}
+      EMPRESA_ENDERECO: ${EMPRESA_ENDERECO}
+      EMPRESA_MUNICIPIO_IBGE: ${EMPRESA_MUNICIPIO_IBGE}
+      EMPRESA_TELEFONES: ${EMPRESA_TELEFONES}
+      EMPRESA_EMAIL: ${EMPRESA_EMAIL}
+      EMPRESA_INSTAGRAM: ${EMPRESA_INSTAGRAM}
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_EMPRESA_NOME: ${NEXT_PUBLIC_EMPRESA_NOME}
+        NEXT_PUBLIC_EMPRESA_CNPJ: ${NEXT_PUBLIC_EMPRESA_CNPJ}
+        NEXT_PUBLIC_EMPRESA_ENDERECO: ${NEXT_PUBLIC_EMPRESA_ENDERECO}
+        NEXT_PUBLIC_EMPRESA_EMAIL: ${NEXT_PUBLIC_EMPRESA_EMAIL}
+        NEXT_PUBLIC_EMPRESA_LOGO_URL: ${NEXT_PUBLIC_EMPRESA_LOGO_URL}
+        NEXT_PUBLIC_EMPRESA_COR_PRIMARIA: ${NEXT_PUBLIC_EMPRESA_COR_PRIMARIA}
+    image: boxpersonalizado-frontend:latest
+    container_name: box-frontend
+    restart: always
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: ${BACKEND_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      # Painel admin de templates PDF (/configuracoes/templates) — server-side only.
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      CONFIG_PANEL_PASSWORD: ${CONFIG_PANEL_PASSWORD}
+      CONFIG_PANEL_SESSION_SECRET: ${CONFIG_PANEL_SESSION_SECRET}
+    networks:
+      - box_net
+    ports:
+      - "3035:3000"
+
+volumes:
+  box_tailscale_data:
+
+networks:
+  box_net:
