@@ -33,6 +33,27 @@ services:
     ports:
       - "4035:4000" # backend (compartilha este netns) exposto no host:4035
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: box-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    networks:
+      - box_net
+    ports:
+      - "5438:5432" # host:5438 (BomCusto usa 5435 — sem colisao)
+    volumes:
+      - box_postgres_data:/var/lib/postgresql/data
+
   backend:
     build:
       context: ..
@@ -41,6 +62,8 @@ services:
     container_name: box-backend
     restart: always
     depends_on:
+      postgres:
+        condition: service_healthy
       ts-box:
         condition: service_started
     network_mode: service:ts-box
@@ -125,6 +148,7 @@ services:
 
 volumes:
   box_tailscale_data:
+  box_postgres_data:
 
 networks:
   box_net:
