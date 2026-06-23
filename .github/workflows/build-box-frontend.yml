@@ -1,0 +1,62 @@
+name: Build Box Personalizado Frontend (GHCR)
+
+# Builda e publica a imagem do frontend do Box Personalizado com a marca
+# baked no build (NEXT_PUBLIC_* sao inlinadas em build-time).
+# Disparo manual: Actions > Build Box Personalizado Frontend > Run workflow.
+# Apos publicar, faca o pull/redeploy do stack Box no Portainer.
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "NEXT_PUBLIC_API_URL (URL publica do backend que o navegador acessa)"
+        required: true
+        default: "http://localhost:4035/api"
+      logo_url:
+        description: "NEXT_PUBLIC_EMPRESA_LOGO_URL"
+        required: true
+        default: "/media/logo-primary.png"
+      cor_primaria:
+        description: "NEXT_PUBLIC_EMPRESA_COR_PRIMARIA (hex)"
+        required: true
+        default: "#FE3C72"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set lowercase owner
+        id: vars
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Box frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/frontend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.vars.outputs.owner }}/boxpersonalizado-frontend:latest
+            ghcr.io/${{ steps.vars.outputs.owner }}/boxpersonalizado-frontend:sha-${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ github.event.inputs.api_url }}
+            NEXT_PUBLIC_EMPRESA_NOME=Box Personalizado
+            NEXT_PUBLIC_EMPRESA_CNPJ=63.624.342/0001-00
+            NEXT_PUBLIC_EMPRESA_ENDERECO=Rua Maria Lúcia Pereira Fornitani, 220 — Itaguassu, Ilhabela-SP — CEP 11633-840
+            NEXT_PUBLIC_EMPRESA_EMAIL=boxpersonalizadorh@gmail.com
+            NEXT_PUBLIC_EMPRESA_LOGO_URL=${{ github.event.inputs.logo_url }}
+            NEXT_PUBLIC_EMPRESA_COR_PRIMARIA=${{ github.event.inputs.cor_primaria }}

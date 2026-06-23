@@ -33,10 +33,8 @@ services:
       - box_postgres_data:/var/lib/postgresql/data
 
   backend:
-    build:
-      context: ..
-      dockerfile: apps/backend/Dockerfile
-    image: boxpersonalizado-backend:latest
+    # Reusa a imagem do BomCusto — o backend é idêntico (white-label é 100% runtime via EMPRESA_*).
+    image: ${BACKEND_IMAGE:-ghcr.io/martoxak/bomcusto-backend:latest}
     container_name: box-backend
     restart: always
     depends_on:
@@ -97,18 +95,9 @@ services:
       EMPRESA_INSTAGRAM: ${EMPRESA_INSTAGRAM}
 
   frontend:
-    build:
-      context: ..
-      dockerfile: apps/frontend/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_EMPRESA_NOME: ${NEXT_PUBLIC_EMPRESA_NOME}
-        NEXT_PUBLIC_EMPRESA_CNPJ: ${NEXT_PUBLIC_EMPRESA_CNPJ}
-        NEXT_PUBLIC_EMPRESA_ENDERECO: ${NEXT_PUBLIC_EMPRESA_ENDERECO}
-        NEXT_PUBLIC_EMPRESA_EMAIL: ${NEXT_PUBLIC_EMPRESA_EMAIL}
-        NEXT_PUBLIC_EMPRESA_LOGO_URL: ${NEXT_PUBLIC_EMPRESA_LOGO_URL}
-        NEXT_PUBLIC_EMPRESA_COR_PRIMARIA: ${NEXT_PUBLIC_EMPRESA_COR_PRIMARIA}
-    image: boxpersonalizado-frontend:latest
+    # Imagem dedicada do Box: a marca (NEXT_PUBLIC_*) é baked no build.
+    # Gerada pelo workflow .github/workflows/build-box-frontend.yml (build/push no ghcr).
+    image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/boxpersonalizado-frontend:latest}
     container_name: box-frontend
     restart: always
     depends_on:
