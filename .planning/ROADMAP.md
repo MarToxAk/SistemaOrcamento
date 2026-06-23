@@ -146,7 +146,7 @@ Plans:
 
 ## Backlog
 
-### Phase 999.1: Gerenciamento de layout do PDF de orçamento pela interface (BACKLOG)
+### Phase 999.1: Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-22)
 
 **Goal:** Permitir trocar o layout/template do PDF de orçamento a qualquer momento pelo próprio sistema (usuário final), sem alterar código/git nem reiniciar o servidor.
 **Requirements:** TBD (relacionados às ideias deferidas WL-01 painel admin e WL-03 templates PDF gerenciados, ver 36-CONTEXT.md)
@@ -169,7 +169,9 @@ Plans:
 - [x] 999.1-05-PLAN.md — Módulo backend: upload/validar/ativar/excluir/preview + checkpoint sanitize-html (Wave 3)
 - [x] 999.1-06-PLAN.md — Frontend: tela de gerenciamento (galeria/upload/preview) + rotas proxy admin (Wave 4)
 
-**⚠ Follow-up obrigatório antes da execução:** `/gsd-secure-phase 999.1` — esta fase envia upload de template arbitrário; a postura `--no-sandbox`+root do Chromium (assunção A4, alto risco) fica explicitamente deferida para esse passo.
+**✓ Verificação:** `999.1-VERIFICATION.md` — PASSED (8/8 must-haves; UAT manual aprovado + validação Nyquist + suítes verdes).
+**✓ Segurança:** `999.1-SECURITY.md` — `threats_open: 0` (T-AUTH mitigado com rate-limit; T-SANDBOX `--no-sandbox` aceito como risco para deploy interno; dívida do code review registrada).
+**⚠ Ação obrigatória pré-deploy (CR-01):** o gate de senha do painel é *fail-open* — definir `ADMIN_API_KEY`, `CONFIG_PANEL_PASSWORD` e `CONFIG_PANEL_SESSION_SECRET` (e adicioná-los ao `deploy/stack.env.example`) antes de subir, senão o painel admin sobe sem proteção. Ver `999.1-REVIEW.md`.
 
 ---
 
