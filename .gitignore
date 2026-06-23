@@ -8,3 +8,8 @@ deploy/stack.env
 coverage/
 *.log
 *.tsbuildinfo
+
+# Segredos de deploy (nunca commitar)
+deploy/box.env
+deploy/*.env
+!deploy/*.env.example
