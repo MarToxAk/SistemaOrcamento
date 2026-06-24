@@ -8,6 +8,11 @@ export type EmpresaConfig = {
   EMPRESA_CNPJ: string;
   EMPRESA_ENDERECO: string;
   EMPRESA_EMAIL: string;
+  // Telefones de contato exibidos no header (string livre; oculto se vazio).
+  // Mesma var que o backend usa no rodapé do PDF — define uma vez, vale nos dois.
+  EMPRESA_TELEFONES: string;
+  // Número (somente dígitos, com DDI) usado nos links wa.me; oculto se vazio.
+  EMPRESA_WHATSAPP: string;
   EMPRESA_LOGO_URL: string;
   EMPRESA_COR_PRIMARIA: string;
 };
@@ -18,6 +23,8 @@ export function getEmpresaConfig(): EmpresaConfig {
     EMPRESA_CNPJ: process.env.EMPRESA_CNPJ ?? "",
     EMPRESA_ENDERECO: process.env.EMPRESA_ENDERECO ?? "",
     EMPRESA_EMAIL: process.env.EMPRESA_EMAIL ?? "",
+    EMPRESA_TELEFONES: process.env.EMPRESA_TELEFONES ?? "",
+    EMPRESA_WHATSAPP: process.env.EMPRESA_WHATSAPP ?? "",
     EMPRESA_LOGO_URL: process.env.EMPRESA_LOGO_URL ?? "/media/logo-primary.png",
     EMPRESA_COR_PRIMARIA: process.env.EMPRESA_COR_PRIMARIA ?? "#0d6efd",
   };
