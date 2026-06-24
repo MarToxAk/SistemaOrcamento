@@ -46,8 +46,8 @@ jobs:
           file: ./apps/backend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/bomcusto-backend:${{ github.sha }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/bomcusto-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/orcamento-backend:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/orcamento-backend:latest
 
       - name: Build and push frontend image
         if: ${{ steps.dockerhub.outputs.enabled == 'true' }}
@@ -57,8 +57,8 @@ jobs:
           file: ./apps/frontend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/bomcusto-frontend:${{ github.sha }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/bomcusto-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/orcamento-frontend:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/orcamento-frontend:latest
 
       - name: End gracefully when Docker Hub is not configured
         if: ${{ steps.dockerhub.outputs.enabled != 'true' }}

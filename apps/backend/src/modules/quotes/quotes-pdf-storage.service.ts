@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { Injectable, InternalServerErrorException, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import axios from "axios";
 import Handlebars from "handlebars";
 import { Client as MinioClient } from "minio";
 import puppeteer from "puppeteer";
@@ -139,7 +140,12 @@ export class QuotesPdfStorageService {
     const empresaNome = this.configService.get<string>("EMPRESA_NOME") ?? "";
     const empresaCnpj = this.configService.get<string>("EMPRESA_CNPJ") ?? "";
     const empresaEndereco = this.configService.get<string>("EMPRESA_ENDERECO") ?? "";
-    const empresaLogoUrl = this.configService.get<string>("EMPRESA_LOGO_URL"); // undefined quando ausente (Pitfall 3)
+    // O render do PDF roda com rede TOTALMENTE bloqueada (shouldAllowRequest só
+    // libera about:blank e data:). Por isso o logo precisa virar data: URI aqui no
+    // servidor — um <img src="https://..."> nunca carregaria no PDF (D-02).
+    const empresaLogoUrl = await this.resolveLogoDataUri(
+      this.configService.get<string>("EMPRESA_LOGO_URL"),
+    );
     const empresaCor = this.configService.get<string>("EMPRESA_COR_PRIMARIA") ?? "#0d6efd";
 
     // Contato de empresa — dehardcode (D-07). Opcionais; sem elas a linha some no template.
@@ -197,6 +203,53 @@ export class QuotesPdfStorageService {
       empresaEmail,
       empresaInstagram,
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // resolveLogoDataUri — D-02/white-label
+  //
+  // O Puppeteer renderiza com rede bloqueada (anti-SSRF), então um logo via URL
+  // externa (ex.: MinIO https://...) nunca carrega no PDF. Aqui baixamos o arquivo
+  // no servidor e devolvemos um data: URI (base64), que o render aceita.
+  // EMPRESA_LOGO_URL vem do .env (config do operador, não de input do usuário).
+  // Qualquer falha → undefined: o PDF é gerado sem logo (template cai no placeholder).
+  // ---------------------------------------------------------------------------
+  private readonly logoCache = new Map<string, { dataUri: string; expires: number }>();
+  private static readonly LOGO_TTL_MS = 5 * 60 * 1000;
+  private static readonly LOGO_MAX_BYTES = 5 * 1024 * 1024;
+
+  private async resolveLogoDataUri(logoUrl?: string): Promise<string | undefined> {
+    const url = logoUrl?.trim();
+    if (!url) return undefined;
+    if (url.startsWith("data:")) return url; // já inline
+
+    if (!/^https?:\/\//i.test(url)) {
+      this.logger.warn(`EMPRESA_LOGO_URL ignorada no PDF (precisa ser http(s) ou data:): ${url}`);
+      return undefined;
+    }
+
+    const cached = this.logoCache.get(url);
+    if (cached && cached.expires > Date.now()) return cached.dataUri;
+
+    try {
+      const res = await axios.get<ArrayBuffer>(url, {
+        responseType: "arraybuffer",
+        timeout: 5000,
+        maxContentLength: QuotesPdfStorageService.LOGO_MAX_BYTES,
+        maxBodyLength: QuotesPdfStorageService.LOGO_MAX_BYTES,
+      });
+      const contentType = String(res.headers["content-type"] ?? "").split(";")[0].trim();
+      if (!contentType.startsWith("image/")) {
+        this.logger.warn(`EMPRESA_LOGO_URL não retornou imagem (content-type: ${contentType || "?"}): ${url}`);
+        return undefined;
+      }
+      const dataUri = `data:${contentType};base64,${Buffer.from(res.data).toString("base64")}`;
+      this.logoCache.set(url, { dataUri, expires: Date.now() + QuotesPdfStorageService.LOGO_TTL_MS });
+      return dataUri;
+    } catch (err) {
+      this.logger.warn(`Falha ao baixar EMPRESA_LOGO_URL para o PDF (${url}): ${(err as Error).message}`);
+      return undefined;
+    }
   }
 
   // ---------------------------------------------------------------------------

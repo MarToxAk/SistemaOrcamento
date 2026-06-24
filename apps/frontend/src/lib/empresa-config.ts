@@ -25,7 +25,9 @@ export function getEmpresaConfig(): EmpresaConfig {
     EMPRESA_EMAIL: process.env.EMPRESA_EMAIL ?? "",
     EMPRESA_TELEFONES: process.env.EMPRESA_TELEFONES ?? "",
     EMPRESA_WHATSAPP: process.env.EMPRESA_WHATSAPP ?? "",
-    EMPRESA_LOGO_URL: process.env.EMPRESA_LOGO_URL ?? "/media/logo-primary.png",
+    // Sem default de marca: logo vem 100% do .env. Vazio = nenhum <img> renderizado
+    // (mesma postura do PDF {{#if empresaLogoUrl}}), nunca o logo de outra empresa.
+    EMPRESA_LOGO_URL: process.env.EMPRESA_LOGO_URL ?? "",
     EMPRESA_COR_PRIMARIA: process.env.EMPRESA_COR_PRIMARIA ?? "#0d6efd",
   };
 }

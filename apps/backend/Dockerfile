@@ -20,8 +20,8 @@ RUN npm ci
 
 FROM deps AS build
 COPY . .
-RUN npm --workspace @bomcusto/backend run prisma:generate -- --schema prisma/schema.prisma
-RUN npm --workspace @bomcusto/backend run build
+RUN npm --workspace @orcamento/backend run prisma:generate -- --schema prisma/schema.prisma
+RUN npm --workspace @orcamento/backend run build
 
 FROM base AS runtime
 ENV NODE_ENV=production

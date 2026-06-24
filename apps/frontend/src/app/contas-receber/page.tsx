@@ -106,11 +106,14 @@ export default function ContasReceberPage() {
         {/* Header */}
         <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top">
           <div className="d-flex align-items-center gap-3 flex-wrap">
-            <img
-              src={EMPRESA_LOGO_URL}
-              alt={EMPRESA_NOME}
-              className="logo-img"
-            />
+            {EMPRESA_LOGO_URL && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={EMPRESA_LOGO_URL}
+                alt={EMPRESA_NOME}
+                className="logo-img"
+              />
+            )}
             <div>
               <h3 className="mb-1">Contas a Receber</h3>
               <small className="text-muted">Monitoramento de inadimplência</small>

@@ -1,8 +1,8 @@
 ﻿services:
   ts-webserver2:
     image: tailscale/tailscale:latest
-    container_name: bomcusto-ts-webserver2
-    hostname: bomcusto-webserver
+    container_name: orcamento-ts-webserver2
+    hostname: orcamento-webserver
     restart: always
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY}
@@ -23,7 +23,7 @@
 
   postgres:
     image: postgres:16-alpine
-    container_name: bomcusto-postgres
+    container_name: orcamento-postgres
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -43,8 +43,8 @@
       - postgres_data:/var/lib/postgresql/data
 
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/martoxak/bomcusto-backend:latest}
-    container_name: bomcusto-backend
+    image: ${BACKEND_IMAGE:-ghcr.io/martoxak/orcamento-backend:latest}
+    container_name: orcamento-backend
     restart: always
     depends_on:
       postgres:
@@ -111,8 +111,8 @@
     # Backend compartilha o namespace de rede do Tailscale para acessar a Tailnet.
 
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/bomcusto-frontend:latest}
-    container_name: bomcusto-frontend
+    image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/orcamento-frontend:latest}
+    container_name: orcamento-frontend
     restart: always
     depends_on:
       - backend

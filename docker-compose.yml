@@ -1,15 +1,15 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: bomcusto-postgres
+    container_name: orcamento-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: bomcusto
+      POSTGRES_DB: orcamento
     ports:
       - "5435:5432"
     volumes:
-      - bomcusto_pg_data:/var/lib/postgresql/data
+      - orcamento_pg_data:/var/lib/postgresql/data
 
 volumes:
-  bomcusto_pg_data:
+  orcamento_pg_data:
