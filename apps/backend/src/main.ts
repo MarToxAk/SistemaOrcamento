@@ -39,8 +39,8 @@ async function bootstrap() {
 
   if (process.env.NODE_ENV !== "production") {
     const config = new DocumentBuilder()
-      .setTitle("BomCusto API")
-      .setDescription("API interna do Sistema de Orçamento BomCusto")
+      .setTitle("Sistema de Orçamento API")
+      .setDescription("API interna do Sistema de Orçamento")
       .setVersion("2.0")
       .addApiKey({ type: "apiKey", name: "x-api-token", in: "header" }, "AthosApiToken")
       .build();

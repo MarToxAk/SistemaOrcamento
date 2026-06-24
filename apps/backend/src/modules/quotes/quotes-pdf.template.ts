@@ -1,19 +1,21 @@
 /**
- * BomCusto — Quotes PDF Handlebars template (v2 · colorful edition)
+ * Quotes PDF Handlebars template (v2 · colorful edition) — fallback absoluto.
+ *
+ * White-label: nome/CNPJ/endereço/contato/logo vêm do contexto (EMPRESA_* no .env),
+ * nunca chumbados. Variáveis de empresa: empresaNome, empresaCnpj, empresaEndereco,
+ * empresaLogoUrl, empresaTelefones, empresaEmail, empresaInstagram (linhas de contato
+ * são omitidas quando a variável estiver ausente/vazia).
  *
  * Para ativar as faixas de lápis coloridos (pencils-top / pencils-bottom),
  * passe `pencilsTopUrl` e `pencilsBottomUrl` no contexto passado ao template.
  * Sem elas o PDF renderiza limpo, sem as faixas decorativas.
- *
- * Para usar o novo logo, passe `logoUrl` no contexto (ex: https://autopyweb.com.br/logo-primary.png).
- * Sem isso usa o logo atual já hospedado em autopyweb.com.br.
  */
 export const QUOTES_PDF_HTML_TEMPLATE = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Orçamento Nº {{idorcamento}} — Bom Custo</title>
+<title>Orçamento Nº {{idorcamento}} — {{empresaNome}}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap">
@@ -145,20 +147,28 @@ export const QUOTES_PDF_HTML_TEMPLATE = `<!DOCTYPE html>
 <div class="page{{#if pencilsTopUrl}} has-strips{{/if}}">
 
   <header class="doc-header">
-    <img src="{{#if logoUrl}}{{logoUrl}}{{else}}https://autopyweb.com.br/logo_new.svg{{/if}}" class="doc-header__logo" alt="Bom Custo">
+    {{#if empresaLogoUrl}}<img src="{{empresaLogoUrl}}" class="doc-header__logo" alt="{{empresaNome}}">{{/if}}
 
     <div class="doc-header__co">
-      <h1>Bom Custo Papelaria &amp; Gráfica Rápida LTDA</h1>
-      <div class="cnpj"><b>CNPJ</b> 62.391.927/0001-57</div>
+      <h1>{{empresaNome}}</h1>
+      {{#if empresaCnpj}}<div class="cnpj"><b>CNPJ</b> {{empresaCnpj}}</div>{{/if}}
       <div class="contact-list">
+        {{#if empresaEndereco}}
         <span class="icon ic-pin"><i class="bi bi-geo-alt-fill"></i></span>
-        <span>Rua Olímpio Leite da Silva, 39 — Loja 07, Perequê · Ilhabela / SP · CEP 11633-078</span>
+        <span>{{empresaEndereco}}</span>
+        {{/if}}
+        {{#if empresaTelefones}}
         <span class="icon ic-phone"><i class="bi bi-telephone-fill"></i></span>
-        <span>(12) 99648-4918 · (12) 3896-1474 · (12) 99678-2405</span>
+        <span>{{empresaTelefones}}</span>
+        {{/if}}
+        {{#if empresaEmail}}
         <span class="icon ic-mail"><i class="bi bi-envelope-fill"></i></span>
-        <span>orcamento@bomcustoilhabela.com.br</span>
+        <span>{{empresaEmail}}</span>
+        {{/if}}
+        {{#if empresaInstagram}}
         <span class="icon ic-insta"><i class="bi bi-instagram"></i></span>
-        <span>@bomcustopapelaria</span>
+        <span>{{empresaInstagram}}</span>
+        {{/if}}
       </div>
     </div>
 
@@ -273,7 +283,7 @@ export const QUOTES_PDF_HTML_TEMPLATE = `<!DOCTYPE html>
 
   <p class="signoff">
     Estamos à disposição e aguardamos seu retorno.<br>
-    <b>Atenciosamente, equipe Bom Custo.</b>
+    <b>Atenciosamente, equipe {{empresaNome}}.</b>
   </p>
 
 </div>
