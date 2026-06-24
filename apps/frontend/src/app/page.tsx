@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useEmpresa } from "@/lib/empresa";
 
 type Quote = {
   id: string;
@@ -46,6 +47,7 @@ function getParamFromUrl(param: string): string {
 }
 
 export default function OrcamentosListPage() {
+  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
@@ -75,7 +77,7 @@ export default function OrcamentosListPage() {
   return (
     <div className="orcamento-app">
       <div className="orcamento-header">
-        <img src="/media/logo-primary.png" alt="Logo" className="orcamento-logo" />
+        <img src={EMPRESA_LOGO_URL} alt={EMPRESA_NOME} className="orcamento-logo" />
         <div className="orcamento-title">
           <h1>Lista de Orçamentos</h1>
           <p className="orcamento-subtitle">Consulte, filtre e acompanhe seus orçamentos em tempo real</p>

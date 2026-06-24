@@ -3,7 +3,7 @@
 import Script from "next/script";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { EMPRESA_NOME, EMPRESA_LOGO_URL } from "@/lib/empresa";
+import { useEmpresa } from "@/lib/empresa";
 
 type StatusState = "loading" | "loaded" | "error";
 
@@ -19,6 +19,7 @@ const STATUS_INFO: Record<string, { emoji: string; label: string; description: s
 };
 
 export default function StatusPage() {
+  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
   const { id } = useParams<{ id: string }>();
 
   const [pageState, setPageState] = useState<StatusState>("loading");

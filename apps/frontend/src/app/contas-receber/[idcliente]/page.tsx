@@ -3,7 +3,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { safeHttpUrl } from "@/lib/safe-url";
-import { EMPRESA_NOME, EMPRESA_LOGO_URL } from "@/lib/empresa";
+import { useEmpresa } from "@/lib/empresa";
 
 interface NfseEmitidaCliente {
   id: number;
@@ -68,6 +68,7 @@ export default function ClienteDetalhePage({
   params: Promise<{ idcliente: string }>;
 }) {
   const { idcliente } = use(params);
+  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
 
   const [dadosCliente, setDadosCliente] = useState<DadosCliente | null>(null);
   const [titulos, setTitulos] = useState<TituloReceber[]>([]);
