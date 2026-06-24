@@ -103,12 +103,14 @@ export default function StatusPage() {
       <div className="page-wrapper">
         <div className="status-card bg-white">
           <div className="status-header text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={EMPRESA_LOGO_URL}
-              alt={EMPRESA_NOME}
-              style={{ maxWidth: 140, maxHeight: 80, background: "#fff", borderRadius: 8, padding: 6 }}
-            />
+            {EMPRESA_LOGO_URL && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={EMPRESA_LOGO_URL}
+                alt={EMPRESA_NOME}
+                style={{ maxWidth: 140, maxHeight: 80, background: "#fff", borderRadius: 8, padding: 6 }}
+              />
+            )}
             <div className="mt-2 small text-muted">{EMPRESA_NOME}</div>
           </div>
 

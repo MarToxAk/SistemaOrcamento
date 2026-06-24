@@ -77,7 +77,10 @@ export default function OrcamentosListPage() {
   return (
     <div className="orcamento-app">
       <div className="orcamento-header">
-        <img src={EMPRESA_LOGO_URL} alt={EMPRESA_NOME} className="orcamento-logo" />
+        {EMPRESA_LOGO_URL && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={EMPRESA_LOGO_URL} alt={EMPRESA_NOME} className="orcamento-logo" />
+        )}
         <div className="orcamento-title">
           {EMPRESA_NOME && <div className="fw-semibold" style={{ fontSize: "1.1rem", opacity: 0.9 }}>{EMPRESA_NOME}</div>}
           <h1>Lista de Orçamentos</h1>
