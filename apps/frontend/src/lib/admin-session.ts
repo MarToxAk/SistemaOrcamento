@@ -15,7 +15,7 @@ import type { NextRequest } from "next/server";
  * do backend nunca chegam ao browser.
  */
 
-export const ADMIN_SESSION_COOKIE = "bomcusto_admin_session";
+export const ADMIN_SESSION_COOKIE = "orcamento_admin_session";
 
 // Validade da sessao (8 horas) — expediente tipico sem precisar relogar.
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;

@@ -36,8 +36,8 @@ type QuoteRow = {
 };
 
 const PRODUCTION_STATUSES = ["APROVADO", "EM_PRODUCAO", "PRONTO_PARA_ENTREGA"];
-const LS_LAST_PAYMENT = "bomcusto_last_caixa_payment";
-const LS_DISMISSED = "bomcusto_last_caixa_dismissed";
+const LS_LAST_PAYMENT = "orcamento_last_caixa_payment";
+const LS_DISMISSED = "orcamento_last_caixa_dismissed";
 
 function getQuoteIdentifier(quote: QuoteRow): string {
   if (quote.body.idorcamento && Number.isFinite(quote.body.idorcamento)) {
