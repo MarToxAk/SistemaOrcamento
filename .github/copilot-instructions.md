@@ -21,8 +21,8 @@
   - npm run build
   - npm run test
 - Fluxo de banco principal com Prisma:
-  - npm --workspace @bomcusto/backend run prisma:migrate
-  - npm --workspace @bomcusto/backend run prisma:generate
+  - npm --workspace @orcamento/backend run prisma:migrate
+  - npm --workspace @orcamento/backend run prisma:generate
 - Banco principal atual e remoto (VPS) e o docker-compose local e opcional para desenvolvimento.
 - Ao alterar comportamento, rode ao menos build e validacoes relacionadas antes de concluir.
 

@@ -16,7 +16,7 @@ Validação
 Como testar localmente
 ```bash
 git checkout fix/tests/nfse-athos-teardown
-npm --workspace @bomcusto/backend run test
+npm --workspace @orcamento/backend run test
 ```
 
 Observações

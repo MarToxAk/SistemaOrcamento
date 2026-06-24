@@ -22,7 +22,7 @@ Fluxo:
 - Ao finalizar com sucesso o `build-and-publish.yml`, o `deploy.yml` acionará e rodará os comandos remotos via SSH para dar `docker compose pull` e `docker compose up -d`.
 
 Observações:
-- As imagens são publicadas em `DOCKERHUB_USERNAME/bomcusto-backend` e `DOCKERHUB_USERNAME/bomcusto-frontend` (substitua `DOCKERHUB_USERNAME`).
+- As imagens são publicadas em `DOCKERHUB_USERNAME/orcamento-backend` e `DOCKERHUB_USERNAME/orcamento-frontend` (substitua `DOCKERHUB_USERNAME`).
 - No servidor remoto, o deploy executa `docker login` no Docker Hub usando `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` antes de `docker compose pull`.
 - Ajuste `deploy/docker-compose.vps.yml` e `deploy/.env` no servidor conforme necessário.
 
