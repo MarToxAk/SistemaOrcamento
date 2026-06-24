@@ -1,4 +1,4 @@
-﻿# BomCusto Orcamento
+﻿# Sistema de Orçamento
 
 Plataforma full-stack para gestao de orcamentos com integracao ao Chatwoot e ingestao de dados do PDV legado.
 
@@ -48,7 +48,7 @@ npm run docker:up
 5. Rodar migracoes (backend)
 
 ```bash
-npm --workspace @bomcusto/backend run prisma:migrate
+npm --workspace @orcamento/backend run prisma:migrate
 ```
 
 6. Rodar backend

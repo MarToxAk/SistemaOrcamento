@@ -29,7 +29,7 @@ export class HealthController {
 
     return {
       status: allOk ? "ok" : "degraded",
-      service: "bomcusto-backend",
+      service: "orcamento-backend",
       now: new Date().toISOString(),
       integrations: { db, chatwoot, nfse },
     };

@@ -398,7 +398,10 @@ export default function OrcamentoListaPage() {
       <div className="container my-5">
         <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top" style={{background: "linear-gradient(135deg,#c5f2e8 0%,#cbe1f9 25%,#e7d8f9 50%,#f9e7f5 75%,#f0cacb 100%)", color: "#222"}}>
           <div className="d-flex align-items-center">
-            <img src={EMPRESA_LOGO_URL} alt={EMPRESA_NOME} className="me-3" style={{maxWidth:180, maxHeight:120, background: "#fff", borderRadius:8, padding:4}} />
+            {EMPRESA_LOGO_URL && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={EMPRESA_LOGO_URL} alt={EMPRESA_NOME} className="me-3" style={{maxWidth:180, maxHeight:120, background: "#fff", borderRadius:8, padding:4}} />
+            )}
             <div>
               <h3 className="mb-0">{EMPRESA_NOME}</h3>
               {EMPRESA_CNPJ && <div className="small">CNPJ: {EMPRESA_CNPJ}</div>}

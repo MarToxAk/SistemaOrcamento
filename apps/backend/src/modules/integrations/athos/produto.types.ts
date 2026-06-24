@@ -1,4 +1,4 @@
-// Interfaces verificadas contra o banco Athos BomCusto (192.168.3.198) em 2026-06-15
+// Interfaces verificadas contra o banco Athos em 2026-06-15
 // 162 colunas mapeadas; imagemproduto (bytea) sempre retornada como null
 
 export interface Produto {

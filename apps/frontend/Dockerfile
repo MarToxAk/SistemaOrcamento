@@ -13,7 +13,7 @@ COPY . .
 # White-label do frontend é RUNTIME (EMPRESA_* lidas pelo servidor em src/lib/empresa-config.ts
 # e entregues via Context). Sem NEXT_PUBLIC_* baked no build — a MESMA imagem serve qualquer
 # empresa; a marca (logo/nome/cor) e a comunicação com o backend (BACKEND_URL) vêm do .env do container.
-RUN npm --workspace @bomcusto/frontend run build
+RUN npm --workspace @orcamento/frontend run build
 
 FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
@@ -30,4 +30,4 @@ COPY --from=build /app/apps/frontend/tsconfig.json ./apps/frontend/tsconfig.json
 COPY --from=build /app/package.json ./package.json
 
 EXPOSE 3000
-CMD ["npm", "--workspace", "@bomcusto/frontend", "run", "start"]
+CMD ["npm", "--workspace", "@orcamento/frontend", "run", "start"]

@@ -93,8 +93,8 @@ export class AthosController {
     summary: "Buscar clientes no Athos",
     description: "Busca clientes por nome (mín. 3 chars), CPF/CNPJ ou idcliente com paginação.",
   })
-  @ApiQuery({ name: "nome", required: false, example: "BomCusto" })
-  @ApiQuery({ name: "documento", required: false, example: "62391927000157" })
+  @ApiQuery({ name: "nome", required: false, example: "Maria Silva" })
+  @ApiQuery({ name: "documento", required: false, example: "00000000000191" })
   @ApiQuery({ name: "idcliente", required: false, example: "123" })
   @ApiQuery({ name: "page", required: false, example: "1" })
   @ApiQuery({ name: "take", required: false, example: "20" })

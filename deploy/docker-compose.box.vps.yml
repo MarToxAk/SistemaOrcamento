@@ -1,7 +1,7 @@
 # ============================================================
 # Stack dedicado: BOX PERSONALIZADO (2º tenant no mesmo VPS)
 # SEM Tailscale — o Athos é acessado por IP público e não há SMB.
-# Nomes/portas/rede distintos do stack BomCusto para nao colidir.
+# Nomes/portas/rede distintos do stack principal para nao colidir.
 #
 # Subir:
 #   docker compose -f deploy/docker-compose.box.vps.yml --env-file deploy/box.env up -d --build
@@ -28,13 +28,13 @@ services:
     networks:
       - box_net
     ports:
-      - "5438:5432" # host:5438 (BomCusto usa 5435 — sem colisao)
+      - "5438:5432" # host:5438 (stack principal usa 5435 — sem colisao)
     volumes:
       - box_postgres_data:/var/lib/postgresql/data
 
   backend:
-    # Reusa a imagem do BomCusto — o backend é idêntico (white-label é 100% runtime via EMPRESA_*).
-    image: ${BACKEND_IMAGE:-ghcr.io/martoxak/bomcusto-backend:latest}
+    # Reusa a imagem principal — o backend é idêntico (white-label é 100% runtime via EMPRESA_*).
+    image: ${BACKEND_IMAGE:-ghcr.io/martoxak/orcamento-backend:latest}
     container_name: box-backend
     restart: always
     depends_on:
@@ -95,9 +95,9 @@ services:
       EMPRESA_INSTAGRAM: ${EMPRESA_INSTAGRAM}
 
   frontend:
-    # Imagem GENÉRICA (mesma do BomCusto) — a marca agora vem das EMPRESA_* em RUNTIME,
+    # Imagem GENÉRICA (mesma do stack principal) — a marca agora vem das EMPRESA_* em RUNTIME,
     # então não há mais imagem por empresa nem rebuild para trocar logo/nome/cor.
-    image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/bomcusto-frontend:latest}
+    image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/orcamento-frontend:latest}
     container_name: box-frontend
     restart: always
     depends_on:

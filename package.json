@@ -1,5 +1,5 @@
 {
-  "name": "bomcusto-orcamento",
+  "name": "sistema-orcamento",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
@@ -7,10 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:backend": "npm --workspace @bomcusto/backend run start:dev",
-    "dev:frontend": "npm --workspace @bomcusto/frontend run dev",
-    "build": "npm --workspace @bomcusto/backend run build && npm --workspace @bomcusto/frontend run build",
-    "test": "npm --workspace @bomcusto/backend run test",
+    "dev:backend": "npm --workspace @orcamento/backend run start:dev",
+    "dev:frontend": "npm --workspace @orcamento/frontend run dev",
+    "build": "npm --workspace @orcamento/backend run build && npm --workspace @orcamento/frontend run build",
+    "test": "npm --workspace @orcamento/backend run test",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "dev": "kill-port 3000 4000 && concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\""
