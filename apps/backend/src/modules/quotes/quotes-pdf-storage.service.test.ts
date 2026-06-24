@@ -9,14 +9,17 @@ jest.mock("node:fs", () => ({
   existsSync: jest.fn(),
   readFileSync: jest.fn(),
 }));
+jest.mock("axios", () => ({ __esModule: true, default: { get: jest.fn() } }));
 
 // Import after mocks are registered
 import * as fs from "node:fs";
+import axios from "axios";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
 import { PdfTemplatesRepository } from "../pdf-templates/pdf-templates.repository";
 
 const mockExistsSync = fs.existsSync as jest.MockedFunction<typeof fs.existsSync>;
 const mockReadFileSync = fs.readFileSync as jest.MockedFunction<typeof fs.readFileSync>;
+const mockAxiosGet = (axios as unknown as { get: jest.Mock }).get;
 
 const MINIMAL_PAYLOAD = {
   idorcamento_interno: 42,
@@ -156,6 +159,39 @@ describe("QuotesPdfStorageService - cadeia de resolucao de template", () => {
     const html = await service.renderHtml(MINIMAL_PAYLOAD);
 
     // Handlebars: {{#if undefined}} e false, entao nao deve renderizar a tag img
+    expect(html).not.toContain("<img");
+  });
+
+  it("(e2) EMPRESA_LOGO_URL http: baixa o logo e injeta como data: URI (rede bloqueada no PDF)", async () => {
+    const TEMPLATE_COM_LOGO = "{{#if empresaLogoUrl}}<img src=\"{{empresaLogoUrl}}\">{{/if}}";
+    mockExistsSync.mockImplementation(() => true);
+    mockReadFileSync.mockReturnValue(TEMPLATE_COM_LOGO);
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+      headers: { "content-type": "image/png" },
+    });
+
+    const service = await buildService({ EMPRESA_LOGO_URL: "https://cdn.exemplo.com/logo.png" });
+    const html = await service.renderHtml(MINIMAL_PAYLOAD);
+
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      "https://cdn.exemplo.com/logo.png",
+      expect.objectContaining({ responseType: "arraybuffer" }),
+    );
+    // O <img> usa data: URI inline (e NÃO a URL externa, que o Puppeteer bloquearia)
+    expect(html).toContain("data:image/png;base64,");
+    expect(html).not.toContain("https://cdn.exemplo.com");
+  });
+
+  it("(e3) EMPRESA_LOGO_URL http com falha de download: PDF gera sem <img>", async () => {
+    const TEMPLATE_COM_LOGO = "{{#if empresaLogoUrl}}<img src=\"{{empresaLogoUrl}}\">{{/if}}";
+    mockExistsSync.mockImplementation(() => true);
+    mockReadFileSync.mockReturnValue(TEMPLATE_COM_LOGO);
+    mockAxiosGet.mockRejectedValue(new Error("ECONNREFUSED"));
+
+    const service = await buildService({ EMPRESA_LOGO_URL: "https://cdn.exemplo.com/logo.png" });
+    const html = await service.renderHtml(MINIMAL_PAYLOAD);
+
     expect(html).not.toContain("<img");
   });
 
