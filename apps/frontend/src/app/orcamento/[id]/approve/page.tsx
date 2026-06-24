@@ -8,7 +8,7 @@ import { useEmpresa } from "@/lib/empresa";
 type ApproveState = "loading-quote" | "idle" | "submitting" | "success" | "already-approved" | "error" | "no-token";
 
 export default function ApprovePage() {
-  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
+  const { EMPRESA_NOME, EMPRESA_LOGO_URL, EMPRESA_TELEFONES, EMPRESA_WHATSAPP } = useEmpresa();
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
@@ -245,12 +245,14 @@ export default function ApprovePage() {
                 <p className="text-muted">
                   Nossa equipe já foi notificada e em breve seu pedido entra em produção. Avisaremos assim que estiver pronto.
                 </p>
-                <div className="mt-3 border-top pt-3 small text-muted">
-                  Dúvidas? Fale conosco:{" "}
-                  <a href="https://wa.me/5512996484918" className="text-decoration-none fw-semibold">
-                    (12) 99648-4918
-                  </a>
-                </div>
+                {EMPRESA_WHATSAPP && (
+                  <div className="mt-3 border-top pt-3 small text-muted">
+                    Dúvidas? Fale conosco:{" "}
+                    <a href={`https://wa.me/${EMPRESA_WHATSAPP}`} className="text-decoration-none fw-semibold">
+                      {EMPRESA_TELEFONES || EMPRESA_WHATSAPP}
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 
@@ -270,12 +272,14 @@ export default function ApprovePage() {
                 <p className="text-muted">
                   Você já aprovou este orçamento anteriormente. Nossa equipe está cuidando do seu pedido.
                 </p>
-                <div className="mt-3 border-top pt-3 small text-muted">
-                  Dúvidas? Fale conosco:{" "}
-                  <a href="https://wa.me/5512996484918" className="text-decoration-none fw-semibold">
-                    (12) 99648-4918
-                  </a>
-                </div>
+                {EMPRESA_WHATSAPP && (
+                  <div className="mt-3 border-top pt-3 small text-muted">
+                    Dúvidas? Fale conosco:{" "}
+                    <a href={`https://wa.me/${EMPRESA_WHATSAPP}`} className="text-decoration-none fw-semibold">
+                      {EMPRESA_TELEFONES || EMPRESA_WHATSAPP}
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 
@@ -283,12 +287,14 @@ export default function ApprovePage() {
             {state === "error" && (
               <div className="py-2">
                 <div className="alert alert-danger">{errorMessage || "Ocorreu um erro inesperado."}</div>
-                <div className="small text-muted mt-2">
-                  Tente novamente ou entre em contato:{" "}
-                  <a href="https://wa.me/5512996484918" className="text-decoration-none">
-                    (12) 99648-4918
-                  </a>
-                </div>
+                {EMPRESA_WHATSAPP && (
+                  <div className="small text-muted mt-2">
+                    Tente novamente ou entre em contato:{" "}
+                    <a href={`https://wa.me/${EMPRESA_WHATSAPP}`} className="text-decoration-none">
+                      {EMPRESA_TELEFONES || EMPRESA_WHATSAPP}
+                    </a>
+                  </div>
+                )}
               </div>
             )}
           </div>

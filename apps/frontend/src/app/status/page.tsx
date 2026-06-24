@@ -305,6 +305,7 @@ export default function StatusPage() {
           <div className="d-flex align-items-center gap-3 flex-wrap">
             <img src={EMPRESA_LOGO_URL} alt={EMPRESA_NOME} className="logo-img" />
             <div>
+              {EMPRESA_NOME && <div className="fw-semibold" style={{ fontSize: "0.95rem", opacity: 0.9 }}>{EMPRESA_NOME}</div>}
               <h3 className="mb-1">Produção de Orçamentos</h3>
               <div className="small d-flex align-items-center gap-2">
                 <span className="badge bg-success-subtle text-success-emphasis">

@@ -19,7 +19,7 @@ const STATUS_INFO: Record<string, { emoji: string; label: string; description: s
 };
 
 export default function StatusPage() {
-  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
+  const { EMPRESA_NOME, EMPRESA_LOGO_URL, EMPRESA_TELEFONES, EMPRESA_WHATSAPP } = useEmpresa();
   const { id } = useParams<{ id: string }>();
 
   const [pageState, setPageState] = useState<StatusState>("loading");
@@ -125,12 +125,14 @@ export default function StatusPage() {
             {pageState === "error" && (
               <div className="py-2">
                 <div className="alert alert-danger">{errorMessage}</div>
-                <div className="small text-muted mt-2">
-                  Entre em contato:{" "}
-                  <a href="https://wa.me/5512996484918" className="text-decoration-none">
-                    (12) 99648-4918
-                  </a>
-                </div>
+                {EMPRESA_WHATSAPP && (
+                  <div className="small text-muted mt-2">
+                    Entre em contato:{" "}
+                    <a href={`https://wa.me/${EMPRESA_WHATSAPP}`} className="text-decoration-none">
+                      {EMPRESA_TELEFONES || EMPRESA_WHATSAPP}
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 
@@ -186,12 +188,14 @@ export default function StatusPage() {
                   </div>
                 )}
 
-                <div className="border-top pt-3 small text-muted">
-                  Dúvidas? Fale conosco:{" "}
-                  <a href="https://wa.me/5512996484918" className="text-decoration-none fw-semibold">
-                    (12) 99648-4918
-                  </a>
-                </div>
+                {EMPRESA_WHATSAPP && (
+                  <div className="border-top pt-3 small text-muted">
+                    Dúvidas? Fale conosco:{" "}
+                    <a href={`https://wa.me/${EMPRESA_WHATSAPP}`} className="text-decoration-none fw-semibold">
+                      {EMPRESA_TELEFONES || EMPRESA_WHATSAPP}
+                    </a>
+                  </div>
+                )}
               </>
             )}
           </div>
