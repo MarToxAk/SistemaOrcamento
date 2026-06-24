@@ -95,9 +95,9 @@ services:
       EMPRESA_INSTAGRAM: ${EMPRESA_INSTAGRAM}
 
   frontend:
-    # Imagem dedicada do Box: a marca (NEXT_PUBLIC_*) é baked no build.
-    # Gerada pelo workflow .github/workflows/build-box-frontend.yml (build/push no ghcr).
-    image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/boxpersonalizado-frontend:latest}
+    # Imagem GENÉRICA (mesma do BomCusto) — a marca agora vem das EMPRESA_* em RUNTIME,
+    # então não há mais imagem por empresa nem rebuild para trocar logo/nome/cor.
+    image: ${FRONTEND_IMAGE:-ghcr.io/martoxak/bomcusto-frontend:latest}
     container_name: box-frontend
     restart: always
     depends_on:
@@ -109,6 +109,13 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       CONFIG_PANEL_PASSWORD: ${CONFIG_PANEL_PASSWORD}
       CONFIG_PANEL_SESSION_SECRET: ${CONFIG_PANEL_SESSION_SECRET}
+      # White-label do frontend (runtime — troca logo/nome/cor sem rebuild)
+      EMPRESA_NOME: ${EMPRESA_NOME}
+      EMPRESA_CNPJ: ${EMPRESA_CNPJ}
+      EMPRESA_ENDERECO: ${EMPRESA_ENDERECO}
+      EMPRESA_EMAIL: ${EMPRESA_EMAIL}
+      EMPRESA_LOGO_URL: ${EMPRESA_LOGO_URL}
+      EMPRESA_COR_PRIMARIA: ${EMPRESA_COR_PRIMARIA}
     networks:
       - box_net
     ports:
