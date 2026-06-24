@@ -3,7 +3,7 @@
 
 import Script from "next/script";
 import { useEffect, useState } from "react";
-import { EMPRESA_NOME, EMPRESA_CNPJ, EMPRESA_ENDERECO, EMPRESA_EMAIL, EMPRESA_LOGO_URL } from "@/lib/empresa";
+import { useEmpresa } from "@/lib/empresa";
 
 type QuoteRow = {
   id: string;
@@ -158,6 +158,7 @@ const FILTER_OPTIONS = [
 ] as const;
 
 export default function OrcamentoListaPage() {
+  const { EMPRESA_NOME, EMPRESA_CNPJ, EMPRESA_ENDERECO, EMPRESA_EMAIL, EMPRESA_LOGO_URL } = useEmpresa();
   const [validationState, setValidationState] = useState<"checking" | "valid" | "invalid">("checking");
   const [validationMessage, setValidationMessage] = useState("");
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);

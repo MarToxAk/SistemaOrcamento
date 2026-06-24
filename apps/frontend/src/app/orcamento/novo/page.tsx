@@ -3,7 +3,7 @@ import Script from "next/script";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CARIMBOS_CONFIG } from "./carimbos-config";
-import { EMPRESA_NOME, EMPRESA_CNPJ, EMPRESA_ENDERECO, EMPRESA_EMAIL, EMPRESA_LOGO_URL } from "@/lib/empresa";
+import { useEmpresa } from "@/lib/empresa";
 
 type ItemForm = {
   descricao: string;
@@ -134,6 +134,7 @@ const DADOS_EXEMPLO = {
 };
 
 export default function PreencherOrcamentoPage() {
+  const { EMPRESA_NOME, EMPRESA_CNPJ, EMPRESA_ENDERECO, EMPRESA_EMAIL, EMPRESA_LOGO_URL } = useEmpresa();
   const [form, setForm] = useState({ ...DADOS_EXEMPLO });
   const [numeroBusca, setNumeroBusca] = useState("");
   const [conversationId, setConversationId] = useState<number | undefined>(undefined);
