@@ -3,7 +3,7 @@
 import Script from "next/script";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { EMPRESA_NOME, EMPRESA_CNPJ, EMPRESA_ENDERECO, EMPRESA_EMAIL, EMPRESA_LOGO_URL } from "@/lib/empresa";
+import { useEmpresa } from "@/lib/empresa";
 
 type QuoteItem = {
   sequenciaitem?: number;
@@ -95,6 +95,7 @@ function normalizeChatwootPayload(raw: Record<string, any>) {
 }
 
 export default function OrcamentoDetailPage() {
+  const { EMPRESA_NOME, EMPRESA_CNPJ, EMPRESA_ENDERECO, EMPRESA_EMAIL, EMPRESA_LOGO_URL } = useEmpresa();
   const params = useParams<{ id: string }>();
   const quoteId = typeof params?.id === "string" ? params.id : "";
 

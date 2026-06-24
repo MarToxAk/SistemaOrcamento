@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Script from "next/script";
-import { EMPRESA_NOME, EMPRESA_LOGO_URL } from "@/lib/empresa";
+import { useEmpresa } from "@/lib/empresa";
 
 interface DashboardSummary {
   total_a_receber: number;
@@ -52,6 +52,7 @@ const STATUS_OPTIONS: { value: StatusFiltro; label: string; cls: string }[] = [
 ];
 
 export default function ContasReceberPage() {
+  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [clientes, setClientes] = useState<ClienteDevedor[]>([]);
   const [loading, setLoading] = useState(true);

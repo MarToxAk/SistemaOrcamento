@@ -10,24 +10,9 @@ FROM deps AS build
 WORKDIR /app
 COPY . .
 
-# White-label: NEXT_PUBLIC_* sao inlinadas no bundle JS em build-time.
-# Passe via --build-arg (ou build.args no compose) para gerar uma imagem por empresa.
-# Sem args, caem nos fallbacks definidos em src/lib/empresa.ts.
-ARG NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_EMPRESA_NOME
-ARG NEXT_PUBLIC_EMPRESA_CNPJ
-ARG NEXT_PUBLIC_EMPRESA_ENDERECO
-ARG NEXT_PUBLIC_EMPRESA_EMAIL
-ARG NEXT_PUBLIC_EMPRESA_LOGO_URL
-ARG NEXT_PUBLIC_EMPRESA_COR_PRIMARIA
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
-    NEXT_PUBLIC_EMPRESA_NOME=${NEXT_PUBLIC_EMPRESA_NOME} \
-    NEXT_PUBLIC_EMPRESA_CNPJ=${NEXT_PUBLIC_EMPRESA_CNPJ} \
-    NEXT_PUBLIC_EMPRESA_ENDERECO=${NEXT_PUBLIC_EMPRESA_ENDERECO} \
-    NEXT_PUBLIC_EMPRESA_EMAIL=${NEXT_PUBLIC_EMPRESA_EMAIL} \
-    NEXT_PUBLIC_EMPRESA_LOGO_URL=${NEXT_PUBLIC_EMPRESA_LOGO_URL} \
-    NEXT_PUBLIC_EMPRESA_COR_PRIMARIA=${NEXT_PUBLIC_EMPRESA_COR_PRIMARIA}
-
+# White-label do frontend é RUNTIME (EMPRESA_* lidas pelo servidor em src/lib/empresa-config.ts
+# e entregues via Context). Sem NEXT_PUBLIC_* baked no build — a MESMA imagem serve qualquer
+# empresa; a marca (logo/nome/cor) e a comunicação com o backend (BACKEND_URL) vêm do .env do container.
 RUN npm --workspace @bomcusto/frontend run build
 
 FROM node:20-bookworm-slim AS runtime

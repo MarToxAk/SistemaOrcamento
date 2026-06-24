@@ -3,11 +3,12 @@
 import Script from "next/script";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { EMPRESA_NOME, EMPRESA_LOGO_URL } from "@/lib/empresa";
+import { useEmpresa } from "@/lib/empresa";
 
 type ApproveState = "loading-quote" | "idle" | "submitting" | "success" | "already-approved" | "error" | "no-token";
 
 export default function ApprovePage() {
+  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";

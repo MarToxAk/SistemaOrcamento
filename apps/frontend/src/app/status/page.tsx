@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
+import { useEmpresa } from "@/lib/empresa";
 
 type StatusOption = {
   value: string;
@@ -72,6 +73,7 @@ function showToast(message: string, type: "success" | "danger") {
 }
 
 export default function StatusPage() {
+  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
@@ -301,7 +303,7 @@ export default function StatusPage() {
       <div className="container my-4">
         <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top">
           <div className="d-flex align-items-center gap-3 flex-wrap">
-            <img src="/media/logo-primary.png" alt="Logo Bom Custo" className="logo-img" />
+            <img src={EMPRESA_LOGO_URL} alt={EMPRESA_NOME} className="logo-img" />
             <div>
               <h3 className="mb-1">Produção de Orçamentos</h3>
               <div className="small d-flex align-items-center gap-2">
