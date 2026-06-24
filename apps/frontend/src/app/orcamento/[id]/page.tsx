@@ -95,7 +95,7 @@ function normalizeChatwootPayload(raw: Record<string, any>) {
 }
 
 export default function OrcamentoDetailPage() {
-  const { EMPRESA_NOME, EMPRESA_CNPJ, EMPRESA_ENDERECO, EMPRESA_EMAIL, EMPRESA_LOGO_URL } = useEmpresa();
+  const { EMPRESA_NOME, EMPRESA_CNPJ, EMPRESA_ENDERECO, EMPRESA_EMAIL, EMPRESA_TELEFONES, EMPRESA_LOGO_URL } = useEmpresa();
   const params = useParams<{ id: string }>();
   const quoteId = typeof params?.id === "string" ? params.id : "";
 
@@ -534,7 +534,7 @@ export default function OrcamentoDetailPage() {
                 {EMPRESA_CNPJ && <div className="small">CNPJ: {EMPRESA_CNPJ}</div>}
                 {EMPRESA_ENDERECO && <div className="small">{EMPRESA_ENDERECO}</div>}
                 <div className="small">
-                  Telefones: (12) 99648-4918 / (12) 3896-1474 / (12) 99678-2405<br />
+                  {EMPRESA_TELEFONES && <>Telefones: {EMPRESA_TELEFONES}<br /></>}
                   {EMPRESA_EMAIL && <>E-mail: {EMPRESA_EMAIL}</>}
                 </div>
               </div>
