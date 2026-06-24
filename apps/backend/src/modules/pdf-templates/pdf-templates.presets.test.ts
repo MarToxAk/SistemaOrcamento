@@ -20,6 +20,7 @@ import * as path from "path";
 import Handlebars from "handlebars";
 import { PdfTemplateKind } from "@prisma/client";
 import { PRESET_SLUGS, DEFAULT_ACTIVE_SLUG } from "./pdf-templates.types";
+import { QUOTES_PDF_HTML_TEMPLATE } from "../quotes/quotes-pdf.template";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -126,6 +127,46 @@ describe("Presets PDF (D-06) — compilação Handlebars hardened", () => {
       expect(html).toContain(MOCK_CONTEXT.empresaInstagram);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// White-label (anti-regressão D-07): o fallback absoluto embutido
+// (QUOTES_PDF_HTML_TEMPLATE) também não pode reintroduzir marca/contato
+// hardcoded — nome/CNPJ/endereço/contato/logo vêm do contexto (EMPRESA_*).
+// ---------------------------------------------------------------------------
+
+describe("Fallback embutido QUOTES_PDF_HTML_TEMPLATE — white-label (D-07)", () => {
+  function compileSource(source: string, context: Record<string, unknown>): string {
+    const instance = Handlebars.create();
+    const template = instance.compile(source, {
+      knownHelpers: {},
+      knownHelpersOnly: true,
+      strict: false,
+      noEscape: false,
+    });
+    return template(context);
+  }
+
+  it("compila sem lançar", () => {
+    expect(() => compileSource(QUOTES_PDF_HTML_TEMPLATE, MOCK_CONTEXT)).not.toThrow();
+  });
+
+  it("não contém marca/contato hardcoded (BomCusto, CNPJ, autopyweb)", () => {
+    const lower = QUOTES_PDF_HTML_TEMPLATE.toLowerCase();
+    for (const literal of BOMCUSTO_LITERALS) {
+      expect(lower).not.toContain(literal.toLowerCase());
+    }
+    expect(lower).not.toContain("bom custo");
+    expect(lower).not.toContain("autopyweb");
+    expect(QUOTES_PDF_HTML_TEMPLATE).not.toContain("62.391.927");
+  });
+
+  it("renderiza as variáveis de empresa via contexto", () => {
+    const html = compileSource(QUOTES_PDF_HTML_TEMPLATE, MOCK_CONTEXT);
+    // empresaNome tem '&' (escapado p/ &amp; no HTML) — checamos os contatos sem chars especiais.
+    expect(html).toContain(MOCK_CONTEXT.empresaTelefones);
+    expect(html).toContain(MOCK_CONTEXT.empresaEmail);
+  });
 });
 
 // ---------------------------------------------------------------------------
