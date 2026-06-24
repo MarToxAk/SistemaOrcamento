@@ -37,8 +37,8 @@ jobs:
           file: apps/backend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ steps.vars.outputs.owner }}/bomcusto-backend:latest
-            ghcr.io/${{ steps.vars.outputs.owner }}/bomcusto-backend:sha-${{ github.sha }}
+            ghcr.io/${{ steps.vars.outputs.owner }}/orcamento-backend:latest
+            ghcr.io/${{ steps.vars.outputs.owner }}/orcamento-backend:sha-${{ github.sha }}
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
@@ -47,8 +47,8 @@ jobs:
           file: apps/frontend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ steps.vars.outputs.owner }}/bomcusto-frontend:latest
-            ghcr.io/${{ steps.vars.outputs.owner }}/bomcusto-frontend:sha-${{ github.sha }}
+            ghcr.io/${{ steps.vars.outputs.owner }}/orcamento-frontend:latest
+            ghcr.io/${{ steps.vars.outputs.owner }}/orcamento-frontend:sha-${{ github.sha }}
 
       - name: Trigger Portainer Webhook
         if: ${{ vars.PORTAINER_WEBHOOK_ENABLED == 'true' }}

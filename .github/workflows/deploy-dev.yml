@@ -23,13 +23,13 @@ jobs:
         run: npm ci
 
       - name: Prisma generate (backend)
-        run: npm --workspace @bomcusto/backend run prisma:generate
+        run: npm --workspace @orcamento/backend run prisma:generate
 
       - name: Build frontend
-        run: npm --workspace @bomcusto/frontend run build
+        run: npm --workspace @orcamento/frontend run build
 
       - name: Build backend
-        run: npm --workspace @bomcusto/backend run build
+        run: npm --workspace @orcamento/backend run build
 
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v0.1.7

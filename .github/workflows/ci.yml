@@ -26,12 +26,12 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Generate Prisma Client (backend)
-        run: npm --workspace @bomcusto/backend run prisma:generate
+        run: npm --workspace @orcamento/backend run prisma:generate
 
       - name: Build (monorepo)
         run: npm run build
 
       - name: Run tests
-        run: npm --workspace @bomcusto/backend run test
+        run: npm --workspace @orcamento/backend run test
         env:
           NODE_ENV: test
