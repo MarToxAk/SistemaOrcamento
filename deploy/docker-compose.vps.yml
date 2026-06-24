@@ -101,6 +101,17 @@
       SMB_USER: ${SMB_USER}
       SMB_PASS: ${SMB_PASS}
       SMB_DOMAIN: ${SMB_DOMAIN}
+      # White-label do PDF (runtime): o backend lê estas para montar o cabeçalho do
+      # orçamento. EMPRESA_LOGO_URL é baixada e injetada como data: URI (rede bloqueada
+      # no render). Sem elas o PDF sai sem marca/logo.
+      EMPRESA_NOME: ${EMPRESA_NOME}
+      EMPRESA_CNPJ: ${EMPRESA_CNPJ}
+      EMPRESA_ENDERECO: ${EMPRESA_ENDERECO}
+      EMPRESA_TELEFONES: ${EMPRESA_TELEFONES}
+      EMPRESA_EMAIL: ${EMPRESA_EMAIL}
+      EMPRESA_INSTAGRAM: ${EMPRESA_INSTAGRAM}
+      EMPRESA_LOGO_URL: ${EMPRESA_LOGO_URL}
+      EMPRESA_COR_PRIMARIA: ${EMPRESA_COR_PRIMARIA}
 
     # Volumes opcionais: descomente e configure ATHOS_SMB_HOST_MOUNT_PATH e ATHOS_SMB_MOUNT_PATH
     # somente se o host VPS tiver acesso direto ao share Samba e precisar de bind mount.

@@ -93,6 +93,10 @@ services:
       EMPRESA_TELEFONES: ${EMPRESA_TELEFONES}
       EMPRESA_EMAIL: ${EMPRESA_EMAIL}
       EMPRESA_INSTAGRAM: ${EMPRESA_INSTAGRAM}
+      # Logo/cor também no backend: o PDF baixa o logo (EMPRESA_LOGO_URL) e o injeta
+      # como data: URI (rede bloqueada no render). Sem isto, PDF sai sem logo.
+      EMPRESA_LOGO_URL: ${EMPRESA_LOGO_URL}
+      EMPRESA_COR_PRIMARIA: ${EMPRESA_COR_PRIMARIA}
 
   frontend:
     # Imagem GENÉRICA (mesma do stack principal) — a marca agora vem das EMPRESA_* em RUNTIME,
