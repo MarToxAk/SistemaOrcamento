@@ -15,6 +15,8 @@ const FALLBACK: EmpresaConfig = {
   EMPRESA_CNPJ: "",
   EMPRESA_ENDERECO: "",
   EMPRESA_EMAIL: "",
+  EMPRESA_TELEFONES: "",
+  EMPRESA_WHATSAPP: "",
   EMPRESA_LOGO_URL: "/media/logo-primary.png",
   EMPRESA_COR_PRIMARIA: "#0d6efd",
 };
