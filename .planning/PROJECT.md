@@ -8,6 +8,20 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
+## Current Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
+
+**Goal:** Produtos criados pela API saem prontos para uso (ativos, vendaveis e fiscalmente validos) sem ajuste manual no Athos, preenchendo campos faltantes com os valores mais usados pelos produtos ja existentes (moda).
+
+**Target features:**
+- Defaults operacionais: produto nasce ativo/vendavel (`statusproduto`/`vendeproduto`) e com estoque sensato (`controlaestoque`/`baixarestoque`)
+- Defaults fiscais (ICMS/NF-e): `icms`/`icmsnfe`, `tributacao`/`tributacaonfe`, `codigocsosn`/`codigocsosnnfe`, `origem`/`origemnfe`, `tipoitem`, `piscst`/`cofinscst`, `idcfopsaida`, `ncm`
+- Descoberta dinamica: servico calcula a moda (valor mais comum) de cada campo a partir dos produtos ativos do Athos
+- Override: valor enviado no DTO sempre prevalece sobre o default
+- Robustez: sem dados para a moda -> fallback seguro, nunca quebra o insert
+- Observabilidade: log de quais defaults foram aplicados em cada cadastro
+
+**Key context:** continuacao direta do v2.2 (API de produto; escrita liberada APENAS na tabela `produto`). Backend/API apenas, sem frontend. Numeracao de fases continua a partir de 36.
+
 ## Last Shipped Milestone: v2.1 - Cobrança e Fiscal do Cliente
 
 Shipped em 2026-06-08 (auditoria: passed).
@@ -94,8 +108,19 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 - checkmark FRONT-01..04: Frontend white-label (nome/logo/CNPJ/endereco/cor via env vars + CSS theming) -- v2.3 (fase 36)
 - checkmark Gerenciamento de layout do PDF pela interface (upload/preview/ativacao em runtime, render seguro) -- v2.3 (fase 999.1)
 
+### Active → v2.4 (Defaults Inteligentes no Cadastro de Produto)
+
+- [ ] Defaults operacionais aplicados na criacao (produto ativo/vendavel + estoque sensato)
+- [ ] Defaults fiscais (ICMS/CSOSN/origem/tributacao/tipoitem/pis/cofins/cfop) aplicados quando nao informados
+- [ ] Descoberta dinamica da moda dos campos a partir dos produtos ativos do Athos
+- [ ] Override do operador sempre prevalece sobre o default
+- [ ] Fallback seguro quando nao ha dados para calcular a moda
+- [ ] Log de defaults aplicados por cadastro
+
 ### Out of Scope
 
+- Frontend/tela de cadastro de produto (v2.4 e API-only, como v2.2)
+- Escrita em qualquer tabela do Athos alem de `produto`
 - Reintroduzir n8n para roteamento de pagamentos
 - Recalculo retroativo de NFS-e ja emitida
 - Refactor completo de dominio de orcamentos
@@ -145,4 +170,4 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-06-23 — Milestone v2.3 (White-Label Multi-Empresa) concluído e arquivado*
+*Last updated: 2026-06-25 — Milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) iniciado*

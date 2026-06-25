@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.3
-milestone_name: — White-Label Multi-Empresa
-current_phase: 999.1
-status: Awaiting next milestone
-stopped_at: 999.1-06 complete (fase pronta para verificacao)
-last_updated: "2026-06-23T12:19:43.966Z"
-last_activity: 2026-06-23
-last_activity_desc: Milestone v2.3 completed and archived
+milestone: v2.4
+milestone_name: Defaults Inteligentes no Cadastro de Produto
+status: planning
+last_updated: "2026-06-25T21:05:30.326Z"
+last_activity: 2026-06-25
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
-current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -27,10 +23,10 @@ Milestone: v2.3 — White-Label Multi-Empresa
 
 ## Current Position
 
-Phase: Milestone v2.3 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-23 — Milestone v2.3 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-25 — Milestone v2.4 started
 
 ## Project Status
 
