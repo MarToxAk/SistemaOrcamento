@@ -633,14 +633,14 @@ describe('computeDefaults', () => {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Pool compartilhado vs. pool separado para o serviço de defaults**
+1. **RESOLVED: Pool compartilhado vs. pool separado para o serviço de defaults**
    - O que sabemos: `AthosProdutoService` já tem seu próprio `_pool` privado
    - O que está incerto: Se faz sentido compartilhar o pool (evitar conexões duplicadas) ou manter pools separados (isolamento)
    - Recomendação: Criar pool separado no `AthosDefaultsService` (mesmo padrão de `AthosProdutoService`) — a fase é read-only e o número de conexões (max:5 cada) é manageable. Pool compartilhado exigiria refatoração do módulo.
 
-2. **Tipo exato retornado pelo `pg` para `origem` e `origemnfe` (integer)**
+2. **RESOLVED: Tipo exato retornado pelo `pg` para `origem` e `origemnfe` (integer)**
    - O que sabemos: `produto.types.ts` tipifica como `number | null`; pg converte `integer` para `number` por padrão
    - O que está incerto: Confirmação no ambiente real
    - Recomendação: Cobrir nos testes de integração; se retornar string, a função pura ainda funciona (usa `String(raw)` como chave)
