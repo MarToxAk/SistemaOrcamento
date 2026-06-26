@@ -15,8 +15,66 @@
 - ✅ **v2.1 Cobrança e Fiscal do Cliente** — Fases 28-31 (shipped 2026-06-08)
 - ✅ **v2.2 Gestão de Produtos do Athos (API)** — Fases 32-33 (shipped 2026-06-17) — Phase 34 descartada (decisão: API-only)
 - ✅ **v2.3 White-Label Multi-Empresa** — Fases 35-36 + 999.1 (shipped 2026-06-23)
+- 🔄 **v2.4 Defaults Inteligentes no Cadastro de Produto** — Fases 37-38 (em andamento)
 
 Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-ROADMAP.md`.
+
+---
+
+## v2.4 — Defaults Inteligentes no Cadastro de Produto
+
+**Goal:** Produtos criados pela API saem prontos para uso (ativos, vendáveis e fiscalmente válidos) sem ajuste manual no Athos, preenchendo campos faltantes com os valores mais usados pelos produtos já existentes (moda).
+
+### Phases
+
+- [ ] **Phase 37: Motor de Defaults (Descoberta por Moda)** - Serviço NestJS que calcula e armazena em cache a moda de cada campo configurável a partir dos produtos ativos do Athos, com fallback seguro quando não há amostra
+- [ ] **Phase 38: Aplicação de Defaults na Criação de Produto** - Integração do motor de defaults no fluxo de criação: defaults operacionais e fiscais preenchidos automaticamente, override do operador garantido, edição não alterada, log de defaults aplicados
+
+### Phase Details
+
+#### Phase 37: Motor de Defaults (Descoberta por Moda)
+
+**Goal:** Um serviço dedicado calcula a moda de cada campo configurável do produto a partir dos produtos ativos do Athos, armazena o resultado em cache e fornece fallback seguro quando não há amostra suficiente.
+
+**Depends on:** Nothing — serviço independente que apenas lê do Athos (read-only)
+
+**Requirements:** DEFD-01, DEFD-02, DEFD-03, DEFD-04
+
+**Success Criteria** (what must be TRUE):
+  1. Dado um conjunto de produtos ativos no Athos, o serviço retorna o valor mais frequente de cada campo configurável (ex: se 8 de 10 produtos têm `icms = 'NAO'`, o default retornado é `'NAO'`)
+  2. Campos com valor nulo ou vazio nos produtos existentes são ignorados no cálculo — apenas valores preenchidos participam da moda
+  3. O resultado da moda é reutilizado entre chamadas consecutivas sem nova consulta ao banco Athos (cache válido por TTL ou por sessão de execução)
+  4. Quando um campo não possui nenhuma amostra válida (todos nulos ou tabela vazia), o serviço retorna um valor de fallback seguro e não lança exceção
+
+**Plans:** TBD
+
+---
+
+#### Phase 38: Aplicação de Defaults na Criação de Produto
+
+**Goal:** O endpoint de criação de produto preenche automaticamente campos omitidos com os valores do motor de defaults (operacionais e fiscais), preserva integralmente qualquer valor enviado pelo operador, não altera produtos já existentes na edição, e registra em log quais defaults foram aplicados.
+
+**Depends on:** Phase 37
+
+**Requirements:** DOPR-01, DOPR-02, DFIS-01, DFIS-02, DFIS-03, OVRD-01, OVRD-02, OVRD-03, OBSV-01
+
+**Success Criteria** (what must be TRUE):
+  1. Um produto criado sem informar `statusproduto` e `vendeproduto` nasce ativo e vendável; criado sem informar `controlaestoque` e `baixarestoque` recebe valores sensatos — confirmável ao buscar o produto recém-criado no Athos
+  2. Campos fiscais omitidos no DTO (`icms`, `icmsnfe`, `tributacao`, `tributacaonfe`, `codigocsosn`, `codigocsosnnfe`, `origem`, `origemnfe`, `tipoitem`, `piscst`, `cofinscst`, `idcfopsaida`, `ncm`) são preenchidos com o valor de moda calculado pelo Phase 37
+  3. Qualquer valor enviado explicitamente no DTO de criação — mesmo que coincida com o default — chega intacto ao banco; o default nunca sobrescreve o operador
+  4. Uma chamada de edição (PATCH/PUT) de produto existente não injeta nem altera campos via defaults — apenas o que o operador enviou é gravado
+  5. Cada criação de produto gera uma entrada de log identificando campo a campo quais defaults foram aplicados e qual valor foi usado; criações sem defaults (operador preencheu tudo) geram log indicando que nenhum default foi necessário
+
+**Plans:** TBD
+
+---
+
+### Progress
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 37. Motor de Defaults | 0/? | Not started | - |
+| 38. Aplicação de Defaults na Criação | 0/? | Not started | - |
 
 ---
 
@@ -44,9 +102,9 @@ Plans:
 
 ## Estado atual
 
-**Milestone v2.3 (White-Label Multi-Empresa) concluído e arquivado em 2026-06-23.** Aguardando início do próximo milestone.
+**Milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) em andamento.** Roadmap definido em 2026-06-26.
 
-Próximo passo: `/gsd-new-milestone`
+Próximo passo: `/gsd-plan-phase 37`
 
 ### Dívida diferida (não bloqueia)
 

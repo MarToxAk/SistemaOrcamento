@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: Defaults Inteligentes no Cadastro de Produto
 status: planning
-last_updated: "2026-06-25T21:05:30.326Z"
-last_activity: 2026-06-25
+last_updated: "2026-06-26T00:00:00.000Z"
+last_activity: 2026-06-26
 progress:
-  total_phases: 0
+  total_phases: 2
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -15,18 +15,18 @@ progress:
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-06-17 — Roadmap v2.3 definido (White-Label Multi-Empresa)
-Current phase: 999.1
-Milestone: v2.3 — White-Label Multi-Empresa
+Last updated: 2026-06-26 — Roadmap v2.4 definido (Defaults Inteligentes no Cadastro de Produto)
+Current phase: 37 (not started)
+Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
 
 ---
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap defined)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-25 — Milestone v2.4 started
+Status: Planning — roadmap aprovado, aguardando /gsd-plan-phase 37
+Last activity: 2026-06-26 — Roadmap v2.4 criado (Fases 37-38)
 
 ## Project Status
 
@@ -69,6 +69,8 @@ Last activity: 2026-06-25 — Milestone v2.4 started
 | 35 | Backend White-Label | complete (v2.3) |
 | 36 | Frontend White-Label | complete (v2.3) |
 | 999.1 | Gerenciamento de layout do PDF pela interface | complete (v2.3) |
+| 37 | Motor de Defaults (Descoberta por Moda) | not started (v2.4) |
+| 38 | Aplicacao de Defaults na Criacao de Produto | not started (v2.4) |
 
 ## Milestones Archived
 
@@ -89,17 +91,18 @@ Last activity: 2026-06-25 — Milestone v2.4 started
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-17)
+See: .planning/PROJECT.md (updated 2026-06-25)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v2.3 concluído — aguardando próximo milestone (/gsd-new-milestone)
+Current focus: v2.4 — Defaults Inteligentes no Cadastro de Produto (Fases 37-38)
 
 ## Active Context
 
-- Milestone v2.3 (White-Label Multi-Empresa) concluído e arquivado em 2026-06-23.
-- Entregue: env vars EMPRESA_* + PDF extraído para .hbs + NFS-e dehardcoded (Fase 35); frontend 8 arquivos dehardcoded + CSS theming (Fase 36); gerenciamento de templates PDF pela UI com upload/preview/ativação + render seguro (Fase 999.1, originalmente WL-01/WL-03 deferidos).
-- Stack: NestJS + Next.js + Prisma + PostgreSQL
-- Dívida diferida: UAT/verificação humana das Fases 32/33 (v2.2) — ver Deferred Items. Segurança v2.3: ação pré-deploy CR-01 (env vars do painel admin) — ver 999.1-SECURITY.md.
-- Próximo passo: /gsd-new-milestone
+- Milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) em andamento. Roadmap definido em 2026-06-26.
+- 2 fases: Phase 37 (motor de moda/cache/fallback) → Phase 38 (injeção de defaults no create, override, log).
+- Continuação direta do v2.2: escrita liberada APENAS na tabela `produto`; sem frontend.
+- Stack: NestJS + Prisma + PostgreSQL (banco próprio) + Athos (read-only para calcular moda).
+- Dívida diferida v2.2: UAT/verificação humana das Fases 32/33 — ver Deferred Items.
+- Segurança v2.3: ação pré-deploy CR-01 (env vars do painel admin) — ver 999.1-SECURITY.md.
 
 ## Decisions Log
 
@@ -231,7 +234,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Próxima fase: `/gsd-plan-phase 37`
 
 ## Performance Metrics
 
@@ -250,8 +253,8 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Session
 
-**Last session:** 2026-06-22T20:52:11.553Z
-**Stopped at:** 999.1-06 complete (fase pronta para verificacao)
+**Last session:** 2026-06-26
+**Stopped at:** Roadmap v2.4 definido
 **Resume file:** None
 
 ## Decisions
