@@ -1,10 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.4
-milestone_name: Defaults Inteligentes no Cadastro de Produto
+milestone_name: — Defaults Inteligentes no Cadastro de Produto
+current_phase: 37 (not started)
+current_phase_name: roadmap defined
 status: planning
-last_updated: "2026-06-26T00:00:00.000Z"
+stopped_at: Phase 37 context gathered
+last_updated: "2026-06-26T16:03:04.190Z"
 last_activity: 2026-06-26
+last_activity_desc: Roadmap v2.4 criado (Fases 37-38)
 progress:
   total_phases: 2
   completed_phases: 0
@@ -253,9 +257,9 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Session
 
-**Last session:** 2026-06-26
-**Stopped at:** Roadmap v2.4 definido
-**Resume file:** None
+**Last session:** 2026-06-26T16:03:04.127Z
+**Stopped at:** Phase 37 context gathered
+**Resume file:** .planning/phases/37-motor-de-defaults-descoberta-por-moda/37-CONTEXT.md
 
 ## Decisions
 
