@@ -46,7 +46,8 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
   3. O resultado da moda é reutilizado entre chamadas consecutivas sem nova consulta ao banco Athos (cache válido por TTL ou por sessão de execução)
   4. Quando um campo não possui nenhuma amostra válida (todos nulos ou tabela vazia), o serviço retorna um valor de fallback seguro e não lança exceção
 
-**Plans:** TBD
+**Plans:** 1 plan
+- [ ] 37-01-PLAN.md — Motor de defaults: função pura da moda (util), serviço singleton com cache/pg Pool e registro no AthosModule (DEFD-01..04)
 
 ---
 
