@@ -2,35 +2,35 @@
 gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: — Defaults Inteligentes no Cadastro de Produto
-current_phase: 38 — Aplicação de Defaults na Criação de Produto
-current_phase_name: motor-de-defaults-descoberta-por-moda
-status: executing
-stopped_at: Phase 38 context gathered
-last_updated: "2026-06-27T13:36:05.919Z"
+current_phase: 38
+current_phase_name: aplica-o-de-defaults-na-cria-o-de-produto
+status: complete
+stopped_at: Phase 38 Plan 01 complete — criarProduto com defaults operacionais e fiscais
+last_updated: "2026-06-27T13:51:27.000Z"
 last_activity: 2026-06-27
-last_activity_desc: Phase 37 complete, transitioned to Phase 38
+last_activity_desc: Phase 38 Plan 01 executed — 9 novos testes, 3 arquivos modificados, 319/319 testes verdes
 progress:
   total_phases: 2
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 50
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
+  percent: 100
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-06-26 — Roadmap v2.4 definido (Defaults Inteligentes no Cadastro de Produto)
-Current phase: 38 — Aplicação de Defaults na Criação de Produto
+Current phase: 38
 Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
 
 ---
 
 ## Current Position
 
-Phase: 37 (motor-de-defaults-descoberta-por-moda) — EXECUTING
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-27 — Phase 37 complete, transitioned to Phase 38
+Phase: 38 (aplica-o-de-defaults-na-cria-o-de-produto) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-06-27 — Phase 38 execution started
 
 ## Project Status
 
@@ -73,8 +73,8 @@ Last activity: 2026-06-27 — Phase 37 complete, transitioned to Phase 38
 | 35 | Backend White-Label | complete (v2.3) |
 | 36 | Frontend White-Label | complete (v2.3) |
 | 999.1 | Gerenciamento de layout do PDF pela interface | complete (v2.3) |
-| 37 | Motor de Defaults (Descoberta por Moda) | not started (v2.4) |
-| 38 | Aplicacao de Defaults na Criacao de Produto | not started (v2.4) |
+| 37 | Motor de Defaults (Descoberta por Moda) | complete (v2.4) |
+| 38 | Aplicacao de Defaults na Criacao de Produto | complete (v2.4) |
 
 ## Milestones Archived
 
@@ -157,6 +157,8 @@ Current focus: v2.4 — Defaults Inteligentes no Cadastro de Produto (Fases 37-3
 | 2026-06-17 | Phase 34 (Frontend de Gestao de Produtos) descartada — entrega API-only | Operador decidiu que a API REST de produtos e suficiente; UI nao necessaria para esta iteracao |
 | 2026-06-17 | v2.3 usa env vars (.env por deploy) em vez de tabela empresa_config no banco | Abordagem mais simples; sem Prisma migration, sem MinIO, sem painel admin — deploy separado por empresa com .env próprio |
 | 2026-06-17 | EMPRESA_PDF_TEMPLATE_PATH com fallback para template padrão .hbs — template customizado montado via volume Docker | Permite white-label de PDF sem rebuild da imagem; padrão funciona out-of-the-box |
+| 2026-06-27 | OPERATIONAL_DEFAULTS definido inline em criarProduto (nao como helper compartilhado) — garante que editarProduto nunca pode alcancar defaults (D-11/OVRD-02) | Isolamento total da logica de defaults no caminho de criacao, conforme D-11 |
+| 2026-06-27 | Loop do INSERT em criarProduto itera sobre merged (nao dto original) — campos preenchidos por default chegam ao SQL | Sem essa mudanca os defaults aplicados seriam ignorados na montagem das colunas |
 
 ## Notes
 
@@ -255,10 +257,11 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 999.1 P05 | ~20min | 2 tasks | 6 files |
 | Phase 999.1 P06 | ~45min | 2 tasks | 12 files |
 | Phase 37 P01 | 378 | 3 tasks | 5 files |
+| Phase 38 P01 | 7min | 3 tasks | 3 files |
 
 ## Session
 
-**Last session:** 2026-06-27T13:00:46.904Z
+**Last session:** 2026-06-27T13:53:23.814Z
 **Stopped at:** Phase 38 context gathered
 **Resume file:** .planning/phases/38-aplica-o-de-defaults-na-cria-o-de-produto/38-CONTEXT.md
 

@@ -17,24 +17,24 @@ Backend/API apenas (sem frontend). Continuacao do v2.2 — escrita liberada APEN
 
 ### Defaults Operacionais
 
-- [ ] **DOPR-01**: Produto criado nasce ativo e vendavel por padrao (`statusproduto` e `vendeproduto`) quando o operador nao informa
-- [ ] **DOPR-02**: `controlaestoque` e `baixarestoque` recebem default sensato quando nao informados
+- [x] **DOPR-01**: Produto criado nasce ativo e vendavel por padrao (`statusproduto` e `vendeproduto`) quando o operador nao informa
+- [x] **DOPR-02**: `controlaestoque` e `baixarestoque` recebem default sensato quando nao informados
 
 ### Defaults Fiscais (ICMS / NF-e)
 
-- [ ] **DFIS-01**: Campos de ICMS (`icms`, `icmsnfe`) sao preenchidos com a moda quando nao informados
-- [ ] **DFIS-02**: Campos de tributacao/CSOSN/origem (`tributacao`/`tributacaonfe`, `codigocsosn`/`codigocsosnnfe`, `origem`/`origemnfe`) sao preenchidos com a moda quando nao informados
-- [ ] **DFIS-03**: Campos PIS/COFINS (`piscst`/`cofinscst`), `tipoitem`, `idcfopsaida` e `ncm` sao preenchidos com a moda quando aplicavel e nao informados
+- [x] **DFIS-01**: Campos de ICMS (`icms`, `icmsnfe`) sao preenchidos com a moda quando nao informados
+- [x] **DFIS-02**: Campos de tributacao/CSOSN/origem (`tributacao`/`tributacaonfe`, `codigocsosn`/`codigocsosnnfe`, `origem`/`origemnfe`) sao preenchidos com a moda quando nao informados
+- [x] **DFIS-03**: Campos PIS/COFINS (`piscst`/`cofinscst`), `tipoitem`, `idcfopsaida` e `ncm` sao preenchidos com a moda quando aplicavel e nao informados
 
 ### Override e Seguranca
 
-- [ ] **OVRD-01**: Qualquer valor enviado no DTO de criacao sempre prevalece sobre o default
-- [ ] **OVRD-02**: Defaults sao aplicados apenas na criacao; a edicao de produto nunca forca defaults sobre campos ja existentes
-- [ ] **OVRD-03**: A escrita permanece restrita a tabela `produto`; nenhum outro comportamento do Athos e alterado (trigger/rules/FKs respeitados)
+- [x] **OVRD-01**: Qualquer valor enviado no DTO de criacao sempre prevalece sobre o default
+- [x] **OVRD-02**: Defaults sao aplicados apenas na criacao; a edicao de produto nunca forca defaults sobre campos ja existentes
+- [x] **OVRD-03**: A escrita permanece restrita a tabela `produto`; nenhum outro comportamento do Athos e alterado (trigger/rules/FKs respeitados)
 
 ### Observabilidade
 
-- [ ] **OBSV-01**: O sistema registra em log quais campos receberam default e qual valor foi aplicado em cada cadastro
+- [x] **OBSV-01**: O sistema registra em log quais campos receberam default e qual valor foi aplicado em cada cadastro
 
 ## v2 Requirements (Deferidos)
 
@@ -60,15 +60,15 @@ Backend/API apenas (sem frontend). Continuacao do v2.2 — escrita liberada APEN
 | DEFD-02 | Phase 37 | Complete |
 | DEFD-03 | Phase 37 | Complete |
 | DEFD-04 | Phase 37 | Complete |
-| DOPR-01 | Phase 38 | Pending |
-| DOPR-02 | Phase 38 | Pending |
-| DFIS-01 | Phase 38 | Pending |
-| DFIS-02 | Phase 38 | Pending |
-| DFIS-03 | Phase 38 | Pending |
-| OVRD-01 | Phase 38 | Pending |
-| OVRD-02 | Phase 38 | Pending |
-| OVRD-03 | Phase 38 | Pending |
-| OBSV-01 | Phase 38 | Pending |
+| DOPR-01 | Phase 38 | Complete |
+| DOPR-02 | Phase 38 | Complete |
+| DFIS-01 | Phase 38 | Complete |
+| DFIS-02 | Phase 38 | Complete |
+| DFIS-03 | Phase 38 | Complete |
+| OVRD-01 | Phase 38 | Complete |
+| OVRD-02 | Phase 38 | Complete |
+| OVRD-03 | Phase 38 | Complete |
+| OBSV-01 | Phase 38 | Complete |
 
 **Coverage:**
 

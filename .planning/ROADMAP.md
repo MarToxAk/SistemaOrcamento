@@ -28,7 +28,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 ### Phases
 
 - [x] **Phase 37: Motor de Defaults (Descoberta por Moda)** - Serviço NestJS que calcula e armazena em cache a moda de cada campo configurável a partir dos produtos ativos do Athos, com fallback seguro quando não há amostra (completed 2026-06-27)
-- [ ] **Phase 38: Aplicação de Defaults na Criação de Produto** - Integração do motor de defaults no fluxo de criação: defaults operacionais e fiscais preenchidos automaticamente, override do operador garantido, edição não alterada, log de defaults aplicados
+- [x] **Phase 38: Aplicação de Defaults na Criação de Produto** - Integração do motor de defaults no fluxo de criação: defaults operacionais e fiscais preenchidos automaticamente, override do operador garantido, edição não alterada, log de defaults aplicados (completed 2026-06-27)
 
 ### Phase Details
 
@@ -69,11 +69,11 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
   4. Uma chamada de edição (PATCH/PUT) de produto existente não injeta nem altera campos via defaults — apenas o que o operador enviou é gravado
   5. Cada criação de produto gera uma entrada de log identificando campo a campo quais defaults foram aplicados e qual valor foi usado; criações sem defaults (operador preencheu tudo) geram log indicando que nenhum default foi necessário
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 
-- [ ] 38-01-PLAN.md — Defaults na criacao de produto: estender CreateProdutoDto, aplicar defaults operacionais (DOPR) + fiscais (DFIS) em criarProduto com override do operador (OVRD) e log (OBSV); edicao intacta (Wave 1)
+- [x] 38-01-PLAN.md — Defaults na criacao de produto: estender CreateProdutoDto, aplicar defaults operacionais (DOPR) + fiscais (DFIS) em criarProduto com override do operador (OVRD) e log (OBSV); edicao intacta (Wave 1)
 
 ---
 
@@ -82,7 +82,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 37. Motor de Defaults | 1/1 | Complete    | 2026-06-27 |
-| 38. Aplicação de Defaults na Criação | 0/1 | Not started | - |
+| 38. Aplicação de Defaults na Criação | 1/1 | Complete   | 2026-06-27 |
 
 ---
 
