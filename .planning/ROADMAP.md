@@ -77,7 +77,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 37. Motor de Defaults | 1/1 | Complete   | 2026-06-27 |
+| 37. Motor de Defaults | 1/1 | Complete    | 2026-06-27 |
 | 38. Aplicação de Defaults na Criação | 0/? | Not started | - |
 
 ---
