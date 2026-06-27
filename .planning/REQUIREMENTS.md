@@ -10,10 +10,10 @@ Backend/API apenas (sem frontend). Continuacao do v2.2 — escrita liberada APEN
 
 ### Descoberta de Defaults (moda)
 
-- [ ] **DEFD-01**: O sistema calcula a moda (valor mais comum) de cada campo configuravel a partir dos produtos ativos ja existentes no Athos
-- [ ] **DEFD-02**: O calculo da moda ignora valores nulos/vazios, considerando apenas produtos que tem o campo preenchido
-- [ ] **DEFD-03**: O resultado da moda e reaproveitado (cache) entre criacoes para nao recalcular a cada insert
-- [ ] **DEFD-04**: Quando nao ha amostra suficiente para um campo, o sistema usa fallback seguro e nunca quebra o cadastro
+- [x] **DEFD-01**: O sistema calcula a moda (valor mais comum) de cada campo configuravel a partir dos produtos ativos ja existentes no Athos
+- [x] **DEFD-02**: O calculo da moda ignora valores nulos/vazios, considerando apenas produtos que tem o campo preenchido
+- [x] **DEFD-03**: O resultado da moda e reaproveitado (cache) entre criacoes para nao recalcular a cada insert
+- [x] **DEFD-04**: Quando nao ha amostra suficiente para um campo, o sistema usa fallback seguro e nunca quebra o cadastro
 
 ### Defaults Operacionais
 
@@ -56,10 +56,10 @@ Backend/API apenas (sem frontend). Continuacao do v2.2 — escrita liberada APEN
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DEFD-01 | Phase 37 | Pending |
-| DEFD-02 | Phase 37 | Pending |
-| DEFD-03 | Phase 37 | Pending |
-| DEFD-04 | Phase 37 | Pending |
+| DEFD-01 | Phase 37 | Complete |
+| DEFD-02 | Phase 37 | Complete |
+| DEFD-03 | Phase 37 | Complete |
+| DEFD-04 | Phase 37 | Complete |
 | DOPR-01 | Phase 38 | Pending |
 | DOPR-02 | Phase 38 | Pending |
 | DFIS-01 | Phase 38 | Pending |
@@ -71,6 +71,7 @@ Backend/API apenas (sem frontend). Continuacao do v2.2 — escrita liberada APEN
 | OBSV-01 | Phase 38 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 13 total
 - Mapped to phases: 13
 - Unmapped: 0

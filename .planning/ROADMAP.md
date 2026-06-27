@@ -27,7 +27,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 
 ### Phases
 
-- [ ] **Phase 37: Motor de Defaults (Descoberta por Moda)** - Serviço NestJS que calcula e armazena em cache a moda de cada campo configurável a partir dos produtos ativos do Athos, com fallback seguro quando não há amostra
+- [x] **Phase 37: Motor de Defaults (Descoberta por Moda)** - Serviço NestJS que calcula e armazena em cache a moda de cada campo configurável a partir dos produtos ativos do Athos, com fallback seguro quando não há amostra (completed 2026-06-27)
 - [ ] **Phase 38: Aplicação de Defaults na Criação de Produto** - Integração do motor de defaults no fluxo de criação: defaults operacionais e fiscais preenchidos automaticamente, override do operador garantido, edição não alterada, log de defaults aplicados
 
 ### Phase Details
@@ -41,13 +41,15 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 **Requirements:** DEFD-01, DEFD-02, DEFD-03, DEFD-04
 
 **Success Criteria** (what must be TRUE):
+
   1. Dado um conjunto de produtos ativos no Athos, o serviço retorna o valor mais frequente de cada campo configurável (ex: se 8 de 10 produtos têm `icms = 'NAO'`, o default retornado é `'NAO'`)
   2. Campos com valor nulo ou vazio nos produtos existentes são ignorados no cálculo — apenas valores preenchidos participam da moda
   3. O resultado da moda é reutilizado entre chamadas consecutivas sem nova consulta ao banco Athos (cache válido por TTL ou por sessão de execução)
   4. Quando um campo não possui nenhuma amostra válida (todos nulos ou tabela vazia), o serviço retorna um valor de fallback seguro e não lança exceção
 
-**Plans:** 1 plan
-- [ ] 37-01-PLAN.md — Motor de defaults: função pura da moda (util), serviço singleton com cache/pg Pool e registro no AthosModule (DEFD-01..04)
+**Plans:** 1/1 plans complete
+
+- [x] 37-01-PLAN.md — Motor de defaults: função pura da moda (util), serviço singleton com cache/pg Pool e registro no AthosModule (DEFD-01..04)
 
 ---
 
@@ -60,6 +62,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 **Requirements:** DOPR-01, DOPR-02, DFIS-01, DFIS-02, DFIS-03, OVRD-01, OVRD-02, OVRD-03, OBSV-01
 
 **Success Criteria** (what must be TRUE):
+
   1. Um produto criado sem informar `statusproduto` e `vendeproduto` nasce ativo e vendável; criado sem informar `controlaestoque` e `baixarestoque` recebe valores sensatos — confirmável ao buscar o produto recém-criado no Athos
   2. Campos fiscais omitidos no DTO (`icms`, `icmsnfe`, `tributacao`, `tributacaonfe`, `codigocsosn`, `codigocsosnnfe`, `origem`, `origemnfe`, `tipoitem`, `piscst`, `cofinscst`, `idcfopsaida`, `ncm`) são preenchidos com o valor de moda calculado pelo Phase 37
   3. Qualquer valor enviado explicitamente no DTO de criação — mesmo que coincida com o default — chega intacto ao banco; o default nunca sobrescreve o operador
@@ -74,7 +77,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 37. Motor de Defaults | 0/? | Not started | - |
+| 37. Motor de Defaults | 1/1 | Complete   | 2026-06-27 |
 | 38. Aplicação de Defaults na Criação | 0/? | Not started | - |
 
 ---
