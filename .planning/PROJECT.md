@@ -112,7 +112,7 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 
 - [ ] Defaults operacionais aplicados na criacao (produto ativo/vendavel + estoque sensato)
 - [ ] Defaults fiscais (ICMS/CSOSN/origem/tributacao/tipoitem/pis/cofins/cfop) aplicados quando nao informados
-- [ ] Descoberta dinamica da moda dos campos a partir dos produtos ativos do Athos
+- checkmark DEFD-01..04: Descoberta dinamica da moda dos campos a partir dos produtos ativos do Athos (motor read-only com cache 24h + fallback seguro) -- v2.4 (fase 37)
 - [ ] Override do operador sempre prevalece sobre o default
 - [ ] Fallback seguro quando nao ha dados para calcular a moda
 - [ ] Log de defaults aplicados por cadastro
@@ -170,4 +170,4 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-06-25 — Milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) iniciado*
+*Last updated: 2026-06-27 — Fase 37 (Motor de Defaults / Descoberta por Moda) completa; próxima: Fase 38 (aplicação dos defaults na criação de produto)*
