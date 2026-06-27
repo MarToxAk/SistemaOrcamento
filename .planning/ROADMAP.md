@@ -69,7 +69,11 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
   4. Uma chamada de edição (PATCH/PUT) de produto existente não injeta nem altera campos via defaults — apenas o que o operador enviou é gravado
   5. Cada criação de produto gera uma entrada de log identificando campo a campo quais defaults foram aplicados e qual valor foi usado; criações sem defaults (operador preencheu tudo) geram log indicando que nenhum default foi necessário
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+
+- [ ] 38-01-PLAN.md — Defaults na criacao de produto: estender CreateProdutoDto, aplicar defaults operacionais (DOPR) + fiscais (DFIS) em criarProduto com override do operador (OVRD) e log (OBSV); edicao intacta (Wave 1)
 
 ---
 
@@ -78,7 +82,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 37. Motor de Defaults | 1/1 | Complete    | 2026-06-27 |
-| 38. Aplicação de Defaults na Criação | 0/? | Not started | - |
+| 38. Aplicação de Defaults na Criação | 0/1 | Not started | - |
 
 ---
 
