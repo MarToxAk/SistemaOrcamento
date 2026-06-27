@@ -127,8 +127,10 @@ export function computeDefaults(rows: RawRow[]): ProductDefaults {
   // Campos de estoque: sempre presentes, fallback false (D-07)
   for (const field of STOCK_FIELDS) {
     const mode = computeModeFromRows(rows, field, DEFAULTS_MIN_SAMPLE);
-    // D-07: sem moda calculavel -> false; com moda -> valor original
-    result[field] = mode !== null ? (mode as boolean) : false;
+    // D-07: sem moda calculavel -> false; com moda -> coercao Boolean() (WR-03)
+    // Boolean() converte runtime: true->true, false->false, "true"->true, 0->false
+    // Evita que asserção de tipo mascara retorno de string pelo driver pg legado
+    result[field] = mode !== null ? Boolean(mode) : false;
   }
 
   return result as unknown as ProductDefaults;
