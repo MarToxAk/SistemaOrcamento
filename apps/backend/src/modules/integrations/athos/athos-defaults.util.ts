@@ -1,6 +1,6 @@
 // Tipos locais — sem imports externos (funcao pura, zero dependencias NestJS)
-type RawValue = string | number | boolean | null;
-type RawRow = Record<string, RawValue>;
+export type RawValue = string | number | boolean | null;
+export type RawRow = Record<string, RawValue>;
 
 // Constantes nomeadas exportadas (D-03, D-09 — proibido magic number inline)
 export const DEFAULTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h em ms
