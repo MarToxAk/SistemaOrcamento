@@ -99,6 +99,7 @@ export class AthosDefaultsService {
   private async _fetchAndCompute(): Promise<ProductDefaults> {
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
+    let queryError: Error | undefined;
     try {
       const result = await client.query<RawRow>(SQL_ACTIVE_PRODUCTS);
       const defaults = computeDefaults(result.rows);
@@ -115,9 +116,12 @@ export class AthosDefaultsService {
       );
 
       return defaults;
+    } catch (err) {
+      queryError = err as Error;
+      throw err;
     } finally {
-      // client.release() sempre chamado, inclusive em erro (try/finally padrao)
-      client.release();
+      // Sinaliza ao pool que a conexao pode estar corrompida quando houve erro (WR-01)
+      client.release(queryError);
     }
   }
 }
