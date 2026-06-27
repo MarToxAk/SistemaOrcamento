@@ -571,6 +571,58 @@ describe("AthosProdutoService", () => {
       // editarProduto nao deve chamar getDefaults em nenhuma hipotese (D-11)
       expect(mockDefaultsService.getDefaults).toHaveBeenCalledTimes(0);
     });
+
+    it("WR-02/EDIT-FISCAL: campo fiscal icms enviado pelo operador e gravado no UPDATE", async () => {
+      // Verifica que editarProduto inclui campos fiscais da Fase 38 no SET do UPDATE
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(8, { icms: "NORMAL" });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      const updateParams = updateCall![1] as unknown[];
+      expect(updateSql).toMatch(/"icms"/);
+      expect(updateParams).toContain("NORMAL");
+      // Garantia de que getDefaults nunca foi chamado (D-11 permanece satisfeito)
+      expect(mockDefaultsService.getDefaults).toHaveBeenCalledTimes(0);
+    });
+
+    it("WR-02/EDIT-ESTOQUE: campos baixarestoque e estoqueloja enviados pelo operador sao gravados no UPDATE", async () => {
+      // Verifica que editarProduto inclui campos operacionais de estoque da Fase 38
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(9, { baixarestoque: false, estoqueloja: "5" });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      const updateParams = updateCall![1] as unknown[];
+      expect(updateSql).toMatch(/"baixarestoque"/);
+      expect(updateSql).toMatch(/"estoqueloja"/);
+      expect(updateParams).toContain(false);
+      expect(updateParams).toContain("5");
+      // D-11: editarProduto nunca chama getDefaults
+      expect(mockDefaultsService.getDefaults).toHaveBeenCalledTimes(0);
+    });
   });
 
   describe("alterarStatusProduto", () => {

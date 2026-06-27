@@ -272,12 +272,20 @@ export class AthosProdutoService {
       params.push(sistemaUsuarioId);
 
       // Allowlist explícita — evita identifier injection mesmo que o ValidationPipe seja contornado
+      // Inclui campos da Fase 38: baixarestoque, estoqueloja e todos os 12 campos fiscais.
+      // statusproduto/vendeproduto ficam de fora: o endpoint dedicado alterarStatusProduto os gerencia.
       const ALLOWED_UPDATE_FIELDS = new Set([
         "descricaoproduto", "descricaocurta", "codigobarra1", "codigobarra2", "referencia",
         "ncm", "informacaoadicional", "observacao", "idunidade", "iddepartamento", "idgrupo",
         "idmarca", "idfornecedor", "valorvenda1", "valorvenda2", "valorvenda3", "valorvenda4",
         "valorvenda5", "valorvenda6", "valorvendapromocao", "valorvendaatacado1",
         "valorcustounitario", "descontomaximo", "tipoproduto", "controlaestoque",
+        // Campos operacionais da Fase 38 (sem endpoint dedicado)
+        "baixarestoque", "estoqueloja",
+        // Campos fiscais da Fase 38 (D-08/D-10 — FISCAL_FIELDS)
+        "icms", "icmsnfe", "tributacao", "tributacaonfe",
+        "codigocsosn", "codigocsosnnfe", "origem", "origemnfe",
+        "tipoitem", "piscst", "cofinscst", "idcfopsaida",
       ]);
       for (const [key, value] of Object.entries(dto)) {
         if (value !== undefined && ALLOWED_UPDATE_FIELDS.has(key)) {
