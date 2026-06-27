@@ -9,11 +9,15 @@ import {
 import { Pool, PoolClient } from "pg";
 import { CreateProdutoDto } from "./dto/create-produto.dto";
 import { UpdateProdutoDto } from "./dto/update-produto.dto";
+import { AthosDefaultsService } from "./athos-defaults.service";
+import { FISCAL_FIELDS } from "./athos-defaults.util";
 
 @Injectable()
 export class AthosProdutoService {
   private readonly logger = new Logger(AthosProdutoService.name);
   private _pool: Pool | null = null;
+
+  constructor(private readonly defaultsService: AthosDefaultsService) {}
 
   private getPool(): Pool {
     if (!this._pool) {
@@ -74,14 +78,51 @@ export class AthosProdutoService {
         await this.validarFkExiste(client, "produto_marca", "idmarca", dto.idmarca, "Marca");
       }
 
-      // Construir INSERT dinamicamente com os campos definidos no DTO
+      // === Aplicar defaults (D-03..D-13, OBSV-01) ===
+      // Buscar defaults fiscais do motor da Fase 37 (D-08, D-13 — nunca lanca excecao)
+      const fiscalDefaults = await this.defaultsService.getDefaults();
+
+      // Defaults operacionais fixos (D-03..D-07) — mapa proprio da Fase 38 (D-10)
+      const OPERATIONAL_DEFAULTS: Partial<CreateProdutoDto> = {
+        statusproduto: true,
+        vendeproduto: true,
+        controlaestoque: true,
+        baixarestoque: true,
+        estoqueloja: "10",
+      };
+
+      // Merge: operador prevalece sempre (D-01/D-02) — undefined OU null dispara default
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const merged: any = { ...dto };
+      const appliedDefaults: Record<string, unknown> = {};
+
+      // Aplicar defaults operacionais
+      for (const [field, defaultVal] of Object.entries(OPERATIONAL_DEFAULTS)) {
+        if (merged[field] == null) {
+          merged[field] = defaultVal;
+          appliedDefaults[field] = defaultVal;
+        }
+      }
+
+      // Aplicar defaults fiscais — usando FISCAL_FIELDS como fonte unica (D-10)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fiscalDefaultsMap = fiscalDefaults as any;
+      for (const field of FISCAL_FIELDS) {
+        const defaultVal = fiscalDefaultsMap[field];
+        if (defaultVal !== undefined && merged[field] == null) {
+          merged[field] = defaultVal;
+          appliedDefaults[field] = defaultVal;
+        }
+      }
+
+      // Construir INSERT dinamicamente com o objeto merged (nao dto original — D-05/Task3)
       // Campos fixos: descricaoproduto ($1), datacadastro (NOW() literal), idusuariocadastro ($2), idusuarioalteracao ($2)
       const columns: string[] = ["descricaoproduto", "datacadastro", "idusuariocadastro", "idusuarioalteracao"];
       const valuePlaceholders: string[] = ["$1", "NOW()", "$2", "$2"];
       const params: unknown[] = [dto.descricaoproduto, sistemaUsuarioId];
       let paramIndex = 3;
 
-      // Campos opcionais do DTO
+      // Allowlist ampliada com os campos de default (T-38-01: sem interpolacao de input)
       const optionalFields: (keyof CreateProdutoDto)[] = [
         "descricaocurta",
         "codigobarra1",
@@ -107,13 +148,32 @@ export class AthosProdutoService {
         "descontomaximo",
         "tipoproduto",
         "controlaestoque",
+        // Novos campos de default operacional (D-03..D-07)
+        "statusproduto",
+        "vendeproduto",
+        "baixarestoque",
+        "estoqueloja",
+        // Novos campos fiscais (D-08/D-10 — FISCAL_FIELDS)
+        "icms",
+        "icmsnfe",
+        "tributacao",
+        "tributacaonfe",
+        "codigocsosn",
+        "codigocsosnnfe",
+        "origem",
+        "origemnfe",
+        "tipoitem",
+        "piscst",
+        "cofinscst",
+        "idcfopsaida",
       ];
 
+      // Iterar sobre merged (nao dto) para incluir valores de default aplicados
       for (const field of optionalFields) {
-        if (dto[field] !== undefined) {
+        if (merged[field] !== undefined) {
           columns.push(field);
           valuePlaceholders.push(`$${paramIndex++}`);
-          params.push(dto[field]);
+          params.push(merged[field]);
         }
       }
 
@@ -124,6 +184,15 @@ export class AthosProdutoService {
       this.logger.log(
         `criarProduto descricao="${dto.descricaoproduto}" idproduto=${idproduto} idusuario=${sistemaUsuarioId}`,
       );
+
+      // Log D-12 (OBSV-01): registrar campo->valor de cada default aplicado nesta criacao
+      const appliedStr =
+        Object.keys(appliedDefaults).length > 0
+          ? Object.entries(appliedDefaults)
+              .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+              .join(", ")
+          : "nenhum default necessario";
+      this.logger.log(`criarProduto idproduto=${idproduto} defaults aplicados: ${appliedStr}`);
 
       return { idproduto };
     } catch (err) {
