@@ -44,6 +44,17 @@ export class AthosProdutoService {
     return { host, database, user, password, port };
   }
 
+  private getSistemaUsuarioId(): number {
+    const raw = process.env.ATHOS_SISTEMA_USUARIO_ID;
+    const id = Number(raw);
+    if (!raw || !Number.isInteger(id) || id <= 0) {
+      throw new InternalServerErrorException(
+        "ATHOS_SISTEMA_USUARIO_ID ausente ou invalido. Defina um inteiro positivo.",
+      );
+    }
+    return id;
+  }
+
   private async validarFkExiste(
     client: PoolClient,
     tabela: string,
@@ -63,7 +74,7 @@ export class AthosProdutoService {
   }
 
   async criarProduto(dto: CreateProdutoDto): Promise<{ idproduto: number }> {
-    const sistemaUsuarioId = Number(process.env.ATHOS_SISTEMA_USUARIO_ID);
+    const sistemaUsuarioId = this.getSistemaUsuarioId();
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
     try {
@@ -227,7 +238,7 @@ export class AthosProdutoService {
   }
 
   async editarProduto(idproduto: number, dto: UpdateProdutoDto): Promise<{ idproduto: number }> {
-    const sistemaUsuarioId = Number(process.env.ATHOS_SISTEMA_USUARIO_ID);
+    const sistemaUsuarioId = this.getSistemaUsuarioId();
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
     try {
@@ -326,7 +337,7 @@ export class AthosProdutoService {
     idproduto: number,
     ativo: boolean,
   ): Promise<{ idproduto: number; ativo: boolean }> {
-    const sistemaUsuarioId = Number(process.env.ATHOS_SISTEMA_USUARIO_ID);
+    const sistemaUsuarioId = this.getSistemaUsuarioId();
     const pool = this.getPool();
     const client: PoolClient = await pool.connect();
     try {
