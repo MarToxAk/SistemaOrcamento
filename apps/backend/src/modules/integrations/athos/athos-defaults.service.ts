@@ -105,7 +105,13 @@ export class AthosDefaultsService {
       const defaults = computeDefaults(result.rows);
 
       // Gravar cache com TTL de 24h (D-03)
-      this._cache = { defaults, expiresAt: Date.now() + DEFAULTS_CACHE_TTL_MS };
+      // WR-02: Object.freeze impede mutacao acidental pelo chamador; o objeto continua
+      // sendo a mesma referencia (freeze in-place), entao cache hits retornam o mesmo
+      // objeto congelado — compativel com toBe() nos testes e com o promise-lock.
+      this._cache = {
+        defaults: Object.freeze(defaults) as ProductDefaults,
+        expiresAt: Date.now() + DEFAULTS_CACHE_TTL_MS,
+      };
 
       // T-37-03: log apenas com contadores — nunca valores fiscais individuais
       const fiscalCount = Object.keys(defaults).filter((k) =>
