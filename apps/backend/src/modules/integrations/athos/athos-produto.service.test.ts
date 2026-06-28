@@ -439,7 +439,7 @@ describe("AthosProdutoService", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const logSpy = jest.spyOn((service as any)["logger"], "log").mockImplementation(() => {});
 
-      // DTO preenche todos os campos de OPERATIONAL_DEFAULTS — nenhum default deve ser aplicado
+      // DTO preenche todos os campos de OPERATIONAL_DEFAULTS e COST_DEFAULTS — nenhum default deve ser aplicado
       await service.criarProduto({
         descricaoproduto: "Papel A4",
         statusproduto: true,
@@ -447,6 +447,11 @@ describe("AthosProdutoService", () => {
         controlaestoque: true,
         baixarestoque: true,
         estoqueloja: "10",
+        valorcustocaixa: 5,
+        quantidadecaixa: 10,
+        valorcustounitario: 0.5,
+        custorealcaixa: 5,
+        custorealunitario: 0.5,
       });
 
       const logCalls: string[] = logSpy.mock.calls.map((args) => String(args[0]));
