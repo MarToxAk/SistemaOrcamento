@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: — Defaults Inteligentes no Cadastro de Produto
 current_phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
-current_phase_name: aplica-o-de-defaults-na-cria-o-de-produto
-status: verifying
+status: Awaiting next milestone
 stopped_at: Phase 38 context gathered
-last_updated: "2026-06-28T13:19:12.574Z"
+last_updated: "2026-06-28T13:55:47.472Z"
 last_activity: 2026-06-28
-last_activity_desc: Phase 38 complete, transitioned to Phase 999.1
+last_activity_desc: Milestone v2.4 completed and archived
 progress:
   total_phases: 2
   completed_phases: 2
   total_plans: 2
   completed_plans: 2
   percent: 100
+current_phase_name: aplica-o-de-defaults-na-cria-o-de-produto
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -27,10 +27,10 @@ Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
 
 ## Current Position
 
-Phase: 38 (aplica-o-de-defaults-na-cria-o-de-produto) — EXECUTING
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-06-28 — Phase 38 complete, transitioned to Phase 999.1
+Phase: Milestone v2.4 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-28 — Milestone v2.4 completed and archived
 
 ## Project Status
 
@@ -240,7 +240,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Operator Next Steps
 
-- Próxima fase: `/gsd-plan-phase 37`
+- Start the next milestone with /gsd-new-milestone
 
 ## Performance Metrics
 

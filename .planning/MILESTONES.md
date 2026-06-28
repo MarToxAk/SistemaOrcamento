@@ -1,5 +1,16 @@
 # Milestones - Sistema de Orcamento BomCusto
 
+## v2.4 Defaults Inteligentes no Cadastro de Produto (Shipped: 2026-06-28)
+
+**Phases completed:** 2 phases, 2 plans, 0 tasks
+
+**Key accomplishments:**
+
+- Motor de descoberta de defaults por moda com `computeModeFromRows` pura (TTL 24h, promise-lock, fallback seguro D-07/D-08) registrado no `AthosModule`.
+- Motor de defaults da Fase 37 ligado ao `criarProduto` via injeção de `AthosDefaultsService`, preenchendo campos operacionais fixos (status/vende/estoque) e fiscais (moda do catálogo) apenas quando omitidos, com override total do operador e log campo→valor por cadastro.
+
+---
+
 ## v2.3 White-Label Multi-Empresa (Shipped: 2026-06-23)
 
 **Phases completed:** 3 phases (35, 36, 999.1), 12 plans

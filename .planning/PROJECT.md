@@ -8,7 +8,13 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
-## Current Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
+## Current State
+
+**Entre milestones.** v2.4 (Defaults Inteligentes no Cadastro de Produto) enviado em 2026-06-28 — Fases 37-38, auditoria `passed`. Próximo passo: `/gsd-new-milestone`.
+
+## Last Shipped Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
+
+Shipped: 2026-06-28 (auditoria: passed). Fases 37-38 (2 planos). Arquivo: `.planning/milestones/v2.4-ROADMAP.md`.
 
 **Goal:** Produtos criados pela API saem prontos para uso (ativos, vendaveis e fiscalmente validos) sem ajuste manual no Athos, preenchendo campos faltantes com os valores mais usados pelos produtos ja existentes (moda).
 
@@ -172,4 +178,4 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-06-28 — Fase 38 completa e verificada (UAT + segurança); milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) 100% concluído (fases 37 e 38)*
+*Last updated: 2026-06-28 after v2.4 milestone — Defaults Inteligentes no Cadastro de Produto enviado (fases 37-38); entre milestones, próximo: /gsd-new-milestone*
