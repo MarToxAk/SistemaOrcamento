@@ -1,14 +1,16 @@
 ---
 phase: 38-aplica-o-de-defaults-na-cria-o-de-produto
 verified: 2026-06-27T11:25:00Z
-status: human_needed
+status: passed
 score: 6/6 must-haves verificados
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Criar produto via API sem statusproduto/vendeproduto/controlaestoque/baixarestoque e buscar o registro no Athos"
     expected: "Produto aparece com statusproduto=true, vendeproduto=true, controlaestoque=true, baixarestoque=true, estoqueloja='10' (DOPR-01/02, SC-1 do roadmap)"
     why_human: "Testes unitários verificam o SQL do INSERT com mocks; confirmação real exige escrita no banco Athos de produção/homologação e leitura do registro gravado"
+
   - test: "Criar produto via API sem campos fiscais (icms, tributacao, etc.) e buscar o registro no Athos"
     expected: "Campos fiscais aparecem preenchidos com valores coerentes com a moda do catálogo ativo (DFIS-01/02/03, SC-2 do roadmap)"
     why_human: "Testes unitários verificam o merge fiscal com mocks de getDefaults; confirmação real exige que AthosDefaultsService calcule a moda a partir do banco Athos real e que os valores gravados coincidam"

@@ -82,7 +82,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 37. Motor de Defaults | 1/1 | Complete    | 2026-06-27 |
-| 38. Aplicação de Defaults na Criação | 1/1 | Complete   | 2026-06-27 |
+| 38. Aplicação de Defaults na Criação | 1/1 | Complete    | 2026-06-27 |
 
 ---
 
