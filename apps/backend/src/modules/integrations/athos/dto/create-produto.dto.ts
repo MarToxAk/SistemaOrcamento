@@ -156,4 +156,86 @@ export class CreateProdutoDto {
   @IsBoolean()
   controlaestoque?: boolean;
 
+  @ApiPropertyOptional({ example: true, description: "Status do produto: true = ativo, false = inativo" })
+  @IsOptional()
+  @IsBoolean()
+  statusproduto?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: "Indica se o produto e vendavel" })
+  @IsOptional()
+  @IsBoolean()
+  vendeproduto?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: "Indica se o produto da baixa automatica no estoque ao vender" })
+  @IsOptional()
+  @IsBoolean()
+  baixarestoque?: boolean;
+
+  @ApiPropertyOptional({ example: "10", description: "Estoque inicial na loja" })
+  @IsOptional()
+  @IsString()
+  estoqueloja?: string;
+
+  @ApiPropertyOptional({ example: "NAO", description: "Situacao tributaria do ICMS" })
+  @IsOptional()
+  @IsString()
+  icms?: string;
+
+  @ApiPropertyOptional({ example: "NAO", description: "Situacao tributaria do ICMS na NF-e" })
+  @IsOptional()
+  @IsString()
+  icmsnfe?: string;
+
+  @ApiPropertyOptional({ example: "60", description: "Tributacao do produto" })
+  @IsOptional()
+  @IsString()
+  tributacao?: string;
+
+  @ApiPropertyOptional({ example: "60", description: "Tributacao do produto na NF-e" })
+  @IsOptional()
+  @IsString()
+  tributacaonfe?: string;
+
+  @ApiPropertyOptional({ example: "400", description: "Codigo CSOSN" })
+  @IsOptional()
+  @IsString()
+  codigocsosn?: string;
+
+  @ApiPropertyOptional({ example: "400", description: "Codigo CSOSN na NF-e" })
+  @IsOptional()
+  @IsString()
+  codigocsosnnfe?: string;
+
+  @ApiPropertyOptional({ example: "00", description: "Tipo do item fiscal" })
+  @IsOptional()
+  @IsString()
+  tipoitem?: string;
+
+  @ApiPropertyOptional({ example: "07", description: "Situacao tributaria do PIS" })
+  @IsOptional()
+  @IsString()
+  piscst?: string;
+
+  @ApiPropertyOptional({ example: "07", description: "Situacao tributaria do COFINS" })
+  @IsOptional()
+  @IsString()
+  cofinscst?: string;
+
+  @ApiPropertyOptional({ example: "5102", description: "ID do CFOP de saida" })
+  @IsOptional()
+  @IsString()
+  idcfopsaida?: string;
+
+  @ApiPropertyOptional({ example: 0, description: "Origem da mercadoria (0 = nacional)" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  origem?: number;
+
+  @ApiPropertyOptional({ example: 0, description: "Origem da mercadoria na NF-e" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  origemnfe?: number;
+
 }

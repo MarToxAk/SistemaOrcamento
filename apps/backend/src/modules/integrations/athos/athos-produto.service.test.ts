@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { InternalServerErrorException, UnprocessableEntityException } from "@nestjs/common";
 import { AthosProdutoService } from "./athos-produto.service";
+import { AthosDefaultsService } from "./athos-defaults.service";
 
 // Mock do módulo pg — deve vir antes dos imports do serviço
 jest.mock("pg", () => {
@@ -20,6 +21,7 @@ const pgMock = require("pg");
 
 describe("AthosProdutoService", () => {
   let service: AthosProdutoService;
+  let mockDefaultsService: { getDefaults: jest.Mock };
 
   beforeAll(() => {
     process.env.ATHOS_PG_HOST = "localhost";
@@ -32,13 +34,46 @@ describe("AthosProdutoService", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockDefaultsService = {
+      getDefaults: jest.fn().mockResolvedValue({}),
+    };
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AthosProdutoService],
+      providers: [
+        AthosProdutoService,
+        { provide: AthosDefaultsService, useValue: mockDefaultsService },
+      ],
     }).compile();
     service = module.get<AthosProdutoService>(AthosProdutoService);
   });
 
   afterEach(() => jest.clearAllMocks());
+
+  /**
+   * Helper: extrai o valor parametrizado de uma coluna no INSERT dinamico.
+   * Usa a posicao da coluna na lista para encontrar o placeholder $N e
+   * retorna o valor correspondente no array de params.
+   * Retorna `undefined` se a coluna nao estiver presente no INSERT.
+   */
+  function getInsertColValue(insertSql: string, insertParams: unknown[], col: string): unknown {
+    const parts = String(insertSql).split("VALUES");
+    const colsContent = parts[0].match(/\(([^)]+)\)/)![1];
+
+    // Extrai o conteudo dos VALUES removendo os parenteses externos
+    const valuesPart = parts[1].split("RETURNING")[0].trim();
+    const valuesContent = valuesPart.slice(1, -1);
+
+    const cols = colsContent.split(", ");
+    const vals = valuesContent.split(", ");
+
+    const idx = cols.indexOf(col);
+    if (idx === -1) return undefined;
+
+    const ph = vals[idx];
+    const m = ph.match(/^\$(\d+)$/);
+    if (!m) return ph; // literal como NOW()
+
+    return insertParams[parseInt(m[1]) - 1];
+  }
 
   describe("criarProduto", () => {
     it("deve retornar idproduto do RETURNING quando DTO valido", async () => {
@@ -197,6 +232,227 @@ describe("AthosProdutoService", () => {
       await expect(
         service.criarProduto({ descricaoproduto: "Papel A4" }),
       ).rejects.toThrow("connection refused");
+    });
+
+    // === NOVOS CASOS — Task 1 TDD RED (DOPR/DFIS/OVRD/OBSV) ===
+
+    it("DOPR-01: criarProduto sem statusproduto/vendeproduto -> INSERT inclui ambos = true", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      await service.criarProduto({ descricaoproduto: "Papel A4" });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      expect(getInsertColValue(insertSql, insertParams, "statusproduto")).toBe(true);
+      expect(getInsertColValue(insertSql, insertParams, "vendeproduto")).toBe(true);
+    });
+
+    it("DOPR-02: criarProduto sem controlaestoque/baixarestoque/estoqueloja -> INSERT inclui os 3 defaults", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      await service.criarProduto({ descricaoproduto: "Papel A4" });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      expect(getInsertColValue(insertSql, insertParams, "controlaestoque")).toBe(true);
+      expect(getInsertColValue(insertSql, insertParams, "baixarestoque")).toBe(true);
+      expect(getInsertColValue(insertSql, insertParams, "estoqueloja")).toBe("10");
+    });
+
+    it("DFIS-aplicado: getDefaults retorna moda fiscal -> campos fiscais entram no INSERT", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({ icms: "NAO", tributacao: "60" });
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      await service.criarProduto({ descricaoproduto: "Papel A4" });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      expect(getInsertColValue(insertSql, insertParams, "icms")).toBe("NAO");
+      expect(getInsertColValue(insertSql, insertParams, "tributacao")).toBe("60");
+    });
+
+    it("DFIS-omitido: getDefaults retorna {} -> coluna fiscal ausente do INSERT", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      await service.criarProduto({ descricaoproduto: "Papel A4" });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      // Campo fiscal sem moda nao deve aparecer no INSERT
+      expect(getInsertColValue(insertSql, insertParams, "icms")).toBeUndefined();
+    });
+
+    it("D-13: getDefaults retorna {} -> criarProduto resolve normalmente sem lancar excecao", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      const result = await service.criarProduto({ descricaoproduto: "Papel A4" });
+
+      expect(result).toEqual({ idproduto: 42 });
+    });
+
+    it("OVRD-01/03: statusproduto=false no DTO -> INSERT grava false, nunca o default true", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      // Operador envia statusproduto=false explicitamente — deve prevalecer sobre o default true
+      await service.criarProduto({ descricaoproduto: "Papel A4", statusproduto: false });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      expect(getInsertColValue(insertSql, insertParams, "statusproduto")).toBe(false);
+    });
+
+    it("OVRD-falsy: controlaestoque=false no DTO -> INSERT grava false, nao o default true", async () => {
+      // Garante que == null (nao === undefined) e usado — false nao deve ser sobrescrito pelo default true
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      await service.criarProduto({ descricaoproduto: "Papel A4", controlaestoque: false });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      expect(getInsertColValue(insertSql, insertParams, "controlaestoque")).toBe(false);
+    });
+
+    it("OVRD-falsy: baixarestoque=false no DTO -> INSERT grava false, nao o default true", async () => {
+      // Garante que == null e usado — false nao deve ser sobrescrito pelo default true
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      await service.criarProduto({ descricaoproduto: "Papel A4", baixarestoque: false });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      expect(getInsertColValue(insertSql, insertParams, "baixarestoque")).toBe(false);
+    });
+
+    it("OVRD-falsy: estoqueloja='0' no DTO -> INSERT grava '0', nao o default '10'", async () => {
+      // Garante que == null e usado — string '0' (truthy=false, mas != null) nao deve ser sobrescrita
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      await service.criarProduto({ descricaoproduto: "Papel A4", estoqueloja: "0" });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      expect(getInsertColValue(insertSql, insertParams, "estoqueloja")).toBe("0");
+    });
+
+    it("OBSV-01a: log contem os campos de default aplicados na criacao", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const logSpy = jest.spyOn((service as any)["logger"], "log").mockImplementation(() => {});
+
+      await service.criarProduto({ descricaoproduto: "Papel A4" });
+
+      // Deve haver uma chamada de log contendo "statusproduto" (default aplicado)
+      const logCalls: string[] = logSpy.mock.calls.map((args) => String(args[0]));
+      const defaultsLogCall = logCalls.find((msg) => msg.includes("defaults aplicados"));
+      expect(defaultsLogCall).toBeDefined();
+      expect(defaultsLogCall).toContain("statusproduto");
+    });
+
+    it("OBSV-01b: log diz 'nenhum default necessario' quando DTO ja preenche todos os campos de default", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      // Motor sem moda fiscal — sem defaults fiscais a aplicar
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const logSpy = jest.spyOn((service as any)["logger"], "log").mockImplementation(() => {});
+
+      // DTO preenche todos os campos de OPERATIONAL_DEFAULTS — nenhum default deve ser aplicado
+      await service.criarProduto({
+        descricaoproduto: "Papel A4",
+        statusproduto: true,
+        vendeproduto: true,
+        controlaestoque: true,
+        baixarestoque: true,
+        estoqueloja: "10",
+      });
+
+      const logCalls: string[] = logSpy.mock.calls.map((args) => String(args[0]));
+      const defaultsLogCall = logCalls.find((msg) => msg.includes("defaults aplicados") || msg.includes("nenhum default"));
+      expect(defaultsLogCall).toBeDefined();
+      expect(defaultsLogCall).toContain("nenhum default necessario");
     });
   });
 
@@ -359,6 +615,73 @@ describe("AthosProdutoService", () => {
       // Nenhuma query deve conter DELETE
       const allSqls = allCalls.map(([sql]: [string]) => String(sql).toUpperCase());
       expect(allSqls.every((sql) => !sql.includes("DELETE"))).toBe(true);
+    });
+
+    it("OVRD-02/D-11: editarProduto nunca chama getDefaults (defaults exclusivos de criacao)", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(7, { descricaoproduto: "Teste" });
+
+      // editarProduto nao deve chamar getDefaults em nenhuma hipotese (D-11)
+      expect(mockDefaultsService.getDefaults).toHaveBeenCalledTimes(0);
+    });
+
+    it("WR-02/EDIT-FISCAL: campo fiscal icms enviado pelo operador e gravado no UPDATE", async () => {
+      // Verifica que editarProduto inclui campos fiscais da Fase 38 no SET do UPDATE
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(8, { icms: "NORMAL" });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      const updateParams = updateCall![1] as unknown[];
+      expect(updateSql).toMatch(/"icms"/);
+      expect(updateParams).toContain("NORMAL");
+      // Garantia de que getDefaults nunca foi chamado (D-11 permanece satisfeito)
+      expect(mockDefaultsService.getDefaults).toHaveBeenCalledTimes(0);
+    });
+
+    it("WR-02/EDIT-ESTOQUE: campos baixarestoque e estoqueloja enviados pelo operador sao gravados no UPDATE", async () => {
+      // Verifica que editarProduto inclui campos operacionais de estoque da Fase 38
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(9, { baixarestoque: false, estoqueloja: "5" });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      const updateParams = updateCall![1] as unknown[];
+      expect(updateSql).toMatch(/"baixarestoque"/);
+      expect(updateSql).toMatch(/"estoqueloja"/);
+      expect(updateParams).toContain(false);
+      expect(updateParams).toContain("5");
+      // D-11: editarProduto nunca chama getDefaults
+      expect(mockDefaultsService.getDefaults).toHaveBeenCalledTimes(0);
     });
   });
 
