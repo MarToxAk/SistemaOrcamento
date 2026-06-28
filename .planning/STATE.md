@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: — Defaults Inteligentes no Cadastro de Produto
 current_phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
-status: Awaiting next milestone
+status: "Milestone v2.4 shipped — PR #41"
 stopped_at: Phase 38 context gathered
-last_updated: "2026-06-28T13:55:47.472Z"
+last_updated: "2026-06-28T14:32:57.274Z"
 last_activity: 2026-06-28
 last_activity_desc: Milestone v2.4 completed and archived
 progress:
@@ -29,7 +29,7 @@ Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
 
 Phase: Milestone v2.4 complete
 Plan: —
-Status: Awaiting next milestone
+Status: Milestone v2.4 shipped — PR #41
 Last activity: 2026-06-28 — Milestone v2.4 completed and archived
 
 ## Project Status
