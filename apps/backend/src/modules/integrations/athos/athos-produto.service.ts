@@ -102,6 +102,16 @@ export class AthosProdutoService {
         estoqueloja: "10",
       };
 
+      // Defaults de custo/caixa — Athos exige esses campos preenchidos.
+      // Valores minimos (0.01) e quantidade 1 quando o operador nao informar.
+      const COST_DEFAULTS: Partial<CreateProdutoDto> = {
+        valorcustocaixa: 0.01,
+        quantidadecaixa: 1,
+        valorcustounitario: 0.01,
+        custorealcaixa: 0.01,
+        custorealunitario: 0.01,
+      };
+
       // Merge: operador prevalece sempre (D-01/D-02) — undefined OU null dispara default
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const merged: any = { ...dto };
@@ -109,6 +119,14 @@ export class AthosProdutoService {
 
       // Aplicar defaults operacionais
       for (const [field, defaultVal] of Object.entries(OPERATIONAL_DEFAULTS)) {
+        if (merged[field] == null) {
+          merged[field] = defaultVal;
+          appliedDefaults[field] = defaultVal;
+        }
+      }
+
+      // Aplicar defaults de custo/caixa (mesma regra: undefined OU null dispara default)
+      for (const [field, defaultVal] of Object.entries(COST_DEFAULTS)) {
         if (merged[field] == null) {
           merged[field] = defaultVal;
           appliedDefaults[field] = defaultVal;
@@ -156,6 +174,10 @@ export class AthosProdutoService {
         "valorvendapromocao",
         "valorvendaatacado1",
         "valorcustounitario",
+        "valorcustocaixa",
+        "quantidadecaixa",
+        "custorealcaixa",
+        "custorealunitario",
         "descontomaximo",
         "tipoproduto",
         "controlaestoque",
@@ -279,7 +301,8 @@ export class AthosProdutoService {
         "ncm", "informacaoadicional", "observacao", "idunidade", "iddepartamento", "idgrupo",
         "idmarca", "idfornecedor", "valorvenda1", "valorvenda2", "valorvenda3", "valorvenda4",
         "valorvenda5", "valorvenda6", "valorvendapromocao", "valorvendaatacado1",
-        "valorcustounitario", "descontomaximo", "tipoproduto", "controlaestoque",
+        "valorcustounitario", "valorcustocaixa", "quantidadecaixa",
+        "custorealcaixa", "custorealunitario", "descontomaximo", "tipoproduto", "controlaestoque",
         // Campos operacionais da Fase 38 (sem endpoint dedicado)
         "baixarestoque", "estoqueloja",
         // Campos fiscais da Fase 38 (D-08/D-10 — FISCAL_FIELDS)

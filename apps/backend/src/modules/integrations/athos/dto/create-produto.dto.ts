@@ -132,11 +132,40 @@ export class CreateProdutoDto {
   @IsNumber()
   valorvendaatacado1?: number;
 
-  @ApiPropertyOptional({ example: 18.5, description: "Valor de custo unitario" })
+  @ApiPropertyOptional({ example: 18.5, description: "Valor de custo unitario (default 0.01 na criacao)" })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
   valorcustounitario?: number;
+
+  @ApiPropertyOptional({ example: 0.01, description: "Valor de custo por caixa (default 0.01 na criacao)" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  valorcustocaixa?: number;
+
+  @ApiPropertyOptional({ example: 1, description: "Quantidade por caixa (default 1 na criacao)" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  quantidadecaixa?: number;
+
+  @ApiPropertyOptional({ example: 0.01, description: "Custo real por caixa (default 0.01 na criacao)" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  custorealcaixa?: number;
+
+  @ApiPropertyOptional({ example: 0.01, description: "Custo real unitario (default 0.01 na criacao)" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  custorealunitario?: number;
 
   @ApiPropertyOptional({ example: 15.0, description: "Desconto maximo permitido (0 a 100)" })
   @IsOptional()
