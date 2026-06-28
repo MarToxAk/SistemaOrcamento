@@ -1,36 +1,36 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.3
-milestone_name: — White-Label Multi-Empresa
-current_phase: 999.1
+milestone: v2.4
+milestone_name: — Defaults Inteligentes no Cadastro de Produto
+current_phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
 status: Awaiting next milestone
-stopped_at: 999.1-06 complete (fase pronta para verificacao)
-last_updated: "2026-06-23T12:19:43.966Z"
-last_activity: 2026-06-23
-last_activity_desc: Milestone v2.3 completed and archived
+stopped_at: Phase 38 context gathered
+last_updated: "2026-06-28T13:55:47.472Z"
+last_activity: 2026-06-28
+last_activity_desc: Milestone v2.4 completed and archived
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 12
-  completed_plans: 12
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
   percent: 100
-current_phase_name: gerenciamento-de-layout-do-pdf-de-orcamento-pela-interface
+current_phase_name: aplica-o-de-defaults-na-cria-o-de-produto
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-06-17 — Roadmap v2.3 definido (White-Label Multi-Empresa)
-Current phase: 999.1
-Milestone: v2.3 — White-Label Multi-Empresa
+Last updated: 2026-06-26 — Roadmap v2.4 definido (Defaults Inteligentes no Cadastro de Produto)
+Current phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
+Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
 
 ---
 
 ## Current Position
 
-Phase: Milestone v2.3 complete
+Phase: Milestone v2.4 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-06-23 — Milestone v2.3 completed and archived
+Last activity: 2026-06-28 — Milestone v2.4 completed and archived
 
 ## Project Status
 
@@ -73,6 +73,8 @@ Last activity: 2026-06-23 — Milestone v2.3 completed and archived
 | 35 | Backend White-Label | complete (v2.3) |
 | 36 | Frontend White-Label | complete (v2.3) |
 | 999.1 | Gerenciamento de layout do PDF pela interface | complete (v2.3) |
+| 37 | Motor de Defaults (Descoberta por Moda) | complete (v2.4) |
+| 38 | Aplicacao de Defaults na Criacao de Produto | complete (v2.4) |
 
 ## Milestones Archived
 
@@ -93,17 +95,18 @@ Last activity: 2026-06-23 — Milestone v2.3 completed and archived
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-17)
+See: .planning/PROJECT.md (updated 2026-06-25)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v2.3 concluído — aguardando próximo milestone (/gsd-new-milestone)
+Current focus: v2.4 — Defaults Inteligentes no Cadastro de Produto (Fases 37-38)
 
 ## Active Context
 
-- Milestone v2.3 (White-Label Multi-Empresa) concluído e arquivado em 2026-06-23.
-- Entregue: env vars EMPRESA_* + PDF extraído para .hbs + NFS-e dehardcoded (Fase 35); frontend 8 arquivos dehardcoded + CSS theming (Fase 36); gerenciamento de templates PDF pela UI com upload/preview/ativação + render seguro (Fase 999.1, originalmente WL-01/WL-03 deferidos).
-- Stack: NestJS + Next.js + Prisma + PostgreSQL
-- Dívida diferida: UAT/verificação humana das Fases 32/33 (v2.2) — ver Deferred Items. Segurança v2.3: ação pré-deploy CR-01 (env vars do painel admin) — ver 999.1-SECURITY.md.
-- Próximo passo: /gsd-new-milestone
+- Milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) em andamento. Roadmap definido em 2026-06-26.
+- 2 fases: Phase 37 (motor de moda/cache/fallback) → Phase 38 (injeção de defaults no create, override, log).
+- Continuação direta do v2.2: escrita liberada APENAS na tabela `produto`; sem frontend.
+- Stack: NestJS + Prisma + PostgreSQL (banco próprio) + Athos (read-only para calcular moda).
+- Dívida diferida v2.2: UAT/verificação humana das Fases 32/33 — ver Deferred Items.
+- Segurança v2.3: ação pré-deploy CR-01 (env vars do painel admin) — ver 999.1-SECURITY.md.
 
 ## Decisions Log
 
@@ -154,6 +157,8 @@ Current focus: v2.3 concluído — aguardando próximo milestone (/gsd-new-miles
 | 2026-06-17 | Phase 34 (Frontend de Gestao de Produtos) descartada — entrega API-only | Operador decidiu que a API REST de produtos e suficiente; UI nao necessaria para esta iteracao |
 | 2026-06-17 | v2.3 usa env vars (.env por deploy) em vez de tabela empresa_config no banco | Abordagem mais simples; sem Prisma migration, sem MinIO, sem painel admin — deploy separado por empresa com .env próprio |
 | 2026-06-17 | EMPRESA_PDF_TEMPLATE_PATH com fallback para template padrão .hbs — template customizado montado via volume Docker | Permite white-label de PDF sem rebuild da imagem; padrão funciona out-of-the-box |
+| 2026-06-27 | OPERATIONAL_DEFAULTS definido inline em criarProduto (nao como helper compartilhado) — garante que editarProduto nunca pode alcancar defaults (D-11/OVRD-02) | Isolamento total da logica de defaults no caminho de criacao, conforme D-11 |
+| 2026-06-27 | Loop do INSERT em criarProduto itera sobre merged (nao dto original) — campos preenchidos por default chegam ao SQL | Sem essa mudanca os defaults aplicados seriam ignorados na montagem das colunas |
 
 ## Notes
 
@@ -251,12 +256,14 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 999.1 P04 | 20min | 3 tasks | 4 files |
 | Phase 999.1 P05 | ~20min | 2 tasks | 6 files |
 | Phase 999.1 P06 | ~45min | 2 tasks | 12 files |
+| Phase 37 P01 | 378 | 3 tasks | 5 files |
+| Phase 38 P01 | 7min | 3 tasks | 3 files |
 
 ## Session
 
-**Last session:** 2026-06-22T20:52:11.553Z
-**Stopped at:** 999.1-06 complete (fase pronta para verificacao)
-**Resume file:** None
+**Last session:** 2026-06-27T13:53:23.814Z
+**Stopped at:** Phase 38 context gathered
+**Resume file:** .planning/phases/38-aplica-o-de-defaults-na-cria-o-de-produto/38-CONTEXT.md
 
 ## Decisions
 

@@ -15,6 +15,7 @@
 - ✅ **v2.1 Cobrança e Fiscal do Cliente** — Fases 28-31 (shipped 2026-06-08)
 - ✅ **v2.2 Gestão de Produtos do Athos (API)** — Fases 32-33 (shipped 2026-06-17) — Phase 34 descartada (decisão: API-only)
 - ✅ **v2.3 White-Label Multi-Empresa** — Fases 35-36 + 999.1 (shipped 2026-06-23)
+- ✅ **v2.4 Defaults Inteligentes no Cadastro de Produto** — Fases 37-38 (shipped 2026-06-28)
 
 Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-ROADMAP.md`.
 
@@ -44,7 +45,7 @@ Plans:
 
 ## Estado atual
 
-**Milestone v2.3 (White-Label Multi-Empresa) concluído e arquivado em 2026-06-23.** Aguardando início do próximo milestone.
+**Milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) concluído e arquivado em 2026-06-28** (Fases 37-38; auditoria: passed). Detalhes em `.planning/milestones/v2.4-ROADMAP.md`.
 
 Próximo passo: `/gsd-new-milestone`
 

@@ -8,6 +8,26 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
+## Current State
+
+**Entre milestones.** v2.4 (Defaults Inteligentes no Cadastro de Produto) enviado em 2026-06-28 — Fases 37-38, auditoria `passed`. Próximo passo: `/gsd-new-milestone`.
+
+## Last Shipped Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
+
+Shipped: 2026-06-28 (auditoria: passed). Fases 37-38 (2 planos). Arquivo: `.planning/milestones/v2.4-ROADMAP.md`.
+
+**Goal:** Produtos criados pela API saem prontos para uso (ativos, vendaveis e fiscalmente validos) sem ajuste manual no Athos, preenchendo campos faltantes com os valores mais usados pelos produtos ja existentes (moda).
+
+**Target features:**
+- Defaults operacionais: produto nasce ativo/vendavel (`statusproduto`/`vendeproduto`) e com estoque sensato (`controlaestoque`/`baixarestoque`)
+- Defaults fiscais (ICMS/NF-e): `icms`/`icmsnfe`, `tributacao`/`tributacaonfe`, `codigocsosn`/`codigocsosnnfe`, `origem`/`origemnfe`, `tipoitem`, `piscst`/`cofinscst`, `idcfopsaida`, `ncm`
+- Descoberta dinamica: servico calcula a moda (valor mais comum) de cada campo a partir dos produtos ativos do Athos
+- Override: valor enviado no DTO sempre prevalece sobre o default
+- Robustez: sem dados para a moda -> fallback seguro, nunca quebra o insert
+- Observabilidade: log de quais defaults foram aplicados em cada cadastro
+
+**Key context:** continuacao direta do v2.2 (API de produto; escrita liberada APENAS na tabela `produto`). Backend/API apenas, sem frontend. Numeracao de fases continua a partir de 36.
+
 ## Last Shipped Milestone: v2.1 - Cobrança e Fiscal do Cliente
 
 Shipped em 2026-06-08 (auditoria: passed).
@@ -94,8 +114,19 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 - checkmark FRONT-01..04: Frontend white-label (nome/logo/CNPJ/endereco/cor via env vars + CSS theming) -- v2.3 (fase 36)
 - checkmark Gerenciamento de layout do PDF pela interface (upload/preview/ativacao em runtime, render seguro) -- v2.3 (fase 999.1)
 
+### Validated in v2.4 (Defaults Inteligentes no Cadastro de Produto)
+
+- checkmark DEFD-01..04: Descoberta dinamica da moda dos campos a partir dos produtos ativos do Athos (motor read-only com cache 24h + fallback seguro) -- v2.4 (fase 37)
+- checkmark DOPR-01/02: Defaults operacionais aplicados na criacao (produto nasce ativo/vendavel; controlaestoque/baixarestoque=true, estoqueloja=10) -- v2.4 (fase 38)
+- checkmark DFIS-01/02/03: Defaults fiscais (ICMS/CSOSN/origem/tributacao/tipoitem/pis/cofins/cfop/ncm) aplicados por moda quando nao informados; fiscal sem moda e omitido -- v2.4 (fase 38)
+- checkmark OVRD-01/02/03: Override do operador sempre prevalece (deteccao `== null`, prova de coincidencia); edicao nunca aplica defaults (D-11) -- v2.4 (fase 38)
+- checkmark Fallback seguro quando nao ha dados para a moda (estoque=false no motor; fiscal omitido) sem quebrar o insert -- v2.4 (fases 37/38)
+- checkmark OBSV-01: Log de defaults aplicados por cadastro (campo->valor; "nenhum default necessario") -- v2.4 (fase 38)
+
 ### Out of Scope
 
+- Frontend/tela de cadastro de produto (v2.4 e API-only, como v2.2)
+- Escrita em qualquer tabela do Athos alem de `produto`
 - Reintroduzir n8n para roteamento de pagamentos
 - Recalculo retroativo de NFS-e ja emitida
 - Refactor completo de dominio de orcamentos
@@ -139,10 +170,12 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 | White-label via env vars EMPRESA_* (nao tabela empresa_config no banco) | Modelo single-deploy-por-empresa; mais simples que painel admin + DB | checkmark Validado -- v2.3 |
 | Templates PDF gerenciados em runtime pela UI (upload/preview/ativacao) com render endurecido | Trocar layout sem editar codigo/reiniciar; upload arbitrario exige anti-SSRF + sanitizacao | checkmark Validado -- v2.3 (fase 999.1) |
 | Painel admin protegido por API key server-side + senha (fail-open sem env vars) | Deploy interno; ⚠ exige definir env vars antes do deploy (CR-01) | Em validacao -- v2.3 |
+| Defaults de produto = moda do catalogo (fiscais) + valores fixos operacionais (status/vende/estoque) | Fiscais refletem o catalogo real (Simples Nacional/CSOSN); operacionais sao regra de negocio fixa | checkmark Validado -- v2.4 (fases 37/38) |
+| Override do operador detectado por `== null` (undefined OU null) | Preserva valores falsy validos (false/0/"") enviados pelo operador; default so preenche omissoes | checkmark Validado -- v2.4 (fase 38) |
 
 ## Evolution
 
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-06-23 — Milestone v2.3 (White-Label Multi-Empresa) concluído e arquivado*
+*Last updated: 2026-06-28 after v2.4 milestone — Defaults Inteligentes no Cadastro de Produto enviado (fases 37-38); entre milestones, próximo: /gsd-new-milestone*
