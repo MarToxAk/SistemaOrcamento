@@ -108,14 +108,14 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 - checkmark FRONT-01..04: Frontend white-label (nome/logo/CNPJ/endereco/cor via env vars + CSS theming) -- v2.3 (fase 36)
 - checkmark Gerenciamento de layout do PDF pela interface (upload/preview/ativacao em runtime, render seguro) -- v2.3 (fase 999.1)
 
-### Active → v2.4 (Defaults Inteligentes no Cadastro de Produto)
+### Validated in v2.4 (Defaults Inteligentes no Cadastro de Produto)
 
-- [ ] Defaults operacionais aplicados na criacao (produto ativo/vendavel + estoque sensato)
-- [ ] Defaults fiscais (ICMS/CSOSN/origem/tributacao/tipoitem/pis/cofins/cfop) aplicados quando nao informados
 - checkmark DEFD-01..04: Descoberta dinamica da moda dos campos a partir dos produtos ativos do Athos (motor read-only com cache 24h + fallback seguro) -- v2.4 (fase 37)
-- [ ] Override do operador sempre prevalece sobre o default
-- [ ] Fallback seguro quando nao ha dados para calcular a moda
-- [ ] Log de defaults aplicados por cadastro
+- checkmark DOPR-01/02: Defaults operacionais aplicados na criacao (produto nasce ativo/vendavel; controlaestoque/baixarestoque=true, estoqueloja=10) -- v2.4 (fase 38)
+- checkmark DFIS-01/02/03: Defaults fiscais (ICMS/CSOSN/origem/tributacao/tipoitem/pis/cofins/cfop/ncm) aplicados por moda quando nao informados; fiscal sem moda e omitido -- v2.4 (fase 38)
+- checkmark OVRD-01/02/03: Override do operador sempre prevalece (deteccao `== null`, prova de coincidencia); edicao nunca aplica defaults (D-11) -- v2.4 (fase 38)
+- checkmark Fallback seguro quando nao ha dados para a moda (estoque=false no motor; fiscal omitido) sem quebrar o insert -- v2.4 (fases 37/38)
+- checkmark OBSV-01: Log de defaults aplicados por cadastro (campo->valor; "nenhum default necessario") -- v2.4 (fase 38)
 
 ### Out of Scope
 
@@ -164,10 +164,12 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 | White-label via env vars EMPRESA_* (nao tabela empresa_config no banco) | Modelo single-deploy-por-empresa; mais simples que painel admin + DB | checkmark Validado -- v2.3 |
 | Templates PDF gerenciados em runtime pela UI (upload/preview/ativacao) com render endurecido | Trocar layout sem editar codigo/reiniciar; upload arbitrario exige anti-SSRF + sanitizacao | checkmark Validado -- v2.3 (fase 999.1) |
 | Painel admin protegido por API key server-side + senha (fail-open sem env vars) | Deploy interno; ⚠ exige definir env vars antes do deploy (CR-01) | Em validacao -- v2.3 |
+| Defaults de produto = moda do catalogo (fiscais) + valores fixos operacionais (status/vende/estoque) | Fiscais refletem o catalogo real (Simples Nacional/CSOSN); operacionais sao regra de negocio fixa | checkmark Validado -- v2.4 (fases 37/38) |
+| Override do operador detectado por `== null` (undefined OU null) | Preserva valores falsy validos (false/0/"") enviados pelo operador; default so preenche omissoes | checkmark Validado -- v2.4 (fase 38) |
 
 ## Evolution
 
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-06-27 — Fase 37 (Motor de Defaults / Descoberta por Moda) completa; próxima: Fase 38 (aplicação dos defaults na criação de produto)*
+*Last updated: 2026-06-28 — Fase 38 completa e verificada (UAT + segurança); milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) 100% concluído (fases 37 e 38)*
