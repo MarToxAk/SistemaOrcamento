@@ -55,16 +55,15 @@ async function allocateNextContaPagarId(client: PoolClient, tableName: string, i
   const sequence = seqResult.rows[0]?.seq ?? null;
 
   if (sequence) {
-    // Garante que a sequence esteja >= MAX(id) real antes de alocar (nunca anda para tras).
-    // Embute o setval de ressincronizacao automatizado a cada insert; is_called via EXISTS
-    // trata tabela vazia sem erro de "out of bounds".
+    // Serializa contra inserts concorrentes (tela do Athos) durante o resync + alocacao.
+    await client.query(`LOCK TABLE "${tableName}" IN EXCLUSIVE MODE`);
+    // Ressincroniza a sequence com o MAX(id) real (mesmo setval manual usado hoje, automatizado
+    // a cada insert) e aloca o proximo id via nextval — o mesmo contador que o Athos usa.
+    // is_called via EXISTS trata tabela vazia sem erro de "out of bounds".
     await client.query(
       `SELECT setval(
          $1,
-         GREATEST(
-           COALESCE((SELECT MAX(CAST("${idColumn}" AS INTEGER)) FROM "${tableName}"), 1),
-           COALESCE(pg_sequence_last_value($1::regclass), 1)
-         ),
+         GREATEST(COALESCE((SELECT MAX(CAST("${idColumn}" AS INTEGER)) FROM "${tableName}"), 1), 1),
          (SELECT EXISTS (SELECT 1 FROM "${tableName}"))
        )`,
       [sequence],
