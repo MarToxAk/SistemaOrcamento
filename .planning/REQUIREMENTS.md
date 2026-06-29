@@ -40,24 +40,27 @@ Reconhecidos, mas deferidos — fora do roadmap atual.
 
 ## Traceability
 
-Atualizado durante a criacao do roadmap.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| COMP-01 | TBD | Pending |
-| COMP-02 | TBD | Pending |
-| COMP-03 | TBD | Pending |
-| COMP-04 | TBD | Pending |
-| COMP-05 | TBD | Pending |
-| COMP-06 | TBD | Pending |
-| COMP-07 | TBD | Pending |
-| COMP-08 | TBD | Pending |
+| COMP-01 | Phase 39 | Pending |
+| COMP-02 | Phase 40 | Pending |
+| COMP-03 | Phase 40 | Pending |
+| COMP-04 | Phase 40 | Pending |
+| COMP-05 | Phase 40 | Pending |
+| COMP-06 | Phase 40 | Pending |
+| COMP-07 | Phase 39 | Pending |
+| COMP-08 | Phase 39 | Pending |
 
 **Coverage:**
 - v1 requirements: 8 total
-- Mapped to phases: 0 (roadmap pendente)
-- Unmapped: 8 ⚠️ (sera resolvido pelo roadmapper)
+- Mapped to phases: 8 (100%)
+- Unmapped: 0
+
+| Phase | Requirements | Count |
+|-------|-------------|-------|
+| Phase 39: Scaffold, Leitura e Spikes de Introspecao | COMP-07, COMP-08, COMP-01 | 3 |
+| Phase 40: Write CRUD | COMP-02, COMP-03, COMP-04, COMP-05, COMP-06 | 5 |
 
 ---
 *Requirements defined: 2026-06-29*
-*Last updated: 2026-06-29 after initial definition (milestone v2.5)*
+*Last updated: 2026-06-29 — traceability preenchida pelo roadmapper (milestone v2.5, fases 39-40)*

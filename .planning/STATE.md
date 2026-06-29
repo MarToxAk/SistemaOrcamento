@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v2.5
 milestone_name: API de Produtos Compostos (Kits) no Athos
 status: planning
-last_updated: "2026-06-29T13:54:37.554Z"
+last_updated: "2026-06-29T00:00:00.000Z"
 last_activity: 2026-06-29
 progress:
-  total_phases: 0
+  total_phases: 2
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -15,18 +15,20 @@ progress:
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-06-26 — Roadmap v2.4 definido (Defaults Inteligentes no Cadastro de Produto)
-Current phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
-Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
+Last updated: 2026-06-29 — Roadmap v2.5 definido (API de Produtos Compostos / Kits no Athos)
+Current phase: Roadmap definido — pronto para /gsd-plan-phase 39
+Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap defined)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-29 — Milestone v2.5 started
+Status: Ready for Phase 39
+Last activity: 2026-06-29 — Roadmap v2.5 criado (Fases 39-40)
+
+Progress: [░░░░░░░░░░] 0% (0/2 phases complete)
 
 ## Project Status
 
@@ -71,6 +73,8 @@ Last activity: 2026-06-29 — Milestone v2.5 started
 | 999.1 | Gerenciamento de layout do PDF pela interface | complete (v2.3) |
 | 37 | Motor de Defaults (Descoberta por Moda) | complete (v2.4) |
 | 38 | Aplicacao de Defaults na Criacao de Produto | complete (v2.4) |
+| 39 | Scaffold, Leitura e Spikes de Introspecao | not started (v2.5) |
+| 40 | Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto) | not started (v2.5) |
 
 ## Milestones Archived
 
@@ -88,21 +92,24 @@ Last activity: 2026-06-29 — Milestone v2.5 started
 - v2.1 — phases 28-31 (.planning/milestones/v2.1-ROADMAP.md)
 - v2.2 — phases 32-33 (não arquivado separadamente; UAT/verificação diferidas — ver Deferred Items)
 - v2.3 — phases 35-36 + 999.1 (.planning/milestones/v2.3-ROADMAP.md)
+- v2.4 — phases 37-38 (.planning/milestones/v2.4-ROADMAP.md)
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-25)
+See: .planning/PROJECT.md (updated 2026-06-29)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v2.4 — Defaults Inteligentes no Cadastro de Produto (Fases 37-38)
+Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 
 ## Active Context
 
-- Milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) em andamento. Roadmap definido em 2026-06-26.
-- 2 fases: Phase 37 (motor de moda/cache/fallback) → Phase 38 (injeção de defaults no create, override, log).
-- Continuação direta do v2.2: escrita liberada APENAS na tabela `produto`; sem frontend.
-- Stack: NestJS + Prisma + PostgreSQL (banco próprio) + Athos (read-only para calcular moda).
-- Dívida diferida v2.2: UAT/verificação humana das Fases 32/33 — ver Deferred Items.
-- Segurança v2.3: ação pré-deploy CR-01 (env vars do painel admin) — ver 999.1-SECURITY.md.
+- Milestone v2.5 (API de Produtos Compostos / Kits no Athos) iniciado. Roadmap definido em 2026-06-29.
+- 2 fases: Phase 39 (scaffold + leitura + 3 spikes DB — NEEDS RESEARCH-PHASE) → Phase 40 (write CRUD + testes — gated no write GRANT).
+- Expansao da superficie de escrita Athos para uma segunda tabela: produto_composto.
+- Stack: NestJS + pg (Pool raw) + class-validator. Zero novas dependencias npm.
+- Gate critico: GRANT INSERT, UPDATE, DELETE ON produto_composto + USAGE,SELECT na sequence — deve ser concedido no Athos antes da verificacao da Phase 40.
+- Padrao: AthosProdutoCompostoService + controller inseridos no AthosModule existente; sem novo modulo NestJS.
+- Divida diferida v2.2: UAT/verificacao humana das Fases 32/33 — ver Deferred Items.
+- Seguranca v2.3: acao pre-deploy CR-01 (env vars do painel admin) — ver 999.1-SECURITY.md.
 
 ## Decisions Log
 
@@ -151,10 +158,15 @@ Current focus: v2.4 — Defaults Inteligentes no Cadastro de Produto (Fases 37-3
 | 2026-06-15 | SPROD-02 (auth) atribuido a Phase 32 (primeiro endpoint) | Auth estabelecida desde o inicio; nao diferida para a fase de escrita |
 | 2026-06-15 | SPROD-04 (Swagger) atribuido a Phase 33 (write phase) | Documentacao cobre a superficie completa da API apos write endpoints existirem |
 | 2026-06-17 | Phase 34 (Frontend de Gestao de Produtos) descartada — entrega API-only | Operador decidiu que a API REST de produtos e suficiente; UI nao necessaria para esta iteracao |
-| 2026-06-17 | v2.3 usa env vars (.env por deploy) em vez de tabela empresa_config no banco | Abordagem mais simples; sem Prisma migration, sem MinIO, sem painel admin — deploy separado por empresa com .env próprio |
-| 2026-06-17 | EMPRESA_PDF_TEMPLATE_PATH com fallback para template padrão .hbs — template customizado montado via volume Docker | Permite white-label de PDF sem rebuild da imagem; padrão funciona out-of-the-box |
+| 2026-06-17 | v2.3 usa env vars (.env por deploy) em vez de tabela empresa_config no banco | Abordagem mais simples; sem Prisma migration, sem MinIO, sem painel admin — deploy separado por empresa com .env proprio |
+| 2026-06-17 | EMPRESA_PDF_TEMPLATE_PATH com fallback para template padrao .hbs — template customizado montado via volume Docker | Permite white-label de PDF sem rebuild da imagem; padrao funciona out-of-the-box |
 | 2026-06-27 | OPERATIONAL_DEFAULTS definido inline em criarProduto (nao como helper compartilhado) — garante que editarProduto nunca pode alcancar defaults (D-11/OVRD-02) | Isolamento total da logica de defaults no caminho de criacao, conforme D-11 |
 | 2026-06-27 | Loop do INSERT em criarProduto itera sobre merged (nao dto original) — campos preenchidos por default chegam ao SQL | Sem essa mudanca os defaults aplicados seriam ignorados na montagem das colunas |
+| 2026-06-29 | v2.5 expandir superficie de escrita Athos para produto_composto (segunda excecao controlada) | Gestao de kits requer CRUD de composicao; padrao identico ao produto (v2.2) |
+| 2026-06-29 | DELETE fisico em produto_composto e correto — distinto da regra de soft-delete de produto | produto_composto e tabela de composicao (link table), nao entidade com historico; Athos remove fisicamente |
+| 2026-06-29 | PK serial via INSERT ... RETURNING — nunca MAX+1 — para idprodutocomposto | Padrao serial; MAX+1 causou bug de race condition em conta_pagar em producao |
+| 2026-06-29 | validarFkExiste extraido para athos-fk.util.ts (COMP-08) antes de qualquer codigo de escrita | Elimina duplicacao entre AthosProdutoService e AthosProdutoCompostoService; testavel em isolamento |
+| 2026-06-29 | Spikes de introspecao (COMP-07) executados antes de escrever DTO/INSERT | Tipo do dominio quantidade e triggers desconhecidos podem causar mismatch DTO/DB e rollbacks inesperados |
 
 ## Notes
 
@@ -236,7 +248,8 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Executar `/gsd-plan-phase 39` (com flag --research-phase para os spikes de introspecao)
+- Obter GRANT de escrita em produto_composto do DBA antes da verificacao da Phase 40
 
 ## Performance Metrics
 
@@ -257,9 +270,9 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Session
 
-**Last session:** 2026-06-27T13:53:23.814Z
-**Stopped at:** Phase 38 context gathered
-**Resume file:** .planning/phases/38-aplica-o-de-defaults-na-cria-o-de-produto/38-CONTEXT.md
+**Last session:** 2026-06-29T00:00:00.000Z
+**Stopped at:** Roadmap v2.5 definido (Fases 39-40)
+**Resume file:** .planning/ROADMAP.md
 
 ## Decisions
 
