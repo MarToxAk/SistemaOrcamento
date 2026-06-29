@@ -1,10 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.5
-milestone_name: API de Produtos Compostos (Kits) no Athos
+milestone_name: — API de Produtos Compostos
+current_phase: Roadmap definido — pronto para /gsd-plan-phase 39
+current_phase_name: roadmap defined
 status: planning
-last_updated: "2026-06-29T00:00:00.000Z"
+stopped_at: Phase 39 context gathered
+last_updated: "2026-06-29T15:46:28.154Z"
 last_activity: 2026-06-29
+last_activity_desc: Roadmap v2.5 criado (Fases 39-40)
 progress:
   total_phases: 2
   completed_phases: 0
@@ -270,9 +274,9 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Session
 
-**Last session:** 2026-06-29T00:00:00.000Z
-**Stopped at:** Roadmap v2.5 definido (Fases 39-40)
-**Resume file:** .planning/ROADMAP.md
+**Last session:** 2026-06-29T15:46:28.138Z
+**Stopped at:** Phase 39 context gathered
+**Resume file:** .planning/phases/39-scaffold-leitura-e-spikes-de-introspec-o/39-CONTEXT.md
 
 ## Decisions
 
