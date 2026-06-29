@@ -46,6 +46,34 @@ async function findExistingTable(client: Pick<Client, "query">, tableCandidates:
 }
 
 async function allocateNextContaPagarId(client: PoolClient, tableName: string, idColumn: string) {
+  // Usa a MESMA sequence que o Athos usa para alocar o id (nextval), evitando que
+  // a alocacao manual via MAX+1 colida com inserts feitos pela tela do Athos.
+  const seqResult = await client.query<{ seq: string | null }>(
+    `SELECT pg_get_serial_sequence($1, $2) AS seq`,
+    [tableName, idColumn],
+  );
+  const sequence = seqResult.rows[0]?.seq ?? null;
+
+  if (sequence) {
+    // Garante que a sequence esteja >= MAX(id) real antes de alocar (nunca anda para tras).
+    // Embute o setval de ressincronizacao automatizado a cada insert; is_called via EXISTS
+    // trata tabela vazia sem erro de "out of bounds".
+    await client.query(
+      `SELECT setval(
+         $1,
+         GREATEST(
+           COALESCE((SELECT MAX(CAST("${idColumn}" AS INTEGER)) FROM "${tableName}"), 1),
+           COALESCE(pg_sequence_last_value($1::regclass), 1)
+         ),
+         (SELECT EXISTS (SELECT 1 FROM "${tableName}"))
+       )`,
+      [sequence],
+    );
+    const next = await client.query<{ next_id: string }>(`SELECT nextval($1) AS next_id`, [sequence]);
+    return Number(next.rows[0].next_id);
+  }
+
+  // Fallback (tabela sem sequence): mantem o MAX+1 com lock exclusivo.
   await client.query(`LOCK TABLE "${tableName}" IN EXCLUSIVE MODE`);
   const result = await client.query<{ next_id: number }>(
     `SELECT COALESCE(MAX(CAST("${idColumn}" AS INTEGER)), 0) + 1 AS next_id FROM "${tableName}"`,
