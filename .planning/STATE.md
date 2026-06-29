@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.4
-milestone_name: — Defaults Inteligentes no Cadastro de Produto
-current_phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
-status: Awaiting next milestone
-stopped_at: Phase 38 context gathered
-last_updated: "2026-06-28T13:55:47.472Z"
-last_activity: 2026-06-28
-last_activity_desc: Milestone v2.4 completed and archived
+milestone: v2.5
+milestone_name: API de Produtos Compostos (Kits) no Athos
+status: planning
+last_updated: "2026-06-29T13:54:37.554Z"
+last_activity: 2026-06-29
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 100
-current_phase_name: aplica-o-de-defaults-na-cria-o-de-produto
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -27,10 +23,10 @@ Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
 
 ## Current Position
 
-Phase: Milestone v2.4 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-28 — Milestone v2.4 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-29 — Milestone v2.5 started
 
 ## Project Status
 

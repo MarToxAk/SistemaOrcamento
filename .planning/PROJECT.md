@@ -8,9 +8,26 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
+## Current Milestone: v2.5 API de Produtos Compostos (Kits) no Athos
+
+**Goal:** Montar e gerenciar produtos compostos (kits) no Athos via API REST — um produto *master* composto de N produtos *detail* com quantidade — no mesmo padrao backend-only das APIs de produto (v2.2/v2.4).
+
+**Target features:**
+- CRUD completo da composicao: listar componentes por `idprodutomaster`, adicionar componente, editar `quantidade`, remover componente
+- Validacao de integridade: `idprodutomaster` e `idprodutodetail` devem existir em `produto`
+- Escrita no Athos ampliada para `produto_composto` (nova excecao controlada a regra read-only)
+- Autenticacao `x-internal-api-key` + logging estruturado (padroes existentes)
+- Backend/API apenas (sem frontend)
+
+**Key context:**
+- ⚠️ Dependencia operacional: o GRANT de escrita (INSERT/UPDATE/DELETE) em `produto_composto` ainda precisa ser concedido no banco Athos — o DDL so tem `GRANT SELECT`. Sem isso a API falha em runtime.
+- `192.168.3.198` = banco de referencia read-only com exemplos de `produto_composto`; a API escreve no Athos configurado (`ATHOS_PG_*`).
+- "Remover componente" = `DELETE` fisico da linha de `produto_composto` (tabela de composicao, distinta da regra de soft-delete do `produto`).
+- Tipo de dominio custom `quantidade`. Numeracao de fases continua a partir de 39.
+
 ## Current State
 
-**Entre milestones.** v2.4 (Defaults Inteligentes no Cadastro de Produto) enviado em 2026-06-28 — Fases 37-38, auditoria `passed`. Próximo passo: `/gsd-new-milestone`.
+**Milestone v2.5 iniciado** (2026-06-29) — definindo requisitos. v2.4 (Defaults Inteligentes no Cadastro de Produto) enviado em 2026-06-28 — Fases 37-38, auditoria `passed`.
 
 ## Last Shipped Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
 
@@ -178,4 +195,4 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/ver
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-06-28 after v2.4 milestone — Defaults Inteligentes no Cadastro de Produto enviado (fases 37-38); entre milestones, próximo: /gsd-new-milestone*
+*Last updated: 2026-06-29 — milestone v2.5 (API de Produtos Compostos/Kits no Athos) iniciado; definindo requisitos.*
