@@ -458,7 +458,7 @@ describe("AthosService - criarContaPagar", () => {
           ],
         };
       }
-      if (text === "BEGIN" || text === "COMMIT") return { rows: [] };
+      if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) return { rows: [] };
       if (text.includes("pg_get_serial_sequence")) return { rows: [{ seq: "conta_pagar_idcontapagar_seq" }] };
       if (text.includes("setval")) return { rows: [{ setval: 77 }] };
       if (text.includes("nextval")) return { rows: [{ next_id: 78 }] };
@@ -474,10 +474,12 @@ describe("AthosService - criarContaPagar", () => {
 
     // ID veio do nextval, nao do MAX+1
     expect(result.idcontapagar).toBe(78);
-    // Ressincroniza a sequence antes de alocar e nao usa o LOCK/MAX+1 do fallback
+    // Ressincroniza a sequence (setval) antes de alocar via nextval — sem pg_sequence_last_value
     expect(sqls.some((s) => s.includes("setval"))).toBe(true);
     expect(sqls.some((s) => s.includes("nextval"))).toBe(true);
-    expect(sqls.some((s) => s.startsWith("LOCK TABLE"))).toBe(false);
+    expect(sqls.some((s) => s.includes("pg_sequence_last_value"))).toBe(false);
+    // SELECT COALESCE(MAX(...)+1 do fallback nao deve ser usado quando ha sequence
+    expect(sqls.some((s) => s.includes("AS INTEGER)), 0) + 1"))).toBe(false);
   });
 
   it("fallback: usa MAX+1 com LOCK quando a tabela nao tem sequence", async () => {
