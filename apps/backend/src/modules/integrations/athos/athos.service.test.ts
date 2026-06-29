@@ -410,7 +410,11 @@ describe("AthosService - criarContaPagar", () => {
         return { rows: [] };
       }
 
-      if (text.includes("SELECT COALESCE(MAX(CAST(\"idcontapagar\" AS INTEGER))")) {
+      if (text.includes("pg_get_serial_sequence")) {
+        return { rows: [{ seq: "conta_pagar_idcontapagar_seq" }] };
+      }
+
+      if (text.includes("setval") || text.includes("nextval")) {
         return { rows: [{ next_id: 42 }] };
       }
 
@@ -433,6 +437,84 @@ describe("AthosService - criarContaPagar", () => {
 
     expect(result.idcontapagar).toBe(42);
     expect(client.release).toHaveBeenCalled();
+  });
+
+  it("deve alocar id via nextval da sequence e ressincronizar com setval (evita duplicidade)", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    const sqls: string[] = [];
+    client.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      sqls.push(text);
+      if (text.includes("information_schema.columns")) {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "descricaoconta" },
+            { column_name: "datavencimento" },
+            { column_name: "valorconta" },
+          ],
+        };
+      }
+      if (text === "BEGIN" || text === "COMMIT") return { rows: [] };
+      if (text.includes("pg_get_serial_sequence")) return { rows: [{ seq: "conta_pagar_idcontapagar_seq" }] };
+      if (text.includes("setval")) return { rows: [{ setval: 77 }] };
+      if (text.includes("nextval")) return { rows: [{ next_id: 78 }] };
+      if (text.includes("INSERT INTO")) return { rows: [{ idcontapagar: 78 }] };
+      return { rows: [] };
+    });
+
+    const result = await service.criarContaPagar({
+      descricaoconta: "Conta via sequence",
+      datavencimento: "2026-06-30",
+      valorconta: 100,
+    });
+
+    // ID veio do nextval, nao do MAX+1
+    expect(result.idcontapagar).toBe(78);
+    // Ressincroniza a sequence antes de alocar e nao usa o LOCK/MAX+1 do fallback
+    expect(sqls.some((s) => s.includes("setval"))).toBe(true);
+    expect(sqls.some((s) => s.includes("nextval"))).toBe(true);
+    expect(sqls.some((s) => s.startsWith("LOCK TABLE"))).toBe(false);
+  });
+
+  it("fallback: usa MAX+1 com LOCK quando a tabela nao tem sequence", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    const sqls: string[] = [];
+    client.query.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      sqls.push(text);
+      if (text.includes("information_schema.columns")) {
+        return {
+          rows: [
+            { column_name: "idcontapagar" },
+            { column_name: "descricaoconta" },
+            { column_name: "datavencimento" },
+            { column_name: "valorconta" },
+          ],
+        };
+      }
+      if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) return { rows: [] };
+      if (text.includes("pg_get_serial_sequence")) return { rows: [{ seq: null }] };
+      if (text.includes("SELECT COALESCE(MAX(CAST")) return { rows: [{ next_id: 43 }] };
+      if (text.includes("INSERT INTO")) return { rows: [{ idcontapagar: 43 }] };
+      return { rows: [] };
+    });
+
+    const result = await service.criarContaPagar({
+      descricaoconta: "Conta sem sequence",
+      datavencimento: "2026-06-30",
+      valorconta: 100,
+    });
+
+    expect(result.idcontapagar).toBe(43);
+    expect(sqls.some((s) => s.startsWith("LOCK TABLE"))).toBe(true);
+    expect(sqls.some((s) => s.includes("nextval"))).toBe(false);
   });
 
   it("deve lançar erro quando tabela de contas a pagar não encontrada", async () => {
@@ -490,7 +572,11 @@ describe("AthosService - criarContaPagar", () => {
         return { rows: [] };
       }
 
-      if (text.includes("SELECT COALESCE(MAX(CAST(\"idcontapagar\" AS INTEGER))")) {
+      if (text.includes("pg_get_serial_sequence")) {
+        return { rows: [{ seq: "conta_pagar_idcontapagar_seq" }] };
+      }
+
+      if (text.includes("setval") || text.includes("nextval")) {
         return { rows: [{ next_id: 42 }] };
       }
 
@@ -1202,7 +1288,10 @@ describe("AthosService - criarContaPagar com novos campos do DTO", () => {
       if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) {
         return { rows: [] };
       }
-      if (text.includes("SELECT COALESCE(MAX(CAST")) {
+      if (text.includes("pg_get_serial_sequence")) {
+        return { rows: [{ seq: "conta_pagar_idcontapagar_seq" }] };
+      }
+      if (text.includes("setval") || text.includes("nextval")) {
         return { rows: [{ next_id: 10 }] };
       }
       if (text.includes("INSERT INTO") && params) {
@@ -1251,7 +1340,10 @@ describe("AthosService - criarContaPagar com novos campos do DTO", () => {
       if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) {
         return { rows: [] };
       }
-      if (text.includes("SELECT COALESCE(MAX(CAST")) {
+      if (text.includes("pg_get_serial_sequence")) {
+        return { rows: [{ seq: "conta_pagar_idcontapagar_seq" }] };
+      }
+      if (text.includes("setval") || text.includes("nextval")) {
         return { rows: [{ next_id: 11 }] };
       }
       if (text.includes("INSERT INTO")) {
@@ -1320,7 +1412,8 @@ describe("AthosService - workflow: criar conta e liquidar pagamento", () => {
         };
       }
       if (text === "BEGIN" || text === "COMMIT" || text.startsWith("LOCK TABLE")) return { rows: [] };
-      if (text.includes("SELECT COALESCE(MAX(CAST")) return { rows: [{ next_id: 200 }] };
+      if (text.includes("pg_get_serial_sequence")) return { rows: [{ seq: "conta_pagar_idcontapagar_seq" }] };
+      if (text.includes("setval") || text.includes("nextval")) return { rows: [{ next_id: 200 }] };
       if (text.includes("INSERT INTO")) return { rows: [{ idcontapagar: 200 }] };
       return { rows: [] };
     });
