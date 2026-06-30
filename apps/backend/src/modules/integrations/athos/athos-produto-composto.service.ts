@@ -10,6 +10,7 @@ import {
 import { Pool, PoolClient } from "pg";
 import { validarFkExiste } from "./athos-fk.util";
 import { CreateProdutoCompostoDto } from "./dto/create-produto-composto.dto";
+import { UpdateProdutoCompostoDto } from "./dto/update-produto-composto.dto";
 
 interface ComposicaoItem {
   idprodutocomposto: number;
@@ -240,6 +241,134 @@ export class AthosProdutoCompostoService {
         await client.query("ROLLBACK");
       } catch (rbErr) {
         this.logger.error(`Erro no ROLLBACK: ${rbErr}`);
+      }
+      this.mapPgWriteError(err); // sempre lança
+      throw err; // unreachable — satisfaz TypeScript
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Atualiza a quantidade de um componente existente em produto_composto.
+   *
+   * Fluxo:
+   *   1. SELECT idprodutocomposto WHERE (master, detail) — 404 se par inexistente
+   *   2. UPDATE produto_composto SET quantidade=$1 WHERE idprodutomaster=$2 AND idprodutodetail=$3
+   *   3. Retorna { idprodutocomposto } do par encontrado no passo 1.
+   *
+   * Sem transação multi-statement explícita (operação single-UPDATE), mas erros pg
+   * são mapeados via mapPgWriteError (incluindo 22003 -> 422).
+   * Valores sempre via parâmetros $N — nunca interpolados na string SQL (T-40-06).
+   */
+  async atualizarQuantidade(
+    idprodutomaster: number,
+    idprodutodetail: number,
+    dto: UpdateProdutoCompostoDto,
+  ): Promise<{ idprodutocomposto: number }> {
+    const client: PoolClient = await this.getPool().connect();
+    try {
+      // 1. Verificar existência do par (master, detail) em produto_composto
+      const parCheck = await client.query<{ idprodutocomposto: number }>(
+        `SELECT idprodutocomposto FROM produto_composto WHERE idprodutomaster = $1 AND idprodutodetail = $2 LIMIT 1`,
+        [idprodutomaster, idprodutodetail],
+      );
+      if (parCheck.rows.length === 0) {
+        throw new NotFoundException(
+          `Par (idprodutomaster=${idprodutomaster}, idprodutodetail=${idprodutodetail}) nao encontrado em produto_composto`,
+        );
+      }
+      const idprodutocomposto = parCheck.rows[0].idprodutocomposto;
+
+      // 2. Atualizar a quantidade — todos os valores via parâmetros $N (T-40-06)
+      await client.query(
+        `UPDATE produto_composto SET quantidade = $1 WHERE idprodutomaster = $2 AND idprodutodetail = $3`,
+        [dto.quantidade, idprodutomaster, idprodutodetail],
+      );
+
+      this.logger.log(
+        `atualizarQuantidade idprodutomaster=${idprodutomaster} idprodutodetail=${idprodutodetail} ` +
+        `idprodutocomposto=${idprodutocomposto} quantidade=${dto.quantidade}`,
+      );
+
+      return { idprodutocomposto };
+    } catch (err) {
+      this.mapPgWriteError(err); // re-lança HttpException ou mapeia pg -> HTTP; sempre lança
+      throw err; // unreachable — satisfaz TypeScript
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Remove fisicamente um componente de produto_composto.
+   *
+   * Fluxo transacional (BEGIN/COMMIT — T-40-08 atomicidade):
+   *   1. BEGIN
+   *   2. SELECT 1 WHERE (master, detail) — 404 se par inexistente (NotFoundException dentro do BEGIN)
+   *   3. DELETE FROM produto_composto WHERE (master, detail) — DELETE FÍSICO (não soft-delete)
+   *   4. SELECT count(*)::int AS total FROM produto_composto WHERE idprodutomaster = $1
+   *   5. Se total === 0: UPDATE produto SET usaprodutocomposto = false WHERE idproduto = $1 (COMP-05)
+   *   6. COMMIT; retorna { removed: true }
+   *
+   * Em qualquer erro: ROLLBACK protegido + mapPgWriteError.
+   * Valores sempre via parâmetros $N (T-40-06).
+   */
+  async removerComponente(
+    idprodutomaster: number,
+    idprodutodetail: number,
+  ): Promise<{ removed: true }> {
+    const client: PoolClient = await this.getPool().connect();
+    try {
+      await client.query("BEGIN");
+
+      // 2. Verificar existência do par (master, detail) antes do DELETE
+      const parCheck = await client.query(
+        `SELECT 1 FROM produto_composto WHERE idprodutomaster = $1 AND idprodutodetail = $2 LIMIT 1`,
+        [idprodutomaster, idprodutodetail],
+      );
+      if (parCheck.rows.length === 0) {
+        throw new NotFoundException(
+          `Par (idprodutomaster=${idprodutomaster}, idprodutodetail=${idprodutodetail}) nao encontrado em produto_composto`,
+        );
+      }
+
+      // 3. DELETE FÍSICO do par (produto_composto é tabela de composição — não usa soft-delete)
+      await client.query(
+        `DELETE FROM produto_composto WHERE idprodutomaster = $1 AND idprodutodetail = $2`,
+        [idprodutomaster, idprodutodetail],
+      );
+
+      // 4. Contar componentes restantes APÓS o DELETE (na mesma transação)
+      const countResult = await client.query<{ total: number }>(
+        `SELECT count(*)::int AS total FROM produto_composto WHERE idprodutomaster = $1`,
+        [idprodutomaster],
+      );
+      const total = countResult.rows[0]?.total ?? 0;
+
+      // 5. Se nenhum componente restou, desligar flag usaprodutocomposto no master (COMP-05)
+      //    Feito SOMENTE quando total === 0 e dentro da mesma transação (T-40-08)
+      const flagDesligado = total === 0;
+      if (flagDesligado) {
+        await client.query(
+          `UPDATE produto SET usaprodutocomposto = false WHERE idproduto = $1`,
+          [idprodutomaster],
+        );
+      }
+
+      await client.query("COMMIT");
+
+      this.logger.log(
+        `removerComponente idprodutomaster=${idprodutomaster} idprodutodetail=${idprodutodetail} ` +
+        `flagDesligado=${flagDesligado}`,
+      );
+
+      return { removed: true };
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rbErr) {
+        this.logger.error(`Erro no ROLLBACK de removerComponente: ${rbErr}`);
       }
       this.mapPgWriteError(err); // sempre lança
       throw err; // unreachable — satisfaz TypeScript
