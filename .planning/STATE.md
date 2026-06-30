@@ -4,11 +4,10 @@ milestone: v2.5
 milestone_name: — API de Produtos Compostos
 current_phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
 current_phase_name: scaffold-leitura-e-spikes-de-introspec-o
-status: executing
+status: "Phase 40 shipped — PR #46 (branch limpa feat/v2.5-produto-composto-pr)"
 stopped_at: Phase 39 context gathered
-last_updated: "2026-06-30T20:58:08.070Z"
+last_updated: "2026-06-30T21:11:39.415Z"
 last_activity: 2026-06-30
-last_activity_desc: Phase 40 complete, transitioned to Phase 999.1
 progress:
   total_phases: 2
   completed_phases: 2
@@ -29,8 +28,8 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 Phase: 39 (scaffold-leitura-e-spikes-de-introspec-o) — EXECUTING
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-30 — Phase 40 complete, transitioned to Phase 999.1
+Status: Phase 40 shipped — PR #46 (branch limpa feat/v2.5-produto-composto-pr)
+Last activity: 2026-06-30
 
 Progress: [░░░░░░░░░░] 0% (0/2 phases complete)
 
