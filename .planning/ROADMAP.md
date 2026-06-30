@@ -83,11 +83,11 @@ Plans:
   4. Operador pode remover um componente via DELETE físico; ao remover o último componente, usaprodutocomposto do master é automaticamente definido como false dentro da mesma transação — DELETE físico é correto aqui (produto_composto é tabela de composição, distinta da regra de soft-delete de produto)
   5. Erros Postgres mapeados corretamente para HTTP: 42501 → 500 com mensagem acionável apontando o GRANT ausente; 23505 → 409 (par duplicado); 23514 → 422 (violação de domínio); 23503 → 422 (FK); master/detail inexistente → 422; testes Jest unitários cobrem todos esses cenários incluindo validarFkExiste chamado para ambos master e detail
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 
-- [ ] 40-01-PLAN.md — COMP-02/05/06: POST adicionar componente (DTO create finalizado, dual-FK, auto-ref/dup/inativo, RETURNING serial, flag-on transacional, helper de mapeamento de erro pg) + testes (Wave 1)
+- [x] 40-01-PLAN.md — COMP-02/05/06: POST adicionar componente (DTO create finalizado, dual-FK, auto-ref/dup/inativo, RETURNING serial, flag-on transacional, helper de mapeamento de erro pg) + testes (Wave 1)
 - [ ] 40-02-PLAN.md — COMP-03/04/05: PATCH atualizar quantidade (404/422) + DELETE fisico (404, flag-off transacional no ultimo) + DTO update finalizado + testes (Wave 2)
 
 ---
@@ -97,7 +97,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 39. Scaffold, Leitura e Spikes | 3/3 | Complete   | 2026-06-30 |
-| 40. Write CRUD | 0/2 | Not started | - |
+| 40. Write CRUD | 1/2 | In Progress|  |
 
 ---
 

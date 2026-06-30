@@ -10,11 +10,11 @@ Requisitos do milestone v2.5. API REST de composicao de produtos (`produto_compo
 ### Composicao de Produtos (COMP)
 
 - [ ] **COMP-01**: Operador pode listar os componentes de um kit por `idprodutomaster` (GET), com a resposta enriquecida com `descricaoproduto`/`statusproduto` do produto detail via JOIN
-- [ ] **COMP-02**: Operador pode adicionar um componente a um kit (POST), com validacao manual de que `idprodutomaster` E `idprodutodetail` existem em `produto`; rejeita auto-referencia (`master == detail`), par duplicado, e componente cujo produto detail esteja inativo (`statusproduto = false`)
+- [x] **COMP-02**: Operador pode adicionar um componente a um kit (POST), com validacao manual de que `idprodutomaster` E `idprodutodetail` existem em `produto`; rejeita auto-referencia (`master == detail`), par duplicado, e componente cujo produto detail esteja inativo (`statusproduto = false`)
 - [ ] **COMP-03**: Operador pode editar a `quantidade` de um componente existente (PATCH), com checagem de existencia (404 se o par master/detail nao existir)
 - [ ] **COMP-04**: Operador pode remover um componente de um kit (DELETE fisico), com checagem de existencia; DELETE fisico e correto aqui — `produto_composto` e tabela de composicao, distinta da regra de soft-delete do `produto`
-- [ ] **COMP-05**: O flag `usaprodutocomposto` do produto master e auto-gerenciado: ligado (`true`) ao adicionar o primeiro componente e desligado (`false`) ao remover o ultimo, sempre na MESMA transacao da escrita em `produto_composto`
-- [ ] **COMP-06**: A criacao usa PK serial via `INSERT ... RETURNING idprodutocomposto` (nunca MAX+1), e os erros do Postgres sao mapeados para HTTP: `42501`→500 acionavel (GRANT de escrita ausente), `23503`→422, `23505`→409, `23514`→422
+- [x] **COMP-05**: O flag `usaprodutocomposto` do produto master e auto-gerenciado: ligado (`true`) ao adicionar o primeiro componente e desligado (`false`) ao remover o ultimo, sempre na MESMA transacao da escrita em `produto_composto`
+- [x] **COMP-06**: A criacao usa PK serial via `INSERT ... RETURNING idprodutocomposto` (nunca MAX+1), e os erros do Postgres sao mapeados para HTTP: `42501`→500 acionavel (GRANT de escrita ausente), `23503`→422, `23505`→409, `23514`→422
 - [ ] **COMP-07**: Spikes de introspecao na DB de referencia read-only (192.168.3.198) realizados antes de escrever DTO/INSERT: tipo-base + CHECK do dominio `quantidade`, presenca de constraint UNIQUE em `(idprodutomaster, idprodutodetail)`, e inventario de triggers/rules em `produto_composto`
 - [ ] **COMP-08**: `validarFkExiste` extraido para `athos-fk.util.ts` reutilizavel (refactor sem mudanca de comportamento; cobertura preservada pelos testes existentes do produto)
 
@@ -43,15 +43,16 @@ Reconhecidos, mas deferidos — fora do roadmap atual.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | COMP-01 | Phase 39 | Pending |
-| COMP-02 | Phase 40 | Pending |
+| COMP-02 | Phase 40 | Complete |
 | COMP-03 | Phase 40 | Pending |
 | COMP-04 | Phase 40 | Pending |
-| COMP-05 | Phase 40 | Pending |
-| COMP-06 | Phase 40 | Pending |
+| COMP-05 | Phase 40 | Complete |
+| COMP-06 | Phase 40 | Complete |
 | COMP-07 | Phase 39 | Pending |
 | COMP-08 | Phase 39 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 8 total
 - Mapped to phases: 8 (100%)
 - Unmapped: 0
