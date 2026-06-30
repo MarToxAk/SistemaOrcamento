@@ -11,6 +11,7 @@ import { CreateProdutoDto } from "./dto/create-produto.dto";
 import { UpdateProdutoDto } from "./dto/update-produto.dto";
 import { AthosDefaultsService } from "./athos-defaults.service";
 import { FISCAL_FIELDS } from "./athos-defaults.util";
+import { validarFkExiste } from "./athos-fk.util";
 
 @Injectable()
 export class AthosProdutoService {
@@ -55,24 +56,6 @@ export class AthosProdutoService {
     return id;
   }
 
-  private async validarFkExiste(
-    client: PoolClient,
-    tabela: string,
-    coluna: string,
-    id: number,
-    nomeEntidade: string,
-  ): Promise<void> {
-    const result = await client.query(
-      `SELECT 1 FROM "${tabela}" WHERE "${coluna}" = $1 LIMIT 1`,
-      [id],
-    );
-    if (result.rows.length === 0) {
-      throw new UnprocessableEntityException(
-        `${nomeEntidade} com id ${id} nao encontrado no Athos`,
-      );
-    }
-  }
-
   async criarProduto(dto: CreateProdutoDto): Promise<{ idproduto: number }> {
     const sistemaUsuarioId = this.getSistemaUsuarioId();
     const pool = this.getPool();
@@ -80,13 +63,13 @@ export class AthosProdutoService {
     try {
       // Pre-validacao FK: departamento, grupo, marca (apenas para IDs informados)
       if (dto.iddepartamento !== undefined) {
-        await this.validarFkExiste(client, "produto_departamento", "iddepartamento", dto.iddepartamento, "Departamento");
+        await validarFkExiste(client, "produto_departamento", "iddepartamento", dto.iddepartamento, "Departamento");
       }
       if (dto.idgrupo !== undefined) {
-        await this.validarFkExiste(client, "produto_grupo", "idgrupo", dto.idgrupo, "Grupo");
+        await validarFkExiste(client, "produto_grupo", "idgrupo", dto.idgrupo, "Grupo");
       }
       if (dto.idmarca !== undefined) {
-        await this.validarFkExiste(client, "produto_marca", "idmarca", dto.idmarca, "Marca");
+        await validarFkExiste(client, "produto_marca", "idmarca", dto.idmarca, "Marca");
       }
 
       // === Aplicar defaults (D-03..D-13, OBSV-01) ===
@@ -275,13 +258,13 @@ export class AthosProdutoService {
 
       // Pre-validacao FK: departamento, grupo, marca (apenas para IDs informados)
       if (dto.iddepartamento !== undefined) {
-        await this.validarFkExiste(client, "produto_departamento", "iddepartamento", dto.iddepartamento, "Departamento");
+        await validarFkExiste(client, "produto_departamento", "iddepartamento", dto.iddepartamento, "Departamento");
       }
       if (dto.idgrupo !== undefined) {
-        await this.validarFkExiste(client, "produto_grupo", "idgrupo", dto.idgrupo, "Grupo");
+        await validarFkExiste(client, "produto_grupo", "idgrupo", dto.idgrupo, "Grupo");
       }
       if (dto.idmarca !== undefined) {
-        await this.validarFkExiste(client, "produto_marca", "idmarca", dto.idmarca, "Marca");
+        await validarFkExiste(client, "produto_marca", "idmarca", dto.idmarca, "Marca");
       }
 
       // Construir UPDATE dinamicamente
