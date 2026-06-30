@@ -53,7 +53,12 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
   4. Os 3 spikes de introspecção no DB de referência (192.168.3.198) estão concluídos e documentados no plano de fase: (a) tipo-base e cláusula CHECK do domínio quantidade, (b) existência de constraint UNIQUE em (idprodutomaster, idprodutodetail), (c) inventário completo de triggers/rules em produto_composto
   5. validarFkExiste extraído para athos-fk.util.ts e AthosProdutoService importa do util sem mudança de comportamento — testes existentes do serviço de produto continuam passando sem alteração
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 39-01-PLAN.md — COMP-07: 3 spikes de introspecção no DB de referência (192.168.3.198), entrega manual (usuário cola resultados) (Wave 1)
+- [ ] 39-02-PLAN.md — COMP-08: extrair validarFkExiste para athos-fk.util.ts + teste do util; re-wirear AthosProdutoService sem mudança de comportamento (Wave 1)
+- [ ] 39-03-PLAN.md — COMP-01: GET /athos/produtos/:idprodutomaster/composicao (lista enriquecida via LEFT JOIN) + service/controller/DTOs scaffold + registro no AthosModule (Wave 2)
 
 ---
 
@@ -83,7 +88,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 39. Scaffold, Leitura e Spikes | 0/TBD | Not started | - |
+| 39. Scaffold, Leitura e Spikes | 0/3 | Not started | - |
 | 40. Write CRUD | 0/TBD | Not started | - |
 
 ---
