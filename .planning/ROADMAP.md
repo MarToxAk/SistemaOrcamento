@@ -31,7 +31,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 
 ### Phases
 
-- [ ] **Phase 39: Scaffold, Leitura e Spikes de Introspecão** - Spikes de introspecção no DB de referência (192.168.3.198), extração de validarFkExiste para util reutilizável, e endpoint GET de listagem enriquecida de componentes — tudo que não depende do write GRANT
+- [x] **Phase 39: Scaffold, Leitura e Spikes de Introspecão** - Spikes de introspecção no DB de referência (192.168.3.198), extração de validarFkExiste para util reutilizável, e endpoint GET de listagem enriquecida de componentes — tudo que não depende do write GRANT (completed 2026-06-30)
 - [ ] **Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)** - Quatro endpoints de escrita com validação dual de FK, gerenciamento transacional do flag, PK serial via RETURNING e mapeamento completo de erros Postgres; cobertura de testes Jest
 
 ### Phase Details
@@ -47,18 +47,20 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 **Research flag:** NEEDS RESEARCH-PHASE — os 3 spikes (COMP-07) requerem acesso live ao DB de referência 192.168.3.198; não podem ser respondidos pelo codebase.
 
 **Success Criteria** (what must be TRUE):
+
   1. GET /athos/produtos/:idprodutomaster/composicao retorna lista de componentes enriquecida com descricaoproduto e statusproduto do produto detail via JOIN (não N+1)
   2. GET retorna array vazio (sem erro) quando o master existe mas não tem componentes cadastrados em produto_composto
   3. GET retorna 404 quando idprodutomaster não existe no catálogo de produtos
   4. Os 3 spikes de introspecção no DB de referência (192.168.3.198) estão concluídos e documentados no plano de fase: (a) tipo-base e cláusula CHECK do domínio quantidade, (b) existência de constraint UNIQUE em (idprodutomaster, idprodutodetail), (c) inventário completo de triggers/rules em produto_composto
   5. validarFkExiste extraído para athos-fk.util.ts e AthosProdutoService importa do util sem mudança de comportamento — testes existentes do serviço de produto continuam passando sem alteração
 
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 39-01-PLAN.md — COMP-07: 3 spikes de introspecção no DB de referência (192.168.3.198), entrega manual (usuário cola resultados) (Wave 1)
-- [ ] 39-02-PLAN.md — COMP-08: extrair validarFkExiste para athos-fk.util.ts + teste do util; re-wirear AthosProdutoService sem mudança de comportamento (Wave 1)
-- [ ] 39-03-PLAN.md — COMP-01: GET /athos/produtos/:idprodutomaster/composicao (lista enriquecida via LEFT JOIN) + service/controller/DTOs scaffold + registro no AthosModule (Wave 2)
+
+- [x] 39-01-PLAN.md — COMP-07: 3 spikes de introspecção no DB de referência (192.168.3.198), entrega manual (usuário cola resultados) (Wave 1)
+- [x] 39-02-PLAN.md — COMP-08: extrair validarFkExiste para athos-fk.util.ts + teste do util; re-wirear AthosProdutoService sem mudança de comportamento (Wave 1)
+- [x] 39-03-PLAN.md — COMP-01: GET /athos/produtos/:idprodutomaster/composicao (lista enriquecida via LEFT JOIN) + service/controller/DTOs scaffold + registro no AthosModule (Wave 2)
 
 ---
 
@@ -74,6 +76,7 @@ Plans:
 **Requirements:** COMP-02, COMP-03, COMP-04, COMP-05, COMP-06
 
 **Success Criteria** (what must be TRUE):
+
   1. Operador pode adicionar um componente via POST e a resposta retorna idprodutocomposto gerado pelo banco (serial via RETURNING — nunca MAX+1); rejeita auto-referência (master == detail), par duplicado e detail com statusproduto = false com os HTTP codes corretos (422/409)
   2. Ao adicionar o primeiro componente de um kit, usaprodutocomposto do produto master é automaticamente definido como true dentro da mesma transação BEGIN/COMMIT do INSERT em produto_composto
   3. Operador pode atualizar a quantidade de um componente via PATCH; recebe 404 quando o par (idprodutomaster, idprodutodetail) não existe; quantidade inválida (viola domínio) retorna 422
@@ -88,7 +91,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 39. Scaffold, Leitura e Spikes | 0/3 | Not started | - |
+| 39. Scaffold, Leitura e Spikes | 3/3 | Complete   | 2026-06-30 |
 | 40. Write CRUD | 0/TBD | Not started | - |
 
 ---
