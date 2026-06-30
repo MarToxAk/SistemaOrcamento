@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.5
 milestone_name: — API de Produtos Compostos
-current_phase: 39
+current_phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
 current_phase_name: scaffold-leitura-e-spikes-de-introspec-o
 status: executing
 stopped_at: Phase 39 context gathered
-last_updated: "2026-06-30T20:49:49.424Z"
+last_updated: "2026-06-30T20:58:08.070Z"
 last_activity: 2026-06-30
-last_activity_desc: Phase 39 execution started
+last_activity_desc: Phase 40 complete, transitioned to Phase 999.1
 progress:
   total_phases: 2
   completed_phases: 2
@@ -20,7 +20,7 @@ progress:
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-06-29 — Roadmap v2.5 definido (API de Produtos Compostos / Kits no Athos)
-Current phase: 39
+Current phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
 Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
@@ -28,9 +28,9 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 ## Current Position
 
 Phase: 39 (scaffold-leitura-e-spikes-de-introspec-o) — EXECUTING
-Plan: 3 of 3
+Plan: Not started
 Status: Ready to execute
-Last activity: 2026-06-30 — Phase 39 execution started
+Last activity: 2026-06-30 — Phase 40 complete, transitioned to Phase 999.1
 
 Progress: [░░░░░░░░░░] 0% (0/2 phases complete)
 

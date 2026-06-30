@@ -97,7 +97,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 39. Scaffold, Leitura e Spikes | 3/3 | Complete   | 2026-06-30 |
-| 40. Write CRUD | 2/2 | Complete   | 2026-06-30 |
+| 40. Write CRUD | 2/2 | Complete    | 2026-06-30 |
 
 ---
 
