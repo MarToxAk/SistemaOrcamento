@@ -52,11 +52,17 @@ WHERE t.typname = 'quantidade'
   AND t.typtype  = 'd';
 ```
 
-**RESULTADO — colar saida do 192.168.3.198 aqui:**
+**RESULTADO (rodado em 192.168.3.198/athos, usuario_leitura — 2026-06-30):**
 ```
--- RESULTADO SPIKE (a):
-[AGUARDANDO RESULTADO DO USUARIO]
+domain_name | base_type | base_type_full | check_clause
+------------+-----------+----------------+-------------
+quantidade  | numeric   | numeric(9,3)   | (null)
 ```
+**Decisao Fase 40:** `quantidade` e `numeric(9,3)` SEM clausula CHECK no dominio.
+→ DTO usa `@IsNumber()` + `@Min(0.001)` (default seguro; nao ha floor de dominio).
+→ Sem CHECK de dominio, NAO esperar pg error 23514 do dominio; valores fora de `numeric(9,3)`
+   (ex.: > 999999.999 ou mais de 3 casas) dao erro de overflow/arredondamento numerico (22003), nao 23514.
+→ Max representavel: 999999.999.
 
 ---
 
@@ -85,11 +91,24 @@ GROUP BY tc.constraint_name, tc.constraint_type
 ORDER BY tc.constraint_type, tc.constraint_name;
 ```
 
-**RESULTADO — colar saida do 192.168.3.198 aqui:**
+**RESULTADO (via pg_constraint — information_schema retornou 0 no PG 9.0, usado pg_catalog):**
 ```
--- RESULTADO SPIKE (b):
-[AGUARDANDO RESULTADO DO USUARIO]
+conname                         | contype | definition
+--------------------------------+---------+--------------------------------------------------------------
+fk_produto__produto_p_produto   | f       | FOREIGN KEY (idprodutomaster) REFERENCES produto(idproduto)
+                                |         |   ON UPDATE RESTRICT ON DELETE RESTRICT
+pk_produto_composto             | p       | PRIMARY KEY (idprodutocomposto)
+
+-- NAO existe constraint UNIQUE em (idprodutomaster, idprodutodetail).
+-- idprodutodetail NAO tem FK (so idprodutomaster referencia produto).
+-- Indexes: pk_produto_composto + produto_composto_pk (ambos UNIQUE em idprodutocomposto, duplicados);
+--          produto_produto_composto_fk (idprodutomaster). Nenhum em (master,detail) nem em idprodutodetail.
 ```
+**Decisao Fase 40:**
+→ SEM UNIQUE em `(idprodutomaster, idprodutodetail)` → a pre-verificacao de duplicata DEVE ser
+   feita em nivel de aplicacao (SELECT antes do INSERT). NAO confiar em pg error 23505 — ele nao dispara.
+→ `idprodutodetail` SEM FK → validacao manual de existencia em `produto` e OBRIGATORIA (validarFkExiste).
+→ PK confirmada: `idprodutocomposto` (serial) → usar `INSERT ... RETURNING idprodutocomposto`.
 
 ---
 
@@ -117,10 +136,9 @@ WHERE event_object_table  = 'produto_composto'
 ORDER BY trigger_name, event_manipulation;
 ```
 
-**RESULTADO — colar saida do 192.168.3.198 aqui:**
+**RESULTADO (via pg_trigger — information_schema.triggers nao tem action_timing no PG 9.0):**
 ```
--- RESULTADO SPIKE (c-1) triggers:
-[AGUARDANDO RESULTADO DO USUARIO]
+-- 0 linhas: NENHUM trigger em produto_composto (excluindo internos de constraint).
 ```
 
 ### SPIKE (c-2) — Rules
@@ -138,12 +156,24 @@ WHERE tablename  = 'produto_composto'
 ORDER BY rulename;
 ```
 
-**RESULTADO — colar saida do 192.168.3.198 aqui:**
+**RESULTADO (via pg_rules — colunas ev_type/is_instead/oid nao existem em pg_rules; usado rulename/definition):**
 ```
--- RESULTADO SPIKE (c-2) rules:
-[AGUARDANDO RESULTADO DO USUARIO]
+-- 0 linhas: NENHUMA rule em produto_composto.
 ```
+
+**Decisao Fase 40 (c):** Zero triggers e zero rules → `INSERT INTO produto_composto (idprodutomaster, idprodutodetail, quantidade) VALUES ($1,$2,$3) RETURNING idprodutocomposto` e seguro; nenhuma coluna extra exigida por trigger/rule.
 
 ---
 
-*Queries copiadas de 39-RESEARCH.md §"COMP-07 — Introspection Spike Queries". Nenhum resultado foi inventado ou preenchido pelo executor.*
+## ⚠️ Achado crítico: versão do PostgreSQL
+
+`SELECT version()` → **PostgreSQL 9.0.5 (32-bit, Visual C++ build 1500)**.
+
+Implicações (afetam toda integração Athos, não só esta fase):
+- `pg_sequence_last_value()` NAO existe (so PG 10+) — confirma a causa do bug do conta_pagar (PR #44).
+- `information_schema.triggers` nao tem `action_timing`; `pg_rules` nao tem `ev_type/is_instead/oid` — usar `pg_catalog` (pg_trigger/pg_constraint) para introspeccao.
+- `RETURNING` funciona (desde 8.2) — OK para o serial PK.
+
+---
+
+*Spikes rodados diretamente em 192.168.3.198/athos com o usuario read-only `usuario_leitura` em 2026-06-30 (queries (b)/(c) adaptadas para PG 9.0 via pg_catalog). Resultados reais, nao inventados.*
