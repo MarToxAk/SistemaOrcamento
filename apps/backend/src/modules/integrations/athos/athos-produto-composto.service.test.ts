@@ -465,4 +465,191 @@ describe("AthosProdutoCompostoService", () => {
       expect(client.release).toHaveBeenCalled();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // atualizarQuantidade (PATCH)
+  // ---------------------------------------------------------------------------
+
+  describe("atualizarQuantidade", () => {
+    /**
+     * Ordem das queries em atualizarQuantidade:
+     *   1. SELECT idprodutocomposto FROM produto_composto WHERE idprodutomaster=$1 AND idprodutodetail=$2 LIMIT 1
+     *   2. UPDATE produto_composto SET quantidade=$1 WHERE idprodutomaster=$2 AND idprodutodetail=$3
+     */
+
+    it("COMP-03-success: retorna { idprodutocomposto } quando par existe e UPDATE ok", async () => {
+      const client = makeClient();
+      client.query
+        .mockResolvedValueOnce({ rows: [{ idprodutocomposto: 7 }] }) // 1. SELECT par
+        .mockResolvedValueOnce({ rows: [] }); // 2. UPDATE
+
+      const result = await service.atualizarQuantidade(42, 10, { quantidade: 3.5 });
+
+      expect(result).toEqual({ idprodutocomposto: 7 });
+      expect(client.release).toHaveBeenCalled();
+    });
+
+    it("COMP-03-404: lanca NotFoundException quando par (master, detail) nao existe", async () => {
+      const client = makeClient();
+      client.query
+        .mockResolvedValueOnce({ rows: [] }); // 1. SELECT par -> vazio -> 404
+
+      await expect(service.atualizarQuantidade(42, 999, { quantidade: 1 })).rejects.toThrow(NotFoundException);
+      expect(client.release).toHaveBeenCalled();
+    });
+
+    it("COMP-03-422: mapeia pg 22003 para UnprocessableEntityException (quantidade fora do dominio)", async () => {
+      const client = makeClient();
+      const pgError = Object.assign(new Error("numeric field overflow"), { code: "22003" });
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ idprodutocomposto: 7 }] }) // 1. SELECT par
+        .mockRejectedValueOnce(pgError); // 2. UPDATE -> 22003 (overflow)
+
+      await expect(service.atualizarQuantidade(42, 10, { quantidade: 9999999.999 }))
+        .rejects.toThrow(UnprocessableEntityException);
+
+      expect(client.release).toHaveBeenCalled();
+    });
+
+    it("COMP-03-release: chama client.release em todos os caminhos", async () => {
+      const client = makeClient();
+      // Caminho de sucesso
+      client.query
+        .mockResolvedValueOnce({ rows: [{ idprodutocomposto: 1 }] })
+        .mockResolvedValueOnce({ rows: [] });
+
+      await service.atualizarQuantidade(1, 2, { quantidade: 1 });
+      expect(client.release).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // removerComponente (DELETE)
+  // ---------------------------------------------------------------------------
+
+  describe("removerComponente", () => {
+    /**
+     * Ordem das queries em removerComponente:
+     *   1. BEGIN
+     *   2. SELECT 1 FROM produto_composto WHERE idprodutomaster=$1 AND idprodutodetail=$2 LIMIT 1
+     *   3. DELETE FROM produto_composto WHERE idprodutomaster=$1 AND idprodutodetail=$2
+     *   4. SELECT count(*)::int AS total FROM produto_composto WHERE idprodutomaster=$1
+     *   5. UPDATE produto SET usaprodutocomposto=false WHERE idproduto=$1  (apenas se total === 0)
+     *   6. COMMIT
+     */
+
+    it("COMP-04-05-ultimo: deleta fisicamente e desliga flag quando ultimo componente (total=0)", async () => {
+      const client = makeClient();
+      client.query
+        .mockResolvedValueOnce({ rows: [] }) // 1. BEGIN
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] }) // 2. SELECT par -> existe
+        .mockResolvedValueOnce({ rows: [] }) // 3. DELETE
+        .mockResolvedValueOnce({ rows: [{ total: 0 }] }) // 4. count -> 0 (ultimo)
+        .mockResolvedValueOnce({ rows: [] }) // 5. UPDATE usaprodutocomposto=false
+        .mockResolvedValueOnce({ rows: [] }); // 6. COMMIT
+
+      const result = await service.removerComponente(42, 10);
+
+      expect(result).toEqual({ removed: true });
+
+      // Assertar que DELETE FROM produto_composto foi chamado (fisico)
+      const allSqls: string[] = client.query.mock.calls.map(([sql]: [string]) => String(sql));
+      const deleteSql = allSqls.find((s) => s.toUpperCase().includes("DELETE FROM"));
+      expect(deleteSql).toBeDefined();
+      expect(deleteSql!.toUpperCase()).toContain("PRODUTO_COMPOSTO");
+
+      // Assertar que UPDATE de flag foi chamado com usaprodutocomposto = false
+      // O valor false é literal SQL (não parâmetro): "SET usaprodutocomposto = false"
+      const flagSql = allSqls.find((s) => s.includes("usaprodutocomposto"));
+      expect(flagSql).toBeDefined();
+      // SQL deve conter o campo e o valor literal false
+      expect(flagSql!).toContain("usaprodutocomposto");
+      expect(flagSql!).toContain("false");
+
+      expect(client.release).toHaveBeenCalled();
+    });
+
+    it("COMP-04-nao-ultimo: deleta fisicamente e NAO desliga flag quando ainda restam componentes", async () => {
+      const client = makeClient();
+      client.query
+        .mockResolvedValueOnce({ rows: [] }) // 1. BEGIN
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] }) // 2. SELECT par -> existe
+        .mockResolvedValueOnce({ rows: [] }) // 3. DELETE
+        .mockResolvedValueOnce({ rows: [{ total: 3 }] }) // 4. count -> 3 (nao ultimo)
+        .mockResolvedValueOnce({ rows: [] }); // 5. COMMIT (sem UPDATE de flag)
+
+      const result = await service.removerComponente(42, 10);
+
+      expect(result).toEqual({ removed: true });
+
+      // Assertar que DELETE FROM produto_composto foi chamado
+      const allSqls: string[] = client.query.mock.calls.map(([sql]: [string]) => String(sql));
+      const deleteSql = allSqls.find((s) => s.toUpperCase().includes("DELETE FROM"));
+      expect(deleteSql).toBeDefined();
+
+      // Assertar que NENHUMA query chamada contem "usaprodutocomposto" (flag nao alterado)
+      const flagSql = allSqls.find((s) => s.includes("usaprodutocomposto"));
+      expect(flagSql).toBeUndefined();
+
+      expect(client.release).toHaveBeenCalled();
+    });
+
+    it("COMP-04-404: lanca NotFoundException quando par nao existe + garante ROLLBACK e release", async () => {
+      const client = makeClient();
+      client.query
+        .mockResolvedValueOnce({ rows: [] }) // 1. BEGIN
+        .mockResolvedValueOnce({ rows: [] }) // 2. SELECT par -> vazio -> 404
+        .mockResolvedValueOnce({ rows: [] }); // 3. ROLLBACK
+
+      await expect(service.removerComponente(42, 999)).rejects.toThrow(NotFoundException);
+
+      // Assertar que ROLLBACK foi chamado
+      const allSqls: string[] = client.query.mock.calls.map(([sql]: [string]) => String(sql));
+      expect(allSqls.some((s) => s === "ROLLBACK")).toBe(true);
+
+      expect(client.release).toHaveBeenCalled();
+    });
+
+    it("COMP-04-delete-fisico: DELETE usa DELETE FROM (nao soft-delete em produto_composto)", async () => {
+      const client = makeClient();
+      client.query
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] }) // SELECT par
+        .mockResolvedValueOnce({ rows: [] }) // DELETE
+        .mockResolvedValueOnce({ rows: [{ total: 1 }] }) // count -> nao ultimo
+        .mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+      await service.removerComponente(42, 10);
+
+      const allSqls: string[] = client.query.mock.calls.map(([sql]: [string]) => String(sql));
+
+      // DELETE FROM produto_composto presente
+      const deleteSql = allSqls.find((s) => s.toUpperCase().includes("DELETE FROM"));
+      expect(deleteSql).toBeDefined();
+      expect(deleteSql!.toLowerCase()).toContain("produto_composto");
+
+      // Nenhum UPDATE soft-delete em produto_composto (sem SET status / SET ativo)
+      const softDeleteSql = allSqls.find(
+        (s) =>
+          s.toLowerCase().includes("produto_composto") &&
+          s.toUpperCase().includes("UPDATE") &&
+          (s.toLowerCase().includes("status") || s.toLowerCase().includes("ativo")),
+      );
+      expect(softDeleteSql).toBeUndefined();
+    });
+
+    it("COMP-04-release: chama client.release em todos os caminhos (sucesso)", async () => {
+      const client = makeClient();
+      client.query
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] }) // SELECT par
+        .mockResolvedValueOnce({ rows: [] }) // DELETE
+        .mockResolvedValueOnce({ rows: [{ total: 2 }] }) // count
+        .mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+      await service.removerComponente(42, 10);
+      expect(client.release).toHaveBeenCalledTimes(1);
+    });
+  });
 });
