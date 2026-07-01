@@ -1,4 +1,6 @@
 ---
+status: complete
+superseded_by: 999.1
 phase: quick
 plan: 260521-bdu
 subsystem: backend/pdf
@@ -19,6 +21,7 @@ key_files:
     - apps/backend/dist/src/modules/quotes/quotes-pdf-storage.service.js.map
 decisions:
   - dist/ esta no .gitignore — apenas o build local foi corrigido; proxima docker build usara os fontes TS atuais e compilara corretamente
+  - "SUPERSEDED pela fase 999.1: renderHtml reescrito com cadeia resolveTemplateSource (template ativo do banco > EMPRESA_PDF_TEMPLATE_PATH > quote-default.hbs > QUOTES_PDF_HTML_TEMPLATE como fallback). O conserto de dist/ desta task foi absorvido; QUOTES_PDF_HTML_TEMPLATE permanece como fallback absoluto."
 metrics:
   duration: ~2min
   completed_date: "2026-05-21"

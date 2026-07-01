@@ -1,33 +1,38 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: Cobrança e Fiscal do Cliente
-current_phase: 31
-status: Awaiting next milestone
-last_updated: "2026-06-08T14:42:57.950Z"
-last_activity: 2026-06-08 — Milestone v2.1 completed and archived
+milestone: v2.5
+milestone_name: — API de Produtos Compostos
+current_phase: 39
+current_phase_name: scaffold-leitura-e-spikes-de-introspec-o
+status: executing
+stopped_at: Phase 39 context gathered
+last_updated: "2026-06-30T12:04:46.651Z"
+last_activity: 2026-06-30
+last_activity_desc: Phase 39 execution started
 progress:
-  total_phases: 32
-  completed_phases: 27
-  total_plans: 59
-  completed_plans: 57
-  percent: 84
+  total_phases: 2
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-05-22 — Phase 29 Plan 02 completo (modal boleto frontend + Route Handler)
-Current phase: 31
-Milestone: v2.1 — Cobranca e Fiscal do Cliente
+Last updated: 2026-06-29 — Roadmap v2.5 definido (API de Produtos Compostos / Kits no Athos)
+Current phase: 39
+Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
 
 ## Current Position
 
-Phase: Milestone v2.1 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-08 — Milestone v2.1 completed and archived
+Phase: 39 (scaffold-leitura-e-spikes-de-introspec-o) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 39
+Last activity: 2026-06-30 — Phase 39 execution started
+
+Progress: [░░░░░░░░░░] 0% (0/2 phases complete)
 
 ## Project Status
 
@@ -61,9 +66,19 @@ Last activity: 2026-06-08 — Milestone v2.1 completed and archived
 | 26 | Status Pagina Producao — Layout Kanban 3 colunas | complete (v2.0) |
 | 27 | Dashboard de Contas a Receber — Read-Only | complete (v2.0) |
 | 28 | Pagina de Detalhe do Cliente + Schema Prisma | complete (v2.1) |
-| 29 | Boleto Consolidado via EFI Bank | in-progress (v2.1) — Plans 01+02 completos, checkpoint pendente |
-| 30 | Emissao de NFS-e a partir de Titulos | pending (v2.1) |
-| 31 | Historico NFS-e + Consulta NF Athos | pending (v2.1) |
+| 29 | Boleto Consolidado via EFI Bank | complete (v2.1) |
+| 30 | Emissao de NFS-e a partir de Titulos | complete (v2.1) |
+| 31 | Historico NFS-e + Consulta NF Athos | complete (v2.1) |
+| 32 | API de Busca de Produto | complete (v2.2) |
+| 33 | API de Escrita de Produto | complete (v2.2) |
+| 34 | Frontend de Gestao de Produtos | skipped — decisão API-only (2026-06-17) |
+| 35 | Backend White-Label | complete (v2.3) |
+| 36 | Frontend White-Label | complete (v2.3) |
+| 999.1 | Gerenciamento de layout do PDF pela interface | complete (v2.3) |
+| 37 | Motor de Defaults (Descoberta por Moda) | complete (v2.4) |
+| 38 | Aplicacao de Defaults na Criacao de Produto | complete (v2.4) |
+| 39 | Scaffold, Leitura e Spikes de Introspecao | not started (v2.5) |
+| 40 | Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto) | not started (v2.5) |
 
 ## Milestones Archived
 
@@ -78,22 +93,27 @@ Last activity: 2026-06-08 — Milestone v2.1 completed and archived
 - v1.8 — phases 19-21 (.planning/milestones/v1.8-ROADMAP.md)
 - v1.9 — phase 22
 - v2.0 — phases 23-27 (.planning/milestones/v2.0-ROADMAP.md)
+- v2.1 — phases 28-31 (.planning/milestones/v2.1-ROADMAP.md)
+- v2.2 — phases 32-33 (não arquivado separadamente; UAT/verificação diferidas — ver Deferred Items)
+- v2.3 — phases 35-36 + 999.1 (.planning/milestones/v2.3-ROADMAP.md)
+- v2.4 — phases 37-38 (.planning/milestones/v2.4-ROADMAP.md)
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-22)
+See: .planning/PROJECT.md (updated 2026-06-29)
 Core value: Orcamentos criados, aprovados e cobrados sem intervencao manual
-Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
+Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 
 ## Active Context
 
-- Milestone ativo: v2.1 (iniciado 2026-05-22)
-- Proximo passo: /gsd:plan-phase 29 (boleto-consolidado)
-- Stack: NestJS + Next.js + Prisma + PostgreSQL
-- Athos: somente leitura — nunca gravar
-- NfseModule existente em apps/backend/src/modules/integrations/nfse/ — reutilizar
-- EFI integration existente — reutilizar para boleto consolidado
-- Phases 28 e 30 requerem Prisma migrations
+- Milestone v2.5 (API de Produtos Compostos / Kits no Athos) iniciado. Roadmap definido em 2026-06-29.
+- 2 fases: Phase 39 (scaffold + leitura + 3 spikes DB — NEEDS RESEARCH-PHASE) → Phase 40 (write CRUD + testes — gated no write GRANT).
+- Expansao da superficie de escrita Athos para uma segunda tabela: produto_composto.
+- Stack: NestJS + pg (Pool raw) + class-validator. Zero novas dependencias npm.
+- Gate critico: GRANT INSERT, UPDATE, DELETE ON produto_composto + USAGE,SELECT na sequence — deve ser concedido no Athos antes da verificacao da Phase 40.
+- Padrao: AthosProdutoCompostoService + controller inseridos no AthosModule existente; sem novo modulo NestJS.
+- Divida diferida v2.2: UAT/verificacao humana das Fases 32/33 — ver Deferred Items.
+- Seguranca v2.3: acao pre-deploy CR-01 (env vars do painel admin) — ver 999.1-SECURITY.md.
 
 ## Decisions Log
 
@@ -137,11 +157,26 @@ Current focus: v2.1 - Cobranca e Fiscal do Cliente (phases 28-31)
 | 2026-05-22 | backendFetch ja injeta x-internal-api-key — Route Handler /api/cobranca/boleto nao duplica header | internalHeaders() em backend-client.ts cobre a injecao server-side automaticamente |
 | 2026-05-22 | void navigator.clipboard.writeText() no botao Copiar da linha digitavel | Suprimir aviso de floating Promise no TypeScript strict sem quebrar o comportamento |
 | 2026-05-22 | Modal boleto sem Bootstrap Modal JS — React state overlay padrao pdf-modal-backdrop | Consistencia com padrao existente em orcamento/[id]/page.tsx; sem dependencia de Bootstrap JS |
+| 2026-06-15 | Liberar escrita no Athos APENAS na tabela produto (excecao controlada) | Necessidade de cadastrar/editar produtos pelo sistema sem abrir o Athos diretamente |
+| 2026-06-15 | Soft-delete de produto via statusproduto/vendeproduto=false — nunca DELETE fisico | Preservar integridade referencial (venda_item etc.) e historico completo |
+| 2026-06-15 | SPROD-02 (auth) atribuido a Phase 32 (primeiro endpoint) | Auth estabelecida desde o inicio; nao diferida para a fase de escrita |
+| 2026-06-15 | SPROD-04 (Swagger) atribuido a Phase 33 (write phase) | Documentacao cobre a superficie completa da API apos write endpoints existirem |
+| 2026-06-17 | Phase 34 (Frontend de Gestao de Produtos) descartada — entrega API-only | Operador decidiu que a API REST de produtos e suficiente; UI nao necessaria para esta iteracao |
+| 2026-06-17 | v2.3 usa env vars (.env por deploy) em vez de tabela empresa_config no banco | Abordagem mais simples; sem Prisma migration, sem MinIO, sem painel admin — deploy separado por empresa com .env proprio |
+| 2026-06-17 | EMPRESA_PDF_TEMPLATE_PATH com fallback para template padrao .hbs — template customizado montado via volume Docker | Permite white-label de PDF sem rebuild da imagem; padrao funciona out-of-the-box |
+| 2026-06-27 | OPERATIONAL_DEFAULTS definido inline em criarProduto (nao como helper compartilhado) — garante que editarProduto nunca pode alcancar defaults (D-11/OVRD-02) | Isolamento total da logica de defaults no caminho de criacao, conforme D-11 |
+| 2026-06-27 | Loop do INSERT em criarProduto itera sobre merged (nao dto original) — campos preenchidos por default chegam ao SQL | Sem essa mudanca os defaults aplicados seriam ignorados na montagem das colunas |
+| 2026-06-29 | v2.5 expandir superficie de escrita Athos para produto_composto (segunda excecao controlada) | Gestao de kits requer CRUD de composicao; padrao identico ao produto (v2.2) |
+| 2026-06-29 | DELETE fisico em produto_composto e correto — distinto da regra de soft-delete de produto | produto_composto e tabela de composicao (link table), nao entidade com historico; Athos remove fisicamente |
+| 2026-06-29 | PK serial via INSERT ... RETURNING — nunca MAX+1 — para idprodutocomposto | Padrao serial; MAX+1 causou bug de race condition em conta_pagar em producao |
+| 2026-06-29 | validarFkExiste extraido para athos-fk.util.ts (COMP-08) antes de qualquer codigo de escrita | Elimina duplicacao entre AthosProdutoService e AthosProdutoCompostoService; testavel em isolamento |
+| 2026-06-29 | Spikes de introspecao (COMP-07) executados antes de escrever DTO/INSERT | Tipo do dominio quantidade e triggers desconhecidos podem causar mismatch DTO/DB e rollbacks inesperados |
 
 ## Notes
 
 - Arquivo de auditoria dedicado do milestone v1.8 nao foi encontrado no fechamento.
 - Recomendada auditoria consolidada no inicio do proximo ciclo.
+- Tech debt remanescente: testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API).
 
 ### Quick Tasks Completed
 
@@ -198,6 +233,66 @@ Itens reconhecidos (acknowledged) e deferidos no fechamento do milestone v2.1 em
 
 Tech debt aceitável remanescente (não bloqueia): testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API).
 
+---
+
+Itens reconhecidos (acknowledged) e deferidos no fechamento do milestone **v2.3** em 2026-06-23:
+
+**Dívida de UAT/verificação de milestone anterior (v2.2 — APIs de Produto), nunca fechada:**
+
+| Categoria | Item | Status |
+|-----------|------|--------|
+| uat | 32-HUMAN-UAT.md (API de Busca de Produto) | partial — 6 cenários pendentes (ciclo v2.2) |
+| uat | 33-HUMAN-UAT.md (API de Escrita de Produto) | partial — 4 cenários pendentes (ciclo v2.2) |
+| verification | 32-VERIFICATION.md | human_needed (ciclo v2.2) |
+| verification | 33-VERIFICATION.md | human_needed (ciclo v2.2) |
+
+Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São APIs de produto já em uso em produção; o UAT humano e a verificação ficaram pendentes mas não bloqueiam o White-Label. Tratar com `/gsd-audit-uat` num ciclo futuro de saneamento.
+
+**Dívida de segurança do v2.3 (documentada, deploy interno):** ver `999.1-SECURITY.md` — CR-01 (gate de senha fail-open, exige definir env vars antes do deploy), T-SANDBOX (Chromium --no-sandbox aceito p/ deploy interno).
+
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Executar `/gsd-plan-phase 39` (com flag --research-phase para os spikes de introspecao)
+- Obter GRANT de escrita em produto_composto do DBA antes da verificacao da Phase 40
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Notes |
+|-------|------|----------|-------|
+| Phase 35 P01 | 8min | 1 tasks | 2 files |
+| Phase 35 P02 | 8min | 2 tasks | 2 files |
+| Phase 36 P01 | 8min | 2 tasks | 4 files |
+| Phase 36 P02 | 6min | 2 tasks | 5 files |
+| Phase 36 P03 | 6min | 1 tasks | 2 files |
+| Phase 999.1 P01 | 10min | 3 tasks | 7 files |
+| Phase 999.1 P03 | 25min | 2 tasks | 6 files |
+| Phase 999.1 P04 | 20min | 3 tasks | 4 files |
+| Phase 999.1 P05 | ~20min | 2 tasks | 6 files |
+| Phase 999.1 P06 | ~45min | 2 tasks | 12 files |
+| Phase 37 P01 | 378 | 3 tasks | 5 files |
+| Phase 38 P01 | 7min | 3 tasks | 3 files |
+
+## Session
+
+**Last session:** 2026-06-29T15:46:28.138Z
+**Stopped at:** Phase 39 context gathered
+**Resume file:** .planning/phases/39-scaffold-leitura-e-spikes-de-introspec-o/39-CONTEXT.md
+
+## Decisions
+
+- [Phase 36]: Módulo empresa.ts usa nullish coalescing com fallbacks concretos — zero risco de undefined chegando ao JSX
+- [Phase 36]: CSS custom property --cor-primaria injetada no <head> via <style> inline — Server Component lê env var antes do HTML ser enviado ao cliente
+- [Phase ?]: storage banco vs MinIO
+- [Phase ?]: migration manual
+- [Phase ?]: seed incremental
+- [Phase ?]: renderHtml tornado publico para preview (D-08)
+- [Phase ?]: shouldAllowRequest como funcao pura exportada (D-02 anti-SSRF, testavel sem Puppeteer)
+- [Phase ?]: Handlebars.create() por render isolado (Pitfall 3)
+- [Phase 999.1]: Os 3 presets PDF (D-06) compartilham exatamente o mesmo conjunto de variaveis Handlebars de empresa/orcamento — trocar de layout nao perde dados — Requisito explicito do plano 999.1-04 para permitir troca de preset em runtime sem reescrever orcamentos
+- [Phase 999.1]: Teste do seed de presets PDF mocka PrismaClient em vez de usar Postgres real — Docker indisponivel neste ambiente de execucao; logica de isActive=true unico e determinada pelos dados estaticos do array PRESETS, nao por comportamento do banco — mock valida a mesma asercao
+- [Phase ?]: Checkpoint sanitize-html aprovado pelo orquestrador apos verificacao independente (apostrophecms oficial, ~9.8M downloads/semana) — falso positivo de recencia confirmado
+- [Phase ?]: renderPreviewPdf adicionado como novo metodo publico em QuotesPdfStorageService (Rule 2) — D-08 exigia preview via render hardened mas nenhum metodo combinava renderHtml+renderPdfBuffer sem persistir
+- [Phase ?]: validateUpload REJEITA (nao limpa) HTML perigoso — regex de padroes perigosos + sanitize-html como sinal adicional de divergencia >30%
+- [Phase ?]: [Phase 999.1]: adminBackendFetch injeta x-admin-api-key apenas server-side — segredo nunca chega ao browser (T-999.1-18)
+- [Phase ?]: [Phase 999.1]: gate de senha opcional em /configuracoes/* (Rule 4) — cookie httpOnly HMAC; falha fechada sem CONFIG_PANEL_PASSWORD (preserva D-03)
+- [Phase ?]: [Phase 999.1]: preview por templateId no backend (Rule 2) — galeria nao tinha como pre-visualizar template salvo sem o source

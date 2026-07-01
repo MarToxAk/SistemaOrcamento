@@ -8,6 +8,43 @@ Sistema interno de gestao de orcamentos da Bom Custo (Ilhabela-SP). Cobre o cicl
 
 Orcamentos criados, aprovados e cobrados sem intervencao manual, com integracoes confiaveis e observaveis.
 
+## Current Milestone: v2.5 API de Produtos Compostos (Kits) no Athos
+
+**Goal:** Montar e gerenciar produtos compostos (kits) no Athos via API REST — um produto *master* composto de N produtos *detail* com quantidade — no mesmo padrao backend-only das APIs de produto (v2.2/v2.4).
+
+**Target features:**
+- CRUD completo da composicao: listar componentes por `idprodutomaster`, adicionar componente, editar `quantidade`, remover componente
+- Validacao de integridade: `idprodutomaster` e `idprodutodetail` devem existir em `produto`
+- Escrita no Athos ampliada para `produto_composto` (nova excecao controlada a regra read-only)
+- Autenticacao `x-internal-api-key` + logging estruturado (padroes existentes)
+- Backend/API apenas (sem frontend)
+
+**Key context:**
+- ⚠️ Dependencia operacional: o GRANT de escrita (INSERT/UPDATE/DELETE) em `produto_composto` ainda precisa ser concedido no banco Athos — o DDL so tem `GRANT SELECT`. Sem isso a API falha em runtime.
+- `192.168.3.198` = banco de referencia read-only com exemplos de `produto_composto`; a API escreve no Athos configurado (`ATHOS_PG_*`).
+- "Remover componente" = `DELETE` fisico da linha de `produto_composto` (tabela de composicao, distinta da regra de soft-delete do `produto`).
+- Tipo de dominio custom `quantidade`. Numeracao de fases continua a partir de 39.
+
+## Current State
+
+**Milestone v2.5 iniciado** (2026-06-29) — definindo requisitos. v2.4 (Defaults Inteligentes no Cadastro de Produto) enviado em 2026-06-28 — Fases 37-38, auditoria `passed`.
+
+## Last Shipped Milestone: v2.4 — Defaults Inteligentes no Cadastro de Produto
+
+Shipped: 2026-06-28 (auditoria: passed). Fases 37-38 (2 planos). Arquivo: `.planning/milestones/v2.4-ROADMAP.md`.
+
+**Goal:** Produtos criados pela API saem prontos para uso (ativos, vendaveis e fiscalmente validos) sem ajuste manual no Athos, preenchendo campos faltantes com os valores mais usados pelos produtos ja existentes (moda).
+
+**Target features:**
+- Defaults operacionais: produto nasce ativo/vendavel (`statusproduto`/`vendeproduto`) e com estoque sensato (`controlaestoque`/`baixarestoque`)
+- Defaults fiscais (ICMS/NF-e): `icms`/`icmsnfe`, `tributacao`/`tributacaonfe`, `codigocsosn`/`codigocsosnnfe`, `origem`/`origemnfe`, `tipoitem`, `piscst`/`cofinscst`, `idcfopsaida`, `ncm`
+- Descoberta dinamica: servico calcula a moda (valor mais comum) de cada campo a partir dos produtos ativos do Athos
+- Override: valor enviado no DTO sempre prevalece sobre o default
+- Robustez: sem dados para a moda -> fallback seguro, nunca quebra o insert
+- Observabilidade: log de quais defaults foram aplicados em cada cadastro
+
+**Key context:** continuacao direta do v2.2 (API de produto; escrita liberada APENAS na tabela `produto`). Backend/API apenas, sem frontend. Numeracao de fases continua a partir de 36.
+
 ## Last Shipped Milestone: v2.1 - Cobrança e Fiscal do Cliente
 
 Shipped em 2026-06-08 (auditoria: passed).
@@ -21,11 +58,29 @@ Entregas principais:
 
 Milestone anterior: v2.0 - Gestão Integrada Financeira, Caixa e Dashboards (2026-05-22).
 
-## Next Milestone: a definir
+## Last Shipped Milestone: v2.2 — Gestão de Produtos do Athos (API)
 
-**Status:** entre milestones desde 2026-06-08. Rodar `/gsd-new-milestone` para iniciar o próximo ciclo (questionamento → pesquisa → requisitos → roadmap).
+Shipped: 2026-06-17. Fases 32-33 entregues (API de busca e escrita de produto via REST). Phase 34 (frontend) descartada por decisão: API-only foi suficiente.
 
-Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferidos por indisponibilidade da API no fechamento).
+## Last Shipped Milestone: v2.3 — White-Label Multi-Empresa
+
+Shipped: 2026-06-23. Fases 35, 36 e 999.1 (12 planos). Arquivo: `.planning/milestones/v2.3-ROADMAP.md`.
+
+**Goal:** Tornar o sistema implantável para qualquer empresa sem editar código — branding, dados fiscais e layout do PDF configuráveis.
+
+**Entregue:**
+- **Configuração via env vars `EMPRESA_*`** (nome, CNPJ, endereço, logo, cor, município IBGE NFS-e) — abordagem por-deploy, em vez de tabela `empresa_config` no banco (ver decisão abaixo).
+- Frontend dinâmico: título da aba, cabeçalho das páginas internas e públicas, logo e cor lidos de env vars; CSS theming via custom property.
+- PDF e NFS-e dehardcoded: nome/CNPJ/endereço/logo e código IBGE vêm das env vars.
+- **Gerenciamento de layout do PDF pela interface (Fase 999.1):** tela `/configuracoes/templates` com galeria de 3 presets, upload de `.hbs`/HTML, preview server-side e troca do template ativo em runtime (sem reiniciar). Render endurecido (anti-SSRF, sanitização de upload, Handlebars restrito), rotas admin protegidas por API key + gate de senha com rate-limit.
+
+**Desvio do plano original:** o painel admin com tabela `empresa_config` + upload de logo para MinIO foi substituído por configuração via env vars (mais simples para o modelo single-deploy-por-empresa). O "painel admin" materializou-se como a tela de gerenciamento de templates PDF da Fase 999.1.
+
+**Segurança:** `999.1-SECURITY.md` — `threats_open: 0`. ⚠ Ação pré-deploy CR-01: definir `ADMIN_API_KEY`, `CONFIG_PANEL_PASSWORD`, `CONFIG_PANEL_SESSION_SECRET` (o gate do painel é fail-open sem elas).
+
+**Fora do escopo (mantido):** credenciais de integração permanecem em env vars; multi-tenant (cada empresa tem deploy próprio).
+
+Tech debt carregado: testes de integração com API live IIBR (Fase 30); UAT/verificação humana das Fases 32/33 (v2.2) diferidos.
 
 ## Requirements
 
@@ -64,8 +119,31 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferido
 - checkmark NFR-01..05: Emissao NFS-e a partir de titulos (banco proprio Prisma) -- v2.1
 - checkmark NFAT-01..02: Consulta de NF no Athos + historico NFS-e emitidas -- v2.1
 
+### Validated in v2.2
+
+- checkmark BPROD/SPROD: API de busca de produto (read autenticado, filtros, paginacao) -- v2.2 (fase 32)
+- checkmark CPROD/EPROD/DPROD: API de escrita de produto (create/edit/soft-delete, trigger respeitado, log) -- v2.2 (fase 33)
+
+### Validated in v2.3
+
+- checkmark CFG-01..05 / NFSE-01: Configuracao por empresa via env vars EMPRESA_* (dados fiscais, municipio IBGE) -- v2.3 (fase 35)
+- checkmark PDF-01..05: Template PDF externo (.hbs) com variaveis de empresa + cadeia de fallback -- v2.3 (fase 35)
+- checkmark FRONT-01..04: Frontend white-label (nome/logo/CNPJ/endereco/cor via env vars + CSS theming) -- v2.3 (fase 36)
+- checkmark Gerenciamento de layout do PDF pela interface (upload/preview/ativacao em runtime, render seguro) -- v2.3 (fase 999.1)
+
+### Validated in v2.4 (Defaults Inteligentes no Cadastro de Produto)
+
+- checkmark DEFD-01..04: Descoberta dinamica da moda dos campos a partir dos produtos ativos do Athos (motor read-only com cache 24h + fallback seguro) -- v2.4 (fase 37)
+- checkmark DOPR-01/02: Defaults operacionais aplicados na criacao (produto nasce ativo/vendavel; controlaestoque/baixarestoque=true, estoqueloja=10) -- v2.4 (fase 38)
+- checkmark DFIS-01/02/03: Defaults fiscais (ICMS/CSOSN/origem/tributacao/tipoitem/pis/cofins/cfop/ncm) aplicados por moda quando nao informados; fiscal sem moda e omitido -- v2.4 (fase 38)
+- checkmark OVRD-01/02/03: Override do operador sempre prevalece (deteccao `== null`, prova de coincidencia); edicao nunca aplica defaults (D-11) -- v2.4 (fase 38)
+- checkmark Fallback seguro quando nao ha dados para a moda (estoque=false no motor; fiscal omitido) sem quebrar o insert -- v2.4 (fases 37/38)
+- checkmark OBSV-01: Log de defaults aplicados por cadastro (campo->valor; "nenhum default necessario") -- v2.4 (fase 38)
+
 ### Out of Scope
 
+- Frontend/tela de cadastro de produto (v2.4 e API-only, como v2.2)
+- Escrita em qualquer tabela do Athos alem de `produto`
 - Reintroduzir n8n para roteamento de pagamentos
 - Recalculo retroativo de NFS-e ja emitida
 - Refactor completo de dominio de orcamentos
@@ -90,7 +168,9 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferido
 - Operacao: Solucao deve funcionar com docker compose pull/up sem passos manuais ocultos
 - Seguranca: Sem segredos em codigo
 - Integracao: Fluxo deve ficar 100% no backend desta aplicacao (sem n8n)
-- Athos: Somente leitura — nunca gravar no banco Athos
+- Athos: Read-only por padrao — EXCECAO controlada (v2.2): escrita permitida APENAS na tabela `produto` (insert/update). Todo o resto do Athos permanece somente leitura
+- Produto: Nunca apagar fisicamente (sem DELETE) — "remover" = desativar via statusproduto/vendeproduto = false
+- Produto: Escrita deve respeitar trigger tg_alterarproduto, rules atualizardatahora* e FKs/constraints existentes
 
 ## Key Decisions
 
@@ -102,10 +182,17 @@ Tech debt carregado: testes de integração com API live IIBR (Fase 30, deferido
 | clienteAthosId com prioridade na resolucao do tomador | Previsibilidade de emissao | checkmark Validado -- v1.8 |
 | NFS-e emitidas registradas no banco proprio (nao Athos) | Athos e read-only; historico proprio evita dependencia | Em validacao -- v2.1 |
 | Boleto consolidado (multiplos titulos) em vez de por titulo | Reduz numero de boletos e simplifica cobranca | Em validacao -- v2.1 |
+| Liberar escrita no Athos APENAS na tabela `produto` (excecao a regra read-only) | Necessidade de cadastrar/editar produtos pelo sistema sem trocar de ferramenta | checkmark Validado -- v2.2 (fase 33) |
+| Soft-delete de produto (statusproduto/vendeproduto=false), nunca DELETE fisico | Preservar integridade referencial (venda_item etc.) e historico | checkmark Validado -- v2.2 (fase 33) |
+| White-label via env vars EMPRESA_* (nao tabela empresa_config no banco) | Modelo single-deploy-por-empresa; mais simples que painel admin + DB | checkmark Validado -- v2.3 |
+| Templates PDF gerenciados em runtime pela UI (upload/preview/ativacao) com render endurecido | Trocar layout sem editar codigo/reiniciar; upload arbitrario exige anti-SSRF + sanitizacao | checkmark Validado -- v2.3 (fase 999.1) |
+| Painel admin protegido por API key server-side + senha (fail-open sem env vars) | Deploy interno; ⚠ exige definir env vars antes do deploy (CR-01) | Em validacao -- v2.3 |
+| Defaults de produto = moda do catalogo (fiscais) + valores fixos operacionais (status/vende/estoque) | Fiscais refletem o catalogo real (Simples Nacional/CSOSN); operacionais sao regra de negocio fixa | checkmark Validado -- v2.4 (fases 37/38) |
+| Override do operador detectado por `== null` (undefined OU null) | Preserva valores falsy validos (false/0/"") enviados pelo operador; default so preenche omissoes | checkmark Validado -- v2.4 (fase 38) |
 
 ## Evolution
 
 Este documento evolui a cada transicao de fase e fechamento de milestone.
 
 ---
-*Last updated: 2026-05-22 after v2.0 — v2.1 started*
+*Last updated: 2026-06-29 — milestone v2.5 (API de Produtos Compostos/Kits no Athos) iniciado; definindo requisitos.*

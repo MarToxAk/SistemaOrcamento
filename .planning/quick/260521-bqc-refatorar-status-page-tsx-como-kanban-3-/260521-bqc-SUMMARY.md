@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick
 plan: 260521-bqc
 subsystem: frontend/status
