@@ -133,6 +133,10 @@
     environment:
       BACKEND_URL: ${BACKEND_URL}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      # Necessária para as rotas /api/athos/* do frontend assinarem o header
+      # x-api-token. Sem ela, o backend responde 401 "Token invalido ou ausente"
+      # (ex.: busca de cliente no orçamento, contas a receber, notas fiscais).
+      ATHOS_API_TOKEN: ${ATHOS_API_TOKEN}
       # Painel admin de templates PDF (/configuracoes/templates) — server-side only.
       # Sem estas, o painel sobe fail-open (sem senha) e envia x-admin-api-key vazio (401 no backend).
       ADMIN_API_KEY: ${ADMIN_API_KEY}

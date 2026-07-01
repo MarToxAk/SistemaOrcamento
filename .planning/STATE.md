@@ -2,25 +2,24 @@
 gsd_state_version: 1.0
 milestone: v2.5
 milestone_name: — API de Produtos Compostos
-current_phase: 39
+current_phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
 current_phase_name: scaffold-leitura-e-spikes-de-introspec-o
-status: executing
+status: "Phase 40 shipped — PR #46 (branch limpa feat/v2.5-produto-composto-pr)"
 stopped_at: Phase 39 context gathered
-last_updated: "2026-06-30T12:04:46.651Z"
+last_updated: "2026-06-30T21:11:39.415Z"
 last_activity: 2026-06-30
-last_activity_desc: Phase 39 execution started
 progress:
   total_phases: 2
-  completed_phases: 0
-  total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 5
+  percent: 100
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-06-29 — Roadmap v2.5 definido (API de Produtos Compostos / Kits no Athos)
-Current phase: 39
+Current phase: 999.1 — Gerenciamento de layout do PDF de orçamento pela interface (COMPLETE — 2026-06-23, shipped com v2.3)
 Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
@@ -28,9 +27,9 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 ## Current Position
 
 Phase: 39 (scaffold-leitura-e-spikes-de-introspec-o) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 39
-Last activity: 2026-06-30 — Phase 39 execution started
+Plan: Not started
+Status: Phase 40 shipped — PR #46 (branch limpa feat/v2.5-produto-composto-pr)
+Last activity: 2026-06-30
 
 Progress: [░░░░░░░░░░] 0% (0/2 phases complete)
 
@@ -271,10 +270,12 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 999.1 P06 | ~45min | 2 tasks | 12 files |
 | Phase 37 P01 | 378 | 3 tasks | 5 files |
 | Phase 38 P01 | 7min | 3 tasks | 3 files |
+| Phase 40 P01 | 6min | 3 tasks | 4 files |
+| Phase 40 P02 | 5min | 3 tasks | 4 files |
 
 ## Session
 
-**Last session:** 2026-06-29T15:46:28.138Z
+**Last session:** 2026-06-30T20:49:42.018Z
 **Stopped at:** Phase 39 context gathered
 **Resume file:** .planning/phases/39-scaffold-leitura-e-spikes-de-introspec-o/39-CONTEXT.md
 
@@ -296,3 +297,5 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase ?]: [Phase 999.1]: adminBackendFetch injeta x-admin-api-key apenas server-side — segredo nunca chega ao browser (T-999.1-18)
 - [Phase ?]: [Phase 999.1]: gate de senha opcional em /configuracoes/* (Rule 4) — cookie httpOnly HMAC; falha fechada sem CONFIG_PANEL_PASSWORD (preserva D-03)
 - [Phase ?]: [Phase 999.1]: preview por templateId no backend (Rule 2) — galeria nao tinha como pre-visualizar template salvo sem o source
+- [Phase ?]: mapPgWriteError (helper privado): re-throw HttpException + switch err.code 42501/22003/23503/23505/23514
+- [Phase ?]: INSERT produto_composto: colunas literais fixas + PK serial via RETURNING (nunca MAX+1) — T-40-01 anti-injection, decisao 2026-06-30

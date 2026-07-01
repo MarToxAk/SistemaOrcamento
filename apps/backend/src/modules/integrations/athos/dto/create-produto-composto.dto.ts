@@ -8,15 +8,10 @@ export class CreateProdutoCompostoDto {
   @Type(() => Number)
   idprodutodetail!: number;
 
-  // SCAFFOLD — decorators finais pendentes do spike (a) / Fase 40.
-  // O spike (a) determina o tipo-base do DOMAIN 'quantidade' (integer vs numeric) e
-  // a clausula CHECK (floor do valor). Apos o usuario colar os resultados do spike,
-  // a Fase 40 vai:
-  //   - Se base_type = integer: substituir @IsNumber() por @IsInt() e ajustar @Min()
-  //     para o floor definido pelo CHECK (ex.: @Min(1) se CHECK VALUE > 0).
-  //   - Se base_type = numeric/decimal: manter @IsNumber() e ajustar @Min() conforme o CHECK.
-  // Default seguro atual: @IsNumber() + @Min(0.001) (D-01/RESEARCH §"DTO Scaffolds").
-  @ApiProperty({ example: 2, description: "Quantidade do componente no kit" })
+  // Spike (a) confirmou: DOMAIN 'quantidade' = numeric(9,3) SEM clausula CHECK.
+  // @IsNumber() + @Min(0.001) e o floor seguro (nao ha CHECK de dominio).
+  // Valores > 999999.999 ou com mais de 3 casas decimais dao pg error 22003 (overflow numeric).
+  @ApiProperty({ example: 2, description: "Quantidade do componente no kit (numeric 9,3; min 0.001)" })
   @IsNumber()
   @Min(0.001)
   @Type(() => Number)
