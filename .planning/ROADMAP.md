@@ -16,8 +16,83 @@
 - ✅ **v2.2 Gestão de Produtos do Athos (API)** — Fases 32-33 (shipped 2026-06-17) — Phase 34 descartada (decisão: API-only)
 - ✅ **v2.3 White-Label Multi-Empresa** — Fases 35-36 + 999.1 (shipped 2026-06-23)
 - ✅ **v2.4 Defaults Inteligentes no Cadastro de Produto** — Fases 37-38 (shipped 2026-06-28)
+- 🔄 **v2.5 API de Produtos Compostos (Kits)** — Fases 39-40 (em andamento)
 
 Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-ROADMAP.md`.
+
+---
+
+## v2.5 — API de Produtos Compostos (Kits) no Athos
+
+**Goal:** Montar e gerenciar produtos compostos (kits) no Athos via API REST — um produto master composto de N produtos detail com quantidade — no mesmo padrão backend-only das APIs de produto (v2.2/v2.4). CRUD completo de composição com validação de integridade, gerenciamento automático do flag usaprodutocomposto e escrita controlada na tabela produto_composto (nova exceção à regra read-only do Athos).
+
+**External prerequisite (gate before Phase 40 verification):**
+> ⚠️ GRANT INSERT, UPDATE, DELETE ON TABLE produto_composto TO <usuario_api> + GRANT USAGE, SELECT ON SEQUENCE produto_composto_idprodutocomposto_seq — deve ser executado por DBA no banco Athos antes que qualquer endpoint de escrita possa ser verificado. Sem este GRANT toda operação de escrita falha em runtime com pg error 42501.
+
+### Phases
+
+- [x] **Phase 39: Scaffold, Leitura e Spikes de Introspecão** - Spikes de introspecção no DB de referência (192.168.3.198), extração de validarFkExiste para util reutilizável, e endpoint GET de listagem enriquecida de componentes — tudo que não depende do write GRANT (completed 2026-06-30)
+- [ ] **Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)** - Quatro endpoints de escrita com validação dual de FK, gerenciamento transacional do flag, PK serial via RETURNING e mapeamento completo de erros Postgres; cobertura de testes Jest
+
+### Phase Details
+
+### Phase 39: Scaffold, Leitura e Spikes de Introspecão
+
+**Goal:** Os fundamentos do módulo estão provados e o endpoint de leitura está funcionando antes de qualquer dependência do write GRANT — spikes de introspecção resolvem todas as incógnitas do DB (domínio quantidade, UNIQUE constraint, triggers), o util validarFkExiste está extraído, e o operador pode listar componentes de um kit enriquecidos com dados do produto detail.
+
+**Depends on:** Nothing — requer apenas o SELECT GRANT já existente no Athos
+
+**Requirements:** COMP-07, COMP-08, COMP-01
+
+**Research flag:** NEEDS RESEARCH-PHASE — os 3 spikes (COMP-07) requerem acesso live ao DB de referência 192.168.3.198; não podem ser respondidos pelo codebase.
+
+**Success Criteria** (what must be TRUE):
+
+  1. GET /athos/produtos/:idprodutomaster/composicao retorna lista de componentes enriquecida com descricaoproduto e statusproduto do produto detail via JOIN (não N+1)
+  2. GET retorna array vazio (sem erro) quando o master existe mas não tem componentes cadastrados em produto_composto
+  3. GET retorna 404 quando idprodutomaster não existe no catálogo de produtos
+  4. Os 3 spikes de introspecção no DB de referência (192.168.3.198) estão concluídos e documentados no plano de fase: (a) tipo-base e cláusula CHECK do domínio quantidade, (b) existência de constraint UNIQUE em (idprodutomaster, idprodutodetail), (c) inventário completo de triggers/rules em produto_composto
+  5. validarFkExiste extraído para athos-fk.util.ts e AthosProdutoService importa do util sem mudança de comportamento — testes existentes do serviço de produto continuam passando sem alteração
+
+**Plans:** 3/3 plans complete
+
+Plans:
+
+- [x] 39-01-PLAN.md — COMP-07: 3 spikes de introspecção no DB de referência (192.168.3.198), entrega manual (usuário cola resultados) (Wave 1)
+- [x] 39-02-PLAN.md — COMP-08: extrair validarFkExiste para athos-fk.util.ts + teste do util; re-wirear AthosProdutoService sem mudança de comportamento (Wave 1)
+- [x] 39-03-PLAN.md — COMP-01: GET /athos/produtos/:idprodutomaster/composicao (lista enriquecida via LEFT JOIN) + service/controller/DTOs scaffold + registro no AthosModule (Wave 2)
+
+---
+
+### Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)
+
+**Goal:** Operador pode criar, editar quantidade e remover componentes de um kit com garantias de integridade — validação dual de FK, auto-gerenciamento transacional do flag usaprodutocomposto no primeiro add e último remove, PK gerada pelo banco via RETURNING, e todos os erros do Postgres mapeados para respostas HTTP acionáveis.
+
+**Depends on:** Phase 39
+
+**External gate (before verification):**
+> ⚠️ GRANT INSERT, UPDATE, DELETE ON TABLE produto_composto + GRANT USAGE, SELECT ON SEQUENCE produto_composto_idprodutocomposto_seq devem estar confirmados no banco Athos antes de iniciar a verificação desta fase. Todo endpoint de escrita retorna 500 sem este GRANT.
+
+**Requirements:** COMP-02, COMP-03, COMP-04, COMP-05, COMP-06
+
+**Success Criteria** (what must be TRUE):
+
+  1. Operador pode adicionar um componente via POST e a resposta retorna idprodutocomposto gerado pelo banco (serial via RETURNING — nunca MAX+1); rejeita auto-referência (master == detail), par duplicado e detail com statusproduto = false com os HTTP codes corretos (422/409)
+  2. Ao adicionar o primeiro componente de um kit, usaprodutocomposto do produto master é automaticamente definido como true dentro da mesma transação BEGIN/COMMIT do INSERT em produto_composto
+  3. Operador pode atualizar a quantidade de um componente via PATCH; recebe 404 quando o par (idprodutomaster, idprodutodetail) não existe; quantidade inválida (viola domínio) retorna 422
+  4. Operador pode remover um componente via DELETE físico; ao remover o último componente, usaprodutocomposto do master é automaticamente definido como false dentro da mesma transação — DELETE físico é correto aqui (produto_composto é tabela de composição, distinta da regra de soft-delete de produto)
+  5. Erros Postgres mapeados corretamente para HTTP: 42501 → 500 com mensagem acionável apontando o GRANT ausente; 23505 → 409 (par duplicado); 23514 → 422 (violação de domínio); 23503 → 422 (FK); master/detail inexistente → 422; testes Jest unitários cobrem todos esses cenários incluindo validarFkExiste chamado para ambos master e detail
+
+**Plans:** TBD
+
+---
+
+### Progress
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 39. Scaffold, Leitura e Spikes | 3/3 | Complete   | 2026-06-30 |
+| 40. Write CRUD | 0/TBD | Not started | - |
 
 ---
 
@@ -45,9 +120,9 @@ Plans:
 
 ## Estado atual
 
-**Milestone v2.4 (Defaults Inteligentes no Cadastro de Produto) concluído e arquivado em 2026-06-28** (Fases 37-38; auditoria: passed). Detalhes em `.planning/milestones/v2.4-ROADMAP.md`.
+**Milestone v2.5 (API de Produtos Compostos / Kits) em andamento.** Roadmap definido em 2026-06-29.
 
-Próximo passo: `/gsd-new-milestone`
+Próximo passo: `/gsd-plan-phase 39`
 
 ### Dívida diferida (não bloqueia)
 
