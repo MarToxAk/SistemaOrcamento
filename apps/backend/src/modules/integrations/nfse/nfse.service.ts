@@ -54,7 +54,8 @@ const SERVICOS: Record<string, { itemLista: string; codigoNacional: string; aliq
 const DEFAULT_SERVICO = "24.01";
 const CBS_RATE  = 0.009;  // 0.9%
 const IBS_RATE  = 0.001;  // 0.1%
-const NBS_DEFAULT = "1.2101.22.00";
+// E352 da prefeitura exige NBS com 9 caracteres (sem pontuacao): 1.2101.22.00 -> 121012200
+const NBS_DEFAULT = "121012200";
 
 @Injectable()
 export class NfseService {
@@ -1095,7 +1096,7 @@ ${infXml}
             <ResponsavelRetencao>1</ResponsavelRetencao>
             <ItemListaServico>24.01</ItemListaServico>
             <CodigoTributacaoNacional>240101</CodigoTributacaoNacional>
-            <CodigoNbs>1.2101.22.00</CodigoNbs>
+            <CodigoNbs>121012200</CodigoNbs>
             <Discriminacao>TESTE EMISSAO NFS-E</Discriminacao>
             <CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
         </Servico>

@@ -203,7 +203,7 @@ describe("NfseService - resolucao de tomador por clienteAthosId", () => {
     expect(xmlSent).toContain("<DescontoIncondicionado>10.00</DescontoIncondicionado>");
   });
 
-  it("emissão inclui CodigoNbs padrão 1.2101.22.00 no XML do Servico", async () => {
+  it("emissão inclui CodigoNbs padrão 121012200 (9 caracteres, sem pontos) no XML do Servico", async () => {
     const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValueOnce(CLIENTE_PJ) });
     const service = await buildService(mocks);
 
@@ -217,7 +217,7 @@ describe("NfseService - resolucao de tomador por clienteAthosId", () => {
     await service.emitir("q1", { clienteAthosId: 100, servicoCodigo: "24.01" });
 
     const xmlSent: string = (soapSpy.mock.calls[0] as string[])[1];
-    expect(xmlSent).toContain("<CodigoNbs>1.2101.22.00</CodigoNbs>");
+    expect(xmlSent).toContain("<CodigoNbs>121012200</CodigoNbs>");
   });
 
 });
