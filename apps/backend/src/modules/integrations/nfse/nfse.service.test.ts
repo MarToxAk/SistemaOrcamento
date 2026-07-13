@@ -203,6 +203,23 @@ describe("NfseService - resolucao de tomador por clienteAthosId", () => {
     expect(xmlSent).toContain("<DescontoIncondicionado>10.00</DescontoIncondicionado>");
   });
 
+  it("emissão inclui CodigoNbs padrão 121012200 (9 caracteres, sem pontos) no XML do Servico", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValueOnce(CLIENTE_PJ) });
+    const service = await buildService(mocks);
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(
+        `<GerarNfseResposta><Nfse><InfNfse><NumeroNfse>1004</NumeroNfse><CodigoVerificacao>XYZ</CodigoVerificacao></InfNfse></Nfse></GerarNfseResposta>`,
+      );
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    await service.emitir("q1", { clienteAthosId: 100, servicoCodigo: "24.01" });
+
+    const xmlSent: string = (soapSpy.mock.calls[0] as string[])[1];
+    expect(xmlSent).toContain("<CodigoNbs>121012200</CodigoNbs>");
+  });
+
 });
 
 describe("NfseService - getter CODIGO_MUNICIPIO (NFSE-01)", () => {
