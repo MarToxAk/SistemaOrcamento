@@ -30,6 +30,8 @@ export interface EmitirNfseInput {
   totalPago?: number;
   /** ID do cliente Athos selecionado explicitamente; quando informado substitui o lookup via orcamento (TOMAD-01) */
   clienteAthosId?: number;
+  /** Codigo NBS (Nomenclatura Brasileira de Servicos); sem override usa o default NBS_DEFAULT */
+  codigoNbs?: string;
 }
 
 type TomadorEndereco = {
@@ -52,6 +54,7 @@ const SERVICOS: Record<string, { itemLista: string; codigoNacional: string; aliq
 const DEFAULT_SERVICO = "24.01";
 const CBS_RATE  = 0.009;  // 0.9%
 const IBS_RATE  = 0.001;  // 0.1%
+const NBS_DEFAULT = "1.2101.22.00";
 
 @Injectable()
 export class NfseService {
@@ -135,6 +138,7 @@ export class NfseService {
     discriminacao: string;
     itemLista: string;
     codigoNacional: string;
+    codigoNbs: string;
     aliquotaIss: string;
     tomadorCpf?: string | null;
     tomadorCnpj?: string | null;
@@ -222,6 +226,7 @@ export class NfseService {
 \t\t\t\t<ResponsavelRetencao>1</ResponsavelRetencao>
 \t\t\t\t<ItemListaServico>${input.itemLista}</ItemListaServico>
 \t\t\t\t<CodigoTributacaoNacional>${input.codigoNacional}</CodigoTributacaoNacional>
+\t\t\t\t<CodigoNbs>${input.codigoNbs}</CodigoNbs>
 \t\t\t\t<Discriminacao>${this.escapeXml(input.discriminacao.replace(/[#:()\[\]{}]/g, " ").replace(/\s+/g, " ").trim()).slice(0, 2000)}</Discriminacao>
 \t\t\t\t<CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
 \t\t\t</Servico>
@@ -666,6 +671,7 @@ export class NfseService {
       discriminacao,
       itemLista:       servico.itemLista,
       codigoNacional:  input?.codigoTributacaoNacional ?? servico.codigoNacional,
+      codigoNbs:       input?.codigoNbs ?? NBS_DEFAULT,
       aliquotaIss:     servico.aliquotaIss,
       tomadorCnpj,
       tomadorCpf,
@@ -903,6 +909,7 @@ export class NfseService {
       discriminacao,
       itemLista: servico.itemLista,
       codigoNacional: servico.codigoNacional,
+      codigoNbs: NBS_DEFAULT,
       aliquotaIss: servico.aliquotaIss,
       tomadorCnpj,
       tomadorCpf,
@@ -1088,6 +1095,7 @@ ${infXml}
             <ResponsavelRetencao>1</ResponsavelRetencao>
             <ItemListaServico>24.01</ItemListaServico>
             <CodigoTributacaoNacional>240101</CodigoTributacaoNacional>
+            <CodigoNbs>1.2101.22.00</CodigoNbs>
             <Discriminacao>TESTE EMISSAO NFS-E</Discriminacao>
             <CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
         </Servico>
