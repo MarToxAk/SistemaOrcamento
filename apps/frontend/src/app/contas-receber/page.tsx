@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Script from "next/script";
 import { useEmpresa } from "@/lib/empresa";
+import PasswordGate from "@/components/password-gate";
 
 interface DashboardSummary {
   total_a_receber: number;
@@ -52,6 +53,14 @@ const STATUS_OPTIONS: { value: StatusFiltro; label: string; cls: string }[] = [
 ];
 
 export default function ContasReceberPage() {
+  return (
+    <PasswordGate title="Contas a Receber" description="Esta area exibe dados financeiros de clientes. Digite a senha de configuracoes para continuar.">
+      <ContasReceberDashboard />
+    </PasswordGate>
+  );
+}
+
+function ContasReceberDashboard() {
   const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [clientes, setClientes] = useState<ClienteDevedor[]>([]);
