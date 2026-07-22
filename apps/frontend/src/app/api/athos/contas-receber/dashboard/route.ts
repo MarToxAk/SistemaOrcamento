@@ -1,8 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { backendFetch } from "@/lib/backend-client";
+import { requireAdminSession } from "@/lib/admin-session";
 
 export async function GET(req: NextRequest) {
+  if (!requireAdminSession(req)) {
+    return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
+  }
+
   const athosToken = process.env.INTERNAL_API_KEY ?? "";
   const extraHeaders: Record<string, string> = athosToken
     ? { "x-api-token": athosToken }
