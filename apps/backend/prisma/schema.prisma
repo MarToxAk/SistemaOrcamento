@@ -92,6 +92,7 @@ model Quote {
   firstInstallmentAmount Decimal?          @db.Decimal(12, 2)
   secondInstallmentAmount Decimal?         @db.Decimal(12, 2)
   secondInstallmentExternalId String?      @unique
+  cardChargeId       String?               @unique
   paymentConfirmedAt DateTime?
   paymentFailedAt    DateTime?
   paymentFailureReason String?

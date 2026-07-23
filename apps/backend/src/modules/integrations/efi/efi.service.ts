@@ -322,7 +322,7 @@ export class EfiService implements OnModuleInit {
     const valorCentavos = Math.round(Number(input.amount.toFixed(2)) * 100);
     const expireAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const webhookUrl = this.getPixWebhookUrl();
+    const webhookUrl = this.getCardWebhookUrl();
     const isPublicUrl = !/localhost|127\.0\.0\.1/.test(webhookUrl);
 
     const body: Record<string, unknown> = {
@@ -487,6 +487,12 @@ export class EfiService implements OnModuleInit {
     const base = this.config.get<string>("BACKEND_URL") ?? this.config.get<string>("APP_BASE_URL") ?? "http://localhost:4000/api";
     const baseNoTrailing = base.replace(/\/$/, "");
     return `${baseNoTrailing}/integrations/efi/webhook/payment/pix`;
+  }
+
+  private getCardWebhookUrl(): string {
+    const base = this.config.get<string>("BACKEND_URL") ?? this.config.get<string>("APP_BASE_URL") ?? "http://localhost:4000/api";
+    const baseNoTrailing = base.replace(/\/$/, "");
+    return `${baseNoTrailing}/integrations/efi/webhook/payment/card`;
   }
 
   /**
@@ -712,6 +718,165 @@ export class EfiService implements OnModuleInit {
       notFound: results.filter((r) => r.status === "quote_not_found").length,
       results,
     };
+  }
+
+  /**
+   * Processa a notificacao de pagamento por cartao de credito (API Cobrancas EFI).
+   * Segue o mesmo padrao de troca de token ja usado por CobrancaService.processarNotificacaoEFI():
+   * a notificacao carrega apenas um token opaco, que precisa ser trocado por charge_id+status
+   * via Basic Auth (sem mTLS). Nunca lanca excecao — o controller sempre retorna 200 para a EFI.
+   */
+  async processCardWebhook(token: string): Promise<void> {
+    if (!token) {
+      this.logger.warn("Webhook EFI (cartao) recebido sem token — ignorando.");
+      return;
+    }
+
+    const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
+    const clientId = this.getRequiredConfig("EFI_CLIENT_ID");
+    const clientSecret = this.getRequiredConfig("EFI_CLIENT_SECRET");
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+
+    const cobrancaClient = axios.create({ baseURL: baseUrl, timeout: 15_000 });
+
+    let efiToken: string;
+    try {
+      const authResp = await cobrancaClient.post(
+        "/v1/authorize",
+        { grant_type: "client_credentials" },
+        { headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" } },
+      );
+      efiToken = authResp.data?.access_token as string;
+      if (!efiToken) throw new Error("Token nao retornado");
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: unknown }; message?: string })?.response?.data ??
+        (e as { message?: string })?.message;
+      this.logger.error(`Webhook EFI (cartao): falha ao autenticar para consultar notificacao: ${JSON.stringify(detail)}`);
+      return;
+    }
+
+    let chargeId: number;
+    let status: string;
+    try {
+      const resp = await cobrancaClient.get(`/v1/notification/${token}`, {
+        headers: { Authorization: `Bearer ${efiToken}` },
+      });
+      chargeId = resp.data?.data?.charge?.charge_id as number;
+      status = resp.data?.data?.charge?.status as string;
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: unknown }; message?: string })?.response?.data ??
+        (e as { message?: string })?.message;
+      this.logger.error(`Webhook EFI (cartao): falha ao consultar notificacao token=${token}: ${JSON.stringify(detail)}`);
+      return;
+    }
+
+    if (!chargeId) {
+      this.logger.warn(`Webhook EFI (cartao): charge_id nao encontrado na notificacao token=${token}`);
+      return;
+    }
+
+    const quote = await this.prisma.quote.findFirst({
+      where: { cardChargeId: String(chargeId) },
+    });
+
+    if (!quote) {
+      this.logger.warn(`Webhook EFI (cartao): Quote nao encontrada para chargeId=${chargeId}`);
+      return;
+    }
+
+    if (status !== "paid") {
+      this.logger.log(`Webhook EFI (cartao): notificacao recebida com status='${status}' para chargeId=${chargeId} — sem acao.`);
+      return;
+    }
+
+    // Idempotencia (a): pagamento ja confirmado anteriormente
+    if (quote.paymentConfirmedAt) {
+      this.logger.log(`Webhook EFI (cartao): quote ${quote.id} ja possui paymentConfirmedAt — ignorando reenvio (idempotencia).`);
+      return;
+    }
+
+    // Idempotencia (b): ja existe PaymentTransaction para este chargeId
+    const existingTransaction = await this.prisma.paymentTransaction.findFirst({
+      where: { externalId: String(chargeId) },
+    });
+    if (existingTransaction) {
+      this.logger.log(`Webhook EFI (cartao): PaymentTransaction ja existe para chargeId=${chargeId} — ignorando reenvio (idempotencia).`);
+      return;
+    }
+
+    const quoteTotal = this.toMoney(quote.total);
+    const currentPaid = this.toMoney(quote.paidTotal);
+    const paymentAmount = Math.max(quoteTotal - currentPaid, 0);
+    const nextPaid = Number(Math.min(quoteTotal, currentPaid + paymentAmount).toFixed(2));
+    const pending = Number(Math.max(quoteTotal - nextPaid, 0).toFixed(2));
+    const fullyPaid = pending <= 0;
+    const nextStatus = this.resolveNextQuoteStatus(quote.status, fullyPaid);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const transaction = await tx.paymentTransaction.create({
+        data: {
+          quoteId: quote.id,
+          externalId: String(chargeId),
+          eventId: `card-${chargeId}`,
+          source: "EFI",
+          method: "CARD",
+          status: fullyPaid ? "PAID" : "PARTIAL",
+          amount: paymentAmount.toFixed(2),
+          metadata: { chargeId, token },
+          webhookPayload: { chargeId, status } as any,
+        },
+      });
+
+      const quoteUpdate = await tx.quote.update({
+        where: { id: quote.id },
+        data: {
+          paymentSource: "EFI",
+          paymentMethod: "CARD",
+          paidTotal: nextPaid.toFixed(2),
+          pendingTotal: pending.toFixed(2),
+          paymentConfirmedAt: fullyPaid ? new Date() : quote.paymentConfirmedAt,
+          status: nextStatus,
+          updatedAt: new Date(),
+        },
+      });
+
+      if (nextStatus !== quote.status) {
+        await tx.quoteStatusHistory.create({
+          data: {
+            quoteId: quote.id,
+            oldStatus: quote.status,
+            newStatus: nextStatus,
+            changedByName: "Webhook EFI (cartao)",
+          },
+        });
+      }
+
+      return { transaction, quoteUpdate };
+    });
+
+    // Envio de mensagem automatica ao cliente via Chatwoot com dados do orcamento
+    try {
+      const mapped = await this.quotesService.getById(quote.id);
+      const body = mapped.body ?? ({} as any);
+      const convId = (mapped.chatwootConversationUrl || body.conversationId)
+        ? String(body.conversationId ?? (mapped.body as any)?.conversationId ?? (quote as any).conversationId)
+        : (quote as any).conversationId?.toString?.();
+
+      if (convId) {
+        const clienteNome = (body.cliente as any)?.nome ?? (quote as any).customer?.fullName ?? "Cliente";
+        const numero = (body as any).idorcamento ?? (body as any).idorcamento_interno ?? (quote as any).internalNumber ?? "-";
+        const total = Number((body as any).totais?.valor ?? (quote as any).total ?? 0);
+        const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+        const mensagem = `✅ Pagamento com cartão de crédito recebido, ${clienteNome}!\n\nOrçamento #${numero} — ${fmt(total)}\nComprovante gerado. Pedido confirmado! 😊`;
+
+        await this.chatwootService.sendOutgoingMessage(convId, mensagem);
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao notificar cliente via Chatwoot apos pagamento com cartao: ${err instanceof Error ? err.message : err}`);
+    }
+
+    this.logger.log(`Webhook EFI (cartao): pagamento processado para quote ${quote.id} (chargeId=${chargeId}, status=${updated.quoteUpdate.status}).`);
   }
 
 }
