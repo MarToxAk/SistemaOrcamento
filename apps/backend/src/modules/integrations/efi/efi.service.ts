@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, InternalServerErrorException, Logger, Inject, forwardRef } from "@nestjs/common";
+﻿import { BadRequestException, Injectable, InternalServerErrorException, Logger, Inject, forwardRef, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { QuoteStatus } from "@prisma/client";
 import axios, { AxiosInstance } from "axios";
@@ -11,7 +11,7 @@ import { QuotesService } from "../../quotes/quotes.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
 
 @Injectable()
-export class EfiService {
+export class EfiService implements OnModuleInit {
   private readonly logger = new Logger(EfiService.name);
   private tokenCache: { accessToken: string; expiresAt: number } | null = null;
 
@@ -322,7 +322,7 @@ export class EfiService {
     const valorCentavos = Math.round(Number(input.amount.toFixed(2)) * 100);
     const expireAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const webhookUrl = this.getWebhookUrl();
+    const webhookUrl = this.getPixWebhookUrl();
     const isPublicUrl = !/localhost|127\.0\.0\.1/.test(webhookUrl);
 
     const body: Record<string, unknown> = {
@@ -483,10 +483,70 @@ export class EfiService {
     };
   }
 
-  private getWebhookUrl(): string {
+  private getPixWebhookUrl(): string {
     const base = this.config.get<string>("BACKEND_URL") ?? this.config.get<string>("APP_BASE_URL") ?? "http://localhost:4000/api";
     const baseNoTrailing = base.replace(/\/$/, "");
     return `${baseNoTrailing}/integrations/efi/webhook/payment/pix`;
+  }
+
+  /**
+   * Registra automaticamente a URL do webhook PIX na EFI (PUT /v2/webhook/{chave}).
+   * Nunca lanca excecao — nao-bloqueante, o boot da aplicacao nao pode falhar por causa disto.
+   */
+  async registerPixWebhook(): Promise<{ registered: boolean; reason: string }> {
+    const credentials = this.loadPemCredentials();
+    if (!credentials) {
+      return { registered: false, reason: "missing_credentials" };
+    }
+
+    const pixKey = this.config.get<string>("EFI_PIX_KEY")?.trim();
+    if (!pixKey) {
+      return { registered: false, reason: "missing_pix_key" };
+    }
+
+    const clientId = this.config.get<string>("EFI_CLIENT_ID")?.trim();
+    const clientSecret = this.config.get<string>("EFI_CLIENT_SECRET")?.trim();
+    if (!clientId || !clientSecret) {
+      return { registered: false, reason: "missing_oauth_credentials" };
+    }
+
+    const webhookUrl = this.getPixWebhookUrl();
+    const isPublicUrl = !/localhost|127\.0\.0\.1/.test(webhookUrl);
+    if (!isPublicUrl) {
+      return { registered: false, reason: "non_public_url" };
+    }
+
+    try {
+      const client = this.getHttpClient();
+      const token = await this.getAccessToken(client);
+
+      await client.put(
+        `/v2/webhook/${pixKey}`,
+        { webhookUrl },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      this.logger.log(`Webhook PIX registrado automaticamente na EFI: ${webhookUrl}`);
+      return { registered: true, reason: "ok" };
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const detail = error?.response?.data ?? error?.message;
+      this.logger.error(`Falha ao registrar webhook PIX na EFI. status=${status ?? "n/a"} detalhe=${JSON.stringify(detail)}`);
+      return { registered: false, reason: "efi_api_error" };
+    }
+  }
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.registerPixWebhook();
+    } catch (error) {
+      this.logger.error(`Falha inesperada ao registrar webhook PIX no boot: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async processWebhook(payload: unknown, signature?: string) {
