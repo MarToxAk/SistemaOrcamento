@@ -201,6 +201,8 @@ Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 | 260524-qab | NFS-e: badge na tabela de titulos + botao cancelar emissao para re-emissao | 2026-05-24 | e4fcbab | [260524-qab-nfse-cancel-badge-titulos](./quick/260524-qab-nfse-cancel-badge-titulos/) |
 | 260524-qac | NFS-e: cancelamento SOAP CancelarNfse ABRASF 2.04 + cancela todos com mesmo numero | 2026-05-24 | 5189653 | [260524-qac-nfse-soap-cancelar](./quick/260524-qac-nfse-soap-cancelar/) |
 | 260526-kqd | Boleto EFI: itens gerados a partir de venda_item (1 item por produto/servico) seguindo logica NFS-e | 2026-05-26 | 5de96dc | [260526-kqd-arrumar-emissao-boleto-efi-criar-1-item-](./quick/260526-kqd-arrumar-emissao-boleto-efi-criar-1-item-/) |
+| 260722-mqp | Adicionar protecao por senha (PasswordGate reutilizavel) na pagina /contas-receber | 2026-07-22 | c46bb55, 29d660f, cafdcc9 | [260722-mqp-adicionar-protecao-por-senha-na-pagina-c](./quick/260722-mqp-adicionar-protecao-por-senha-na-pagina-c/) |
+| 260723-h65 | Auto-registro do webhook PIX na EFI no boot + correcao do webhook de pagamento por cartao (Quotes) + fix boleto notification_url | 2026-07-23 | 8aaefb1, 707df8b, 052d044, 41b5663 | [260723-h65-autoconfiguracao-dos-webhooks-de-confirm](./quick/260723-h65-autoconfiguracao-dos-webhooks-de-confirm/) |
 
 ---
 
