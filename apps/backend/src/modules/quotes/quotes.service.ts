@@ -1794,6 +1794,7 @@ export class QuotesService {
     let pixPayment: any = null;
     let pix5050: any = null;
     let cardLink: string | null = null;
+    let cardChargeId: number | null = null;
 
     if (paymentOptions) {
       try {
@@ -1823,20 +1824,22 @@ export class QuotesService {
         try {
           const card = await this.efiService.createCardPaymentLink({ quoteIdentifier: String(numero), amount: total, customerName: clienteNome, customerEmail: clienteEmail });
           cardLink = card.paymentUrl;
+          cardChargeId = card.chargeId ?? null;
         } catch (err) {
           this.logger.warn(`Falha ao gerar link de cartao EFI para orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`);
           cardLink = null;
         }
       }
 
-      // Persiste txid(s) no orçamento para que o webhook EFI consiga localizar o pedido
-      if (pixPayment?.txid || pix5050?.txid) {
+      // Persiste txid(s)/chargeId no orçamento para que o webhook EFI consiga localizar o pedido
+      if (pixPayment?.txid || pix5050?.txid || cardChargeId) {
         try {
           await this.prisma.quote.update({
             where: { id: quote.id },
             data: {
               ...(pixPayment?.txid ? { paymentExternalId: String(pixPayment.txid) } : {}),
               ...(pix5050?.txid ? { secondInstallmentExternalId: String(pix5050.txid) } : {}),
+              ...(cardChargeId ? { cardChargeId: String(cardChargeId) } : {}),
               paymentSource: "EFI",
               paymentMethod: "PIX",
             },

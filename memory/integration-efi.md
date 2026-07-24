@@ -15,6 +15,7 @@ originSessionId: 8a62ac3a-fd0b-49ab-ace5-c246d2a1fdd0
 - Recebe webhooks de confirmação de pagamento
 - Atualiza `paidTotal`, `pendingTotal`, `paymentConfirmedAt` na Quote
 - Registra cada transação em `PaymentTransaction`
+- Pagamentos por cartão de crédito de orçamentos (`Quote.cardChargeId`) também são confirmados automaticamente via webhook dedicado (rota própria, payload diferente do PIX)
 
 ## Variáveis de Ambiente
 ```
@@ -31,6 +32,10 @@ EFI_KEY_PEM            — chave privada mTLS (base64)
 - `GET /api/integrations/efi/status` — verifica configuração e conectividade
 - `POST /api/integrations/efi/webhook/payment` — webhook de pagamento genérico
 - `POST /api/integrations/efi/webhook/payment/pix` — webhook específico PIX
+- `POST /api/integrations/efi/webhook/payment/card` — webhook específico de cartão de crédito (API Cobranças, payload `{notification: token}`)
+
+## Auto-registro do webhook PIX no boot
+`EfiService` implementa `OnModuleInit` e chama `registerPixWebhook()` ao subir, registrando a URL do webhook PIX na EFI via `PUT /v2/webhook/{EFI_PIX_KEY}` — não-bloqueante, ignora silenciosamente se faltar configuração (mTLS, `EFI_PIX_KEY`, `EFI_CLIENT_ID`/`EFI_CLIENT_SECRET`) ou em ambiente local (URL não pública).
 
 ## Fluxo de Pagamento
 1. Orçamento aprovado → gera cobrança PIX na EFI

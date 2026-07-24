@@ -87,7 +87,13 @@ export class ProdutoController {
     return this.athosProdutoService.alterarStatusProduto(id, body.ativo);
   }
 
-  @ApiOperation({ summary: "Editar produto no Athos (partial update)" })
+  @ApiOperation({
+    summary: "Editar produto no Athos (partial update)",
+    description:
+      "Partial update real: envie APENAS os campos que devem ser alterados. " +
+      "Campos omitidos NAO sao tocados no banco (nao aplique defaults nem reenvie o produto inteiro). " +
+      "Para desativar/reativar um produto, use o endpoint dedicado PATCH :idproduto/status.",
+  })
   @ApiParam({ name: "idproduto", example: "123" })
   @ApiBody({ type: UpdateProdutoDto })
   @ApiOkResponse({ description: "{ idproduto: number }" })

@@ -161,8 +161,16 @@ export class CobrancaService {
       throw new InternalServerErrorException("Não foi possível autenticar na API Cobranças EFI.");
     }
 
+    // APP_BASE_URL e a variavel efetivamente injetada no container em producao
+    // (docker-compose.vps.yml / stack.env.example). WEBHOOK_BASE_URL/APP_URL nunca
+    // sao definidas no deploy — mantidas como fallback legado, mas sem elas a
+    // notification_url ficava sempre undefined e o boleto nunca era confirmado
+    // automaticamente (dependia de clique manual em "verificar pagamento").
     const webhookBase =
-      process.env["WEBHOOK_BASE_URL"] ?? process.env["APP_URL"] ?? "";
+      this.config.get<string>("APP_BASE_URL") ??
+      process.env["WEBHOOK_BASE_URL"] ??
+      process.env["APP_URL"] ??
+      "";
     const isPublicUrl = webhookBase.length > 0 && !/localhost|127\.0\.0\.1/.test(webhookBase);
     const notificationUrl = isPublicUrl
       ? `${webhookBase.replace(/\/$/, "")}/api/cobranca/boleto/notificacao`
