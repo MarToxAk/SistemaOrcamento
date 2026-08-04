@@ -66,9 +66,19 @@ function computeIntegridade(rpsXml: string, token: string): string {
 | EIBS02 | IBS inválido | Formato `0.10` + tag `<AliquotaIbs>` |
 | EI87/EI88 | Código tributação nacional inválido | Usar 6 dígitos ex: `240101` |
 | EI29 | Prestador não vinculado ao subitem | Usar apenas serviços da tabela acima |
-| E58 | Município não corresponde ao CEP | `CodigoMunicipio` do tomador deve bater com o CEP |
+| E58 | Município não corresponde ao CEP | Fallback automático via ViaCEP: em E288/E58 o backend consulta `https://viacep.com.br/ws/{cep}/json/`, usa o campo `ibge` e re-tenta a emissão uma única vez; `cliente_endereco.codigocidade` do Athos não é confiável |
+| E288 | Código do município do tomador não vinculado à UF informada | Fallback automático via ViaCEP: em E288/E58 o backend consulta `https://viacep.com.br/ws/{cep}/json/`, usa o campo `ibge` e re-tenta a emissão uma única vez; `cliente_endereco.codigocidade` do Athos não é confiável |
 | E90 | Número RPS inválido | Usar `ProximoRPS` da API Auxiliar |
 | HTTP 500 (sem corpo) | TomadorServico sem `<IdentificacaoTomador>` ou omitido | CPF ou CNPJ é obrigatório — sem documento lançar erro 400 ao usuário |
+
+### Fallback de CodigoMunicipio do tomador
+
+- **Gatilho:** resposta da prefeitura com código de erro `E288` ou `E58`, ou mensagem casando `/municí?pio/i` e `/tomador/i` simultaneamente.
+- **Fonte:** ViaCEP público (`https://viacep.com.br/ws/{cep}/json/`), sem autenticação, timeout de 5s. Nunca lança exceção — falha de rede/CEP inválido/`{erro:true}` retorna `null`.
+- **Limite:** apenas UMA re-tentativa, reutilizando o MESMO número de RPS da primeira tentativa (o RPS rejeitado não é consumido pela prefeitura; `getInfoNfse()` não é chamado de novo).
+- **Comportamento em falha:** se o ViaCEP estiver indisponível, o CEP for inválido, o código IBGE devolvido já for o mesmo cadastrado, ou a segunda tentativa também falhar, o erro ORIGINAL da prefeitura (primeira tentativa) é propagado ao usuário como `BadRequestException` — comportamento idêntico ao existente antes do fallback.
+- **Caso de referência:** `idcliente=3485` (DP BARROS), CEP `05516030` → IBGE `3550308` (São Paulo capital); o cadastro no Athos tinha `codigocidade=4121208` (município do Paraná).
+- **Escopo:** implementado no ponto único de envio `enviarRpsComFallbackMunicipio()`, usado por `emitir()` e `emitirParaContaReceber()`. Não altera `computeIntegridade`, alíquotas, tags IBS/CBS/NBS nem a UF enviada (divergência de UF é apenas logada para diagnóstico).
 
 ## Template XML Validado (usar template strings, NÃO xmlbuilder)
 

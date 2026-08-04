@@ -259,3 +259,94 @@ describe("emitir — fallback ViaCEP ponta-a-ponta (E288) e caminho feliz sem Vi
     expect(mockedAxios.get).not.toHaveBeenCalled();
   });
 });
+
+describe("emitirParaContaReceber — matriz de falhas do fallback ViaCEP", () => {
+  it("E58 + ViaCEP rejeitando (timeout): enviarSoap 1x e BadRequestException com a mensagem original", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(CLIENTE_MUNICIPIO_ERRADO) });
+    const service = await buildService(mocks);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue({ proximoRps: 1, serieRps: "RPS" });
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(respostaErro("E58", "Codigo do municipio do tomador nao corresponde ao CEP informado."));
+
+    mockedAxios.get.mockRejectedValueOnce(new Error("ECONNABORTED"));
+
+    const promise = service.emitirParaContaReceber({ clienteAthosId: 3485, valor: 100 });
+    await expect(promise).rejects.toThrow(BadRequestException);
+    await expect(promise).rejects.toThrow(/nao corresponde ao CEP/);
+    expect(soapSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("E58 + ViaCEP respondendo {erro:'true'}: enviarSoap 1x e BadRequestException com a mensagem original", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(CLIENTE_MUNICIPIO_ERRADO) });
+    const service = await buildService(mocks);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue({ proximoRps: 1, serieRps: "RPS" });
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(respostaErro("E58", "Codigo do municipio do tomador nao corresponde ao CEP informado."));
+    mockedAxios.get.mockResolvedValueOnce({ data: { erro: "true" } });
+
+    const promise = service.emitirParaContaReceber({ clienteAthosId: 3485, valor: 100 });
+    await expect(promise).rejects.toThrow(BadRequestException);
+    await expect(promise).rejects.toThrow(/nao corresponde ao CEP/);
+    expect(soapSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("E165 (aliquota invalida): axios.get nunca chamado, enviarSoap 1x, BadRequestException com a mensagem original", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(CLIENTE_MUNICIPIO_ERRADO) });
+    const service = await buildService(mocks);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue({ proximoRps: 1, serieRps: "RPS" });
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(respostaErro("E165", "Aliquota invalida."));
+
+    const promise = service.emitirParaContaReceber({ clienteAthosId: 3485, valor: 100 });
+    await expect(promise).rejects.toThrow(BadRequestException);
+    await expect(promise).rejects.toThrow(/Aliquota invalida/);
+
+    expect(mockedAxios.get).not.toHaveBeenCalled();
+    expect(soapSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("E58 + ViaCEP devolvendo o MESMO codigo ja usado: enviarSoap 1x (re-tentativa inutil evitada)", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(CLIENTE_MUNICIPIO_ERRADO) });
+    const service = await buildService(mocks);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue({ proximoRps: 1, serieRps: "RPS" });
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(respostaErro("E58", "Codigo do municipio do tomador nao corresponde ao CEP informado."));
+
+    // ViaCEP devolve o MESMO codigoMunicipio ja cadastrado (4121208) — re-tentativa seria identica
+    mockedAxios.get.mockResolvedValueOnce({ data: { ibge: "4121208", uf: "SP", localidade: "Curitiba" } });
+
+    const promise = service.emitirParaContaReceber({ clienteAthosId: 3485, valor: 100 });
+    await expect(promise).rejects.toThrow(BadRequestException);
+    await expect(promise).rejects.toThrow(/nao corresponde ao CEP/);
+
+    expect(soapSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("E58 na 1a e E58 tambem na 2a tentativa: enviarSoap 2x e BadRequestException com a mensagem da PRIMEIRA tentativa", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(CLIENTE_MUNICIPIO_ERRADO) });
+    const service = await buildService(mocks);
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue({ proximoRps: 1, serieRps: "RPS" });
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(respostaErro("E58", "Codigo do municipio do tomador nao corresponde ao CEP informado."))
+      .mockResolvedValueOnce(respostaErro("E58", "Codigo do municipio do tomador nao corresponde ao CEP informado (2a tentativa)."));
+
+    mockedAxios.get.mockResolvedValueOnce({ data: { ibge: "3550308", uf: "SP", localidade: "Sao Paulo" } });
+
+    const promise = service.emitirParaContaReceber({ clienteAthosId: 3485, valor: 100 });
+    await expect(promise).rejects.toThrow(BadRequestException);
+    // Mensagem propagada e a da PRIMEIRA tentativa (nao contem "2a tentativa")
+    await expect(promise).rejects.toThrow(/^(?!.*2a tentativa).*nao corresponde ao CEP.*$/s);
+
+    expect(soapSpy).toHaveBeenCalledTimes(2);
+  });
+});
