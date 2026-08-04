@@ -787,7 +787,7 @@ export class NfseService {
       );
     }
 
-    const rpsXml = this.buildRpsXml({
+    const rpsArgs: RpsXmlInput = {
       numero:          rpsNumero,
       serie:           rpsSerie,
       dataEmissao,
@@ -802,23 +802,15 @@ export class NfseService {
       tomadorCpf,
       tomadorNome,
       tomadorEndereco,
-    });
-
-    const integridade = this.computeIntegridade(rpsXml);
-    const dados = `<?xml version="1.0" encoding="UTF-8"?>
-<GerarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
-  ${rpsXml}
-  <Integridade>${integridade}</Integridade>
-</GerarNfseEnvio>`;
+    };
 
     this.logger.log(`Emitindo NFS-e orÃ§amento #${quote.internalNumber} - RPS #${rpsNumero}/${rpsSerie} - serviÃ§o ${servico.itemLista}/${servico.codigoNacional}`);
-    this.logger.debug(`XML:\n${dados}`);
 
-    const responseXml = await this.enviarSoap(this.buildCabecalho(), dados);
+    const { numeroNfse, erros, responseXml } = await this.enviarRpsComFallbackMunicipio(
+      rpsArgs,
+      `quote ${quote.internalNumber}`,
+    );
     this.logger.debug(`Resposta: ${responseXml.slice(0, 800)}`);
-
-    const erros = this.parseErros(responseXml);
-    const numeroNfse = this.parseNumeroNfse(responseXml);
 
     if (erros.length > 0 && !numeroNfse) {
       throw new BadRequestException(`Erro na emissÃ£o da NFS-e: ${erros.join(" | ")}`);

@@ -211,3 +211,51 @@ describe("emitirParaContaReceber — fallback ViaCEP ponta-a-ponta (E58)", () =>
     expect(resultado.numero).toBe("1234");
   });
 });
+
+describe("emitir — fallback ViaCEP ponta-a-ponta (E288) e caminho feliz sem ViaCEP", () => {
+  it("emitir() com E288 na 1a resposta re-tenta com o ibge do ViaCEP e atualiza quote.update com o nfseNumero da 2a resposta", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(CLIENTE_MUNICIPIO_ERRADO) });
+    const service = await buildService(mocks);
+
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(respostaErro("E288", "Codigo do municipio do tomador do servico nao vinculada a UF informada."))
+      .mockResolvedValueOnce(respostaSucesso("5678"));
+
+    mockedAxios.get.mockResolvedValue({ data: { ibge: "3550308", uf: "SP", localidade: "Sao Paulo" } });
+
+    const resultado = await service.emitir("q1", { clienteAthosId: 300 });
+
+    expect(soapSpy).toHaveBeenCalledTimes(2);
+
+    const xml1: string = (soapSpy.mock.calls[0] as string[])[1];
+    const xml2: string = (soapSpy.mock.calls[1] as string[])[1];
+    const municipio1 = xml1.match(/<TomadorServico>[\s\S]*?<CodigoMunicipio>(\d+)<\/CodigoMunicipio>/)?.[1];
+    const municipio2 = xml2.match(/<TomadorServico>[\s\S]*?<CodigoMunicipio>(\d+)<\/CodigoMunicipio>/)?.[1];
+    expect(municipio1).toBe("4121208");
+    expect(municipio2).toBe("3550308");
+
+    expect(mocks.mockPrisma.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ nfseNumero: "5678" }) }),
+    );
+    expect(resultado).toHaveProperty("numero", "5678");
+  });
+
+  it("emitir() com cliente de municipio correto e sucesso na 1a resposta: enviarSoap 1x e axios.get nunca chamado", async () => {
+    const mocks = buildMocks({ buscarClientePorId: jest.fn().mockResolvedValue(CLIENTE_PJ) });
+    const service = await buildService(mocks);
+
+    jest.spyOn(service as any, "getInfoNfse").mockResolvedValue(null);
+
+    const soapSpy = jest
+      .spyOn(service as any, "enviarSoap")
+      .mockResolvedValueOnce(respostaSucesso("9999"));
+
+    await service.emitir("q1", { clienteAthosId: 100 });
+
+    expect(soapSpy).toHaveBeenCalledTimes(1);
+    expect(mockedAxios.get).not.toHaveBeenCalled();
+  });
+});
