@@ -30,7 +30,7 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 Phase: 39 (scaffold-leitura-e-spikes-de-introspec-o) — EXECUTING
 Plan: 1 of 3
 Status: Executing Phase 39
-Last activity: 2026-06-30 — Phase 39 execution started
+Last activity: 2026-08-04 - Completed quick task 260804-g0t: Corrigir emissao de NFS-e CodigoMunicipio do tomador (fallback ViaCEP)
 
 Progress: [░░░░░░░░░░] 0% (0/2 phases complete)
 
@@ -203,6 +203,7 @@ Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 | 260526-kqd | Boleto EFI: itens gerados a partir de venda_item (1 item por produto/servico) seguindo logica NFS-e | 2026-05-26 | 5de96dc | [260526-kqd-arrumar-emissao-boleto-efi-criar-1-item-](./quick/260526-kqd-arrumar-emissao-boleto-efi-criar-1-item-/) |
 | 260722-mqp | Adicionar protecao por senha (PasswordGate reutilizavel) na pagina /contas-receber | 2026-07-22 | c46bb55, 29d660f, cafdcc9 | [260722-mqp-adicionar-protecao-por-senha-na-pagina-c](./quick/260722-mqp-adicionar-protecao-por-senha-na-pagina-c/) |
 | 260723-h65 | Auto-registro do webhook PIX na EFI no boot + correcao do webhook de pagamento por cartao (Quotes) + fix boleto notification_url | 2026-07-23 | 8aaefb1, 707df8b, 052d044, 41b5663 | [260723-h65-autoconfiguracao-dos-webhooks-de-confirm](./quick/260723-h65-autoconfiguracao-dos-webhooks-de-confirm/) |
+| 260804-g0t | Corrigir emissao de NFS-e: CodigoMunicipio do tomador incorreto (codigocidade do Athos nao confiavel) causando erro E288/E58 na prefeitura — fallback automatico via ViaCEP | 2026-08-04 | 3d2f42f, 518ef6d, 4afc9f2 | [260804-g0t-corrigir-emissao-de-nfs-e-codigomunicipi](./quick/260804-g0t-corrigir-emissao-de-nfs-e-codigomunicipi/) |
 
 ---
 
