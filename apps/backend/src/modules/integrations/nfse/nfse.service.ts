@@ -7,6 +7,7 @@ import * as soap from "soap";
 import { PrismaService } from "../../database/prisma.service";
 import { AthosService } from "../athos/athos.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
+import { consultarIbgePorCep } from "./viacep.util";
 
 export interface EmitirNfseInput {
   tomadorCnpj?: string;
@@ -42,6 +43,26 @@ type TomadorEndereco = {
   codigoMunicipio: string;
   uf: string;
 };
+
+type RpsXmlInput = {
+  numero: number;
+  serie: string;
+  dataEmissao: string;
+  valorServicos: number;
+  descontoIncondicionado: number;
+  discriminacao: string;
+  itemLista: string;
+  codigoNacional: string;
+  codigoNbs: string;
+  aliquotaIss: string;
+  tomadorCpf?: string | null;
+  tomadorCnpj?: string | null;
+  tomadorNome?: string | null;
+  tomadorEndereco?: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+};
+
+// Codigos de erro ABRASF/iiBrasil que indicam CodigoMunicipio do tomador incorreto (D-02)
+const CODIGOS_ERRO_MUNICIPIO_TOMADOR = ["E288", "E58"];
 
 // ServiÃ§os disponÃ­veis para emissÃ£o de NFS-e
 const SERVICOS: Record<string, { itemLista: string; codigoNacional: string; aliquotaIss: string; descricao: string }> = {
@@ -130,22 +151,7 @@ export class NfseService {
 </cabecalho>`;
   }
 
-  private buildRpsXml(input: {
-    numero: number;
-    serie: string;
-    dataEmissao: string;
-    valorServicos: number;
-    descontoIncondicionado: number;
-    discriminacao: string;
-    itemLista: string;
-    codigoNacional: string;
-    codigoNbs: string;
-    aliquotaIss: string;
-    tomadorCpf?: string | null;
-    tomadorCnpj?: string | null;
-    tomadorNome?: string | null;
-    tomadorEndereco?: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
-  }): string {
+  private buildRpsXml(input: RpsXmlInput): string {
     const valorCbs      = Number((input.valorServicos * CBS_RATE).toFixed(2));
     const valorIbs      = Number((input.valorServicos * IBS_RATE).toFixed(2));
     const aliquotaCbs   = (CBS_RATE * 100).toFixed(2);
@@ -334,6 +340,124 @@ export class NfseService {
   private parseErros(xml: string): string[] {
     const decoded = this.decodeOutputXml(xml);
     return [...decoded.matchAll(/<Mensagem>([^<]+)<\/Mensagem>/g)].map(m => m[1].trim());
+  }
+
+  /**
+   * Extrai os codigos de erro (<Codigo>) da resposta da prefeitura.
+   * Nao colide com CodigoVerificacao/CodigoMunicipio/CodigoNbs/CodigoTributacaoNacional
+   * porque o regex casa exatamente a tag <Codigo>.
+   */
+  private parseCodigosErro(xml: string): string[] {
+    const decoded = this.decodeOutputXml(xml);
+    const blocos = [...decoded.matchAll(/<MensagemRetorno>([\s\S]*?)<\/MensagemRetorno>/g)];
+
+    let codigos: string[];
+    if (blocos.length > 0) {
+      codigos = blocos
+        .map((bloco) => bloco[1].match(/<Codigo>([^<]+)<\/Codigo>/)?.[1])
+        .filter((c): c is string => !!c);
+    } else {
+      // Alguns retornos da iiBrasil vem sem o wrapper <MensagemRetorno>
+      codigos = [...decoded.matchAll(/<Codigo>([^<]+)<\/Codigo>/g)].map((m) => m[1]);
+    }
+
+    return codigos.map((c) => c.trim().toUpperCase());
+  }
+
+  /**
+   * Decide se o erro retornado pela prefeitura e de CodigoMunicipio do tomador (D-02),
+   * caso em que vale a pena tentar o fallback via ViaCEP.
+   */
+  private deveTentarFallbackMunicipio(codigos: string[], mensagens: string[]): boolean {
+    if (codigos.some((c) => CODIGOS_ERRO_MUNICIPIO_TOMADOR.includes(c))) return true;
+    return mensagens.some((m) => /munic[ií]pio/i.test(m) && /tomador/i.test(m));
+  }
+
+  /**
+   * Ponto unico de envio de RPS para GerarNfse. Tenta uma vez com os dados atuais;
+   * se a prefeitura rejeitar por CodigoMunicipio do tomador incorreto (E288/E58),
+   * consulta o ViaCEP pelo CEP do tomador e re-tenta UMA unica vez com o IBGE corrigido (D-01..D-05).
+   */
+  private async enviarRpsComFallbackMunicipio(
+    rpsInput: RpsXmlInput,
+    contexto: string,
+  ): Promise<{ responseXml: string; numeroNfse: string | null; erros: string[]; municipioCorrigido: string | null }> {
+    const montarEnvelope = (input: RpsXmlInput): string => {
+      const rpsXml = this.buildRpsXml(input);
+      const integridade = this.computeIntegridade(rpsXml);
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<GerarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  ${rpsXml}
+  <Integridade>${integridade}</Integridade>
+</GerarNfseEnvio>`;
+    };
+
+    // Tentativa 1 (caminho feliz — D-01)
+    const responseXml = await this.enviarSoap(this.buildCabecalho(), montarEnvelope(rpsInput));
+    const erros = this.parseErros(responseXml);
+    const numeroNfse = this.parseNumeroNfse(responseXml);
+
+    if (numeroNfse) {
+      return { responseXml, numeroNfse, erros, municipioCorrigido: null };
+    }
+
+    const resultadoTentativa1 = { responseXml, numeroNfse, erros, municipioCorrigido: null };
+
+    const codigos = this.parseCodigosErro(responseXml);
+    if (!this.deveTentarFallbackMunicipio(codigos, erros)) {
+      return resultadoTentativa1;
+    }
+
+    const cep = rpsInput.tomadorEndereco?.cep?.replace(/\D/g, "") ?? "";
+    if (cep.length !== 8) {
+      this.logger.warn(`[FallbackMunicipio] ${contexto} — CEP do tomador ausente/invalido ("${cep}"), fallback ViaCEP nao aplicavel`);
+      return resultadoTentativa1;
+    }
+
+    const viacep = await consultarIbgePorCep(cep);
+    if (!viacep) {
+      this.logger.warn(`[FallbackMunicipio] ${contexto} — ViaCEP indisponivel/CEP invalido para "${cep}", mantendo erro original`);
+      return resultadoTentativa1;
+    }
+
+    if (rpsInput.tomadorEndereco && viacep.uf !== rpsInput.tomadorEndereco.uf) {
+      this.logger.warn(
+        `[FallbackMunicipio] ${contexto} — divergencia de UF: ViaCEP uf="${viacep.uf}" != Athos uf="${rpsInput.tomadorEndereco.uf}" (nao alterada, apenas diagnostico)`,
+      );
+    }
+
+    if (rpsInput.tomadorEndereco && viacep.ibge === rpsInput.tomadorEndereco.codigoMunicipio) {
+      this.logger.warn(`[FallbackMunicipio] ${contexto} — codigoMunicipio ja e o mesmo do CEP (${viacep.ibge}), re-tentativa seria identica`);
+      return resultadoTentativa1;
+    }
+
+    const retryInput: RpsXmlInput = {
+      ...rpsInput,
+      tomadorEndereco: rpsInput.tomadorEndereco
+        ? { ...rpsInput.tomadorEndereco, codigoMunicipio: viacep.ibge }
+        : rpsInput.tomadorEndereco,
+    };
+
+    try {
+      const responseXml2 = await this.enviarSoap(this.buildCabecalho(), montarEnvelope(retryInput));
+      const erros2 = this.parseErros(responseXml2);
+      const numeroNfse2 = this.parseNumeroNfse(responseXml2);
+
+      if (!numeroNfse2) {
+        this.logger.warn(`[FallbackMunicipio] ${contexto} — 2a tentativa (ibge=${viacep.ibge}) tambem falhou: ${erros2.join(" | ")}`);
+        return resultadoTentativa1;
+      }
+
+      this.logger.log(
+        `[FallbackMunicipio] ${contexto} — correcao aplicada: codigoMunicipio ${rpsInput.tomadorEndereco?.codigoMunicipio ?? "?"} -> ${viacep.ibge}`,
+      );
+      return { responseXml: responseXml2, numeroNfse: numeroNfse2, erros: erros2, municipioCorrigido: viacep.ibge };
+    } catch (err) {
+      this.logger.warn(
+        `[FallbackMunicipio] ${contexto} — 2a tentativa lancou excecao de transporte: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return resultadoTentativa1;
+    }
   }
 
   private async findQuote(identifier: string) {
@@ -663,7 +787,7 @@ export class NfseService {
       );
     }
 
-    const rpsXml = this.buildRpsXml({
+    const rpsArgs: RpsXmlInput = {
       numero:          rpsNumero,
       serie:           rpsSerie,
       dataEmissao,
@@ -678,23 +802,15 @@ export class NfseService {
       tomadorCpf,
       tomadorNome,
       tomadorEndereco,
-    });
-
-    const integridade = this.computeIntegridade(rpsXml);
-    const dados = `<?xml version="1.0" encoding="UTF-8"?>
-<GerarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
-  ${rpsXml}
-  <Integridade>${integridade}</Integridade>
-</GerarNfseEnvio>`;
+    };
 
     this.logger.log(`Emitindo NFS-e orÃ§amento #${quote.internalNumber} - RPS #${rpsNumero}/${rpsSerie} - serviÃ§o ${servico.itemLista}/${servico.codigoNacional}`);
-    this.logger.debug(`XML:\n${dados}`);
 
-    const responseXml = await this.enviarSoap(this.buildCabecalho(), dados);
+    const { numeroNfse, erros, responseXml } = await this.enviarRpsComFallbackMunicipio(
+      rpsArgs,
+      `quote ${quote.internalNumber}`,
+    );
     this.logger.debug(`Resposta: ${responseXml.slice(0, 800)}`);
-
-    const erros = this.parseErros(responseXml);
-    const numeroNfse = this.parseNumeroNfse(responseXml);
 
     if (erros.length > 0 && !numeroNfse) {
       throw new BadRequestException(`Erro na emissÃ£o da NFS-e: ${erros.join(" | ")}`);
@@ -900,8 +1016,8 @@ export class NfseService {
     const discriminacao = input.discriminacao ?? "Prestação de serviços";
     const dataEmissao = new Date().toISOString().slice(0, 10);
 
-    // 5. Montar XML e enviar SOAP (reutiliza métodos privados existentes)
-    const rpsXml = this.buildRpsXml({
+    // 5. Montar XML e enviar SOAP (ponto unico de retry — fallback ViaCEP em E288/E58)
+    const rpsArgs: RpsXmlInput = {
       numero: rpsNumero,
       serie: rpsSerie,
       dataEmissao,
@@ -916,23 +1032,16 @@ export class NfseService {
       tomadorCpf,
       tomadorNome,
       tomadorEndereco,
-    });
-
-    const integridade = this.computeIntegridade(rpsXml);
-    const dados = `<?xml version="1.0" encoding="UTF-8"?>
-<GerarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
-  ${rpsXml}
-  <Integridade>${integridade}</Integridade>
-</GerarNfseEnvio>`;
+    };
 
     this.logger.log(
       `Emitindo NFS-e contas a receber - RPS #${rpsNumero}/${rpsSerie} - serviço ${servico.itemLista}/${servico.codigoNacional} - valor ${valorServicos.toFixed(2)}`,
     );
 
-    const responseXml = await this.enviarSoap(this.buildCabecalho(), dados);
-
-    const erros = this.parseErros(responseXml);
-    const numeroNfse = this.parseNumeroNfse(responseXml);
+    const { numeroNfse, erros, responseXml } = await this.enviarRpsComFallbackMunicipio(
+      rpsArgs,
+      `contaReceber cliente=${input.clienteAthosId}`,
+    );
 
     if (erros.length > 0 && !numeroNfse) {
       throw new BadRequestException(`Erro na emissão da NFS-e: ${erros.join(" | ")}`);
