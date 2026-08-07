@@ -67,6 +67,7 @@ function ContasReceberDashboard() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("");
+  const [busca, setBusca] = useState("");
 
   async function fetchDashboard(status: StatusFiltro = statusFiltro) {
     setLoading(true);
@@ -91,6 +92,15 @@ function ContasReceberDashboard() {
     void fetchDashboard(statusFiltro);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const buscaNormalizada = busca.trim().toLowerCase();
+  const clientesFiltrados = buscaNormalizada
+    ? clientes.filter(
+        (c) =>
+          c.nome_cliente.toLowerCase().includes(buscaNormalizada) ||
+          String(c.idcliente).includes(buscaNormalizada),
+      )
+    : clientes;
 
   return (
     <>
@@ -129,6 +139,18 @@ function ContasReceberDashboard() {
             </div>
           </div>
           <div className="d-flex align-items-center gap-2 flex-wrap">
+            <div className="input-group input-group-sm" style={{ width: "220px" }}>
+              <span className="input-group-text bg-white">
+                <i className="bi bi-search" />
+              </span>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Buscar por nome ou ID..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
             {STATUS_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -206,9 +228,13 @@ function ContasReceberDashboard() {
                 <div className="alert alert-info">
                   <i className="bi bi-info-circle me-2" />Nenhum cliente com contas em aberto.
                 </div>
+              ) : clientesFiltrados.length === 0 ? (
+                <div className="alert alert-info">
+                  <i className="bi bi-info-circle me-2" />Nenhum cliente encontrado para &quot;{busca}&quot;.
+                </div>
               ) : (
                 <div className="row g-3">
-                  {clientes.map((cliente) => {
+                  {clientesFiltrados.map((cliente) => {
                     const pct =
                       cliente.limitecredito > 0
                         ? Math.min(100, Math.round((cliente.total_devido / cliente.limitecredito) * 100))
@@ -220,13 +246,12 @@ function ContasReceberDashboard() {
                       <div key={cliente.idcliente} className="col-md-6 col-lg-4">
                         <div className="card h-100 border-0 shadow-sm">
                           <div className="card-header d-flex justify-content-between align-items-center bg-transparent border-bottom">
-                            <strong
-                              className="text-truncate"
-                              style={{ maxWidth: "65%" }}
-                              title={cliente.nome_cliente}
-                            >
-                              {cliente.nome_cliente}
-                            </strong>
+                            <div className="text-truncate" style={{ maxWidth: "65%" }} title={cliente.nome_cliente}>
+                              <span className="badge bg-secondary-subtle text-secondary-emphasis me-1">
+                                #{cliente.idcliente}
+                              </span>
+                              <strong>{cliente.nome_cliente}</strong>
+                            </div>
                             <span className={getBadgeClass(cliente.maior_atraso_dias)}>
                               {getBadgeLabel(cliente.maior_atraso_dias)}
                             </span>
