@@ -204,6 +204,8 @@ Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 | 260722-mqp | Adicionar protecao por senha (PasswordGate reutilizavel) na pagina /contas-receber | 2026-07-22 | c46bb55, 29d660f, cafdcc9 | [260722-mqp-adicionar-protecao-por-senha-na-pagina-c](./quick/260722-mqp-adicionar-protecao-por-senha-na-pagina-c/) |
 | 260723-h65 | Auto-registro do webhook PIX na EFI no boot + correcao do webhook de pagamento por cartao (Quotes) + fix boleto notification_url | 2026-07-23 | 8aaefb1, 707df8b, 052d044, 41b5663 | [260723-h65-autoconfiguracao-dos-webhooks-de-confirm](./quick/260723-h65-autoconfiguracao-dos-webhooks-de-confirm/) |
 | 260804-g0t | Corrigir emissao de NFS-e: CodigoMunicipio do tomador incorreto (codigocidade do Athos nao confiavel) causando erro E288/E58 na prefeitura — fallback automatico via ViaCEP | 2026-08-04 | 3d2f42f, 518ef6d, 4afc9f2 | [260804-g0t-corrigir-emissao-de-nfs-e-codigomunicipi](./quick/260804-g0t-corrigir-emissao-de-nfs-e-codigomunicipi/) |
+| 260807-onc | Contas a receber: permitir gerar boleto incluindo titulo de desconto (valor negativo) sem NF, para abater outros titulos no mesmo boleto | 2026-08-07 | 0816e62 | [260807-onc-contas-a-receber-permitir-lancamento-de-](./quick/260807-onc-contas-a-receber-permitir-lancamento-de-/) |
+| 260807-oxc | Pagina contas a receber: campo de busca por nome ou id, exibindo id junto ao nome nos cards | 2026-08-07 | e189c1c | [260807-oxc-pagina-contas-a-receber-adicionar-campo-](./quick/260807-oxc-pagina-contas-a-receber-adicionar-campo-/) |
 
 ---
 

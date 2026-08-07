@@ -582,7 +582,8 @@ export default function ClienteDetalhePage({
 
   // Derived variables for the modal
   const titulosSelecionadosParaBoleto = titulos.filter((t) => selectedIds.has(t.idcontareceber));
-  const selecionadosSemNf = titulosSelecionadosParaBoleto.filter((t) => !t.tipoNf);
+  // Títulos de valor negativo (desconto/abatimento) não exigem NF própria.
+  const selecionadosSemNf = titulosSelecionadosParaBoleto.filter((t) => !t.tipoNf && t.valor >= 0);
   const hoje = new Date().toISOString().slice(0, 10);
   const expireAtInvalido = !expireAt || expireAt < hoje;
 

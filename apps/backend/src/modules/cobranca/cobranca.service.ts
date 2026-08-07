@@ -82,7 +82,12 @@ export class CobrancaService {
         item.tipoNf = "NFS-e";
       }
     }
-    const semNf = nfInfo.filter((n) => n.tipoNf === null);
+    // Títulos de valor negativo (desconto/abatimento) reduzem o total do boleto
+    // e não representam produto ou serviço próprio — não exigem NF.
+    const idsValorNegativo = new Set(
+      titulosFiltrados.filter((t) => Number(t.valor) < 0).map((t) => t.idcontareceber),
+    );
+    const semNf = nfInfo.filter((n) => n.tipoNf === null && !idsValorNegativo.has(n.idcontareceber));
     if (semNf.length > 0) {
       throw new BadRequestException(
         `Os títulos ${semNf.map((n) => n.idcontareceber).join(", ")} não possuem nota fiscal emitida. ` +
