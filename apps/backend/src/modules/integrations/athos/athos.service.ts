@@ -108,6 +108,13 @@ function pickNumber(row: Row, keys: string[], fallback = 0) {
   return fallback;
 }
 
+// O Athos as vezes grava orcamentovalorfinalitem como 0 antes de recalcular o item
+// (ex: orcamento recem-criado). Nesse caso o total calculado e mais confiavel que o zero
+// armazenado, evitando que o item aparente sem valor ao apresentar/enviar o orcamento.
+export function resolveItemTotal(totalArmazenado: number, totalCalculado: number) {
+  return totalArmazenado === 0 && totalCalculado !== 0 ? totalCalculado : totalArmazenado;
+}
+
 function pickDateISO(row: Row, keys: string[]) {
   for (const key of keys) {
     const value = row[key];
@@ -418,7 +425,9 @@ async function loadItems(client: Pick<Client, "query">, idOrcamento: string) {
       const quantidade = pickNumber(row, ["quantidadeitem", "quantidade", "qtd"], 0);
       const valor = pickNumber(row, ["valoritem", "valor", "valorunitario", "vlrunitario"], 0);
       const desconto = pickNumber(row, ["valordesconto", "desconto", "vlrdesconto"], 0);
-      const total = pickNumber(row, ["orcamentovalorfinalitem", "valortotal", "total"], quantidade * valor - desconto);
+      const totalCalculado = quantidade * valor - desconto;
+      const totalArmazenado = pickNumber(row, ["orcamentovalorfinalitem", "valortotal", "total"], totalCalculado);
+      const total = resolveItemTotal(totalArmazenado, totalCalculado);
 
       return {
         descricao:

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { AthosService } from "./athos.service";
+import { AthosService, resolveItemTotal } from "./athos.service";
 
 // Mock do módulo pg — deve vir antes dos imports do serviço
 jest.mock("pg", () => {
@@ -1520,5 +1520,21 @@ describe("AthosService - workflow: criar conta e liquidar pagamento", () => {
     ).rejects.toThrow("dataInicio nao pode ser maior que dataFinal");
 
     expect(client.release).toHaveBeenCalled();
+  });
+});
+
+describe("AthosService - resolveItemTotal", () => {
+  it("usa o total calculado quando o total armazenado veio zerado do Athos", () => {
+    // Caso real: orcamento recem-criado, orcamentovalorfinalitem ainda nao recalculado pelo Athos
+    expect(resolveItemTotal(0, 12)).toBe(12);
+  });
+
+  it("mantem o total armazenado quando ele e diferente de zero", () => {
+    expect(resolveItemTotal(78.9, 78.9)).toBe(78.9);
+    expect(resolveItemTotal(50, 100)).toBe(50);
+  });
+
+  it("mantem zero quando o item realmente vale zero (calculado tambem e zero)", () => {
+    expect(resolveItemTotal(0, 0)).toBe(0);
   });
 });
