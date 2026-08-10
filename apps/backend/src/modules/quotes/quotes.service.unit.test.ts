@@ -497,3 +497,34 @@ describe("QuotesService - enviarParaCliente — regra de approvalLink por associ
     expect(result.approvalLink).toEqual(expect.stringContaining('/orcamento/quote-001/approve?token='));
   });
 });
+
+describe("QuotesService - computeAndValidateFinalItemPrice (calculo de desconto)", () => {
+  let service: QuotesService;
+
+  beforeEach(async () => {
+    const { providers } = buildProviders();
+    const module: TestingModule = await Test.createTestingModule({ providers }).compile();
+    service = module.get<QuotesService>(QuotesService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  const compute = (params: { quantity: number; unitPrice: number; discount: number; providedFinalPrice?: number }) =>
+    (service as any).computeAndValidateFinalItemPrice({ ...params, context: "test" });
+
+  it("aplica desconto parcial normalmente", () => {
+    expect(compute({ quantity: 2, unitPrice: 10, discount: 5 })).toBe(15);
+  });
+
+  it("respeita desconto de 100% (item cortesia/bonificado) em vez de cobrar valor cheio", () => {
+    expect(compute({ quantity: 10, unitPrice: 1.2, discount: 12 })).toBe(0);
+  });
+
+  it("trava em zero quando o desconto informado ultrapassa o valor do item, sem descartar o desconto", () => {
+    expect(compute({ quantity: 1, unitPrice: 10, discount: 15 })).toBe(0);
+  });
+
+  it("sem desconto retorna o valor bruto", () => {
+    expect(compute({ quantity: 3, unitPrice: 10, discount: 0 })).toBe(30);
+  });
+});

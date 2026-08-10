@@ -1190,12 +1190,16 @@ export class QuotesService {
       }
     }
 
-    if (params.unitPrice > 0 && params.quantity > 0 && formulaFinal <= 0) {
-      this.logger.error(
-        `[Quotes] orcamentovalorfinalitem recalculado <= 0 em ${params.context} com unitPrice > 0. ` +
-          `Aplicando valor bruto=${baseTotal.toFixed(2)} para evitar persistencia zerada.`,
+    // formulaFinal <= 0 so acontece quando o desconto cobre o valor do item (baseTotal > 0 aqui).
+    // Desconto == baseTotal e um caso legitimo (item 100% bonificado/cortesia) e deve ser respeitado.
+    // So tratamos como anomalia quando o desconto ULTRAPASSA o valor do item (dado inconsistente),
+    // travando o total em zero em vez de descartar o desconto e cobrar o valor cheio.
+    if (params.unitPrice > 0 && params.quantity > 0 && formulaFinal < 0) {
+      this.logger.warn(
+        `[Quotes] desconto maior que o valor do item em ${params.context}. ` +
+          `Desconto=${params.discount.toFixed(2)} > ValorItem=${baseTotal.toFixed(2)}. Ajustando total final para 0.`,
       );
-      return baseTotal;
+      return 0;
     }
 
     return formulaFinal;
