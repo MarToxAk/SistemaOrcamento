@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { AthosService, applyItemCorrecao, resolveItemTotal } from "./athos.service";
+import { AthosService, applyItemCorrecao, resolveItemPricing, resolveItemTotal } from "./athos.service";
 import { PrismaService } from "../../database/prisma.service";
 
 const mockPrismaService = {
@@ -1545,6 +1545,31 @@ describe("AthosService - resolveItemTotal", () => {
 
   it("mantem zero quando o item realmente vale zero (calculado tambem e zero)", () => {
     expect(resolveItemTotal(0, 0)).toBe(0);
+  });
+});
+
+describe("AthosService - resolveItemPricing", () => {
+  it("orcamento #21716 — sem desconto: valor e desconto batem com o total", () => {
+    expect(resolveItemPricing({ valorItem: 3.3, descontoItem: 0, descontoOrcamento: 0 })).toEqual({
+      valorOriginal: 3.3,
+      desconto: 0,
+    });
+  });
+
+  it("orcamento #21717/#21659 — desconto dado direto no produto: valoritem ja vem liquido, reconstroi o valor original", () => {
+    // Athos grava valoritem=2.50 (ja com o desconto de 0.80 embutido) e valordesconto=0.80
+    expect(resolveItemPricing({ valorItem: 2.5, descontoItem: 0.8, descontoOrcamento: 0 })).toEqual({
+      valorOriginal: 3.3,
+      desconto: 0.8,
+    });
+  });
+
+  it("orcamento #21718 — desconto geral da compra rateado no item: valoritem vem bruto, desconto fica em orcamentodesconto", () => {
+    // Athos grava valoritem=3.30 (bruto) e valordesconto=0 — o desconto rateado fica em orcamentodesconto=0.80
+    expect(resolveItemPricing({ valorItem: 3.3, descontoItem: 0, descontoOrcamento: 0.8 })).toEqual({
+      valorOriginal: 3.3,
+      desconto: 0.8,
+    });
   });
 });
 

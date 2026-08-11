@@ -118,6 +118,23 @@ export function resolveItemTotal(totalArmazenado: number, totalCalculado: number
 
 export type ItemCorrecao = { valorItem: number; valorDesconto: number; valorFinalItem: number };
 
+export type ItemPricingBruto = { valorItem: number; descontoItem: number; descontoOrcamento: number };
+
+// O Athos grava o desconto do item de duas formas diferentes dependendo de como foi
+// aplicado no PDV:
+// - Desconto dado direto no produto (ex: orcamento #21717/#21659): valoritem ja vem
+//   LIQUIDO (com desconto embutido) e o valor do desconto fica em valordesconto.
+// - Desconto geral da compra, rateado por item (ex: orcamento #21718): valoritem vem
+//   BRUTO (preco cheio) e o valor rateado fica em orcamentodesconto.
+// Sem diferenciar os dois casos, valor unitario e desconto exibidos nao reconciliavam
+// com o total (ex: valor=2,50 desconto=0,80 total=2,50 — nao bate: 2,50-0,80=1,70).
+export function resolveItemPricing(bruto: ItemPricingBruto): { valorOriginal: number; desconto: number } {
+  if (bruto.descontoItem > 0) {
+    return { valorOriginal: bruto.valorItem + bruto.descontoItem, desconto: bruto.descontoItem };
+  }
+  return { valorOriginal: bruto.valorItem, desconto: bruto.descontoOrcamento };
+}
+
 // Alguns orcamentos sao lancados no balcao do Athos com erro de digitacao (ex: preco
 // errado no PDV) e o Athos e a fonte de dados de producao do PDV — nao pode ser
 // corrigido diretamente no banco dele. OrcamentoItemCorrecao guarda a correcao no
@@ -446,8 +463,14 @@ async function loadItems(
     return rows.map((row: Row) => {
       const produto = productIdOnItem ? productsById.get(String(row[productIdOnItem])) : undefined;
       const quantidade = pickNumber(row, ["quantidadeitem", "quantidade", "qtd"], 0);
-      const valor = pickNumber(row, ["valoritem", "valor", "valorunitario", "vlrunitario"], 0);
-      const desconto = pickNumber(row, ["valordesconto", "desconto", "vlrdesconto"], 0);
+      const valorItemBruto = pickNumber(row, ["valoritem", "valor", "valorunitario", "vlrunitario"], 0);
+      const descontoItem = pickNumber(row, ["valordesconto", "desconto", "vlrdesconto"], 0);
+      const descontoOrcamento = pickNumber(row, ["orcamentodesconto"], 0);
+      const { valorOriginal: valor, desconto } = resolveItemPricing({
+        valorItem: valorItemBruto,
+        descontoItem,
+        descontoOrcamento,
+      });
       const totalCalculado = quantidade * valor - desconto;
       const totalArmazenado = pickNumber(row, ["orcamentovalorfinalitem", "valortotal", "total"], totalCalculado);
       const totalResolvido = resolveItemTotal(totalArmazenado, totalCalculado);
