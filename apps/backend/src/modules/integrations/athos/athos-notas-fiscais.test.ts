@@ -1,5 +1,14 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { AthosService } from "./athos.service";
+import { PrismaService } from "../../database/prisma.service";
+
+const mockPrismaService = {
+  orcamentoItemCorrecao: {
+    findMany: jest.fn().mockResolvedValue([]),
+    upsert: jest.fn(),
+    delete: jest.fn(),
+  },
+} as unknown as PrismaService;
 
 // Mock do módulo pg — deve vir antes dos imports do serviço
 jest.mock("pg", () => {
@@ -38,7 +47,7 @@ describe("AthosService - buscarNotasFiscaisCliente", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });

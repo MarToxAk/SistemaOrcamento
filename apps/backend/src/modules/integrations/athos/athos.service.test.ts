@@ -1,5 +1,14 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { AthosService, resolveItemTotal } from "./athos.service";
+import { AthosService, applyItemCorrecao, resolveItemTotal } from "./athos.service";
+import { PrismaService } from "../../database/prisma.service";
+
+const mockPrismaService = {
+  orcamentoItemCorrecao: {
+    findMany: jest.fn().mockResolvedValue([]),
+    upsert: jest.fn(),
+    delete: jest.fn(),
+  },
+} as unknown as PrismaService;
 
 // Mock do módulo pg — deve vir antes dos imports do serviço
 jest.mock("pg", () => {
@@ -53,7 +62,7 @@ describe("AthosService - verificarPagamentoPorOrcamento", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });
@@ -206,7 +215,7 @@ describe("AthosService - buscarRelacaoOrcamentoVenda", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });
@@ -258,7 +267,7 @@ describe("AthosService - buscarClientes", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });
@@ -380,7 +389,7 @@ describe("AthosService - criarContaPagar", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });
@@ -614,7 +623,7 @@ describe("AthosService - listarContasPagar com statusconta filter", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });
@@ -743,7 +752,7 @@ describe("AthosService - updateContaPagar", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });
@@ -1109,7 +1118,7 @@ describe("AthosService - anexarContaPagar", () => {
     fsMock.unlink.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });
@@ -1257,7 +1266,7 @@ describe("AthosService - criarContaPagar com novos campos do DTO", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module = await (await import("@nestjs/testing")).Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });
@@ -1383,7 +1392,7 @@ describe("AthosService - workflow: criar conta e liquidar pagamento", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module = await (await import("@nestjs/testing")).Test.createTestingModule({
-      providers: [AthosService],
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
     service = module.get<AthosService>(AthosService);
   });
@@ -1536,5 +1545,25 @@ describe("AthosService - resolveItemTotal", () => {
 
   it("mantem zero quando o item realmente vale zero (calculado tambem e zero)", () => {
     expect(resolveItemTotal(0, 0)).toBe(0);
+  });
+});
+
+describe("AthosService - applyItemCorrecao", () => {
+  it("mantem os valores originais quando nao ha correcao registrada", () => {
+    expect(applyItemCorrecao({ valor: 2.5, desconto: 0.8, total: 2.5 })).toEqual({
+      valor: 2.5,
+      desconto: 0.8,
+      total: 2.5,
+    });
+  });
+
+  it("sobrescreve valor/desconto/total quando ha correcao registrada", () => {
+    // Caso real: orcamento #21659 lancado com valor errado no caixa (2,50 em vez de 3,30)
+    expect(
+      applyItemCorrecao(
+        { valor: 2.5, desconto: 0.8, total: 2.5 },
+        { valorItem: 3.3, valorDesconto: 0, valorFinalItem: 3.3 },
+      ),
+    ).toEqual({ valor: 3.3, desconto: 0, total: 3.3 });
   });
 });

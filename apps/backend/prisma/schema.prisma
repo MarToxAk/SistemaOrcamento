@@ -301,3 +301,24 @@ model PdfTemplate {
 
   @@index([isActive])
 }
+
+// OrcamentoItemCorrecao: correcao manual de item de orcamento vindo do Athos (PDV).
+// O Athos e a fonte de dados do orcamento e nao pode ser alterado diretamente (dado
+// de producao do PDV). Quando um item chega com valor errado por erro de digitacao no
+// caixa (ex: orcamento #21659 — valorvenda1=3.30 no catalogo, mas lancado como 2.50),
+// registramos aqui o valor correto e o backend aplica a correcao ao ler o orcamento do
+// Athos, sem tocar no banco do PDV.
+model OrcamentoItemCorrecao {
+  id              String   @id @default(uuid())
+  idOrcamento     String
+  idItemOrcamento String
+  valorItem       Decimal  @db.Decimal(12, 2)
+  valorDesconto   Decimal  @default(0) @db.Decimal(12, 2)
+  valorFinalItem  Decimal  @db.Decimal(12, 2)
+  motivo          String?
+  criadoPor       String?
+  createdAt       DateTime @default(now())
+
+  @@unique([idOrcamento, idItemOrcamento])
+  @@index([idOrcamento])
+}
