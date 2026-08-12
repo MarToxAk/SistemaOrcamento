@@ -322,3 +322,14 @@ model OrcamentoItemCorrecao {
   @@unique([idOrcamento, idItemOrcamento])
   @@index([idOrcamento])
 }
+
+// ChatwootAutomationConfig: textos editaveis da automacao de fechamento de conversa
+// do Chatwoot (substitui o fluxo que rodava no n8n). Linha singleton (id fixo "default")
+// para nao precisar de tela de listagem — so existe uma configuracao ativa.
+model ChatwootAutomationConfig {
+  id                     String   @id @default("default")
+  promptFechamento       String   @db.Text
+  mensagemPedidoPendente String   @db.Text
+  updatedAt              DateTime @updatedAt
+  updatedBy              String?
+}
