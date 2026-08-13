@@ -28,11 +28,13 @@ const DEFAULT_MENSAGEM_PEDIDO_PENDENTE =
   'Nao e possivel finalizar este atendimento. Existe um servico vinculado a este cliente que ainda nao esta com status "Finalizado" ou "Entregue".\n\n' +
   'Por favor, verifique a producao e atualize o status do servico antes de encerrar o contato.';
 
-// Status considerados "concluidos" no historico do pedido (7=Finalizado, 8=Entregue —
-// mesmos codigos usados no fluxo n8n original). Quando o pedido nao existe (chat sem
-// pedido vinculado) tambem liberamos o fechamento normal da conversa.
-export function podeFecharConversa(ultimoStatus: number | null | undefined): boolean {
-  return ultimoStatus === 7 || ultimoStatus === 8 || ultimoStatus === null || ultimoStatus === undefined;
+// Status considerados "seguros para fechar" no historico do pedido — configuravel via
+// CHATWOOT_AUTOMATION_STATUS_FECHAMENTO (default "7,8" = Finalizado/Entregue, mesmos
+// codigos do fluxo n8n original). Quando o pedido nao existe (chat sem pedido vinculado)
+// tambem liberamos o fechamento normal da conversa, independente da lista configurada.
+export function podeFecharConversa(ultimoStatus: number | null | undefined, statusPermitidos: number[]): boolean {
+  if (ultimoStatus === null || ultimoStatus === undefined) return true;
+  return statusPermitidos.includes(ultimoStatus);
 }
 
 export function inboxPermitido(inboxId: number | undefined, permitidos: number[]): boolean {
@@ -79,6 +81,14 @@ export class ChatwootAutomationService {
 
   private getInboxesPermitidos(): number[] {
     const raw = this.config.get<string>("CHATWOOT_AUTOMATION_INBOX_IDS") ?? "1,21";
+    return raw
+      .split(",")
+      .map((v) => Number(v.trim()))
+      .filter((v) => Number.isFinite(v));
+  }
+
+  private getStatusPermitidosFechamento(): number[] {
+    const raw = this.config.get<string>("CHATWOOT_AUTOMATION_STATUS_FECHAMENTO") ?? "7,8";
     return raw
       .split(",")
       .map((v) => Number(v.trim()))
@@ -139,7 +149,7 @@ export class ChatwootAutomationService {
     const conversationId = String(payload.id);
     const status = await this.pedidosDb.buscarUltimoStatusPorChatId(conversationId);
 
-    if (!podeFecharConversa(status?.ultimoStatus)) {
+    if (!podeFecharConversa(status?.ultimoStatus, this.getStatusPermitidosFechamento())) {
       const config = await this.getConfig();
       await this.chatwoot.toggleConversationStatus(conversationId, "open");
       await this.chatwoot.postConversationNote(conversationId, config.mensagemPedidoPendente);

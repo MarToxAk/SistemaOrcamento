@@ -8,22 +8,24 @@ import {
 } from "./chatwoot-automation.service";
 
 describe("ChatwootAutomationService - podeFecharConversa", () => {
-  it("permite fechar quando status = 7 (finalizado)", () => {
-    expect(podeFecharConversa(7)).toBe(true);
+  it("permite fechar quando status esta na lista permitida (ex: 7=finalizado, 8=entregue)", () => {
+    expect(podeFecharConversa(7, [7, 8])).toBe(true);
+    expect(podeFecharConversa(8, [7, 8])).toBe(true);
   });
 
-  it("permite fechar quando status = 8 (entregue)", () => {
-    expect(podeFecharConversa(8)).toBe(true);
+  it("permite fechar quando nao ha pedido vinculado ao chat (null/undefined), mesmo com lista vazia", () => {
+    expect(podeFecharConversa(null, [])).toBe(true);
+    expect(podeFecharConversa(undefined, [])).toBe(true);
   });
 
-  it("permite fechar quando nao ha pedido vinculado ao chat (null/undefined)", () => {
-    expect(podeFecharConversa(null)).toBe(true);
-    expect(podeFecharConversa(undefined)).toBe(true);
+  it("bloqueia fechamento quando pedido esta em status fora da lista permitida (em producao)", () => {
+    expect(podeFecharConversa(3, [7, 8])).toBe(false);
+    expect(podeFecharConversa(0, [7, 8])).toBe(false);
   });
 
-  it("bloqueia fechamento quando pedido esta em outro status (em producao)", () => {
-    expect(podeFecharConversa(3)).toBe(false);
-    expect(podeFecharConversa(0)).toBe(false);
+  it("lista configurada e respeitada (ex: incluindo status de 'nao pago')", () => {
+    expect(podeFecharConversa(1, [1, 7, 8])).toBe(true);
+    expect(podeFecharConversa(1, [7, 8])).toBe(false);
   });
 });
 
@@ -84,6 +86,7 @@ describe("ChatwootAutomationService - handleConversationResolved (orquestracao)"
     podeEnviar?: boolean;
     aiResponse?: unknown;
     aiThrows?: boolean;
+    statusFechamento?: string;
   } = {}) {
     const prisma = {
       chatwootAutomationConfig: {
@@ -112,6 +115,7 @@ describe("ChatwootAutomationService - handleConversationResolved (orquestracao)"
     const config = {
       get: jest.fn((key: string) => {
         if (key === "CHATWOOT_AUTOMATION_INBOX_IDS") return "1,21";
+        if (key === "CHATWOOT_AUTOMATION_STATUS_FECHAMENTO") return overrides.statusFechamento ?? "7,8";
         if (key === "CHATWOOT_AI_URL") return "http://ia.local/v1/responses";
         if (key === "CHATWOOT_AI_TOKEN") return "token";
         if (key === "CHATWOOT_AI_MODEL") return "openclaw/main";
@@ -146,6 +150,17 @@ describe("ChatwootAutomationService - handleConversationResolved (orquestracao)"
     expect(chatwoot.toggleConversationStatus).toHaveBeenCalledWith("42", "open");
     expect(chatwoot.postConversationNote).toHaveBeenCalledWith("42", "Pedido pendente");
     expect(pedidosDb.podeEnviarMensagemFechamento).not.toHaveBeenCalled();
+  });
+
+  it("respeita a lista configurada via CHATWOOT_AUTOMATION_STATUS_FECHAMENTO (ex: incluindo 'nao pago')", async () => {
+    // status 1 = "Nao Pago" (primeiro status) — nao libera por default (7,8), mas libera quando configurado
+    const bloqueado = buildService({ ultimoStatus: 1, statusFechamento: "7,8" });
+    const resultBloqueado = await bloqueado.service.handleConversationResolved({ id: 42, contact_inbox: { inbox_id: 1 } });
+    expect(resultBloqueado.action).toBe("bloqueado_pedido_pendente");
+
+    const liberado = buildService({ ultimoStatus: 1, podeEnviar: true, statusFechamento: "1,7,8" });
+    const resultLiberado = await liberado.service.handleConversationResolved({ id: 43, contact_inbox: { inbox_id: 1 } });
+    expect(resultLiberado.action).toBe("mensagem_enviada");
   });
 
   it("nao reenvia mensagem de fechamento se ja foi enviada hoje", async () => {
