@@ -2,8 +2,13 @@ import { BadRequestException } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
 import nodePath from "node:path";
 
-// UNC path armazenado no banco — necessário para o Athos ERP (Windows) abrir o arquivo
-const SMB_UNC_ROOT = "\\\\192.168.3.203\\html\\Anexo\\contapagar";
+// UNC path armazenado no banco — necessário para o Athos ERP (Windows) abrir o arquivo.
+// Host lido em tempo de execução (mesma variável usada por athos-smb.util.ts) para
+// permitir trocar o servidor SMB via .env sem alterar código.
+function getSmbUncRoot(): string {
+  const host = process.env.SMB_HOST?.trim() || "192.168.3.203";
+  return `\\\\${host}\\html\\Anexo\\contapagar`;
+}
 
 // Path de escrita dentro do container Linux (montado via CIFS).
 // Lido em tempo de execução para permitir override em testes via process.env.
@@ -43,7 +48,7 @@ export function buildContaPagarAnexoPaths(idcontapagar: number, originalName: st
   const fileName = sanitizeAthosAttachmentName(originalName);
 
   // Path UNC para gravar no banco (Athos ERP Windows precisa deste formato)
-  const dbDirectoryPath = nodePath.win32.join(SMB_UNC_ROOT, String(idcontapagar));
+  const dbDirectoryPath = nodePath.win32.join(getSmbUncRoot(), String(idcontapagar));
   const dbFullPath = nodePath.win32.join(dbDirectoryPath, fileName);
 
   // Path de escrita: mount Linux em Docker, ou UNC em Windows
