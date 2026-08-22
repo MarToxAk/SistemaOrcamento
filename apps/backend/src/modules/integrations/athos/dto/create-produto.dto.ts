@@ -90,11 +90,24 @@ export class CreateProdutoDto {
   @IsInt()
   iddeposito?: number;
 
+  @ApiPropertyOptional({ example: 2, description: "ID da unidade tributaria no Athos" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  idunidadetrib?: number;
+
   @ApiPropertyOptional({ example: 29.9, description: "Valor de venda 1" })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   valorvenda1?: number;
+
+  @ApiPropertyOptional({ example: 30, description: "Margem de venda 1 (percentual)" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  margemvenda1?: number;
 
   @ApiPropertyOptional({ example: 28.5, description: "Valor de venda 2" })
   @IsOptional()
@@ -211,6 +224,16 @@ export class CreateProdutoDto {
   @IsString()
   estoqueloja?: string;
 
+  @ApiPropertyOptional({ example: "5", description: "Estoque inicial no deposito" })
+  @IsOptional()
+  @IsString()
+  estoquedeposito?: string;
+
+  @ApiPropertyOptional({ example: "2", description: "Estoque minimo do produto" })
+  @IsOptional()
+  @IsString()
+  estoqueminimo?: string;
+
   @ApiPropertyOptional({ example: "NAO", description: "Situacao tributaria do ICMS" })
   @IsOptional()
   @IsString()
@@ -260,6 +283,11 @@ export class CreateProdutoDto {
   @IsOptional()
   @IsString()
   idcfopsaida?: string;
+
+  @ApiPropertyOptional({ example: "5102", description: "CFOP para SAT" })
+  @IsOptional()
+  @IsString()
+  cfopsat?: string;
 
   @ApiPropertyOptional({ example: 0, description: "Origem da mercadoria (0 = nacional)" })
   @IsOptional()

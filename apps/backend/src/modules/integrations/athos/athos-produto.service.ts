@@ -149,7 +149,9 @@ export class AthosProdutoService {
         "idmarca",
         "idfornecedor",
         "iddeposito",
+        "idunidadetrib",
         "valorvenda1",
+        "margemvenda1",
         "valorvenda2",
         "valorvenda3",
         "valorvenda4",
@@ -170,6 +172,8 @@ export class AthosProdutoService {
         "vendeproduto",
         "baixarestoque",
         "estoqueloja",
+        "estoquedeposito",
+        "estoqueminimo",
         // Novos campos fiscais (D-08/D-10 — FISCAL_FIELDS)
         "icms",
         "icmsnfe",
@@ -183,6 +187,7 @@ export class AthosProdutoService {
         "piscst",
         "cofinscst",
         "idcfopsaida",
+        "cfopsat",
       ];
 
       // Iterar sobre merged (nao dto) para incluir valores de default aplicados
@@ -283,12 +288,15 @@ export class AthosProdutoService {
       const ALLOWED_UPDATE_FIELDS = new Set([
         "descricaoproduto", "descricaocurta", "codigobarra1", "codigobarra2", "referencia",
         "ncm", "informacaoadicional", "observacao", "idunidade", "iddepartamento", "idgrupo",
-        "idmarca", "idfornecedor", "iddeposito", "valorvenda1", "valorvenda2", "valorvenda3", "valorvenda4",
+        "idmarca", "idfornecedor", "iddeposito", "idunidadetrib", "valorvenda1", "margemvenda1",
+        "valorvenda2", "valorvenda3", "valorvenda4",
         "valorvenda5", "valorvenda6", "valorvendapromocao", "valorvendaatacado1",
         "valorcustounitario", "valorcustocaixa", "quantidadecaixa",
         "custorealcaixa", "custorealunitario", "descontomaximo", "tipoproduto", "controlaestoque",
         // Campos operacionais da Fase 38 (sem endpoint dedicado)
         "baixarestoque", "estoqueloja",
+        // Campos liberados na quick task 260822-hg9 (segunda camada de estoque + fiscal)
+        "estoquedeposito", "estoqueminimo", "cfopsat",
         // Campos fiscais da Fase 38 (D-08/D-10 — FISCAL_FIELDS)
         "icms", "icmsnfe", "tributacao", "tributacaonfe",
         "codigocsosn", "codigocsosnnfe", "origem", "origemnfe",
