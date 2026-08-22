@@ -459,6 +459,25 @@ describe("AthosProdutoService", () => {
       expect(defaultsLogCall).toBeDefined();
       expect(defaultsLogCall).toContain("nenhum default necessario");
     });
+
+    it("HG9-T1: criarProduto com iddeposito -> INSERT inclui a coluna iddeposito com o valor enviado", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      await service.criarProduto({ descricaoproduto: "Papel A4", iddeposito: 1 });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      expect(getInsertColValue(insertSql, insertParams, "iddeposito")).toBe(1);
+    });
   });
 
   describe("editarProduto", () => {
@@ -687,6 +706,93 @@ describe("AthosProdutoService", () => {
       expect(updateParams).toContain("5");
       // D-11: editarProduto nunca chama getDefaults
       expect(mockDefaultsService.getDefaults).toHaveBeenCalledTimes(0);
+    });
+
+    it("HG9-T1: campo iddeposito enviado pelo operador e gravado no UPDATE (EPROD-01)", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(11, { iddeposito: 2 });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      const updateParams = updateCall![1] as unknown[];
+      expect(updateSql).toMatch(/"iddeposito"/);
+      expect(updateParams).toContain(2);
+    });
+
+    it("HG9-T2: os seis campos liberados (iddeposito, estoquedeposito, cfopsat, idunidadetrib, margemvenda1, estoqueminimo) sao gravados juntos no UPDATE", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(12, {
+        iddeposito: 1,
+        estoquedeposito: "5",
+        cfopsat: "5102",
+        idunidadetrib: 2,
+        margemvenda1: 30,
+        estoqueminimo: "2",
+      });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      const updateParams = updateCall![1] as unknown[];
+
+      expect(updateSql).toMatch(/"iddeposito"/);
+      expect(updateSql).toMatch(/"estoquedeposito"/);
+      expect(updateSql).toMatch(/"cfopsat"/);
+      expect(updateSql).toMatch(/"idunidadetrib"/);
+      expect(updateSql).toMatch(/"margemvenda1"/);
+      expect(updateSql).toMatch(/"estoqueminimo"/);
+
+      expect(updateParams).toContain(1);
+      expect(updateParams).toContain("5");
+      expect(updateParams).toContain("5102");
+      expect(updateParams).toContain(2);
+      expect(updateParams).toContain(30);
+      expect(updateParams).toContain("2");
+    });
+
+    it("HG9-T2: chave arbitraria fora da allowlist e ignorada no UPDATE (regressao de superficie)", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await service.editarProduto(13, { chaveArbitrariaNaoPermitida: "hack" } as any);
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      const updateParams = updateCall![1] as unknown[];
+
+      expect(updateSql).not.toMatch(/chaveArbitrariaNaoPermitida/i);
+      expect(updateParams).not.toContain("hack");
     });
   });
 
