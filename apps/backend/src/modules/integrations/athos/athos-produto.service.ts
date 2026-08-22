@@ -148,6 +148,7 @@ export class AthosProdutoService {
         "idgrupo",
         "idmarca",
         "idfornecedor",
+        "iddeposito",
         "valorvenda1",
         "valorvenda2",
         "valorvenda3",
@@ -282,7 +283,7 @@ export class AthosProdutoService {
       const ALLOWED_UPDATE_FIELDS = new Set([
         "descricaoproduto", "descricaocurta", "codigobarra1", "codigobarra2", "referencia",
         "ncm", "informacaoadicional", "observacao", "idunidade", "iddepartamento", "idgrupo",
-        "idmarca", "idfornecedor", "valorvenda1", "valorvenda2", "valorvenda3", "valorvenda4",
+        "idmarca", "idfornecedor", "iddeposito", "valorvenda1", "valorvenda2", "valorvenda3", "valorvenda4",
         "valorvenda5", "valorvenda6", "valorvendapromocao", "valorvendaatacado1",
         "valorcustounitario", "valorcustocaixa", "quantidadecaixa",
         "custorealcaixa", "custorealunitario", "descontomaximo", "tipoproduto", "controlaestoque",
