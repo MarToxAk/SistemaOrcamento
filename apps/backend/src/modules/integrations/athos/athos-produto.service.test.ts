@@ -459,6 +459,25 @@ describe("AthosProdutoService", () => {
       expect(defaultsLogCall).toBeDefined();
       expect(defaultsLogCall).toContain("nenhum default necessario");
     });
+
+    it("HG9-T1: criarProduto com iddeposito -> INSERT inclui a coluna iddeposito com o valor enviado", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+      mockDefaultsService.getDefaults.mockResolvedValueOnce({});
+      client.query.mockResolvedValueOnce({ rows: [{ idproduto: 42 }] });
+
+      await service.criarProduto({ descricaoproduto: "Papel A4", iddeposito: 1 });
+
+      const insertCall = client.query.mock.calls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("INSERT INTO"),
+      );
+      expect(insertCall).toBeDefined();
+      const insertSql = String(insertCall[0]);
+      const insertParams = insertCall[1] as unknown[];
+
+      expect(getInsertColValue(insertSql, insertParams, "iddeposito")).toBe(1);
+    });
   });
 
   describe("editarProduto", () => {
@@ -687,6 +706,28 @@ describe("AthosProdutoService", () => {
       expect(updateParams).toContain("5");
       // D-11: editarProduto nunca chama getDefaults
       expect(mockDefaultsService.getDefaults).toHaveBeenCalledTimes(0);
+    });
+
+    it("HG9-T1: campo iddeposito enviado pelo operador e gravado no UPDATE (EPROD-01)", async () => {
+      const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+      const client = { query: jest.fn(), release: jest.fn() };
+      pool.connect = jest.fn().mockResolvedValue(client);
+
+      client.query
+        .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await service.editarProduto(11, { iddeposito: 2 });
+
+      const allCalls = client.query.mock.calls;
+      const updateCall = allCalls.find(([sql]: [string]) =>
+        String(sql).toUpperCase().includes("UPDATE"),
+      );
+      expect(updateCall).toBeDefined();
+      const updateSql = String(updateCall![0]);
+      const updateParams = updateCall![1] as unknown[];
+      expect(updateSql).toMatch(/"iddeposito"/);
+      expect(updateParams).toContain(2);
     });
   });
 

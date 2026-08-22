@@ -84,6 +84,12 @@ export class CreateProdutoDto {
   @IsInt()
   idfornecedor?: number;
 
+  @ApiPropertyOptional({ example: 1, description: "ID do deposito no Athos" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  iddeposito?: number;
+
   @ApiPropertyOptional({ example: 29.9, description: "Valor de venda 1" })
   @IsOptional()
   @Type(() => Number)
