@@ -110,38 +110,12 @@ export default function OrcamentoDetailPage() {
   const [sendMessage, setSendMessage] = useState("");
   const [statusSavingState, setStatusSavingState] = useState<"idle" | "saving">("idle");
   const [statusError, setStatusError] = useState("");
-  const [nfseState, setNfseState] = useState<"idle" | "emitindo" | "sucesso" | "erro">("idle");
+  // Emissão automática de NFS-e (SOAP) foi descontinuada pela prefeitura.
+  // A nota agora é emitida manualmente e o XML assinado é anexado aqui.
+  const [nfseState, setNfseState] = useState<"idle" | "enviando" | "sucesso" | "erro">("idle");
   const [nfseMsg, setNfseMsg] = useState("");
   const [nfseNumero, setNfseNumero] = useState<string | null>(null);
   const [nfseLink, setNfseLink] = useState<string | null>(null);
-  const [nfseModal, setNfseModal] = useState(false);
-  const [nfseServico, setNfseServico] = useState("24.01");
-  const [nfseTomadorDoc, setNfseTomadorDoc] = useState("");
-  const [nfseTomadorNome, setNfseTomadorNome] = useState("");
-  const [nfseTomadorTipo, setNfseTomadorTipo] = useState<"cpf" | "cnpj">("cpf");
-  const [nfseTomadorEnderecoLogradouro, setNfseTomadorEnderecoLogradouro] = useState("");
-  const [nfseTomadorEnderecoNumero, setNfseTomadorEnderecoNumero] = useState("");
-  const [nfseTomadorEnderecoBairro, setNfseTomadorEnderecoBairro] = useState("");
-  const [nfseTomadorEnderecoCep, setNfseTomadorEnderecoCep] = useState("");
-  const [nfseTomadorEnderecoCodigoMunicipio, setNfseTomadorEnderecoCodigoMunicipio] = useState("");
-  const [nfseTomadorEnderecoUf, setNfseTomadorEnderecoUf] = useState("");
-  const [nfseServicos, setNfseServicos] = useState<Array<{ codigo: string; descricao: string }>>([]);
-  const [nfseTomadorAutoDoc, setNfseTomadorAutoDoc] = useState<string | null>(null);
-  const [nfseDescontoAtivo, setNfseDescontoAtivo] = useState(false);
-  const [nfseDescontoPercent, setNfseDescontoPercent] = useState("");
-  const [nfseDescontoValor, setNfseDescontoValor] = useState("");
-  const [nfseValorTotal, setNfseValorTotal] = useState("");
-  const [nfseAthosQuery, setNfseAthosQuery] = useState("");
-  const [nfseAthosResults, setNfseAthosResults] = useState<Array<{
-    idcliente: number;
-    tipoPessoa: "fisico" | "juridico";
-    nome: string;
-    documento: string | null;
-    endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
-  }>>([]);
-  const [nfseAthosSearching, setNfseAthosSearching] = useState(false);
-  const [nfseClienteAthosSelecionado, setNfseClienteAthosSelecionado] = useState<number | null>(null);
-  const [nfseAthosError, setNfseAthosError] = useState("");
 
   useEffect(() => {
     const isDevBypass =
@@ -228,6 +202,8 @@ export default function OrcamentoDetailPage() {
         }
 
         setQuote(data);
+        setNfseNumero(data.nfseNumero ?? null);
+        setNfseLink(data.nfseLink ?? null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Falha ao carregar orçamento.");
       } finally {
@@ -257,196 +233,41 @@ export default function OrcamentoDetailPage() {
     }
   }
 
-  async function handleAbrirModalNfse() {
-    let temDocumento = false;
-    let servico = "24.01";
-    let doc: string | null = null;
-    let docTipo: "cpf" | "cnpj" = "cpf";
-    let nome = "";
-
-    try {
-      const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`);
-      const data = await res.json().catch(() => ({})) as {
-        servicosDisponiveis?: Array<{ codigo: string; descricao: string }>;
-        servicoSugerido?: string;
-        tomador?: {
-          cpf?: string | null;
-          cnpj?: string | null;
-          nome?: string | null;
-          temDocumento?: boolean;
-          endereco?: {
-            logradouro?: string;
-            numero?: string;
-            bairro?: string;
-            cep?: string;
-            codigoMunicipio?: string;
-            uf?: string;
-          } | null;
-        };
-      };
-      setNfseServicos(data.servicosDisponiveis ?? [{ codigo: "24.01", descricao: "Confecção de carimbos, banners, placas" }]);
-      servico = data.servicoSugerido ?? "24.01";
-      setNfseServico(servico);
-      doc = data.tomador?.cpf ?? data.tomador?.cnpj ?? null;
-      docTipo = data.tomador?.cnpj ? "cnpj" : "cpf";
-      nome = data.tomador?.nome ?? "";
-      temDocumento = !!data.tomador?.temDocumento;
-      setNfseTomadorAutoDoc(doc);
-      setNfseTomadorDoc(doc ?? "");
-      setNfseTomadorNome(nome);
-      setNfseTomadorTipo(docTipo);
-      setNfseTomadorEnderecoLogradouro(data.tomador?.endereco?.logradouro ?? "");
-      setNfseTomadorEnderecoNumero(data.tomador?.endereco?.numero ?? "");
-      setNfseTomadorEnderecoBairro(data.tomador?.endereco?.bairro ?? "");
-      setNfseTomadorEnderecoCep(data.tomador?.endereco?.cep ?? "");
-      setNfseTomadorEnderecoCodigoMunicipio(data.tomador?.endereco?.codigoMunicipio ?? "");
-      setNfseTomadorEnderecoUf(data.tomador?.endereco?.uf ?? "");
-    } catch {
-      setNfseServicos([{ codigo: "24.01", descricao: "Confecção de carimbos, banners, placas" }]);
-      setNfseTomadorEnderecoLogradouro("");
-      setNfseTomadorEnderecoNumero("");
-      setNfseTomadorEnderecoBairro("");
-      setNfseTomadorEnderecoCep("");
-      setNfseTomadorEnderecoCodigoMunicipio("");
-      setNfseTomadorEnderecoUf("");
-    }
-
-    // Sempre abre o modal — usuário pode escolher o serviço e confirmar os dados
-    setNfseAthosQuery("");
-    setNfseAthosResults([]);
-    setNfseAthosSearching(false);
-    setNfseClienteAthosSelecionado(null);
-    setNfseAthosError("");
-    setNfseModal(true);
-  }
-
-  async function searchAthosClientes() {
-    const q = nfseAthosQuery.trim();
-    if (!q) return;
-    setNfseAthosSearching(true);
-    setNfseAthosError("");
-    setNfseAthosResults([]);
-    try {
-      const isDoc = /^\d{3,}$/.test(q.replace(/\D/g, "")) && q.replace(/\D/g, "").length >= 8;
-      const param = isDoc
-        ? `documento=${encodeURIComponent(q.replace(/\D/g, ""))}`
-        : `nome=${encodeURIComponent(q)}`;
-      const res = await fetch(`/api/athos/clientes?${param}&take=10`);
-      const data = await res.json().catch(() => ({ error: "Resposta inválida." })) as {
-        items?: typeof nfseAthosResults;
-        error?: string;
-      };
-      if (!res.ok || data.error) {
-        setNfseAthosError(data.error ?? "Erro ao buscar clientes.");
-      } else {
-        setNfseAthosResults(data.items ?? []);
-        if ((data.items ?? []).length === 0) setNfseAthosError("Nenhum cliente encontrado.");
-      }
-    } catch {
-      setNfseAthosError("Falha ao conectar ao backend.");
-    } finally {
-      setNfseAthosSearching(false);
-    }
-  }
-
-  function selecionarClienteAthos(item: typeof nfseAthosResults[0]) {
-    setNfseClienteAthosSelecionado(item.idcliente);
-    setNfseTomadorTipo(item.tipoPessoa === "juridico" ? "cnpj" : "cpf");
-    setNfseTomadorDoc(item.documento ?? "");
-    setNfseTomadorNome(item.nome);
-    setNfseTomadorEnderecoLogradouro(item.endereco?.logradouro ?? "");
-    setNfseTomadorEnderecoNumero(item.endereco?.numero ?? "");
-    setNfseTomadorEnderecoBairro(item.endereco?.bairro ?? "");
-    setNfseTomadorEnderecoCep(item.endereco?.cep ?? "");
-    setNfseTomadorEnderecoCodigoMunicipio(item.endereco?.codigoMunicipio ?? "");
-    setNfseTomadorEnderecoUf(item.endereco?.uf ?? "");
-    setNfseAthosResults([]);
-    setNfseAthosQuery("");
-  }
-
-  function syncDesconto(field: "percent" | "valor" | "total", raw: string) {
-    const base = Number(quote?.body?.totais?.valor ?? 0);
-    const n = parseFloat(raw.replace(",", "."));
-    const valid = !isNaN(n) && n >= 0 && base > 0;
-
-    if (field === "percent") {
-      setNfseDescontoPercent(raw);
-      if (valid) {
-        const vDesc = (base * n) / 100;
-        setNfseDescontoValor(vDesc.toFixed(2));
-        setNfseValorTotal((base - vDesc).toFixed(2));
-      } else {
-        setNfseDescontoValor("");
-        setNfseValorTotal("");
-      }
-    } else if (field === "valor") {
-      setNfseDescontoValor(raw);
-      if (valid) {
-        const pct = (n / base) * 100;
-        setNfseDescontoPercent(pct.toFixed(2));
-        setNfseValorTotal((base - n).toFixed(2));
-      } else {
-        setNfseDescontoPercent("");
-        setNfseValorTotal("");
-      }
-    } else {
-      // Valor total não pode ser maior que o valor base
-      const clamped = valid && n > base ? base : n;
-      const rawClamped = (valid && n > base) ? base.toFixed(2) : raw;
-      setNfseValorTotal(rawClamped);
-      if (!isNaN(clamped) && clamped >= 0 && base > 0) {
-        const vDesc = base - clamped;
-        setNfseDescontoValor(vDesc.toFixed(2));
-        setNfseDescontoPercent(vDesc >= 0 ? ((vDesc / base) * 100).toFixed(2) : "0");
-      } else {
-        setNfseDescontoValor("0");
-        setNfseDescontoPercent("0");
-      }
-    }
-  }
-
-  async function handleEmitirNfse() {
-    setNfseModal(false);
-    setNfseState("emitindo");
+  // Emissão automática (SOAP) foi descontinuada pela prefeitura — a nota é
+  // emitida manualmente fora do sistema e o XML assinado é anexado aqui.
+  async function handleAnexarNfseFile(file: File) {
+    setNfseState("enviando");
     setNfseMsg("");
     try {
-      const body: Record<string, string | number | boolean> = { servicoCodigo: nfseServico };
-      const docLimpo = nfseTomadorDoc.replace(/\D/g, "");
-      if (docLimpo) {
-        if (nfseTomadorTipo === "cnpj") body.tomadorCnpj = docLimpo;
-        else body.tomadorCpf = docLimpo;
-      }
-      if (nfseTomadorNome.trim()) body.tomadorNome = nfseTomadorNome.trim();
-      if (nfseTomadorEnderecoLogradouro.trim()) body.tomadorEnderecoLogradouro = nfseTomadorEnderecoLogradouro.trim();
-      if (nfseTomadorEnderecoNumero.trim()) body.tomadorEnderecoNumero = nfseTomadorEnderecoNumero.trim();
-      if (nfseTomadorEnderecoBairro.trim()) body.tomadorEnderecoBairro = nfseTomadorEnderecoBairro.trim();
-      if (nfseTomadorEnderecoCep.trim()) body.tomadorEnderecoCep = nfseTomadorEnderecoCep.trim();
-      if (nfseTomadorEnderecoCodigoMunicipio.trim()) body.tomadorEnderecoCodigoMunicipio = nfseTomadorEnderecoCodigoMunicipio.trim();
-      if (nfseTomadorEnderecoUf.trim()) body.tomadorEnderecoUf = nfseTomadorEnderecoUf.trim().toUpperCase();
-      if (nfseDescontoAtivo && nfseDescontoValor) {
-        body.descontoAtivo = true;
-        body.descontoPorcentagem = Number(nfseDescontoPercent);
-        body.descontoValor = Number(nfseDescontoValor);
-      }
-
-      if (nfseClienteAthosSelecionado != null) {
-        body.clienteAthosId = nfseClienteAthosSelecionado;
-      }
+      const formData = new FormData();
+      formData.append("file", file);
       const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: formData,
       });
-      const data = await res.json().catch(() => ({})) as { numero?: string; link?: string; jaEmitida?: boolean; message?: string; error?: string };
-      if (!res.ok) throw new Error(data?.message || data?.error || "Falha ao emitir NFS-e.");
-      const numero = data.numero ?? null;
-      setNfseNumero(numero);
+      const data = await res.json().catch(() => ({})) as { numero?: string; link?: string; message?: string; error?: string };
+      if (!res.ok) throw new Error(data?.message || data?.error || "Falha ao anexar NFS-e.");
+      setNfseNumero(data.numero ?? null);
       setNfseLink(data.link ?? null);
       setNfseState("sucesso");
-      setNfseMsg(data.jaEmitida ? `NFS-e já emitida: número ${numero}` : `NFS-e emitida com sucesso! Número: ${numero}`);
+      setNfseMsg(`NFS-e anexada com sucesso! Número: ${data.numero}`);
     } catch (err) {
       setNfseState("erro");
-      setNfseMsg(err instanceof Error ? err.message : "Erro ao emitir NFS-e.");
+      setNfseMsg(err instanceof Error ? err.message : "Erro ao anexar NFS-e.");
+    }
+  }
+
+  async function handleRemoverNfse() {
+    if (!confirm("Remover o anexo da NFS-e? Isso não cancela a nota emitida, apenas libera para reenviar o XML.")) return;
+    try {
+      const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Falha ao remover anexo.");
+      setNfseNumero(null);
+      setNfseLink(null);
+      setNfseState("idle");
+      setNfseMsg("");
+    } catch (err) {
+      setNfseMsg(err instanceof Error ? err.message : "Erro ao remover anexo.");
     }
   }
 
@@ -693,26 +514,37 @@ export default function OrcamentoDetailPage() {
                   </div>
                 ) : null}
 
-                <div className="d-flex gap-2 flex-wrap">
+                <div className="d-flex gap-2 flex-wrap align-items-center">
                   {quote?.statusKey && quote.statusKey !== "CANCELADO" && !nfseNumero ? (
-                    <button
-                      type="button"
-                      className="btn btn-warning"
-                      onClick={() => void handleAbrirModalNfse()}
-                      disabled={nfseState === "emitindo"}
-                    >
-                      {nfseState === "emitindo" ? (
-                        <>
-                          <span className="spinner-border spinner-border-sm me-2" role="status" />
-                          Emitindo NFS-e...
-                        </>
-                      ) : (
-                        <>
-                          <i className="bi bi-receipt me-2" />
-                          Emitir Nota Fiscal
-                        </>
-                      )}
-                    </button>
+                    <>
+                      <input
+                        id="nfse-xml-input"
+                        type="file"
+                        accept=".xml,application/xml,text/xml"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (file) void handleAnexarNfseFile(file);
+                        }}
+                      />
+                      <label
+                        htmlFor="nfse-xml-input"
+                        className={`btn btn-warning mb-0${nfseState === "enviando" ? " disabled" : ""}`}
+                      >
+                        {nfseState === "enviando" ? (
+                          <>
+                            <span className="spinner-border spinner-border-sm me-2" role="status" />
+                            Enviando XML...
+                          </>
+                        ) : (
+                          <>
+                            <i className="bi bi-file-earmark-arrow-up me-2" />
+                            Anexar NFS-e (XML)
+                          </>
+                        )}
+                      </label>
+                    </>
                   ) : nfseNumero ? (
                     <>
                       <span className="btn btn-outline-success disabled">
@@ -722,9 +554,13 @@ export default function OrcamentoDetailPage() {
                       {nfseLink ? (
                         <a className="btn btn-outline-primary" href={nfseLink} target="_blank" rel="noreferrer">
                           <i className="bi bi-box-arrow-up-right me-2" />
-                          Abrir NFS-e
+                          Abrir XML
                         </a>
                       ) : null}
+                      <button type="button" className="btn btn-outline-danger" onClick={() => void handleRemoverNfse()}>
+                        <i className="bi bi-x-circle me-2" />
+                        Remover anexo
+                      </button>
                     </>
                   ) : null}
                   {canEnviar ? (
@@ -787,272 +623,6 @@ export default function OrcamentoDetailPage() {
                 allowFullScreen
                 src={pdfViewerUrl}
               />
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Modal emissão NFS-e */}
-      {nfseModal ? (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1060 }}>
-          <div style={{ background: "#fff", borderRadius: 8, width: "100%", maxWidth: 480, padding: "1.5rem", boxShadow: "0 4px 24px #0003", maxHeight: "90vh", overflowY: "auto" }}>
-            <h5 className="mb-3"><i className="bi bi-file-earmark-text me-2" />Emitir Nota Fiscal (NFS-e)</h5>
-
-            {/* Busca cliente Athos */}
-            <div className="mb-3">
-              <label className="form-label fw-semibold">Buscar cliente Athos</label>
-              {nfseClienteAthosSelecionado ? (
-                <div className="alert alert-success py-2 d-flex justify-content-between align-items-center">
-                  <span>
-                    <i className="bi bi-person-check me-2" />
-                    <strong>{nfseTomadorNome}</strong>
-                    {nfseTomadorDoc ? ` — ${nfseTomadorDoc}` : ""}
-                    <small className="text-muted ms-2">(id {nfseClienteAthosSelecionado})</small>
-                  </span>
-                  <button
-                    type="button"
-                    className="btn-close btn-sm"
-                    aria-label="Remover seleção"
-                    onClick={() => {
-                      setNfseClienteAthosSelecionado(null);
-                      setNfseTomadorDoc("");
-                      setNfseTomadorNome("");
-                      setNfseAthosResults([]);
-                      setNfseAthosQuery("");
-                      setNfseAthosError("");
-                    }}
-                  />
-                </div>
-              ) : (
-                <>
-                  <div className="input-group mb-1">
-                    <input
-                      className="form-control"
-                      placeholder="Nome ou CPF/CNPJ"
-                      value={nfseAthosQuery}
-                      onChange={e => setNfseAthosQuery(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void searchAthosClientes(); } }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary"
-                      onClick={() => void searchAthosClientes()}
-                      disabled={nfseAthosSearching || !nfseAthosQuery.trim()}
-                    >
-                      {nfseAthosSearching
-                        ? <span className="spinner-border spinner-border-sm" role="status" />
-                        : <i className="bi bi-search" />}
-                    </button>
-                  </div>
-                  {nfseAthosError && <div className="text-danger small">{nfseAthosError}</div>}
-                  {nfseAthosResults.length > 0 && (
-                    <ul className="list-group list-group-flush border rounded" style={{ maxHeight: 180, overflowY: "auto" }}>
-                      {nfseAthosResults.map(item => (
-                        <li key={item.idcliente} className="list-group-item list-group-item-action py-2 px-3 d-flex justify-content-between align-items-center">
-                          <span>
-                            <span className={`badge me-2 ${item.tipoPessoa === "juridico" ? "bg-info text-dark" : "bg-secondary"}`}>
-                              {item.tipoPessoa === "juridico" ? "PJ" : "PF"}
-                            </span>
-                            <strong>{item.nome}</strong>
-                            {item.documento ? <small className="text-muted ms-2">{item.documento}</small> : null}
-                          </span>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-primary"
-                            onClick={() => selecionarClienteAthos(item)}
-                          >
-                            Selecionar
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="mb-3">
-              <label className="form-label fw-semibold">Serviço</label>
-              <select className="form-select" value={nfseServico} onChange={e => setNfseServico(e.target.value)}>
-                {nfseServicos.map(s => (
-                  <option key={s.codigo} value={s.codigo}>{s.codigo} — {s.descricao}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mb-3">
-              <label className="form-label fw-semibold">Documento do tomador</label>
-              <div className="d-flex gap-2 mb-2">
-                <div className="form-check">
-                  <input className="form-check-input" type="radio" id="tipoCpf" checked={nfseTomadorTipo === "cpf"} onChange={() => setNfseTomadorTipo("cpf")} />
-                  <label className="form-check-label" htmlFor="tipoCpf">CPF</label>
-                </div>
-                <div className="form-check">
-                  <input className="form-check-input" type="radio" id="tipoCnpj" checked={nfseTomadorTipo === "cnpj"} onChange={() => setNfseTomadorTipo("cnpj")} />
-                  <label className="form-check-label" htmlFor="tipoCnpj">CNPJ</label>
-                </div>
-              </div>
-              <input
-                className="form-control"
-                placeholder={nfseTomadorTipo === "cpf" ? "000.000.000-00" : "00.000.000/0000-00"}
-                value={nfseTomadorDoc}
-                onChange={e => setNfseTomadorDoc(e.target.value)}
-              />
-              {nfseTomadorAutoDoc && (
-                <small className="text-success"><i className="bi bi-check-circle me-1" />Encontrado automaticamente</small>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="form-label fw-semibold">Nome do tomador</label>
-              <input className="form-control" placeholder="Nome completo ou razão social" value={nfseTomadorNome} onChange={e => setNfseTomadorNome(e.target.value)} />
-            </div>
-
-            <div className="mb-2">
-              <label className="form-label fw-semibold">Endereço do tomador</label>
-              <input
-                className="form-control mb-2"
-                placeholder="Logradouro"
-                value={nfseTomadorEnderecoLogradouro}
-                onChange={e => setNfseTomadorEnderecoLogradouro(e.target.value)}
-              />
-              <input
-                className="form-control"
-                placeholder="Número"
-                value={nfseTomadorEnderecoNumero}
-                onChange={e => setNfseTomadorEnderecoNumero(e.target.value)}
-              />
-            </div>
-
-            <div className="mb-2">
-              <input
-                className="form-control"
-                placeholder="Bairro"
-                value={nfseTomadorEnderecoBairro}
-                onChange={e => setNfseTomadorEnderecoBairro(e.target.value)}
-              />
-            </div>
-
-            <div className="row g-2 mb-3">
-              <div className="col-5">
-                <input
-                  className="form-control"
-                  placeholder="CEP"
-                  value={nfseTomadorEnderecoCep}
-                  onChange={e => setNfseTomadorEnderecoCep(e.target.value)}
-                />
-              </div>
-              <div className="col-5">
-                <input
-                  className="form-control"
-                  placeholder="Município (IBGE)"
-                  value={nfseTomadorEnderecoCodigoMunicipio}
-                  onChange={e => setNfseTomadorEnderecoCodigoMunicipio(e.target.value)}
-                />
-              </div>
-              <div className="col-2">
-                <input
-                  className="form-control text-uppercase"
-                  placeholder="UF"
-                  maxLength={2}
-                  value={nfseTomadorEnderecoUf}
-                  onChange={e => setNfseTomadorEnderecoUf(e.target.value.toUpperCase())}
-                />
-              </div>
-            </div>
-
-            <div className="alert alert-light small mb-4">
-              Use a busca acima para selecionar um cliente Athos. Se preferir, preencha documento e endereço manualmente.
-            </div>
-
-            {/* Seção de desconto */}
-            <div className="mb-3">
-              <div className="form-check form-switch mb-2">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="nfseDescontoSwitch"
-                  checked={nfseDescontoAtivo}
-                  onChange={e => {
-                    setNfseDescontoAtivo(e.target.checked);
-                    if (e.target.checked) {
-                      setNfseDescontoPercent("0");
-                      setNfseDescontoValor("0");
-                      setNfseValorTotal((quote?.body?.totais?.valor ?? 0).toFixed(2));
-                    } else {
-                      setNfseDescontoPercent("");
-                      setNfseDescontoValor("");
-                      setNfseValorTotal("");
-                    }
-                  }}
-                />
-                <label className="form-check-label fw-semibold" htmlFor="nfseDescontoSwitch">Aplicar desconto</label>
-              </div>
-              {nfseDescontoAtivo && (
-                <div className="border rounded p-3 bg-light">
-                  <div className="row g-2">
-                    <div className="col-4">
-                      <label className="form-label small mb-1">% desconto</label>
-                      <div className="input-group input-group-sm">
-                        <input
-                          className="form-control"
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={nfseDescontoPercent}
-                          onChange={e => syncDesconto("percent", e.target.value)}
-                        />
-                        <span className="input-group-text">%</span>
-                      </div>
-                    </div>
-                    <div className="col-4">
-                      <label className="form-label small mb-1">R$ desconto</label>
-                      <div className="input-group input-group-sm">
-                        <span className="input-group-text">R$</span>
-                        <input
-                          className="form-control"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={nfseDescontoValor}
-                          onChange={e => syncDesconto("valor", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="col-4">
-                      <label className="form-label small mb-1">Valor total</label>
-                      <div className="input-group input-group-sm">
-                        <span className="input-group-text">R$</span>
-                        <input
-                          className="form-control"
-                          type="number"
-                          min="0"
-                          max={(quote?.body?.totais?.valor ?? 0).toFixed(2)}
-                          step="0.01"
-                          placeholder={(quote?.body?.totais?.valor ?? 0).toFixed(2)}
-                          value={nfseValorTotal}
-                          onChange={e => syncDesconto("total", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  {quote?.body?.totais?.valor != null && (
-                    <small className="text-muted mt-1 d-block">
-                      Valor base: {Number(quote.body?.totais?.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                    </small>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="d-flex gap-2 justify-content-end">
-              <button className="btn btn-secondary" onClick={() => setNfseModal(false)}>Cancelar</button>
-              <button className="btn btn-warning" onClick={() => void handleEmitirNfse()}>
-                <i className="bi bi-file-earmark-check me-2" />Emitir NFS-e
-              </button>
             </div>
           </div>
         </div>

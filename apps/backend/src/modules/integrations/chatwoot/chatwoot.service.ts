@@ -78,6 +78,34 @@ export class ChatwootService {
     }
   }
 
+  async toggleConversationStatus(conversationId: string, status: "open" | "resolved" | "pending" | "snoozed") {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return { enabled: false, message: "Configuração do Chatwoot ausente." };
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/toggle_status`;
+    const response = await axios.post(url, { status }, { headers: { api_access_token: token } });
+    return { enabled: true, response: response.data };
+  }
+
+  async addConversationLabels(conversationId: string, labels: string[]) {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return { enabled: false, message: "Configuração do Chatwoot ausente." };
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/labels`;
+    const response = await axios.post(url, { labels }, { headers: { api_access_token: token } });
+    return { enabled: true, response: response.data };
+  }
+
   async sendAttachment(conversationId: string, buffer: Buffer, fileName: string, contentType: string) {
     const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
     const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
