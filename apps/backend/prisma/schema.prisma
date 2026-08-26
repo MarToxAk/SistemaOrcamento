@@ -257,10 +257,13 @@ model CobrancaBoletoTitulo {
 model NfseEmitida {
   id             Int                 @id @default(autoincrement())
   numeroNfse     String?
-  numeroRps      Int
+  numeroRps      Int?                // legado (emissao SOAP descontinuada); anexo manual nao tem RPS
   idclienteAthos Int
   valorServico   Decimal             @db.Decimal(12, 2)
-  linkNfse       String?             // link de download da NFS-e retornado pela API IIBR
+  linkNfse       String?             // URL publica do XML anexado manualmente
+  chaveAcesso    String?             // Id do infNFSe (padrao nacional NBS)
+  arquivoPath    String?             // objectName no MinIO
+  arquivoNome    String?             // nome original do arquivo enviado
   dataEmissao    DateTime            @default(now())
   criadoEm       DateTime            @default(now())
   idvenda        Int?                // D-07: venda Athos que originou a NFS-e
