@@ -1,3 +1,5 @@
+import { QuoteStatus } from "@prisma/client";
+
 import {
   ChatwootAutomationService,
   calcularSaudacao,
@@ -8,24 +10,24 @@ import {
 } from "./chatwoot-automation.service";
 
 describe("ChatwootAutomationService - podeFecharConversa", () => {
-  it("permite fechar quando status esta na lista permitida (ex: 7=finalizado, 8=entregue)", () => {
-    expect(podeFecharConversa(7, [7, 8])).toBe(true);
-    expect(podeFecharConversa(8, [7, 8])).toBe(true);
+  it("permite fechar quando status esta na lista permitida (ex: ENTREGUE, ENVIADO)", () => {
+    expect(podeFecharConversa(QuoteStatus.ENTREGUE, [QuoteStatus.ENTREGUE, QuoteStatus.ENVIADO])).toBe(true);
+    expect(podeFecharConversa(QuoteStatus.ENVIADO, [QuoteStatus.ENTREGUE, QuoteStatus.ENVIADO])).toBe(true);
   });
 
-  it("permite fechar quando nao ha pedido vinculado ao chat (null/undefined), mesmo com lista vazia", () => {
+  it("permite fechar quando nao ha quote vinculado a conversa (null/undefined), mesmo com lista vazia", () => {
     expect(podeFecharConversa(null, [])).toBe(true);
     expect(podeFecharConversa(undefined, [])).toBe(true);
   });
 
-  it("bloqueia fechamento quando pedido esta em status fora da lista permitida (em producao)", () => {
-    expect(podeFecharConversa(3, [7, 8])).toBe(false);
-    expect(podeFecharConversa(0, [7, 8])).toBe(false);
+  it("bloqueia fechamento quando quote esta em status fora da lista permitida (em producao)", () => {
+    expect(podeFecharConversa(QuoteStatus.EM_PRODUCAO, [QuoteStatus.ENTREGUE, QuoteStatus.ENVIADO])).toBe(false);
+    expect(podeFecharConversa(QuoteStatus.PENDENTE, [QuoteStatus.ENTREGUE, QuoteStatus.ENVIADO])).toBe(false);
   });
 
-  it("lista configurada e respeitada (ex: incluindo status de 'nao pago')", () => {
-    expect(podeFecharConversa(1, [1, 7, 8])).toBe(true);
-    expect(podeFecharConversa(1, [7, 8])).toBe(false);
+  it("lista configurada e respeitada (ex: incluindo status 'APROVADO')", () => {
+    expect(podeFecharConversa(QuoteStatus.APROVADO, [QuoteStatus.APROVADO, QuoteStatus.ENTREGUE])).toBe(true);
+    expect(podeFecharConversa(QuoteStatus.APROVADO, [QuoteStatus.ENTREGUE])).toBe(false);
   });
 });
 
@@ -82,7 +84,7 @@ describe("ChatwootAutomationService - extrairMensagemIA", () => {
 
 describe("ChatwootAutomationService - handleConversationResolved (orquestracao)", () => {
   function buildService(overrides: {
-    ultimoStatus?: number | null;
+    quoteStatus?: QuoteStatus | null;
     podeEnviar?: boolean;
     aiResponse?: unknown;
     aiThrows?: boolean;
@@ -98,6 +100,15 @@ describe("ChatwootAutomationService - handleConversationResolved (orquestracao)"
         create: jest.fn(),
         update: jest.fn(),
       },
+      quote: {
+        findFirst: jest.fn().mockResolvedValue(
+          overrides.quoteStatus === undefined ? null : { status: overrides.quoteStatus },
+        ),
+      },
+      chatwootMensagemEnviada: {
+        findFirst: jest.fn().mockResolvedValue(overrides.podeEnviar === false ? { id: "existente" } : null),
+        create: jest.fn().mockResolvedValue(undefined),
+      },
     };
     const chatwoot = {
       toggleConversationStatus: jest.fn().mockResolvedValue({ enabled: true }),
@@ -105,17 +116,10 @@ describe("ChatwootAutomationService - handleConversationResolved (orquestracao)"
       addConversationLabels: jest.fn().mockResolvedValue({ enabled: true }),
       sendOutgoingMessage: jest.fn().mockResolvedValue({ enabled: true }),
     };
-    const pedidosDb = {
-      buscarUltimoStatusPorChatId: jest.fn().mockResolvedValue(
-        overrides.ultimoStatus === undefined ? null : { pedidoId: 1, numero: "1", nome: "Cliente", ultimoStatus: overrides.ultimoStatus, quando: new Date() },
-      ),
-      podeEnviarMensagemFechamento: jest.fn().mockResolvedValue(overrides.podeEnviar ?? true),
-      registrarMensagemEnviada: jest.fn().mockResolvedValue(undefined),
-    };
     const config = {
       get: jest.fn((key: string) => {
         if (key === "CHATWOOT_AUTOMATION_INBOX_IDS") return "1,21";
-        if (key === "CHATWOOT_AUTOMATION_STATUS_FECHAMENTO") return overrides.statusFechamento ?? "7,8";
+        if (key === "CHATWOOT_AUTOMATION_STATUS_FECHAMENTO") return overrides.statusFechamento;
         if (key === "CHATWOOT_AI_URL") return "http://ia.local/v1/responses";
         if (key === "CHATWOOT_AI_TOKEN") return "token";
         if (key === "CHATWOOT_AI_MODEL") return "openclaw/main";
@@ -123,7 +127,7 @@ describe("ChatwootAutomationService - handleConversationResolved (orquestracao)"
       }),
     };
 
-    const service = new ChatwootAutomationService(prisma as any, chatwoot as any, pedidosDb as any, config as any);
+    const service = new ChatwootAutomationService(prisma as any, chatwoot as any, config as any);
 
     if (overrides.aiThrows) {
       jest.spyOn(service as any, "chamarIA").mockRejectedValue(new Error("IA indisponivel"));
@@ -133,54 +137,55 @@ describe("ChatwootAutomationService - handleConversationResolved (orquestracao)"
       );
     }
 
-    return { service, prisma, chatwoot, pedidosDb };
+    return { service, prisma, chatwoot };
   }
 
   it("ignora webhook de inbox nao monitorado", async () => {
-    const { service, pedidosDb } = buildService();
+    const { service, prisma } = buildService();
     const result = await service.handleConversationResolved({ id: 1, contact_inbox: { inbox_id: 999 } });
     expect(result).toEqual({ processed: false, reason: "inbox_nao_monitorado" });
-    expect(pedidosDb.buscarUltimoStatusPorChatId).not.toHaveBeenCalled();
+    expect(prisma.quote.findFirst).not.toHaveBeenCalled();
   });
 
-  it("bloqueia fechamento e reabre a conversa quando pedido esta pendente", async () => {
-    const { service, chatwoot, pedidosDb } = buildService({ ultimoStatus: 3 });
+  it("bloqueia fechamento e reabre a conversa quando quote esta em producao", async () => {
+    const { service, chatwoot, prisma } = buildService({ quoteStatus: QuoteStatus.EM_PRODUCAO });
     const result = await service.handleConversationResolved({ id: 42, contact_inbox: { inbox_id: 21 } });
     expect(result.action).toBe("bloqueado_pedido_pendente");
     expect(chatwoot.toggleConversationStatus).toHaveBeenCalledWith("42", "open");
     expect(chatwoot.postConversationNote).toHaveBeenCalledWith("42", "Pedido pendente");
-    expect(pedidosDb.podeEnviarMensagemFechamento).not.toHaveBeenCalled();
+    expect(prisma.chatwootMensagemEnviada.findFirst).not.toHaveBeenCalled();
   });
 
-  it("respeita a lista configurada via CHATWOOT_AUTOMATION_STATUS_FECHAMENTO (ex: incluindo 'nao pago')", async () => {
-    // status 1 = "Nao Pago" (primeiro status) — nao libera por default (7,8), mas libera quando configurado
-    const bloqueado = buildService({ ultimoStatus: 1, statusFechamento: "7,8" });
+  it("respeita a lista configurada via CHATWOOT_AUTOMATION_STATUS_FECHAMENTO (ex: incluindo 'APROVADO')", async () => {
+    const bloqueado = buildService({ quoteStatus: QuoteStatus.APROVADO, statusFechamento: "ENTREGUE,ENVIADO" });
     const resultBloqueado = await bloqueado.service.handleConversationResolved({ id: 42, contact_inbox: { inbox_id: 1 } });
     expect(resultBloqueado.action).toBe("bloqueado_pedido_pendente");
 
-    const liberado = buildService({ ultimoStatus: 1, podeEnviar: true, statusFechamento: "1,7,8" });
+    const liberado = buildService({ quoteStatus: QuoteStatus.APROVADO, podeEnviar: true, statusFechamento: "APROVADO,ENTREGUE,ENVIADO" });
     const resultLiberado = await liberado.service.handleConversationResolved({ id: 43, contact_inbox: { inbox_id: 1 } });
     expect(resultLiberado.action).toBe("mensagem_enviada");
   });
 
   it("nao reenvia mensagem de fechamento se ja foi enviada hoje", async () => {
-    const { service, chatwoot } = buildService({ ultimoStatus: 7, podeEnviar: false });
+    const { service, chatwoot } = buildService({ quoteStatus: QuoteStatus.ENTREGUE, podeEnviar: false });
     const result = await service.handleConversationResolved({ id: 42, contact_inbox: { inbox_id: 1 } });
     expect(result.action).toBe("mensagem_ja_enviada_hoje");
     expect(chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
   });
 
-  it("gera e envia mensagem de fechamento via IA quando pedido esta finalizado", async () => {
-    const { service, chatwoot, pedidosDb } = buildService({ ultimoStatus: 7, podeEnviar: true });
+  it("gera e envia mensagem de fechamento via IA quando quote esta entregue", async () => {
+    const { service, chatwoot, prisma } = buildService({ quoteStatus: QuoteStatus.ENTREGUE, podeEnviar: true });
     const result = await service.handleConversationResolved({ id: 42, contact_inbox: { inbox_id: 1 } });
     expect(result.action).toBe("mensagem_enviada");
     expect(chatwoot.addConversationLabels).toHaveBeenCalledWith("42", ["finalizado"]);
     expect(chatwoot.sendOutgoingMessage).toHaveBeenCalledWith("42", "Mensagem gerada pela IA");
-    expect(pedidosDb.registrarMensagemEnviada).toHaveBeenCalledWith("42", "close", "Mensagem gerada pela IA");
+    expect(prisma.chatwootMensagemEnviada.create).toHaveBeenCalledWith({
+      data: { conversationId: "42", tipoEvento: "close", mensagemEnviada: "Mensagem gerada pela IA" },
+    });
   });
 
   it("usa mensagem fallback quando a chamada de IA falha", async () => {
-    const { service, chatwoot } = buildService({ ultimoStatus: null, podeEnviar: true, aiThrows: true });
+    const { service, chatwoot } = buildService({ quoteStatus: null, podeEnviar: true, aiThrows: true });
     const result = await service.handleConversationResolved({ id: 42, contact_inbox: { inbox_id: 1 } });
     expect(result.action).toBe("mensagem_enviada");
     expect(chatwoot.sendOutgoingMessage).toHaveBeenCalledWith("42", expect.stringContaining("Precisa de ajuda com um orçamento"));

@@ -336,3 +336,16 @@ model ChatwootAutomationConfig {
   updatedAt              DateTime @updatedAt
   updatedBy              String?
 }
+
+// Registro de mensagens de automacao enviadas por conversa (ex.: evita reenviar a
+// mensagem de fechamento no mesmo dia). Substitui a tabela "mensagens_enviadas" do
+// banco externo de pedidos, que deixou de ser usado pela automacao do Chatwoot.
+model ChatwootMensagemEnviada {
+  id               String   @id @default(uuid())
+  conversationId   String
+  tipoEvento       String
+  mensagemEnviada  String   @db.Text
+  enviadoEm        DateTime @default(now())
+
+  @@index([conversationId, tipoEvento, enviadoEm])
+}

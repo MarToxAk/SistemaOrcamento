@@ -1,10 +1,10 @@
 import { Injectable, InternalServerErrorException, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { QuoteStatus } from "@prisma/client";
 import axios from "axios";
 import Handlebars from "handlebars";
 
 import { ChatwootService } from "./chatwoot.service";
-import { PedidosDbService } from "./pedidos-db.service";
 import { PrismaService } from "../../database/prisma.service";
 
 export type ChatwootAutomationWebhookPayload = {
@@ -23,18 +23,23 @@ const DEFAULT_PROMPT_FECHAMENTO =
   '- Maximo 2 frases curtas.\n' +
   '- Responda APENAS com a mensagem final, sem aspas, sem explicacoes, sem markdown.';
 
+const STATUS_FECHAMENTO_PADRAO: QuoteStatus[] = [QuoteStatus.ENTREGUE, QuoteStatus.ENVIADO, QuoteStatus.CANCELADO];
+
 const DEFAULT_MENSAGEM_PEDIDO_PENDENTE =
   '⚠️ ATENCAO: PEDIDO PENDENTE\n\n' +
   'Nao e possivel finalizar este atendimento. Existe um servico vinculado a este cliente que ainda nao esta com status "Finalizado" ou "Entregue".\n\n' +
   'Por favor, verifique a producao e atualize o status do servico antes de encerrar o contato.';
 
-// Status considerados "seguros para fechar" no historico do pedido — configuravel via
-// CHATWOOT_AUTOMATION_STATUS_FECHAMENTO (default "7,8" = Finalizado/Entregue, mesmos
-// codigos do fluxo n8n original). Quando o pedido nao existe (chat sem pedido vinculado)
-// tambem liberamos o fechamento normal da conversa, independente da lista configurada.
-export function podeFecharConversa(ultimoStatus: number | null | undefined, statusPermitidos: number[]): boolean {
-  if (ultimoStatus === null || ultimoStatus === undefined) return true;
-  return statusPermitidos.includes(ultimoStatus);
+// Status do Quote (deste sistema) considerados "seguros para fechar" a conversa —
+// configuravel via CHATWOOT_AUTOMATION_STATUS_FECHAMENTO (default ENTREGUE,ENVIADO,
+// CANCELADO). Quando nao ha Quote vinculado a conversationId tambem liberamos o
+// fechamento normal, independente da lista configurada.
+export function podeFecharConversa(
+  statusAtual: QuoteStatus | null | undefined,
+  statusPermitidos: QuoteStatus[],
+): boolean {
+  if (statusAtual === null || statusAtual === undefined) return true;
+  return statusPermitidos.includes(statusAtual);
 }
 
 export function inboxPermitido(inboxId: number | undefined, permitidos: number[]): boolean {
@@ -75,7 +80,6 @@ export class ChatwootAutomationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatwoot: ChatwootService,
-    private readonly pedidosDb: PedidosDbService,
     private readonly config: ConfigService,
   ) {}
 
@@ -87,12 +91,14 @@ export class ChatwootAutomationService {
       .filter((v) => Number.isFinite(v));
   }
 
-  private getStatusPermitidosFechamento(): number[] {
-    const raw = this.config.get<string>("CHATWOOT_AUTOMATION_STATUS_FECHAMENTO") ?? "7,8";
-    return raw
+  private getStatusPermitidosFechamento(): QuoteStatus[] {
+    const raw = this.config.get<string>("CHATWOOT_AUTOMATION_STATUS_FECHAMENTO");
+    if (!raw) return STATUS_FECHAMENTO_PADRAO;
+    const valores = raw
       .split(",")
-      .map((v) => Number(v.trim()))
-      .filter((v) => Number.isFinite(v));
+      .map((v) => v.trim())
+      .filter((v): v is QuoteStatus => Object.values(QuoteStatus).includes(v as QuoteStatus));
+    return valores.length > 0 ? valores : STATUS_FECHAMENTO_PADRAO;
   }
 
   async getConfig() {
@@ -147,16 +153,20 @@ export class ChatwootAutomationService {
     }
 
     const conversationId = String(payload.id);
-    const status = await this.pedidosDb.buscarUltimoStatusPorChatId(conversationId);
+    const quote = await this.prisma.quote.findFirst({
+      where: { conversationId: BigInt(conversationId) },
+      orderBy: { updatedAt: "desc" },
+      select: { status: true },
+    });
 
-    if (!podeFecharConversa(status?.ultimoStatus, this.getStatusPermitidosFechamento())) {
+    if (!podeFecharConversa(quote?.status, this.getStatusPermitidosFechamento())) {
       const config = await this.getConfig();
       await this.chatwoot.toggleConversationStatus(conversationId, "open");
       await this.chatwoot.postConversationNote(conversationId, config.mensagemPedidoPendente);
       return { processed: true, action: "bloqueado_pedido_pendente" as const };
     }
 
-    const podeEnviar = await this.pedidosDb.podeEnviarMensagemFechamento(conversationId);
+    const podeEnviar = await this.podeEnviarMensagemFechamento(conversationId);
     if (!podeEnviar) {
       return { processed: true, action: "mensagem_ja_enviada_hoje" as const };
     }
@@ -178,8 +188,22 @@ export class ChatwootAutomationService {
     }
 
     await this.chatwoot.sendOutgoingMessage(conversationId, mensagem);
-    await this.pedidosDb.registrarMensagemEnviada(conversationId, "close", mensagem);
+    await this.prisma.chatwootMensagemEnviada.create({
+      data: { conversationId, tipoEvento: "close", mensagemEnviada: mensagem },
+    });
 
     return { processed: true, action: "mensagem_enviada" as const, mensagem };
+  }
+
+  private async podeEnviarMensagemFechamento(conversationId: string): Promise<boolean> {
+    const jaEnviouHoje = await this.prisma.chatwootMensagemEnviada.findFirst({
+      where: {
+        conversationId,
+        tipoEvento: "close",
+        enviadoEm: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+      },
+      select: { id: true },
+    });
+    return !jaEnviouHoje;
   }
 }
