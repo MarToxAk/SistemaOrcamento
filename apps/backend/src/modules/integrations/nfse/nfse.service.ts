@@ -1,153 +1,1238 @@
-import { randomUUID } from "node:crypto";
-
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+﻿import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Client as MinioClient } from "minio";
+import axios from "axios";
+import { createHash } from "crypto";
+import * as soap from "soap";
 
 import { PrismaService } from "../../database/prisma.service";
-import { ParsedNfse, parseNfseXml } from "./nfse-xml-parser.util";
+import { AthosService } from "../athos/athos.service";
+import { ChatwootService } from "../chatwoot/chatwoot.service";
+import { consultarIbgePorCep } from "./viacep.util";
 
-export type UploadedXmlFile = {
-  originalname: string;
-  buffer: Buffer;
-  mimetype: string;
-  size: number;
+export interface EmitirNfseInput {
+  tomadorCnpj?: string;
+  tomadorCpf?: string;
+  tomadorNome?: string;
+  tomadorEnderecoLogradouro?: string;
+  tomadorEnderecoNumero?: string;
+  tomadorEnderecoBairro?: string;
+  tomadorEnderecoCep?: string;
+  tomadorEnderecoCodigoMunicipio?: string;
+  tomadorEnderecoUf?: string;
+  servicoCodigo?: string; // ex: "24.01", "13.05", "14.08"
+  codigoTributacaoNacional?: string; // override manual
+  /** Ativa aplicacao de desconto na emissao da NFS-e (NFSD-01) */
+  descontoAtivo?: boolean;
+  /** Percentual de desconto (0-100) sobre valorServicos (NFSD-02) */
+  descontoPorcentagem?: number;
+  /** Valor fixo de desconto em reais (NFSD-03) */
+  descontoValor?: number;
+  /** @deprecated Mantido por compatibilidade; percentual agora usa sempre valorServicos */
+  totalPago?: number;
+  /** ID do cliente Athos selecionado explicitamente; quando informado substitui o lookup via orcamento (TOMAD-01) */
+  clienteAthosId?: number;
+  /** Codigo NBS (Nomenclatura Brasileira de Servicos); sem override usa o default NBS_DEFAULT */
+  codigoNbs?: string;
+}
+
+type TomadorEndereco = {
+  logradouro: string;
+  numero: string;
+  bairro: string;
+  cep: string;
+  codigoMunicipio: string;
+  uf: string;
 };
 
-export type { ParsedNfse };
+type RpsXmlInput = {
+  numero: number;
+  serie: string;
+  dataEmissao: string;
+  valorServicos: number;
+  descontoIncondicionado: number;
+  discriminacao: string;
+  itemLista: string;
+  codigoNacional: string;
+  codigoNbs: string;
+  aliquotaIss: string;
+  tomadorCpf?: string | null;
+  tomadorCnpj?: string | null;
+  tomadorNome?: string | null;
+  tomadorEndereco?: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+};
 
-// ---------------------------------------------------------------------------
-// NfseService — a emissao automatica via SOAP (iiBrasil/ABRASF) foi
-// descontinuada pela prefeitura de Ilhabela. A nota agora e emitida
-// manualmente (fora do sistema) e o XML assinado (padrao nacional NBS) e
-// anexado aqui: parseia os campos relevantes e guarda o arquivo no MinIO.
-// ---------------------------------------------------------------------------
+// Codigos de erro ABRASF/iiBrasil que indicam CodigoMunicipio do tomador incorreto (D-02)
+const CODIGOS_ERRO_MUNICIPIO_TOMADOR = ["E288", "E58"];
+
+// ServiÃ§os disponÃ­veis para emissÃ£o de NFS-e
+const SERVICOS: Record<string, { itemLista: string; codigoNacional: string; aliquotaIss: string; descricao: string }> = {
+  "24.01":    { itemLista: "24.01", codigoNacional: "240101", aliquotaIss: "3.73", descricao: "ConfecÃ§Ã£o de carimbos, banners, placas e sinalizaÃ§Ã£o" },
+  "24.01-02": { itemLista: "24.01", codigoNacional: "240102", aliquotaIss: "3.73", descricao: "GravaÃ§Ã£o de objetos e joias" },
+  "13.05":    { itemLista: "13.05", codigoNacional: "130501", aliquotaIss: "3.73", descricao: "ComposiÃ§Ã£o grÃ¡fica e confecÃ§Ã£o de matrizes" },
+  "14.08":    { itemLista: "14.08", codigoNacional: "140801", aliquotaIss: "3.73", descricao: "EncadernaÃ§Ã£o e acabamento" },
+};
+
+const DEFAULT_SERVICO = "24.01";
+const CBS_RATE  = 0.009;  // 0.9%
+const IBS_RATE  = 0.001;  // 0.1%
+// E352 da prefeitura exige NBS com 9 caracteres (sem pontuacao): 1.2101.22.00 -> 121012200
+const NBS_DEFAULT = "121012200";
+
 @Injectable()
 export class NfseService {
   private readonly logger = new Logger(NfseService.name);
 
+  private get CODIGO_MUNICIPIO() { return this.config.get<string>("EMPRESA_MUNICIPIO_IBGE") ?? "3520400"; }
+  private readonly SERIE_RPS         = "RPS";
+
+  private readonly DEFAULT_ENDPOINT = "https://ilhabela2.iibr.com.br/rps/3520400/1/soap/producao/rps";
+  private readonly DEFAULT_AUX_URL  = "https://ilhabela2.iibr.com.br/rps/3520400/2/AUXILIARRPS";
+
+  private get WSDL_URL()  { return (this.config.get<string>("NFSE_SOAP_URL")?.trim() || this.DEFAULT_ENDPOINT) + "?wsdl"; }
+  private get ENDPOINT()  { return this.config.get<string>("NFSE_SOAP_URL")?.trim() || this.DEFAULT_ENDPOINT; }
+  private get AUX_URL()   { return this.config.get<string>("NFSE_AUX_URL")?.trim()  || this.DEFAULT_AUX_URL;  }
+
   constructor(
+    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly configService: ConfigService,
+    private readonly athosService: AthosService,
+    private readonly chatwootService: ChatwootService,
   ) {}
 
-  parseXml(buffer: Buffer): ParsedNfse {
-    const xml = buffer.toString("utf-8");
-    const parsed = parseNfseXml(xml);
-    if (!parsed.numeroNfse) {
+  private getToken(): string {
+    return this.config.get<string>("NFSE_TOKEN") ?? "";
+  }
+
+  private getCnpjPrestador(): string {
+    return this.config.get<string>("NFSE_CNPJ_PRESTADOR") ?? "";
+  }
+
+  private getInscricaoMunicipal(): string {
+    return this.config.get<string>("NFSE_INSCRICAO_MUNICIPAL") ?? "";
+  }
+
+  private escapeXml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  }
+
+  private computeIntegridade(rpsXml: string, token?: string): string {
+    const tkRaw = token ?? this.getToken();
+    const tk = (typeof tkRaw === "string" ? tkRaw : String(tkRaw)).trim();
+
+    let cleaned = rpsXml.replace(/[^\x20-\x7E]+/g, "");
+    cleaned = cleaned.replace(/[ ]+/g, "");
+
+    const combined = cleaned + tk;
+    const bufUtf8 = Buffer.from(combined, "utf8");
+    const bufLatin1 = Buffer.from(combined, "latin1");
+    const hashUtf8 = createHash("sha512").update(bufUtf8).digest("hex");
+    const hashLatin1 = createHash("sha512").update(bufLatin1).digest("hex");
+
+    const debug = this.config.get<boolean>("NFSE_DEBUG_INTEGRIDADE") ?? false;
+    if (debug) {
+      this.logger.debug(`[INTEGRIDADE] cleaned: ${cleaned}`);
+      this.logger.debug(`[INTEGRIDADE] token(hex utf8): ${Buffer.from(tk, "utf8").toString("hex")}`);
+      this.logger.debug(`[INTEGRIDADE] combined(hex utf8): ${bufUtf8.toString("hex")}`);
+      this.logger.debug(`[INTEGRIDADE] hashUtf8=${hashUtf8}`);
+      this.logger.debug(`[INTEGRIDADE] hashLatin1=${hashLatin1}`);
+    }
+
+    return hashUtf8;
+  }
+
+  private buildCabecalho(): string {
+    return `<cabecalho xmlns="http://www.abrasf.org.br/nfse.xsd" versao="2.04">
+    <versaoDados>2.04</versaoDados>
+</cabecalho>`;
+  }
+
+  private buildRpsXml(input: RpsXmlInput): string {
+    const valorCbs      = Number((input.valorServicos * CBS_RATE).toFixed(2));
+    const valorIbs      = Number((input.valorServicos * IBS_RATE).toFixed(2));
+    const aliquotaCbs   = (CBS_RATE * 100).toFixed(2);
+    const aliquotaIbs   = (IBS_RATE * 100).toFixed(2);
+
+    const docTomador = input.tomadorCnpj
+      ? `<Cnpj>${input.tomadorCnpj}</Cnpj>`
+      : input.tomadorCpf
+        ? `<Cpf>${input.tomadorCpf}</Cpf>`
+        : null;
+
+    // Testado: Ilhabela EXIGE IdentificacaoTomador com CPF ou CNPJ.
+    // Sem documento (consumidor final / sem-tomador) -> servidor retorna HTTP 500 sem mensagem.
+    if (!docTomador) {
       throw new BadRequestException(
-        "XML da NFS-e invalido: numero da nota (nNFSe) nao encontrado. Confirme que o arquivo e o XML assinado da nota (padrao nacional NBS).",
+        "CPF ou CNPJ do cliente Ã© obrigatÃ³rio para emitir NFS-e em Ilhabela. " +
+        "Informe o documento no campo correspondente.",
       );
     }
-    return parsed;
+
+    const partes: string[] = [
+      `\t\t\t<TomadorServico>`,
+      `\t\t\t\t<IdentificacaoTomador>`,
+      `\t\t\t\t\t<CpfCnpj>`,
+      `\t\t\t\t\t\t${docTomador}`,
+      `\t\t\t\t\t</CpfCnpj>`,
+      `\t\t\t\t</IdentificacaoTomador>`,
+      `\t\t\t\t<RazaoSocial>${this.escapeXml(input.tomadorNome ?? "CONSUMIDOR").slice(0, 150)}</RazaoSocial>`,
+    ];
+
+    if (input.tomadorEndereco) {
+      partes.push(
+        `\t\t\t\t<Endereco>`,
+        `\t\t\t\t\t<Endereco>${this.escapeXml(input.tomadorEndereco.logradouro)}</Endereco>`,
+        `\t\t\t\t\t<Numero>${this.escapeXml(input.tomadorEndereco.numero)}</Numero>`,
+        `\t\t\t\t\t<Bairro>${this.escapeXml(input.tomadorEndereco.bairro)}</Bairro>`,
+        `\t\t\t\t\t<CodigoMunicipio>${input.tomadorEndereco.codigoMunicipio}</CodigoMunicipio>`,
+        `\t\t\t\t\t<Uf>${input.tomadorEndereco.uf}</Uf>`,
+        `\t\t\t\t\t<Cep>${input.tomadorEndereco.cep.replace(/\D/g, "")}</Cep>`,
+        `\t\t\t\t</Endereco>`,
+      );
+    }
+
+    partes.push(`\t\t\t</TomadorServico>`);
+    const tomadorXml = partes.join("\n");
+
+    return `
+\t<Rps>
+\t\t<InfDeclaracaoPrestacaoServico Id="rps${input.numero}">
+\t\t\t<Rps>
+\t\t\t\t<IdentificacaoRps>
+\t\t\t\t\t<Numero>${input.numero}</Numero>
+\t\t\t\t\t<Serie>${input.serie}</Serie>
+\t\t\t\t\t<Tipo>1</Tipo>
+\t\t\t\t</IdentificacaoRps>
+\t\t\t\t<DataEmissao>${input.dataEmissao}</DataEmissao>
+\t\t\t\t<Status>1</Status>
+\t\t\t</Rps>
+\t\t\t<Competencia>${input.dataEmissao}</Competencia>
+\t\t\t<Servico>
+\t\t\t\t<Valores>
+\t\t\t\t\t<ValorServicos>${input.valorServicos.toFixed(2)}</ValorServicos>
+\t\t\t\t\t<ValorDeducoes>0.00</ValorDeducoes>
+\t\t\t\t\t<ValorPis>0.00</ValorPis>
+\t\t\t\t\t<ValorCofins>0.00</ValorCofins>
+\t\t\t\t\t<ValorInss>0.00</ValorInss>
+\t\t\t\t\t<ValorIr>0.00</ValorIr>
+\t\t\t\t\t<ValorCsll>0.00</ValorCsll>
+\t\t\t\t\t<ValorCbs>${valorCbs.toFixed(2)}</ValorCbs>
+\t\t\t\t\t<AliquotaCbs>${aliquotaCbs}</AliquotaCbs>
+\t\t\t\t\t<ValorIbs>${valorIbs.toFixed(2)}</ValorIbs>
+\t\t\t\t\t<AliquotaIbs>${aliquotaIbs}</AliquotaIbs>
+\t\t\t\t\t<OutrasRetencoes>0.00</OutrasRetencoes>
+\t\t\t\t\t<Aliquota>${input.aliquotaIss}</Aliquota>
+\t\t\t\t\t<DescontoIncondicionado>${input.descontoIncondicionado.toFixed(2)}</DescontoIncondicionado>
+\t\t\t\t\t<DescontoCondicionado>0.00</DescontoCondicionado>
+\t\t\t\t</Valores>
+\t\t\t\t<IssRetido>2</IssRetido>
+\t\t\t\t<ResponsavelRetencao>1</ResponsavelRetencao>
+\t\t\t\t<ItemListaServico>${input.itemLista}</ItemListaServico>
+\t\t\t\t<CodigoTributacaoNacional>${input.codigoNacional}</CodigoTributacaoNacional>
+\t\t\t\t<CodigoNbs>${input.codigoNbs}</CodigoNbs>
+\t\t\t\t<Discriminacao>${this.escapeXml(input.discriminacao.replace(/[#:()\[\]{}]/g, " ").replace(/\s+/g, " ").trim()).slice(0, 2000)}</Discriminacao>
+\t\t\t\t<CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
+\t\t\t</Servico>
+\t\t\t<Prestador>
+\t\t\t\t<CpfCnpj>
+\t\t\t\t\t<Cnpj>${this.getCnpjPrestador()}</Cnpj>
+\t\t\t\t</CpfCnpj>
+\t\t\t\t<InscricaoMunicipal>${this.getInscricaoMunicipal()}</InscricaoMunicipal>
+\t\t\t</Prestador>${tomadorXml ? "\n" + tomadorXml : ""}
+\t\t</InfDeclaracaoPrestacaoServico>
+\t</Rps>`;
   }
 
-  async storeXml(
-    buffer: Buffer,
-    numeroNfse: string,
-    prefix: string,
-  ): Promise<{ objectName: string; publicUrl: string | null }> {
-    const client = this.buildMinioClient();
-    const bucket = this.requireEnv("MINIO_BUCKET");
-    await this.ensureBucket(client, bucket);
-
-    const objectName = `${this.getPathPrefix()}/${prefix}/NFSe-${numeroNfse}-${randomUUID().slice(0, 8)}.xml`;
-    await client.putObject(bucket, objectName, buffer, buffer.length, {
-      "Content-Type": "application/xml",
-    });
-
-    return { objectName, publicUrl: this.buildPublicUrl(bucket, objectName) };
+  private async getInfoNfse(): Promise<{ proximoRps: number; serieRps: string } | null> {
+    try {
+      const url = `${this.AUX_URL}?Metodo=info_nfse&Token=${this.getToken()}&CpfCnpjPrestador=${this.getCnpjPrestador()}`;
+      const resp = await axios.get(url, { timeout: 15_000 });
+      const raw = resp.data as Record<string, any>;
+      const payload = (raw.data ?? raw) as Record<string, unknown>;
+      const proximoRps = Number(payload.ProximoRPS ?? payload.proximoRPS ?? 0);
+      const serieRps = String(payload.SerieRPS ?? payload.serieRPS ?? this.SERIE_RPS);
+      if (!proximoRps || proximoRps <= 0) return null;
+      return { proximoRps, serieRps };
+    } catch (err) {
+      this.logger.warn(`API Auxiliar info_nfse falhou: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
-  async anexarQuoteNfse(quoteId: string, file: UploadedXmlFile) {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+  private async enviarSoap(cabecalho: string, dados: string, metodo = "GerarNfse"): Promise<string> {
+    this.logger.log(`[SOAP] Endpoint: ${this.ENDPOINT} metodo=${metodo}`);
+    this.logger.log(`[SOAP] CNPJ: ${this.getCnpjPrestador()} | Token: ${this.getToken().slice(0, 6)}...`);
+    this.logger.log(`[SOAP] nfseDadosMsg:\n${dados}`);
 
-    const parsed = this.parseXml(file.buffer);
-    const { publicUrl } = await this.storeXml(file.buffer, parsed.numeroNfse!, `quotes/${quoteId}`);
+    const client = await soap.createClientAsync(this.WSDL_URL);
+    client.setEndpoint(this.ENDPOINT);
+    client.addSoapHeader(
+      { "iibr:cnpjRemetente": this.getCnpjPrestador(), "iibr:token": this.getToken() },
+      "", "iibr", "http://rps.iibr.com.br/",
+    );
 
-    await this.prisma.quote.update({
-      where: { id: quoteId },
-      data: {
-        nfseNumero: parsed.numeroNfse,
-        nfseCodigoVerificacao: parsed.chaveAcesso,
-        nfseLink: publicUrl,
-        nfseEmitidaEm: parsed.dataEmissao ?? new Date(),
-      },
+    return new Promise<string>((resolve, reject) => {
+      (client as any)[metodo](
+        { nfseCabecMsg: cabecalho, nfseDadosMsg: dados },
+        (err: any, _res: any, rawResponse: string, _soapHeader: any, rawRequest: string) => {
+          if (rawRequest) {
+            this.logger.log(`[SOAP] Request enviado:\n${rawRequest}`);
+          }
+          if (err) {
+            const status  = err?.response?.status;
+            const body    = err?.response?.data ?? "";
+            const headers = JSON.stringify(err?.response?.headers ?? {});
+            this.logger.error(`[SOAP] ERRO status=${status}`);
+            this.logger.error(`[SOAP] Response headers: ${headers}`);
+            this.logger.error(`[SOAP] Response body: ${String(body).slice(0, 2000)}`);
+            this.logger.error(`[SOAP] err.message: ${err?.message}`);
+            this.logger.error(`[SOAP] Request que causou erro:\n${(client as any).lastRequest ?? "n/a"}`);
+            reject(new Error(`Falha SOAP status=${status}: ${String(body || err?.message).slice(0, 300)}`));
+          } else {
+            this.logger.log(`[SOAP] Resposta recebida:\n${rawResponse?.slice(0, 2000)}`);
+            resolve(rawResponse ?? "");
+          }
+        }
+      );
     });
+  }
 
-    this.logger.log(`NFS-e #${parsed.numeroNfse} anexada manualmente ao orcamento ${quoteId}.`);
+  /**
+   * Extrai e decodifica o conteudo de <outputXML> da resposta SOAP.
+   * O servidor iiBrasil retorna o XML real como HTML entities dentro dessa tag.
+   * Ex: &lt;NumeroNfse&gt;136&lt;/NumeroNfse&gt; -> <NumeroNfse>136</NumeroNfse>
+   */
+  private decodeOutputXml(soapResponse: string): string {
+    // Tenta extrair o conteudo do outputXML
+    const match = soapResponse.match(/<outputXML[^>]*>([\s\S]*?)<\/outputXML>/i);
+    const raw = match?.[1] ?? soapResponse;
 
+    // Decodifica HTML entities
+    return raw
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, "&");
+  }
+
+  private parseNumeroNfse(xml: string): string | null {
+    const decoded = this.decodeOutputXml(xml);
+    return decoded.match(/<NumeroNfse>(\d+)<\/NumeroNfse>/)?.[1] ?? null;
+  }
+
+  private parseCodigoVerificacao(xml: string): string | null {
+    const decoded = this.decodeOutputXml(xml);
+    return decoded.match(/<CodigoVerificacao>([^<]+)<\/CodigoVerificacao>/)?.[1]?.trim() ?? null;
+  }
+
+  private parseLinkNfse(xml: string): string | null {
+    const decoded = this.decodeOutputXml(xml);
+    const m = decoded.match(/<LinkNfse>([^<]+)<\/LinkNfse>/);
+    if (!m?.[1]?.trim()) return null;
+    try { return Buffer.from(m[1].trim(), "base64").toString("utf8"); } catch { return m[1].trim(); }
+  }
+
+  private parseErros(xml: string): string[] {
+    const decoded = this.decodeOutputXml(xml);
+    return [...decoded.matchAll(/<Mensagem>([^<]+)<\/Mensagem>/g)].map(m => m[1].trim());
+  }
+
+  /**
+   * Extrai os codigos de erro (<Codigo>) da resposta da prefeitura.
+   * Nao colide com CodigoVerificacao/CodigoMunicipio/CodigoNbs/CodigoTributacaoNacional
+   * porque o regex casa exatamente a tag <Codigo>.
+   */
+  private parseCodigosErro(xml: string): string[] {
+    const decoded = this.decodeOutputXml(xml);
+    const blocos = [...decoded.matchAll(/<MensagemRetorno>([\s\S]*?)<\/MensagemRetorno>/g)];
+
+    let codigos: string[];
+    if (blocos.length > 0) {
+      codigos = blocos
+        .map((bloco) => bloco[1].match(/<Codigo>([^<]+)<\/Codigo>/)?.[1])
+        .filter((c): c is string => !!c);
+    } else {
+      // Alguns retornos da iiBrasil vem sem o wrapper <MensagemRetorno>
+      codigos = [...decoded.matchAll(/<Codigo>([^<]+)<\/Codigo>/g)].map((m) => m[1]);
+    }
+
+    return codigos.map((c) => c.trim().toUpperCase());
+  }
+
+  /**
+   * Decide se o erro retornado pela prefeitura e de CodigoMunicipio do tomador (D-02),
+   * caso em que vale a pena tentar o fallback via ViaCEP.
+   */
+  private deveTentarFallbackMunicipio(codigos: string[], mensagens: string[]): boolean {
+    if (codigos.some((c) => CODIGOS_ERRO_MUNICIPIO_TOMADOR.includes(c))) return true;
+    return mensagens.some((m) => /munic[ií]pio/i.test(m) && /tomador/i.test(m));
+  }
+
+  /**
+   * Ponto unico de envio de RPS para GerarNfse. Tenta uma vez com os dados atuais;
+   * se a prefeitura rejeitar por CodigoMunicipio do tomador incorreto (E288/E58),
+   * consulta o ViaCEP pelo CEP do tomador e re-tenta UMA unica vez com o IBGE corrigido (D-01..D-05).
+   */
+  private async enviarRpsComFallbackMunicipio(
+    rpsInput: RpsXmlInput,
+    contexto: string,
+  ): Promise<{ responseXml: string; numeroNfse: string | null; erros: string[]; municipioCorrigido: string | null }> {
+    const montarEnvelope = (input: RpsXmlInput): string => {
+      const rpsXml = this.buildRpsXml(input);
+      const integridade = this.computeIntegridade(rpsXml);
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<GerarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  ${rpsXml}
+  <Integridade>${integridade}</Integridade>
+</GerarNfseEnvio>`;
+    };
+
+    // Tentativa 1 (caminho feliz — D-01)
+    const responseXml = await this.enviarSoap(this.buildCabecalho(), montarEnvelope(rpsInput));
+    const erros = this.parseErros(responseXml);
+    const numeroNfse = this.parseNumeroNfse(responseXml);
+
+    if (numeroNfse) {
+      return { responseXml, numeroNfse, erros, municipioCorrigido: null };
+    }
+
+    const resultadoTentativa1 = { responseXml, numeroNfse, erros, municipioCorrigido: null };
+
+    const codigos = this.parseCodigosErro(responseXml);
+    if (!this.deveTentarFallbackMunicipio(codigos, erros)) {
+      return resultadoTentativa1;
+    }
+
+    const cep = rpsInput.tomadorEndereco?.cep?.replace(/\D/g, "") ?? "";
+    if (cep.length !== 8) {
+      this.logger.warn(`[FallbackMunicipio] ${contexto} — CEP do tomador ausente/invalido ("${cep}"), fallback ViaCEP nao aplicavel`);
+      return resultadoTentativa1;
+    }
+
+    const viacep = await consultarIbgePorCep(cep);
+    if (!viacep) {
+      this.logger.warn(`[FallbackMunicipio] ${contexto} — ViaCEP indisponivel/CEP invalido para "${cep}", mantendo erro original`);
+      return resultadoTentativa1;
+    }
+
+    if (rpsInput.tomadorEndereco && viacep.uf !== rpsInput.tomadorEndereco.uf) {
+      this.logger.warn(
+        `[FallbackMunicipio] ${contexto} — divergencia de UF: ViaCEP uf="${viacep.uf}" != Athos uf="${rpsInput.tomadorEndereco.uf}" (nao alterada, apenas diagnostico)`,
+      );
+    }
+
+    if (rpsInput.tomadorEndereco && viacep.ibge === rpsInput.tomadorEndereco.codigoMunicipio) {
+      this.logger.warn(`[FallbackMunicipio] ${contexto} — codigoMunicipio ja e o mesmo do CEP (${viacep.ibge}), re-tentativa seria identica`);
+      return resultadoTentativa1;
+    }
+
+    const retryInput: RpsXmlInput = {
+      ...rpsInput,
+      tomadorEndereco: rpsInput.tomadorEndereco
+        ? { ...rpsInput.tomadorEndereco, codigoMunicipio: viacep.ibge }
+        : rpsInput.tomadorEndereco,
+    };
+
+    try {
+      const responseXml2 = await this.enviarSoap(this.buildCabecalho(), montarEnvelope(retryInput));
+      const erros2 = this.parseErros(responseXml2);
+      const numeroNfse2 = this.parseNumeroNfse(responseXml2);
+
+      if (!numeroNfse2) {
+        this.logger.warn(`[FallbackMunicipio] ${contexto} — 2a tentativa (ibge=${viacep.ibge}) tambem falhou: ${erros2.join(" | ")}`);
+        return resultadoTentativa1;
+      }
+
+      this.logger.log(
+        `[FallbackMunicipio] ${contexto} — correcao aplicada: codigoMunicipio ${rpsInput.tomadorEndereco?.codigoMunicipio ?? "?"} -> ${viacep.ibge}`,
+      );
+      return { responseXml: responseXml2, numeroNfse: numeroNfse2, erros: erros2, municipioCorrigido: viacep.ibge };
+    } catch (err) {
+      this.logger.warn(
+        `[FallbackMunicipio] ${contexto} — 2a tentativa lancou excecao de transporte: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return resultadoTentativa1;
+    }
+  }
+
+  private async findQuote(identifier: string) {
+    const include = { customer: true, items: { orderBy: { sequence: "asc" } } };
+    const numeric = /^\d+$/.test(identifier) ? Number(identifier) : null;
+
+    if (numeric !== null) {
+      const byExternal = await (this.prisma as any).quote.findFirst({ where: { externalQuoteId: BigInt(numeric) }, include });
+      if (byExternal) return byExternal;
+      return (this.prisma as any).quote.findFirst({ where: { internalNumber: numeric }, include });
+    }
+    return (this.prisma as any).quote.findFirst({ where: { id: identifier }, include });
+  }
+
+  private async buscarTomador(quote: any): Promise<{
+    cnpj: string | null;
+    cpf: string | null;
+    nome: string | null;
+    endereco: TomadorEndereco | null;
+  }> {
+    let cnpj:     string | null = null;
+    let cpf:      string | null = null;
+    let nome:     string | null = null; // Athos tem prioridade; chat e fallback
+    let endereco: TomadorEndereco | null = null;
+
+    try {
+      const lookupId = String(quote.externalQuoteId ?? quote.internalNumber ?? "");
+      this.logger.log(
+        `[Tomador] buscando: lookupId="${lookupId}" externalQuoteId=${quote.externalQuoteId} internalNumber=${quote.internalNumber}`,
+      );
+
+      let athosData: Awaited<ReturnType<typeof this.athosService.buscarOrcamentoPorNumero>> | null = null;
+      try {
+        athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
+      } catch (err) {
+        if (err instanceof NotFoundException) {
+          this.logger.warn(
+            `[Tomador] orcamento "${lookupId}" nao encontrado no Athos (NotFoundException) - sem dados do tomador`,
+          );
+          const nomeBusca = (quote.customer?.fullName ?? "").trim();
+          if (nomeBusca.length >= 3) {
+            try {
+              const resultado = await this.athosService.buscarClientes({ nome: nomeBusca, take: 1 });
+              if (resultado.items.length === 1) {
+                const cli = resultado.items[0];
+                nome     = cli.nome || nome;
+                endereco = cli.endereco ?? endereco;
+                if (cli.tipoPessoa === "juridico" && cli.documento?.replace(/\D/g,"").length === 14)
+                  cnpj = cli.documento!.replace(/\D/g,"");
+                else if (cli.tipoPessoa === "fisico" && cli.documento?.replace(/\D/g,"").length === 11)
+                  cpf = cli.documento!.replace(/\D/g,"");
+                this.logger.log(
+                  `[Tomador] fallback nome="${nomeBusca}" â†’ encontrado: tipo=${cli.tipoPessoa} doc=${cli.documento ?? "null"}`,
+                );
+              } else {
+                this.logger.warn(
+                  `[Tomador] fallback nome="${nomeBusca}" â†’ ${resultado.total} resultados (ambiguo ou ausente) â€” sem dados`,
+                );
+              }
+            } catch (fbErr) {
+              this.logger.warn(
+                `[Tomador] fallback nome="${nomeBusca}" â†’ erro: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}`,
+              );
+            }
+          }
+        } else {
+          this.logger.warn(
+            `[Tomador] erro ao buscar orcamento "${lookupId}" no Athos: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      if (athosData) {
+        const clienteId = (athosData as any)?.mapped?.idcliente;
+        this.logger.log(`[Tomador] orcamento encontrado - idcliente=${clienteId}`);
+
+        if (clienteId != null && clienteId > 0) {
+          const info = await this.athosService.buscarClientePorId(clienteId);
+          if (info) {
+            nome     = info.name || quote.customer?.fullName || null;
+            endereco = (info as any).endereco ?? null;
+            if (info.type === "juridico" && info.documento?.length === 14) cnpj = info.documento;
+            else if (info.type === "fisico"   && info.documento?.length === 11) cpf  = info.documento;
+            this.logger.log(
+              `[Tomador] cliente encontrado - tipo=${info.type} nome="${nome}" documento=${info.documento ?? "null"}`,
+            );
+          } else {
+            this.logger.warn(`[Tomador] buscarClientePorId(${clienteId}) retornou null`);
+          }
+        } else {
+          this.logger.warn(
+            `[Tomador] idcliente=${clienteId} invalido ou ausente no mapeamento do orcamento "${lookupId}"`,
+          );
+          const nomeBusca = ((athosData as any)?.mapped?.cliente ?? quote.customer?.fullName ?? "").trim();
+          if (nomeBusca.length >= 3) {
+            try {
+              const resultado = await this.athosService.buscarClientes({ nome: nomeBusca, take: 1 });
+              if (resultado.items.length === 1) {
+                const cli = resultado.items[0];
+                nome     = cli.nome || nome;
+                endereco = cli.endereco ?? endereco;
+                if (cli.tipoPessoa === "juridico" && cli.documento?.replace(/\D/g,"").length === 14)
+                  cnpj = cli.documento!.replace(/\D/g,"");
+                else if (cli.tipoPessoa === "fisico" && cli.documento?.replace(/\D/g,"").length === 11)
+                  cpf = cli.documento!.replace(/\D/g,"");
+                this.logger.log(
+                  `[Tomador] fallback nome="${nomeBusca}" â†’ encontrado: tipo=${cli.tipoPessoa} doc=${cli.documento ?? "null"}`,
+                );
+              } else {
+                this.logger.warn(
+                  `[Tomador] fallback nome="${nomeBusca}" â†’ ${resultado.total} resultados (ambiguo ou ausente) â€” sem dados`,
+                );
+              }
+            } catch (fbErr) {
+              this.logger.warn(
+                `[Tomador] fallback nome="${nomeBusca}" â†’ erro: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}`,
+              );
+            }
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(
+        `[Tomador] falha inesperada ao buscar tomador no Athos: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // Fallback para nome do chat se Athos nÃ£o encontrou
+    if (!nome) nome = quote.customer?.fullName ?? null;
+
+    return { cnpj, cpf, nome, endereco };
+  }
+
+  private sanitizeTomadorEndereco(endereco: TomadorEndereco): TomadorEndereco {
     return {
-      numero: parsed.numeroNfse,
-      codigoVerificacao: parsed.chaveAcesso,
-      link: publicUrl,
-      dataEmissao: parsed.dataEmissao,
-      valorServico: parsed.valorServico,
+      logradouro: endereco.logradouro.trim(),
+      numero: endereco.numero.trim(),
+      bairro: endereco.bairro.trim(),
+      cep: endereco.cep.replace(/\D/g, ""),
+      codigoMunicipio: endereco.codigoMunicipio.replace(/\D/g, ""),
+      uf: endereco.uf.trim().toUpperCase(),
     };
   }
 
-  async removerQuoteNfse(quoteId: string): Promise<{ ok: boolean }> {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+  private buildTomadorEnderecoFromInput(input?: EmitirNfseInput): TomadorEndereco | null {
+    if (!input) return null;
 
-    await this.prisma.quote.update({
-      where: { id: quoteId },
-      data: { nfseNumero: null, nfseCodigoVerificacao: null, nfseLink: null, nfseEmitidaEm: null },
+    const raw = {
+      logradouro: input.tomadorEnderecoLogradouro?.trim() ?? "",
+      numero: input.tomadorEnderecoNumero?.trim() ?? "",
+      bairro: input.tomadorEnderecoBairro?.trim() ?? "",
+      cep: input.tomadorEnderecoCep?.trim() ?? "",
+      codigoMunicipio: input.tomadorEnderecoCodigoMunicipio?.trim() ?? "",
+      uf: input.tomadorEnderecoUf?.trim() ?? "",
+    };
+
+    const hasAnyField = Object.values(raw).some((value) => value.length > 0);
+    if (!hasAnyField) return null;
+
+    const hasAllFields = Object.values(raw).every((value) => value.length > 0);
+    if (!hasAllFields) {
+      throw new BadRequestException(
+        "EndereÃ§o do tomador incompleto. Informe logradouro, nÃºmero, bairro, CEP, cÃ³digo do municÃ­pio (IBGE) e UF.",
+      );
+    }
+
+    const sanitized = this.sanitizeTomadorEndereco(raw);
+    if (sanitized.cep.length !== 8) {
+      throw new BadRequestException("CEP do tomador invÃ¡lido. Informe 8 dÃ­gitos.");
+    }
+    if (sanitized.codigoMunicipio.length !== 7) {
+      throw new BadRequestException("CÃ³digo do municÃ­pio do tomador invÃ¡lido. Informe 7 dÃ­gitos do IBGE.");
+    }
+    if (sanitized.uf.length !== 2) {
+      throw new BadRequestException("UF do tomador invÃ¡lida. Informe 2 letras.");
+    }
+
+    return sanitized;
+  }
+
+  getServicosDisponiveis() {
+    return Object.entries(SERVICOS).map(([key, s]) => ({
+      codigo: key,
+      itemLista: s.itemLista,
+      codigoNacional: s.codigoNacional,
+      descricao: s.descricao,
+    }));
+  }
+
+  async emitir(quoteId: string, input?: EmitirNfseInput) {
+    const quote = await this.findQuote(quoteId);
+    if (!quote) throw new BadRequestException("OrÃ§amento nÃ£o encontrado");
+
+    if (quote.status === "CANCELADO") {
+      throw new BadRequestException("NÃ£o Ã© possÃ­vel emitir NFS-e para orÃ§amentos cancelados.");
+    }
+
+    if (quote.nfseNumero) {
+      return {
+        jaEmitida: true,
+        numero: quote.nfseNumero,
+        codigoVerificacao: quote.nfseCodigoVerificacao,
+        link: quote.nfseLink ?? null,
+        emitidaEm: quote.nfseEmitidaEm,
+      };
+    }
+
+    // Resolve serviÃ§o
+    const servicoKey = input?.servicoCodigo ?? DEFAULT_SERVICO;
+    const servico = SERVICOS[servicoKey] ?? SERVICOS[DEFAULT_SERVICO];
+
+    // Resolve RPS nÃºmero e sÃ©rie
+    let rpsNumero = Number(quote.internalNumber);
+    let rpsSerie  = this.SERIE_RPS;
+    const infoNfse = await this.getInfoNfse();
+    if (infoNfse) {
+      rpsNumero = infoNfse.proximoRps;
+      rpsSerie  = infoNfse.serieRps || this.SERIE_RPS;
+      this.logger.log(`[RPS] AUXILIARRPS proximoRPS=${rpsNumero} serie=${rpsSerie} (proximo a emitir â€” sem +1)`);
+    } else {
+      this.logger.warn(`API Auxiliar indisponÃ­vel, usando internalNumber=${rpsNumero} como RPS`);
+    }
+
+    const dataEmissao    = new Date().toISOString().slice(0, 10);
+    const valorServicosBruto  = Number(quote.total);
+
+    // Calcular desconto (NFSD-01..04)
+    let descontoIncondicionado = 0;
+    if (input?.descontoAtivo === true) {
+      const base = valorServicosBruto;
+
+      if (input.descontoPorcentagem != null) {
+        if (input.descontoPorcentagem < 0 || input.descontoPorcentagem > 100) {
+          throw new BadRequestException("descontoPorcentagem deve estar entre 0 e 100.");
+        }
+        descontoIncondicionado = Number((base * input.descontoPorcentagem / 100).toFixed(2));
+      } else if (input.descontoValor != null) {
+        if (input.descontoValor < 0) {
+          throw new BadRequestException("descontoValor nao pode ser negativo.");
+        }
+        descontoIncondicionado = Number(input.descontoValor.toFixed(2));
+      }
+
+      if (descontoIncondicionado > valorServicosBruto) {
+        throw new BadRequestException(
+          `descontoIncondicionado (${descontoIncondicionado.toFixed(2)}) nao pode ser maior que valorServicos (${valorServicosBruto.toFixed(2)}).`,
+        );
+      }
+    }
+
+    const valorServicos = Number((valorServicosBruto - descontoIncondicionado).toFixed(2));
+
+    const itensDesc = (quote.items ?? [])
+      .map((item: any, i: number) => `${i + 1}. ${item.shortDescription || item.description} (${Number(item.quantity)}x) - R$ ${Number(item.finalPrice).toFixed(2)}`)
+      .join("; ");
+    const discriminacao = itensDesc
+      ? `Orcamento ${quote.internalNumber} - ${itensDesc}`
+      : `Orcamento ${quote.internalNumber}`;
+
+    // Dados do tomador: clienteAthosId tem prioridade mÃ¡xima; depois manual; depois lookup por orÃ§amento
+    let tomadorCnpj = input?.tomadorCnpj ? input.tomadorCnpj.replace(/\D/g, "") : null;
+    let tomadorCpf  = input?.tomadorCpf  ? input.tomadorCpf.replace(/\D/g, "")  : null;
+    let tomadorNome = input?.tomadorNome?.trim() || null;
+
+    let tomadorEndereco: TomadorEndereco | null = this.buildTomadorEnderecoFromInput(input);
+    const documentoManualInformado = Boolean(tomadorCnpj || tomadorCpf);
+
+    // Caminho A â€” clienteAthosId explÃ­cito (TOMAD-01, TOMAD-02)
+    if (input?.clienteAthosId != null && Number.isFinite(input.clienteAthosId) && input.clienteAthosId > 0) {
+      const info = await this.athosService.buscarClientePorId(input.clienteAthosId);
+      if (!info) {
+        throw new BadRequestException(
+          `Cliente Athos nÃ£o encontrado. Verifique o clienteAthosId informado (${input.clienteAthosId}).`,
+        );
+      }
+      tomadorNome = tomadorNome ?? info.name ?? null;
+      // Preservar endereÃ§o do input se informado explicitamente; senÃ£o usar o do Athos
+      tomadorEndereco = tomadorEndereco ?? (info.endereco ?? null);
+      if (info.type === "juridico" && info.documento?.replace(/\D/g, "").length === 14) {
+        tomadorCnpj = info.documento.replace(/\D/g, "");
+      } else if (info.type === "fisico" && info.documento?.replace(/\D/g, "").length === 11) {
+        tomadorCpf = info.documento.replace(/\D/g, "");
+      }
+      this.logger.log(
+        `[Tomador-A] clienteAthosId=${input.clienteAthosId} tipo=${info.type} nome="${info.name ?? "?"}" doc=${info.documento ? info.documento.slice(0, 4) + "****" : "null"}`,
+      );
+    } else if (!tomadorCnpj && !tomadorCpf) {
+      // Caminho C â€” nenhum clienteAthosId nem documento manual: lookup via orÃ§amento
+      this.logger.log(`[Tomador-C] quoteId=${quoteId} â€” lookup completo de tomador via orcamento (sem clienteAthosId e sem documento manual)`);
+      const tomador = await this.buscarTomador(quote);
+      tomadorCnpj    = tomador.cnpj;
+      tomadorCpf     = tomador.cpf;
+      tomadorNome    = tomadorNome ?? tomador.nome;
+      tomadorEndereco = tomadorEndereco ?? tomador.endereco;
+    } else {
+      // Caminho B â€” documento manual informado: buscar apenas endereÃ§o se ausente
+      this.logger.log(`[Tomador-B] quoteId=${quoteId} â€” documento manual informado; buscando endereco via Athos/orcamento se ausente`);
+      tomadorNome = tomadorNome ?? quote.customer?.fullName ?? null;
+      if (!tomadorEndereco) {
+        const tomador = await this.buscarTomador(quote);
+        tomadorEndereco = tomador.endereco;
+      }
+    }
+
+    if (documentoManualInformado && !input?.clienteAthosId && !tomadorEndereco) {
+      throw new BadRequestException(
+        "EndereÃ§o do tomador Ã© obrigatÃ³rio quando o documento Ã© informado manualmente. Preencha logradouro, nÃºmero, bairro, CEP, cÃ³digo do municÃ­pio (IBGE) e UF.",
+      );
+    }
+
+    // TOMAD-04: validar documento e endereÃ§o mÃ­nimo obrigatÃ³rios pÃ³s-resoluÃ§Ã£o
+    if (!tomadorCnpj && !tomadorCpf) {
+      const fonte = input?.clienteAthosId
+        ? `cliente Athos ${input.clienteAthosId}`
+        : "orÃ§amento/fallback";
+      throw new BadRequestException(
+        `CPF ou CNPJ do tomador ausente. NÃ£o foi possÃ­vel obter documento a partir de: ${fonte}. Informe manualmente ou selecione um cliente com documento cadastrado.`,
+      );
+    }
+
+    if (!tomadorEndereco) {
+      const fonte = input?.clienteAthosId
+        ? `cliente Athos ${input.clienteAthosId}`
+        : "orÃ§amento/fallback";
+      throw new BadRequestException(
+        `EndereÃ§o do tomador ausente. NÃ£o foi possÃ­vel obter endereÃ§o a partir de: ${fonte}. Informe manualmente ou selecione um cliente com endereÃ§o cadastrado.`,
+      );
+    }
+
+    const rpsArgs: RpsXmlInput = {
+      numero:          rpsNumero,
+      serie:           rpsSerie,
+      dataEmissao,
+      valorServicos,
+      descontoIncondicionado,
+      discriminacao,
+      itemLista:       servico.itemLista,
+      codigoNacional:  input?.codigoTributacaoNacional ?? servico.codigoNacional,
+      codigoNbs:       input?.codigoNbs ?? NBS_DEFAULT,
+      aliquotaIss:     servico.aliquotaIss,
+      tomadorCnpj,
+      tomadorCpf,
+      tomadorNome,
+      tomadorEndereco,
+    };
+
+    this.logger.log(`Emitindo NFS-e orÃ§amento #${quote.internalNumber} - RPS #${rpsNumero}/${rpsSerie} - serviÃ§o ${servico.itemLista}/${servico.codigoNacional}`);
+
+    const { numeroNfse, erros, responseXml } = await this.enviarRpsComFallbackMunicipio(
+      rpsArgs,
+      `quote ${quote.internalNumber}`,
+    );
+    this.logger.debug(`Resposta: ${responseXml.slice(0, 800)}`);
+
+    if (erros.length > 0 && !numeroNfse) {
+      throw new BadRequestException(`Erro na emissÃ£o da NFS-e: ${erros.join(" | ")}`);
+    }
+
+    if (!numeroNfse) {
+      this.logger.error(`NFS-e sem nÃºmero. Response: ${responseXml}`);
+      throw new BadRequestException("NFS-e processada mas nÃºmero nÃ£o retornado. Verifique no painel da prefeitura.");
+    }
+
+    const codigoVerificacao = this.parseCodigoVerificacao(responseXml);
+    const linkNfse          = this.parseLinkNfse(responseXml);
+
+    await (this.prisma as any).quote.update({
+      where: { id: quote.id },
+      data: {
+        nfseNumero:           numeroNfse,
+        nfseCodigoVerificacao: codigoVerificacao ?? null,
+        nfseLink:             linkNfse ?? null,
+        nfseEmitidaEm:        new Date(),
+      },
     });
 
-    return { ok: true };
+    this.logger.log(`NFS-e #${numeroNfse} emitida para orÃ§amento #${quote.internalNumber}`);
+
+    // Salvar NfseEmitida com idvenda (D-17, D-24) — falha nao interrompe o fluxo SOAP ja executado
+    try {
+      const idvendaParam = quote?.saleExternalId ? Number(quote.saleExternalId) : null;
+      if (idvendaParam !== null) {
+        const existente = await this.prisma.nfseEmitida.findFirst({ where: { idvenda: idvendaParam } });
+        if (existente) {
+          this.logger.warn(`NfseEmitida ja existe para idvenda ${idvendaParam} (id=${existente.id}) — fluxo orcamento #${quote.internalNumber} nao cria duplicata`);
+        } else {
+          await this.prisma.nfseEmitida.create({
+            data: {
+              numeroNfse,
+              numeroRps: Number(rpsNumero),
+              idclienteAthos: input?.clienteAthosId ?? 0,
+              valorServico:   valorServicos,
+              idvenda:        idvendaParam,
+            },
+          });
+          this.logger.log(`NfseEmitida criada para idvenda=${idvendaParam} nfse=#${numeroNfse}`);
+        }
+      } else {
+        // saleExternalId ausente — salvar sem idvenda (orçamentos sem venda Athos associada)
+        await this.prisma.nfseEmitida.create({
+          data: {
+            numeroNfse,
+            numeroRps: Number(rpsNumero),
+            idclienteAthos: input?.clienteAthosId ?? 0,
+            valorServico:   valorServicos,
+            idvenda:        null,
+          },
+        });
+        this.logger.log(`NfseEmitida criada sem idvenda (saleExternalId ausente) nfse=#${numeroNfse}`);
+      }
+    } catch (err) {
+      this.logger.error(`Falha ao salvar NfseEmitida para orcamento #${quote.internalNumber}: ${err instanceof Error ? err.message : String(err)}`);
+      // Nao relançar — a NFS-e ja foi emitida com sucesso no SOAP; salvar NfseEmitida e melhor-esforco
+    }
+
+    // Notifica cliente via Chatwoot (mensagem + PDF como anexo)
+    if (quote.conversationId) {
+      const convId      = String(quote.conversationId);
+      const nomeCliente = (quote.customer?.fullName ?? "Cliente").split(" ")[0];
+
+      // 1. Envia mensagem de texto
+      try {
+        let mensagem = `Ola, ${nomeCliente}!\n\nSua nota fiscal (NFS-e #${numeroNfse}) foi emitida com sucesso.`;
+        if (codigoVerificacao) mensagem += `\nCodigo de verificacao: ${codigoVerificacao}`;
+        if (linkNfse) mensagem += `\n\nLink: ${linkNfse}`;
+        await this.chatwootService.sendOutgoingMessage(convId, mensagem);
+      } catch (err) {
+        this.logger.warn(`Falha ao enviar mensagem Chatwoot: ${err instanceof Error ? err.message : err}`);
+      }
+
+      // 2. Baixa o PDF e envia como anexo
+      if (linkNfse) {
+        try {
+          this.logger.log(`Baixando PDF da NFS-e #${numeroNfse}: ${linkNfse}`);
+          const pdfResp = await axios.get(linkNfse, {
+            responseType: "arraybuffer",
+            timeout: 30_000,
+            headers: { Accept: "application/pdf,*/*" },
+          });
+          const pdfBuffer  = Buffer.from(pdfResp.data as ArrayBuffer);
+          const fileName   = `NotaFiscal_NFSe_${numeroNfse}.pdf`;
+          const contentType = String(pdfResp.headers["content-type"] ?? "application/pdf").split(";")[0].trim();
+
+          this.logger.log(`PDF baixado (${pdfBuffer.length} bytes) - enviando ao Chatwoot`);
+          await this.chatwootService.sendAttachment(convId, pdfBuffer, fileName, contentType || "application/pdf");
+          this.logger.log(`PDF da NFS-e #${numeroNfse} enviado ao cliente via Chatwoot`);
+        } catch (err) {
+          this.logger.warn(`Falha ao enviar PDF da NFS-e #${numeroNfse} via Chatwoot: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+    }
+
+    return { jaEmitida: false, numero: numeroNfse, codigoVerificacao, link: linkNfse, emitidaEm: new Date().toISOString() };
   }
 
-  private buildMinioClient(): MinioClient {
-    const endPointRaw = this.requireEnv("MINIO_ENDPOINT").replace(/\/$/, "");
-    const useSSL = endPointRaw.startsWith("https://")
-      ? true
-      : endPointRaw.startsWith("http://")
-        ? false
-        : (this.configService.get<string>("MINIO_USE_SSL") ?? "true").toLowerCase() !== "false";
-    const endPoint = endPointRaw.replace(/^https?:\/\//, "");
-    const accessKey = this.requireEnv("MINIO_ACCESS_KEY");
-    const secretKey = this.requireEnv("MINIO_SECRET_KEY");
-    const port = Number(this.configService.get<string>("MINIO_PORT") ?? (useSSL ? 443 : 80));
+  async consultar(quoteId: string) {
+    const quote = await this.findQuote(quoteId);
+    if (!quote) throw new BadRequestException("OrÃ§amento nÃ£o encontrado");
 
-    return new MinioClient({ endPoint, port, useSSL, accessKey, secretKey });
+    // Busca dados do tomador para o frontend pre-preencher o formulario
+    let tomador: { cnpj: string | null; cpf: string | null; nome: string | null; endereco: TomadorEndereco | null } = {
+      cnpj: null, cpf: null, nome: quote.customer?.fullName ?? null, endereco: null,
+    };
+    if (quote.status !== "CANCELADO" && !quote.nfseNumero) {
+      tomador = await this.buscarTomador(quote);
+    }
+
+    return {
+      emitida:             !!quote.nfseNumero,
+      numero:              quote.nfseNumero ?? null,
+      codigoVerificacao:   quote.nfseCodigoVerificacao ?? null,
+      link:                quote.nfseLink ?? null,
+      emitidaEm:           quote.nfseEmitidaEm ?? null,
+      podeEmitir:          quote.status !== "CANCELADO" && !quote.nfseNumero,
+      tomador: {
+        nome:               tomador.nome,
+        cpf:                tomador.cpf,
+        cnpj:               tomador.cnpj,
+        temDocumento:       !!(tomador.cpf || tomador.cnpj),
+        endereco:           tomador.endereco,
+        temEndereco:        !!tomador.endereco,
+      },
+      servicoSugerido:     DEFAULT_SERVICO,
+      servicosDisponiveis: this.getServicosDisponiveis(),
+    };
   }
 
-  private async ensureBucket(client: MinioClient, bucket: string) {
-    const exists = await client.bucketExists(bucket);
-    if (!exists) {
-      const region = this.configService.get<string>("MINIO_REGION") ?? "us-east-1";
-      await client.makeBucket(bucket, region);
+  /**
+   * Emite NFS-e para o fluxo de contas a receber (sem quoteId, sem Chatwoot).
+   * Reutiliza todos os métodos privados de emitir() mas não acessa o model Quote.
+   * NFR-03: tomador resolvido via clienteAthosId; RPS via API Auxiliar iiBrasil.
+   */
+  async emitirParaContaReceber(input: {
+    clienteAthosId: number;
+    valor: number;
+    servicoCodigo?: string;
+    discriminacao?: string;
+    idvenda?: number;
+    idcontareceber?: number;
+  }): Promise<{
+    numero: string;
+    numeroRps: number;
+    codigoVerificacao: string | null;
+    link: string | null;
+  }> {
+    // 1. Resolver tomador via Caminho A (clienteAthosId)
+    const info = await this.athosService.buscarClientePorId(input.clienteAthosId);
+    if (!info) {
+      throw new BadRequestException(
+        `Cliente Athos não encontrado. Verifique o clienteAthosId informado (${input.clienteAthosId}).`,
+      );
+    }
+
+    let tomadorNome: string | null = info.name ?? null;
+    let tomadorCnpj: string | null = null;
+    let tomadorCpf: string | null = null;
+    let tomadorEndereco: TomadorEndereco | null = (info as any).endereco ?? null;
+
+    if (info.type === "juridico" && info.documento?.replace(/\D/g, "").length === 14) {
+      tomadorCnpj = info.documento.replace(/\D/g, "");
+    } else if (info.type === "fisico" && info.documento?.replace(/\D/g, "").length === 11) {
+      tomadorCpf = info.documento.replace(/\D/g, "");
+    }
+
+    this.logger.log(
+      `[emitirParaContaReceber] clienteAthosId=${input.clienteAthosId} tipo=${info.type} nome="${tomadorNome ?? "?"}" doc=${info.documento ? info.documento.slice(0, 4) + "****" : "null"}`,
+    );
+
+    // 2. Obter RPS via API Auxiliar iiBrasil (com fallback para evitar bloqueio)
+    const infoNfse = await this.getInfoNfse();
+    let rpsNumero: number;
+    let rpsSerie: string;
+    if (infoNfse) {
+      rpsNumero = infoNfse.proximoRps;
+      rpsSerie  = infoNfse.serieRps || this.SERIE_RPS;
+      this.logger.log(`[RPS] emitirParaContaReceber proximoRPS=${rpsNumero} serie=${rpsSerie}`);
+    } else {
+      // AUX API indisponível — usa idvenda ou idcontareceber como RPS (mesmo padrão do fluxo de orçamentos)
+      if (typeof input.idvenda === "number") {
+        rpsNumero = input.idvenda;
+      } else if (typeof input.idcontareceber === "number") {
+        rpsNumero = input.idcontareceber;
+      } else {
+        throw new Error("idvenda ou idcontareceber deve ser informado quando a API auxiliar está indisponível");
+      }
+      rpsSerie  = this.SERIE_RPS;
+      this.logger.warn(`[RPS] AUX indisponível; usando idvenda/idcontareceber=${rpsNumero} como RPS fallback`);
+    }
+
+    // 3. Resolver serviço
+    const servicoKey = input.servicoCodigo ?? DEFAULT_SERVICO;
+    const servico = SERVICOS[servicoKey] ?? SERVICOS[DEFAULT_SERVICO];
+
+    // 4. Valor e discriminação
+    const valorServicos = Number(input.valor);
+    const discriminacao = input.discriminacao ?? "Prestação de serviços";
+    const dataEmissao = new Date().toISOString().slice(0, 10);
+
+    // 5. Montar XML e enviar SOAP (ponto unico de retry — fallback ViaCEP em E288/E58)
+    const rpsArgs: RpsXmlInput = {
+      numero: rpsNumero,
+      serie: rpsSerie,
+      dataEmissao,
+      valorServicos,
+      descontoIncondicionado: 0,
+      discriminacao,
+      itemLista: servico.itemLista,
+      codigoNacional: servico.codigoNacional,
+      codigoNbs: NBS_DEFAULT,
+      aliquotaIss: servico.aliquotaIss,
+      tomadorCnpj,
+      tomadorCpf,
+      tomadorNome,
+      tomadorEndereco,
+    };
+
+    this.logger.log(
+      `Emitindo NFS-e contas a receber - RPS #${rpsNumero}/${rpsSerie} - serviço ${servico.itemLista}/${servico.codigoNacional} - valor ${valorServicos.toFixed(2)}`,
+    );
+
+    const { numeroNfse, erros, responseXml } = await this.enviarRpsComFallbackMunicipio(
+      rpsArgs,
+      `contaReceber cliente=${input.clienteAthosId}`,
+    );
+
+    if (erros.length > 0 && !numeroNfse) {
+      throw new BadRequestException(`Erro na emissão da NFS-e: ${erros.join(" | ")}`);
+    }
+
+    if (!numeroNfse) {
+      this.logger.error(`NFS-e sem número. Response: ${responseXml}`);
+      throw new BadRequestException(
+        "NFS-e processada mas número não retornado. Verifique no painel da prefeitura.",
+      );
+    }
+
+    const codigoVerificacao = this.parseCodigoVerificacao(responseXml);
+    const linkNfse = this.parseLinkNfse(responseXml);
+
+    this.logger.log(`NFS-e #${numeroNfse} emitida via emitirParaContaReceber (RPS #${rpsNumero})`);
+
+    // 6. Retornar resultado — SEM chamar prisma.quote.update() e SEM enviar Chatwoot
+    return {
+      numero: numeroNfse,
+      numeroRps: rpsNumero,
+      codigoVerificacao,
+      link: linkNfse,
+    };
+  }
+
+  /**
+   * Cancela NFS-e na prefeitura via SOAP CancelarNfse (ABRASF 2.04).
+   * CodigoCancelamento: 1 = Erro na emissão (padrão).
+   */
+  async cancelarNfse(numeroNfse: string, codigoCancelamento = "1"): Promise<{
+    cancelada: boolean;
+    erros: string[];
+    soapIndisponivel?: boolean;
+  }> {
+    const infXml = `\t<InfPedidoCancelamento Id="cancel${numeroNfse}">
+\t\t<IdentificacaoNfse>
+\t\t\t<Numero>${numeroNfse}</Numero>
+\t\t\t<CpfCnpj>
+\t\t\t\t<Cnpj>${this.getCnpjPrestador()}</Cnpj>
+\t\t\t</CpfCnpj>
+\t\t\t<InscricaoMunicipal>${this.getInscricaoMunicipal()}</InscricaoMunicipal>
+\t\t\t<CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
+\t\t</IdentificacaoNfse>
+\t\t<CodigoCancelamento>${codigoCancelamento}</CodigoCancelamento>
+\t</InfPedidoCancelamento>`;
+
+    // CancelarNfseEnvio não usa <Integridade> — elemento exclusivo de GerarNfseEnvio
+    const dados = `<?xml version="1.0" encoding="UTF-8"?>
+<CancelarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  <Pedido>
+${infXml}
+  </Pedido>
+</CancelarNfseEnvio>`;
+
+    this.logger.log(`Cancelando NFS-e #${numeroNfse} — CodigoCancelamento=${codigoCancelamento}`);
+
+    let responseXml: string;
+    try {
+      responseXml = await this.enviarSoap(this.buildCabecalho(), dados, "CancelarNfse");
+    } catch (err) {
+      // O endpoint IIBR /rps/... não implementa CancelarNfse no NuSOAP.
+      // Retorna soapIndisponivel=true para que o chamador decida como prosseguir.
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`CancelarNfse #${numeroNfse} — SOAP indisponível: ${msg}`);
+      return { cancelada: false, erros: [msg], soapIndisponivel: true };
+    }
+
+    const erros = this.parseErros(responseXml);
+    const decoded = this.decodeOutputXml(responseXml);
+    const cancelada = decoded.includes("<NfseCancelamento>") && erros.length === 0;
+
+    if (!cancelada) {
+      this.logger.warn(`CancelarNfse #${numeroNfse} retornou erros: ${erros.join(" | ")}`);
+    } else {
+      this.logger.log(`NFS-e #${numeroNfse} cancelada com sucesso na prefeitura`);
+    }
+
+    return { cancelada, erros, soapIndisponivel: false };
+  }
+
+  async cancelarTeste(numeroNfse: string): Promise<{
+    cancelada: boolean;
+    erros: string[];
+    decodedXml: string;
+    temNfseCancelamento: boolean;
+  }> {
+    const infXml = `\t<InfPedidoCancelamento Id="cancel${numeroNfse}">
+\t\t<IdentificacaoNfse>
+\t\t\t<Numero>${numeroNfse}</Numero>
+\t\t\t<CpfCnpj>
+\t\t\t\t<Cnpj>${this.getCnpjPrestador()}</Cnpj>
+\t\t\t</CpfCnpj>
+\t\t\t<InscricaoMunicipal>${this.getInscricaoMunicipal()}</InscricaoMunicipal>
+\t\t\t<CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
+\t\t</IdentificacaoNfse>
+\t\t<CodigoCancelamento>1</CodigoCancelamento>
+\t</InfPedidoCancelamento>`;
+
+    const dados = `<?xml version="1.0" encoding="UTF-8"?>
+<CancelarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  <Pedido>
+${infXml}
+  </Pedido>
+</CancelarNfseEnvio>`;
+
+    this.logger.log(`[TESTE CANCELAR] NFS-e #${numeroNfse}`);
+    this.logger.log(`[TESTE CANCELAR] XML:\n${dados}`);
+
+    try {
+      const responseXml = await this.enviarSoap(this.buildCabecalho(), dados, "CancelarNfse");
+      const erros = this.parseErros(responseXml);
+      const decoded = this.decodeOutputXml(responseXml);
+      const temNfseCancelamento = decoded.includes("<NfseCancelamento>");
+      const cancelada = temNfseCancelamento && erros.length === 0;
+
+      this.logger.log(`[TESTE CANCELAR] decodedXml:\n${decoded}`);
+      this.logger.log(`[TESTE CANCELAR] cancelada=${cancelada} erros=${JSON.stringify(erros)}`);
+
+      return { cancelada, erros, decodedXml: decoded, temNfseCancelamento };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`[TESTE CANCELAR] Exceção: ${msg}`);
+      return { cancelada: false, erros: [msg], decodedXml: "", temNfseCancelamento: false };
     }
   }
 
-  private buildPublicUrl(bucket: string, objectName: string): string | null {
-    const customBase = this.configService.get<string>("MINIO_PUBLIC_BASE_URL");
-    if (customBase) {
-      return `${customBase.replace(/\/$/, "")}/${bucket}/${objectName}`;
+  async emitirTeste() {
+    // Teste com dados reais da documentacao - nao altera banco
+    const rpsXml = `<Rps>
+    <InfDeclaracaoPrestacaoServico Id="rps1">
+        <Rps>
+            <IdentificacaoRps>
+                <Numero>1</Numero>
+                <Serie>RPS</Serie>
+                <Tipo>1</Tipo>
+            </IdentificacaoRps>
+            <DataEmissao>${new Date().toISOString().slice(0, 10)}</DataEmissao>
+            <Status>1</Status>
+        </Rps>
+        <Competencia>${new Date().toISOString().slice(0, 10)}</Competencia>
+        <Servico>
+            <Valores>
+                <ValorServicos>30.00</ValorServicos>
+                <ValorDeducoes>0.00</ValorDeducoes>
+                <ValorPis>0.00</ValorPis>
+                <ValorCofins>0.00</ValorCofins>
+                <ValorInss>0.00</ValorInss>
+                <ValorIr>0.00</ValorIr>
+                <ValorCsll>0.00</ValorCsll>
+                <ValorCbs>0.27</ValorCbs>
+                <AliquotaCbs>0.90</AliquotaCbs>
+                <ValorIbs>0.03</ValorIbs>
+                <AliquotaIbs>0.10</AliquotaIbs>
+                <OutrasRetencoes>0.00</OutrasRetencoes>
+                <Aliquota>3.73</Aliquota>
+                <DescontoIncondicionado>0.00</DescontoIncondicionado>
+                <DescontoCondicionado>0.00</DescontoCondicionado>
+            </Valores>
+            <IssRetido>2</IssRetido>
+            <ResponsavelRetencao>1</ResponsavelRetencao>
+            <ItemListaServico>24.01</ItemListaServico>
+            <CodigoTributacaoNacional>240101</CodigoTributacaoNacional>
+            <CodigoNbs>121012200</CodigoNbs>
+            <Discriminacao>TESTE EMISSAO NFS-E</Discriminacao>
+            <CodigoMunicipio>${this.CODIGO_MUNICIPIO}</CodigoMunicipio>
+        </Servico>
+        <Prestador>
+            <CpfCnpj><Cnpj>${this.getCnpjPrestador()}</Cnpj></CpfCnpj>
+            <InscricaoMunicipal>${this.getInscricaoMunicipal()}</InscricaoMunicipal>
+        </Prestador>
+    </InfDeclaracaoPrestacaoServico>
+</Rps>`;
+
+    const integridade = this.computeIntegridade(rpsXml);
+    const dados = `<?xml version="1.0" encoding="UTF-8"?>
+<GerarNfseEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  ${rpsXml}
+  <Integridade>${integridade}</Integridade>
+</GerarNfseEnvio>`;
+
+    this.logger.log(`[TESTE] Hash: ${integridade}`);
+
+    try {
+      const responseXml = await this.enviarSoap(this.buildCabecalho(), dados);
+      const erros = this.parseErros(responseXml);
+      const numero = this.parseNumeroNfse(responseXml);
+      return { sucesso: !!numero, numero, erros, hashGerado: integridade };
+    } catch (err) {
+      return { sucesso: false, erro: err instanceof Error ? err.message : String(err), hashGerado: integridade };
     }
-
-    const endPoint = this.configService.get<string>("MINIO_ENDPOINT");
-    if (!endPoint) return null;
-
-    const useSSL = (this.configService.get<string>("MINIO_USE_SSL") ?? "true").toLowerCase() !== "false";
-    const port = Number(this.configService.get<string>("MINIO_PORT") ?? (useSSL ? 443 : 80));
-    const protocol = useSSL ? "https" : "http";
-    const includePort = (useSSL && port !== 443) || (!useSSL && port !== 80);
-
-    return `${protocol}://${endPoint}${includePort ? `:${port}` : ""}/${bucket}/${objectName}`;
-  }
-
-  private getPathPrefix(): string {
-    return (this.configService.get<string>("MINIO_PATH_PREFIX_NFSE") ?? "nfse").replace(/^\/+|\/+$/g, "");
-  }
-
-  private requireEnv(name: string): string {
-    const value = this.configService.get<string>(name)?.trim();
-    if (!value) {
-      throw new InternalServerErrorException(`Configuracao ausente para armazenamento de NFS-e: defina a variavel ${name}.`);
-    }
-    return value;
   }
 }
+

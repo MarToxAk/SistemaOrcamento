@@ -257,13 +257,10 @@ model CobrancaBoletoTitulo {
 model NfseEmitida {
   id             Int                 @id @default(autoincrement())
   numeroNfse     String?
-  numeroRps      Int?                // legado (emissao SOAP descontinuada); anexo manual nao tem RPS
+  numeroRps      Int
   idclienteAthos Int
   valorServico   Decimal             @db.Decimal(12, 2)
-  linkNfse       String?             // URL publica do XML anexado manualmente
-  chaveAcesso    String?             // Id do infNFSe (padrao nacional NBS)
-  arquivoPath    String?             // objectName no MinIO
-  arquivoNome    String?             // nome original do arquivo enviado
+  linkNfse       String?             // link de download da NFS-e retornado pela API IIBR
   dataEmissao    DateTime            @default(now())
   criadoEm       DateTime            @default(now())
   idvenda        Int?                // D-07: venda Athos que originou a NFS-e
@@ -303,49 +300,4 @@ model PdfTemplate {
   updatedAt DateTime        @updatedAt
 
   @@index([isActive])
-}
-
-// OrcamentoItemCorrecao: correcao manual de item de orcamento vindo do Athos (PDV).
-// O Athos e a fonte de dados do orcamento e nao pode ser alterado diretamente (dado
-// de producao do PDV). Quando um item chega com valor errado por erro de digitacao no
-// caixa (ex: orcamento #21659 — valorvenda1=3.30 no catalogo, mas lancado como 2.50),
-// registramos aqui o valor correto e o backend aplica a correcao ao ler o orcamento do
-// Athos, sem tocar no banco do PDV.
-model OrcamentoItemCorrecao {
-  id              String   @id @default(uuid())
-  idOrcamento     String
-  idItemOrcamento String
-  valorItem       Decimal  @db.Decimal(12, 2)
-  valorDesconto   Decimal  @default(0) @db.Decimal(12, 2)
-  valorFinalItem  Decimal  @db.Decimal(12, 2)
-  motivo          String?
-  criadoPor       String?
-  createdAt       DateTime @default(now())
-
-  @@unique([idOrcamento, idItemOrcamento])
-  @@index([idOrcamento])
-}
-
-// ChatwootAutomationConfig: textos editaveis da automacao de fechamento de conversa
-// do Chatwoot (substitui o fluxo que rodava no n8n). Linha singleton (id fixo "default")
-// para nao precisar de tela de listagem — so existe uma configuracao ativa.
-model ChatwootAutomationConfig {
-  id                     String   @id @default("default")
-  promptFechamento       String   @db.Text
-  mensagemPedidoPendente String   @db.Text
-  updatedAt              DateTime @updatedAt
-  updatedBy              String?
-}
-
-// Registro de mensagens de automacao enviadas por conversa (ex.: evita reenviar a
-// mensagem de fechamento no mesmo dia). Substitui a tabela "mensagens_enviadas" do
-// banco externo de pedidos, que deixou de ser usado pela automacao do Chatwoot.
-model ChatwootMensagemEnviada {
-  id               String   @id @default(uuid())
-  conversationId   String
-  tipoEvento       String
-  mensagemEnviada  String   @db.Text
-  enviadoEm        DateTime @default(now())
-
-  @@index([conversationId, tipoEvento, enviadoEm])
 }
