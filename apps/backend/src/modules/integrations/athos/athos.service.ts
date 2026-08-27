@@ -11,7 +11,6 @@ import { buildContaPagarAnexoPaths, hasSmbMountPath } from "./athos-anexo.util";
 import { getSmbDebugInfo, isSmbEnabled, smbUnlinkContaPagarFile, smbWriteContaPagarFile } from "./athos-smb.util";
 import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
 import { UpdateContaPagarDto } from "./dto/update-conta-pagar.dto";
-import { PrismaService } from "../../database/prisma.service";
 
 type Row = Record<string, unknown>;
 type AthosAttachmentFile = { originalname: string; buffer: Buffer; mimetype: string; size: number };
@@ -114,39 +113,6 @@ function pickNumber(row: Row, keys: string[], fallback = 0) {
 // armazenado, evitando que o item aparente sem valor ao apresentar/enviar o orcamento.
 export function resolveItemTotal(totalArmazenado: number, totalCalculado: number) {
   return totalArmazenado === 0 && totalCalculado !== 0 ? totalCalculado : totalArmazenado;
-}
-
-export type ItemCorrecao = { valorItem: number; valorDesconto: number; valorFinalItem: number };
-
-export type ItemPricingBruto = { valorItem: number; descontoItem: number; descontoOrcamento: number };
-
-// O Athos grava o desconto do item de duas formas diferentes dependendo de como foi
-// aplicado no PDV:
-// - Desconto dado direto no produto (ex: orcamento #21717/#21659): valoritem ja vem
-//   LIQUIDO (com desconto embutido) e o valor do desconto fica em valordesconto.
-// - Desconto geral da compra, rateado por item (ex: orcamento #21718): valoritem vem
-//   BRUTO (preco cheio) e o valor rateado fica em orcamentodesconto.
-// Sem diferenciar os dois casos, valor unitario e desconto exibidos nao reconciliavam
-// com o total (ex: valor=2,50 desconto=0,80 total=2,50 — nao bate: 2,50-0,80=1,70).
-export function resolveItemPricing(bruto: ItemPricingBruto): { valorOriginal: number; desconto: number } {
-  if (bruto.descontoItem > 0) {
-    return { valorOriginal: bruto.valorItem + bruto.descontoItem, desconto: bruto.descontoItem };
-  }
-  return { valorOriginal: bruto.valorItem, desconto: bruto.descontoOrcamento };
-}
-
-// Alguns orcamentos sao lancados no balcao do Athos com erro de digitacao (ex: preco
-// errado no PDV) e o Athos e a fonte de dados de producao do PDV — nao pode ser
-// corrigido diretamente no banco dele. OrcamentoItemCorrecao guarda a correcao no
-// nosso banco e essa funcao a aplica por cima dos valores lidos do Athos.
-export function applyItemCorrecao(
-  valores: { valor: number; desconto: number; total: number },
-  correcao?: ItemCorrecao,
-) {
-  if (!correcao) {
-    return valores;
-  }
-  return { valor: correcao.valorItem, desconto: correcao.valorDesconto, total: correcao.valorFinalItem };
 }
 
 function pickDateISO(row: Row, keys: string[]) {
@@ -387,11 +353,7 @@ function parseDateFilter(value: string, fieldName: string, endOfDay = false) {
   return parsed;
 }
 
-async function loadItems(
-  client: Pick<Client, "query">,
-  idOrcamento: string,
-  correcoes: Map<string, ItemCorrecao> = new Map(),
-) {
+async function loadItems(client: Pick<Client, "query">, idOrcamento: string) {
   const candidates = ["orcamento_item", "orcamentoitem"];
 
   for (const tableName of candidates) {
@@ -458,39 +420,23 @@ async function loadItems(
       }
     }
 
-    const itemIdColumn = ["iditemorcamento", "idorcamentoitem", "iditem", "id"].find((name) => columns.has(name));
-
     return rows.map((row: Row) => {
       const produto = productIdOnItem ? productsById.get(String(row[productIdOnItem])) : undefined;
       const quantidade = pickNumber(row, ["quantidadeitem", "quantidade", "qtd"], 0);
-      const valorItemBruto = pickNumber(row, ["valoritem", "valor", "valorunitario", "vlrunitario"], 0);
-      const descontoItem = pickNumber(row, ["valordesconto", "desconto", "vlrdesconto"], 0);
-      const descontoOrcamento = pickNumber(row, ["orcamentodesconto"], 0);
-      const { valorOriginal: valor, desconto } = resolveItemPricing({
-        valorItem: valorItemBruto,
-        descontoItem,
-        descontoOrcamento,
-      });
+      const valor = pickNumber(row, ["valoritem", "valor", "valorunitario", "vlrunitario"], 0);
+      const desconto = pickNumber(row, ["valordesconto", "desconto", "vlrdesconto"], 0);
       const totalCalculado = quantidade * valor - desconto;
       const totalArmazenado = pickNumber(row, ["orcamentovalorfinalitem", "valortotal", "total"], totalCalculado);
-      const totalResolvido = resolveItemTotal(totalArmazenado, totalCalculado);
-
-      const itemId = itemIdColumn ? row[itemIdColumn] : undefined;
-      const correcao = itemId !== undefined && itemId !== null ? correcoes.get(String(itemId)) : undefined;
-      const { valor: valorFinal, desconto: descontoFinal, total } = applyItemCorrecao(
-        { valor, desconto, total: totalResolvido },
-        correcao,
-      );
+      const total = resolveItemTotal(totalArmazenado, totalCalculado);
 
       return {
         descricao:
           pickString(produto ?? {}, ["descricaoproduto", "descricao", "descricaocurta", "nomeproduto", "produto"]) ||
           pickString(row, ["descricaoproduto", "descricao", "descricaocurta", "nomeproduto", "produto"]),
         quantidade,
-        valor: valorFinal,
-        desconto: descontoFinal,
+        valor,
+        desconto,
         total,
-        corrigido: Boolean(correcao),
         produto: produto ?? null,
         itemRaw: row,
       };
@@ -592,8 +538,6 @@ export class AthosService {
 
   private _pool: Pool | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
-
   private getPool(): Pool {
     if (!this._pool) {
       const cfg = this.getDbConfig();
@@ -677,8 +621,7 @@ export class AthosService {
 
       const quote = result.rows[0] as Row;
       const idOrcamento = String(quote.idorcamento ?? quote.numero ?? numero);
-      const correcoes = await this.carregarCorrecoes(idOrcamento);
-      const itens = await loadItems(client, idOrcamento, correcoes);
+      const itens = await loadItems(client, idOrcamento);
       const funcionario = await loadFuncionario(client, quote);
       const carimbos = await loadCarimbos(client, idOrcamento);
 
@@ -700,7 +643,6 @@ export class AthosService {
           valor: item.valor,
           desconto: item.desconto,
           total: item.total,
-          corrigido: item.corrigido,
         })),
         itensDetalhados: itens,
         carimbos: carimbos.map((item) => ({
@@ -723,75 +665,6 @@ export class AthosService {
       throw new InternalServerErrorException("Erro ao buscar orcamento no Athos");
     } finally {
       client.release();
-    }
-  }
-
-  private async carregarCorrecoes(idOrcamento: string): Promise<Map<string, ItemCorrecao>> {
-    const registros = await this.prisma.orcamentoItemCorrecao.findMany({ where: { idOrcamento } });
-    return new Map(
-      registros.map((registro) => [
-        registro.idItemOrcamento,
-        {
-          valorItem: Number(registro.valorItem),
-          valorDesconto: Number(registro.valorDesconto),
-          valorFinalItem: Number(registro.valorFinalItem),
-        },
-      ]),
-    );
-  }
-
-  // Registra (ou substitui) a correcao manual de um item de orcamento lido do Athos.
-  // Nao altera o banco do Athos — apenas os valores retornados por buscarOrcamentoPorNumero.
-  async registrarCorrecaoItem(params: {
-    idOrcamento: string;
-    idItemOrcamento: string;
-    valorItem: number;
-    valorDesconto: number;
-    valorFinalItem: number;
-    motivo?: string;
-    criadoPor?: string;
-  }) {
-    if (!params.idOrcamento || !params.idItemOrcamento) {
-      throw new BadRequestException("idOrcamento e idItemOrcamento sao obrigatorios");
-    }
-    return this.prisma.orcamentoItemCorrecao.upsert({
-      where: {
-        idOrcamento_idItemOrcamento: {
-          idOrcamento: params.idOrcamento,
-          idItemOrcamento: params.idItemOrcamento,
-        },
-      },
-      update: {
-        valorItem: params.valorItem,
-        valorDesconto: params.valorDesconto,
-        valorFinalItem: params.valorFinalItem,
-        motivo: params.motivo,
-        criadoPor: params.criadoPor,
-      },
-      create: {
-        idOrcamento: params.idOrcamento,
-        idItemOrcamento: params.idItemOrcamento,
-        valorItem: params.valorItem,
-        valorDesconto: params.valorDesconto,
-        valorFinalItem: params.valorFinalItem,
-        motivo: params.motivo,
-        criadoPor: params.criadoPor,
-      },
-    });
-  }
-
-  async listarCorrecoes(idOrcamento?: string) {
-    return this.prisma.orcamentoItemCorrecao.findMany({
-      where: idOrcamento ? { idOrcamento } : undefined,
-      orderBy: { createdAt: "desc" },
-    });
-  }
-
-  async removerCorrecaoItem(id: string) {
-    try {
-      await this.prisma.orcamentoItemCorrecao.delete({ where: { id } });
-    } catch {
-      throw new NotFoundException("Correcao nao encontrada");
     }
   }
 

@@ -41,15 +41,4 @@ describe("athos-anexo.util", () => {
       expect(result.writeFullPath).not.toBe(result.dbFullPath);
     });
   });
-
-  describe("buildContaPagarAnexoPaths — com SMB_HOST customizado", () => {
-    beforeEach(() => { process.env.SMB_HOST = "10.0.0.50"; });
-    afterEach(() => { delete process.env.SMB_HOST; });
-
-    it("deve usar o host configurado via env no UNC path", () => {
-      const result = buildContaPagarAnexoPaths(7, "nota.pdf");
-
-      expect(result.dbFullPath).toMatch(/^\\\\10\.0\.0\.50\\html\\Anexo\\contapagar\\7\\[a-f0-9]{32}\.pdf$/);
-    });
-  });
 });

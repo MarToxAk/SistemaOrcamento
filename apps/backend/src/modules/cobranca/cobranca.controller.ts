@@ -1,16 +1,11 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Query, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Query, Res } from "@nestjs/common";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
 
 import { Public } from "../security/public.decorator";
-import { UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { CobrancaService } from "./cobranca.service";
-import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
-
-const NFSE_XML_MAX_SIZE_BYTES = 2 * 1024 * 1024;
-const NFSE_XML_MIME_PATTERN = /^(application\/xml|text\/xml)$/;
+import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
 
 @Controller("cobranca")
 export class CobrancaController {
@@ -28,20 +23,12 @@ export class CobrancaController {
   }
 
   /**
-   * Anexa manualmente o XML da NFS-e (emissão SOAP descontinuada pela prefeitura)
-   * aos títulos selecionados. Requer autenticação via x-internal-api-key.
+   * Emite NFS-e para os títulos selecionados via iiBrasil.
+   * Requer autenticação via x-internal-api-key (InternalAuthGuard global).
    */
   @Post("nfse")
-  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: NFSE_XML_MAX_SIZE_BYTES } }))
-  async anexarNfse(
-    @Body() dto: AnexarNfseCobrancaDto,
-    @UploadedFile() file?: UploadedXmlFile,
-  ) {
-    if (!file) throw new BadRequestException("Arquivo XML da NFS-e não enviado.");
-    if (!NFSE_XML_MIME_PATTERN.test(file.mimetype)) {
-      throw new BadRequestException("Arquivo deve ser XML (application/xml ou text/xml).");
-    }
-    return this.cobrancaService.anexarNfse(dto, file);
+  async emitirNfse(@Body() dto: EmitirNfseCobrancaDto) {
+    return this.cobrancaService.emitirNfse(dto);
   }
 
   /**
@@ -64,7 +51,7 @@ export class CobrancaController {
     return this.cobrancaService.buscarNfseEmitidaParaTitulos(body.idcontasReceber ?? []);
   }
 
-  /** Remove registro NfseEmitida do banco para permitir novo anexo */
+  /** Remove registro NfseEmitida do banco para permitir re-emissão */
   @Delete("nfse/:id")
   async cancelarNfse(@Param("id", ParseIntPipe) id: number) {
     return this.cobrancaService.cancelarNfseEmitida(id);

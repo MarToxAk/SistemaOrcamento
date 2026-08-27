@@ -5,15 +5,8 @@ type Smb2Client = {
   close(): void;
 };
 
+const SMB_SHARE = "\\\\192.168.3.203\\html";
 const SMB_BASE_PATH = "Anexo\\contapagar";
-
-function getSmbHost(): string {
-  return process.env.SMB_HOST?.trim() || "192.168.3.203";
-}
-
-function getSmbShare(): string {
-  return `\\\\${getSmbHost()}\\html`;
-}
 
 function getSmbDomain(): string {
   return process.env.SMB_DOMAIN?.trim() || "WORKGROUP";
@@ -32,7 +25,7 @@ function maskUsername(value: string | undefined): string {
 
 export function getSmbDebugInfo() {
   return {
-    share: getSmbShare(),
+    share: SMB_SHARE,
     basePath: SMB_BASE_PATH,
     domain: getSmbDomain(),
     userMasked: maskUsername(process.env.SMB_USER),
@@ -60,7 +53,7 @@ function createClient(): Smb2Client {
   const SMB2 = require("@marsaud/smb2");
   const smbDomain = getSmbDomain();
   return new SMB2({
-    share: getSmbShare(),
+    share: SMB_SHARE,
     domain: smbDomain,
     username: process.env.SMB_USER,
     password: process.env.SMB_PASS,

@@ -12,4 +12,3 @@ import { CobrancaService } from "./cobranca.service";
   providers: [CobrancaService],
 })
 export class CobrancaModule {}
-
