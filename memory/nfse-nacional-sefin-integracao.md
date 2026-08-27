@@ -15,7 +15,9 @@ Teste real em 27/08/2026 (local, contra produção `sefin.nfse.gov.br`) retornou
 
 Ou seja: **não é bug de código nem de certificado** (API e portal concordam). A habilitação do CNPJ 62391927000157 no Sistema Nacional via Ilhabela **só entra em vigor em 01/09/2026** (confirmado pelo usuário). Antes dessa data qualquer `dCompet` é rejeitado.
 
-Ação: a partir de 01/09/2026, testar emissão de R$1,00 + cancelar. Se ainda der E0084, confirmar com a Prefeitura de Ilhabela a vigência do convênio e a habilitação do CNPJ para emissão via **API Sefin** (não só portal). Até lá, produção fica no fluxo de anexo manual do XML (PR #54 / commit `8a7f8eb`). O `dCompet` no `nfse-nacional-dps.util.ts` está fixo em "hoje" (`new Date()`); se precisar emitir competência retroativa dentro da janela, adicionar campo opcional `dataCompetencia` no DTO/builder.
+Trabalho salvo no commit `93a4a02` da branch `fix/orcamento-total-desconto-zerado` (pushed). PR de integração: **#56** (`fix/orcamento-total-desconto-zerado` → `main`), aberto como **rascunho** em 27/08/2026 — reaplica o #54 (que foi revertido na main via #55, voltando a main pro estado do #53) e adiciona a NFS-e Nacional. Certificado A1 fica só no `.env`/`deploy/stack.env` locais (gitignored), não vai no PR.
+
+Ação: a partir de 01/09/2026, testar emissão de R$1,00 + cancelar; se OK, configurar `NFSE_NACIONAL_*` no stack.env de produção, build novo do backend (dep `xml-crypto`), tirar o PR #56 de rascunho e mergear. Se ainda der E0084, confirmar com a Prefeitura de Ilhabela a vigência do convênio e a habilitação do CNPJ para emissão via **API Sefin** (não só portal). Até lá, produção fica no fluxo de anexo manual do XML (PR #54 / commit `8a7f8eb`). O `dCompet` no `nfse-nacional-dps.util.ts` está fixo em "hoje" (`new Date()`); se precisar emitir competência retroativa dentro da janela, adicionar campo opcional `dataCompetencia` no DTO/builder.
 
 ## Contexto / Por quê
 
