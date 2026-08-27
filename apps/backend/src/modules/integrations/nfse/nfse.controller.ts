@@ -1,8 +1,11 @@
-import { BadRequestException, Controller, Delete, Param, Post, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Throttle } from "@nestjs/throttler";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ExpressResponse = any;
 
 import { THROTTLE_SENSITIVE } from "../../security/throttle.config";
+import { EmitirNfseNacionalDto } from "./dto/emitir-nfse-nacional.dto";
 import { NfseService, UploadedXmlFile } from "./nfse.service";
 
 const NFSE_XML_MAX_SIZE_BYTES = 2 * 1024 * 1024;
@@ -28,5 +31,21 @@ export class NfseController {
   @Delete()
   async remover(@Param("quoteId") quoteId: string) {
     return this.nfseService.removerQuoteNfse(quoteId);
+  }
+
+  /** Emite a NFS-e automaticamente via API do Sistema Nacional (ADN/Sefin Nacional). */
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @Post("emitir")
+  async emitir(@Param("quoteId") quoteId: string, @Body() dto: EmitirNfseNacionalDto) {
+    return this.nfseService.emitirQuoteNfseAutomatica(quoteId, dto);
+  }
+
+  /** Download do DANFSe (PDF) gerado localmente a partir do XML, para envio ao cliente. */
+  @Get("pdf")
+  async baixarPdf(@Param("quoteId") quoteId: string, @Res() res: ExpressResponse) {
+    const { pdfBuffer, nomeArquivo } = await this.nfseService.baixarDanfsePdf(quoteId);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
+    res.send(pdfBuffer);
   }
 }

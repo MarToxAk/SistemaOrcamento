@@ -117,6 +117,14 @@ export default function OrcamentoDetailPage() {
   const [nfseNumero, setNfseNumero] = useState<string | null>(null);
   const [nfseLink, setNfseLink] = useState<string | null>(null);
 
+  // Emissão automática de NFS-e via API do Sistema Nacional (ADN/Sefin Nacional).
+  const [emitirFormOpen, setEmitirFormOpen] = useState(false);
+  const [emitirState, setEmitirState] = useState<"idle" | "enviando">("idle");
+  const [emitirCodigoServico, setEmitirCodigoServico] = useState("130501");
+  const [emitirDocumentoTomador, setEmitirDocumentoTomador] = useState("");
+  const [emitirNomeTomador, setEmitirNomeTomador] = useState("");
+  const [emitirValorServico, setEmitirValorServico] = useState("");
+
   useEffect(() => {
     const isDevBypass =
       (typeof process !== "undefined" && process.env.NODE_ENV === "development") ||
@@ -204,6 +212,7 @@ export default function OrcamentoDetailPage() {
         setQuote(data);
         setNfseNumero(data.nfseNumero ?? null);
         setNfseLink(data.nfseLink ?? null);
+        setEmitirValorServico(String(data.body?.totais?.valor ?? ""));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Falha ao carregar orçamento.");
       } finally {
@@ -268,6 +277,45 @@ export default function OrcamentoDetailPage() {
       setNfseMsg("");
     } catch (err) {
       setNfseMsg(err instanceof Error ? err.message : "Erro ao remover anexo.");
+    }
+  }
+
+  async function handleEmitirNfseAutomatica() {
+    setEmitirState("enviando");
+    setNfseState("idle");
+    setNfseMsg("");
+    try {
+      const documento = emitirDocumentoTomador.replace(/\D/g, "");
+      if (documento.length !== 11 && documento.length !== 14) {
+        throw new Error("Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.");
+      }
+      const valor = Number(emitirValorServico.replace(",", "."));
+      if (!Number.isFinite(valor) || valor <= 0) {
+        throw new Error("Informe um valor de serviço válido.");
+      }
+
+      const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse/emitir`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codigoServico: emitirCodigoServico,
+          nomeTomador: emitirNomeTomador,
+          valorServico: valor,
+          ...(documento.length === 14 ? { cnpjTomador: documento } : { cpfTomador: documento }),
+        }),
+      });
+      const data = await res.json().catch(() => ({})) as { numero?: string; link?: string; message?: string; error?: string };
+      if (!res.ok) throw new Error(data?.message || data?.error || "Falha ao emitir NFS-e.");
+      setNfseNumero(data.numero ?? null);
+      setNfseLink(data.link ?? null);
+      setNfseState("sucesso");
+      setNfseMsg(`NFS-e emitida automaticamente! Número: ${data.numero}`);
+      setEmitirFormOpen(false);
+    } catch (err) {
+      setNfseState("erro");
+      setNfseMsg(err instanceof Error ? err.message : "Erro ao emitir NFS-e automaticamente.");
+    } finally {
+      setEmitirState("idle");
     }
   }
 
@@ -544,6 +592,14 @@ export default function OrcamentoDetailPage() {
                           </>
                         )}
                       </label>
+                      <button
+                        type="button"
+                        className="btn btn-outline-warning mb-0"
+                        onClick={() => setEmitirFormOpen((open) => !open)}
+                      >
+                        <i className="bi bi-lightning-charge me-2" />
+                        Emitir NFS-e automaticamente
+                      </button>
                     </>
                   ) : nfseNumero ? (
                     <>
@@ -557,6 +613,10 @@ export default function OrcamentoDetailPage() {
                           Abrir XML
                         </a>
                       ) : null}
+                      <a className="btn btn-outline-primary" href={`/api/quotes/${encodeURIComponent(quoteId)}/nfse/pdf`}>
+                        <i className="bi bi-file-earmark-pdf me-2" />
+                        Baixar PDF (DANFSe)
+                      </a>
                       <button type="button" className="btn btn-outline-danger" onClick={() => void handleRemoverNfse()}>
                         <i className="bi bi-x-circle me-2" />
                         Remover anexo
@@ -593,6 +653,80 @@ export default function OrcamentoDetailPage() {
                   ) : null}
                   <a className="btn btn-outline-secondary" href="/orcamento">Voltar para lista</a>
                 </div>
+
+                {emitirFormOpen ? (
+                  <div className="card mt-3">
+                    <div className="card-body">
+                      <h6 className="card-title">Emitir NFS-e automaticamente</h6>
+                      <div className="row g-2">
+                        <div className="col-md-6">
+                          <label className="form-label small">Serviço</label>
+                          <select
+                            className="form-select"
+                            value={emitirCodigoServico}
+                            onChange={(e) => setEmitirCodigoServico(e.target.value)}
+                          >
+                            <option value="130501">13.05 — Composição gráfica / impressão</option>
+                            <option value="140801">14.08 — Encadernação e acabamento</option>
+                            <option value="240101">24.01 — Confecção de carimbos e sinalização</option>
+                          </select>
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label small">Valor do serviço (R$)</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={emitirValorServico}
+                            onChange={(e) => setEmitirValorServico(e.target.value)}
+                            placeholder="0,00"
+                          />
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label small">CPF ou CNPJ do tomador</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={emitirDocumentoTomador}
+                            onChange={(e) => setEmitirDocumentoTomador(e.target.value)}
+                            placeholder="Somente números"
+                          />
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label small">Nome do tomador</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={emitirNomeTomador}
+                            onChange={(e) => setEmitirNomeTomador(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="d-flex gap-2 mt-3">
+                        <button
+                          type="button"
+                          className="btn btn-warning"
+                          disabled={emitirState === "enviando"}
+                          onClick={() => void handleEmitirNfseAutomatica()}
+                        >
+                          {emitirState === "enviando" ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm me-2" role="status" />
+                              Emitindo...
+                            </>
+                          ) : (
+                            <>
+                              <i className="bi bi-lightning-charge me-2" />
+                              Emitir
+                            </>
+                          )}
+                        </button>
+                        <button type="button" className="btn btn-outline-secondary" onClick={() => setEmitirFormOpen(false)}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
                 {!pdfViewerUrl ? (
                   <div className="alert alert-warning mt-3 mb-0">

@@ -109,6 +109,14 @@ export default function ClienteDetalhePage({
   const [nfseValor, setNfseValor] = useState("");
   const [nfseAvisoFisico, setNfseAvisoFisico] = useState(false);
   const [nfseFile, setNfseFile] = useState<File | null>(null);
+  const [nfseModoEmissao, setNfseModoEmissao] = useState<"manual" | "automatico">("manual");
+  const [nfseCodigoServico, setNfseCodigoServico] = useState("130501");
+  const [nfseDocumentoTomador, setNfseDocumentoTomador] = useState("");
+  const [nfseNomeTomador, setNfseNomeTomador] = useState("");
+  const [nfseIncluirIbsCbs, setNfseIncluirIbsCbs] = useState(false);
+  const [nfseEnderecoTomador, setNfseEnderecoTomador] = useState<string | null>(null);
+  const [nfseDescricaoServico, setNfseDescricaoServico] = useState("");
+  const [nfseItensServico, setNfseItensServico] = useState<Array<{ nome: string; quantidade: number; valor: number }>>([]);
   const [nfseResult, setNfseResult] = useState<{
     nfseEmitidaId: number;
     numeroNfse: string;
@@ -513,10 +521,44 @@ export default function ClienteDetalhePage({
       }
     }
 
+    // Itens de serviço de todas as vendas elegíveis, para conferência antes de emitir
+    // (mesma ideia do iiBrasil: mostrar a descrição que vai para a nota).
+    const itensServico = [...vendasElegiveis].flatMap((idv) => tipoPorVenda.get(idv)?.itensServico ?? []);
+    setNfseItensServico(itensServico);
+    setNfseDescricaoServico(
+      itensServico.length > 0
+        ? itensServico.map((i) => `${i.quantidade}x ${i.nome}`).join("; ")
+        : "",
+    );
+    setNfseIncluirIbsCbs(false);
+
     setNfseTitulosElegiveis(elegiveis);
     setNfseAvisoFisico(temFisico);
     setNfseValor(elegiveis.length > 0 ? totalServicos.toFixed(2) : "0");
+    setNfseModoEmissao("manual");
+    setNfseNomeTomador(dadosCliente?.nome_cliente ?? "");
+    setNfseDocumentoTomador("");
+    setNfseEnderecoTomador(null);
     setNfseModalState("confirm");
+
+    // Resolve CPF/CNPJ e endereço do tomador direto do Athos (fonte oficial),
+    // para pre-preencher a emissão automática e evitar digitação divergente.
+    type TomadorApi = {
+      documento?: string | null;
+      nome?: string | null;
+      endereco?: { logradouro: string; numero: string; bairro: string; cep: string; uf: string } | null;
+    };
+    fetch(`/api/cobranca/nfse/tomador/${idcliente}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: TomadorApi | null) => {
+        if (data?.documento) setNfseDocumentoTomador(data.documento);
+        if (data?.nome) setNfseNomeTomador(data.nome);
+        if (data?.endereco) {
+          const e = data.endereco;
+          setNfseEnderecoTomador(`${e.logradouro}, ${e.numero} - ${e.bairro} - ${e.uf}, CEP ${e.cep}`);
+        }
+      })
+      .catch(() => {/* falha silenciosa — usuário preenche manualmente */});
   }
 
   // Emissão automática (SOAP) foi descontinuada pela prefeitura — a nota é
@@ -553,12 +595,59 @@ export default function ClienteDetalhePage({
     }
   }
 
+  async function confirmarEmitirNfseAutomatica() {
+    const documento = nfseDocumentoTomador.replace(/\D/g, "");
+    if (documento.length !== 11 && documento.length !== 14) {
+      setNfseErro("Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido do tomador.");
+      return;
+    }
+    if (!nfseNomeTomador.trim()) {
+      setNfseErro("Informe o nome do tomador.");
+      return;
+    }
+    setNfseModalState("loading");
+    try {
+      const res = await fetch("/api/cobranca/nfse/emitir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idclienteAthos: Number(idcliente),
+          idcontasReceber: nfseTitulosElegiveis,
+          codigoServico: nfseCodigoServico,
+          nomeTomador: nfseNomeTomador,
+          valorServico: Number(nfseValor),
+          descricaoServico: nfseDescricaoServico || undefined,
+          incluirIbsCbs: nfseIncluirIbsCbs,
+          ...(documento.length === 14 ? { cnpjTomador: documento } : { cpfTomador: documento }),
+        }),
+      });
+      const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
+      if (!res.ok) {
+        setNfseErro(
+          (data as { message?: string; error?: string })?.message ??
+            (data as { message?: string; error?: string })?.error ??
+            "Não foi possível emitir a NFS-e automaticamente.",
+        );
+        setNfseErroDetalhe(`HTTP ${res.status}`);
+        setNfseModalState("error");
+      } else {
+        setNfseResult(data as typeof nfseResult);
+        setNfseModalState("success");
+      }
+    } catch (err) {
+      setNfseErro("Falha na conexão.");
+      setNfseErroDetalhe(err instanceof Error ? err.message : "");
+      setNfseModalState("error");
+    }
+  }
+
   function fecharNfseModal(withRefetch?: boolean) {
     setNfseModalState("idle");
     setNfseResult(null);
     setNfseErro("");
     setNfseErroDetalhe("");
     setNfseFile(null);
+    setNfseModoEmissao("manual");
     if (withRefetch) {
       setLoadingTitulos(true);
       setRefetchKey((k) => k + 1);
@@ -757,11 +846,9 @@ export default function ClienteDetalhePage({
                                           <span className={`badge ${badgeClassName(t.tipoNf)}`}>
                                             {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
                                           </span>
-                                          {t.nfseAtivo?.linkNfse && (
+                                          {t.nfseAtivo?.nfseEmitidaId && (
                                             <a
-                                              href={safeHttpUrl(t.nfseAtivo.linkNfse) ?? undefined}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
+                                              href={`/api/cobranca/nfse/${t.nfseAtivo.nfseEmitidaId}/pdf`}
                                               className="btn btn-link btn-sm p-0 text-success"
                                               title="Baixar PDF da NFS-e"
                                               style={{ lineHeight: 1 }}
@@ -827,11 +914,9 @@ export default function ClienteDetalhePage({
                                       title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
                                       {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
                                     </span>
-                                    {titulo.nfseAtivo?.linkNfse && (
+                                    {titulo.nfseAtivo?.nfseEmitidaId && (
                                       <a
-                                        href={safeHttpUrl(titulo.nfseAtivo.linkNfse) ?? undefined}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                        href={`/api/cobranca/nfse/${titulo.nfseAtivo.nfseEmitidaId}/pdf`}
                                         className="btn btn-link btn-sm p-0 text-success"
                                         title="Baixar PDF da NFS-e"
                                         style={{ lineHeight: 1 }}
@@ -1542,25 +1627,123 @@ export default function ClienteDetalhePage({
                       )}
                     </div>
 
-                    {/* Upload do XML emitido manualmente */}
-                    <div className="mb-3">
-                      <label className="form-label fw-semibold small" htmlFor="nfse-xml">
-                        Arquivo XML da NFS-e (padrão nacional NBS)
-                      </label>
-                      <input
-                        id="nfse-xml"
-                        type="file"
-                        accept=".xml,application/xml,text/xml"
-                        className="form-control form-control-sm"
-                        onChange={(e) => setNfseFile(e.target.files?.[0] ?? null)}
-                      />
-                      <small className="text-muted d-block mt-1">
-                        A emissão passou a ser manual — emita a nota fora do sistema e anexe aqui o XML assinado.
-                      </small>
+                    {/* Modo de emissão */}
+                    <div className="btn-group w-100 mb-3" role="group">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${nfseModoEmissao === "manual" ? "btn-primary" : "btn-outline-primary"}`}
+                        onClick={() => setNfseModoEmissao("manual")}
+                      >
+                        Anexar XML manual
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${nfseModoEmissao === "automatico" ? "btn-warning" : "btn-outline-warning"}`}
+                        onClick={() => setNfseModoEmissao("automatico")}
+                      >
+                        <i className="bi bi-lightning-charge me-1" />Emitir automaticamente
+                      </button>
                     </div>
 
+                    {nfseItensServico.length > 0 && (
+                      <div className="mb-3">
+                        <div className="text-muted small fw-semibold mb-1">Itens de serviço (compõem a descrição da nota)</div>
+                        <ul className="list-unstyled mb-0 small border rounded p-2">
+                          {nfseItensServico.map((item, idx) => (
+                            <li key={idx} className="d-flex justify-content-between border-bottom py-1">
+                              <span>{item.quantidade}x {item.nome}</span>
+                              <span className="text-muted">{formatBRL(item.valor)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {nfseModoEmissao === "manual" ? (
+                      <div className="mb-3">
+                        <label className="form-label fw-semibold small" htmlFor="nfse-xml">
+                          Arquivo XML da NFS-e (padrão nacional NBS)
+                        </label>
+                        <input
+                          id="nfse-xml"
+                          type="file"
+                          accept=".xml,application/xml,text/xml"
+                          className="form-control form-control-sm"
+                          onChange={(e) => setNfseFile(e.target.files?.[0] ?? null)}
+                        />
+                        <small className="text-muted d-block mt-1">
+                          Emita a nota fora do sistema e anexe aqui o XML assinado.
+                        </small>
+                      </div>
+                    ) : (
+                      <div className="mb-3">
+                        <div className="mb-2">
+                          <label className="form-label small">Serviço</label>
+                          <select
+                            className="form-select form-select-sm"
+                            value={nfseCodigoServico}
+                            onChange={(e) => setNfseCodigoServico(e.target.value)}
+                          >
+                            <option value="130501">13.05 — Composição gráfica / impressão</option>
+                            <option value="140801">14.08 — Encadernação e acabamento</option>
+                            <option value="240101">24.01 — Confecção de carimbos e sinalização</option>
+                          </select>
+                        </div>
+                        <div className="mb-2">
+                          <label className="form-label small">CPF ou CNPJ do tomador</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            value={nfseDocumentoTomador}
+                            onChange={(e) => setNfseDocumentoTomador(e.target.value)}
+                            placeholder="Somente números"
+                          />
+                        </div>
+                        <div className="mb-2">
+                          <label className="form-label small">Nome do tomador</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            value={nfseNomeTomador}
+                            onChange={(e) => setNfseNomeTomador(e.target.value)}
+                          />
+                        </div>
+                        {nfseEnderecoTomador && (
+                          <div className="mb-2">
+                            <label className="form-label small mb-0">Endereço (vindo do cadastro Athos)</label>
+                            <div className="small text-muted">{nfseEnderecoTomador}</div>
+                          </div>
+                        )}
+                        <div className="mb-2">
+                          <label className="form-label small">Descrição do serviço (vai na nota)</label>
+                          <textarea
+                            className="form-control form-control-sm"
+                            rows={2}
+                            value={nfseDescricaoServico}
+                            onChange={(e) => setNfseDescricaoServico(e.target.value)}
+                          />
+                        </div>
+                        <div className="form-check">
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
+                            id="nfse-ibscbs"
+                            checked={nfseIncluirIbsCbs}
+                            onChange={(e) => setNfseIncluirIbsCbs(e.target.checked)}
+                          />
+                          <label className="form-check-label small" htmlFor="nfse-ibscbs">
+                            Incluir grupo IBS/CBS (reforma tributária)
+                          </label>
+                          <small className="text-muted d-block">
+                            Ilhabela ainda não exige — o Sistema Nacional calcula o valor a partir da classificação
+                            declarada (não é uma alíquota escolhida aqui).
+                          </small>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Dados do tomador */}
-                    {dadosCliente && (
+                    {dadosCliente && nfseModoEmissao === "manual" && (
                       <div className="mb-3">
                         <div className="text-muted small fw-semibold mb-1">Tomador</div>
                         <div className="text-muted small">{dadosCliente.nome_cliente}</div>
@@ -1586,14 +1769,25 @@ export default function ClienteDetalhePage({
                     >
                       Cancelar
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={confirmarAnexarNfse}
-                      disabled={!nfseFile}
-                    >
-                      <i className="bi bi-check-lg me-1" />Confirmar Anexo
-                    </button>
+                    {nfseModoEmissao === "manual" ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={confirmarAnexarNfse}
+                        disabled={!nfseFile}
+                      >
+                        <i className="bi bi-check-lg me-1" />Confirmar Anexo
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-warning"
+                        onClick={confirmarEmitirNfseAutomatica}
+                        disabled={!nfseNomeTomador.trim() || !nfseDocumentoTomador.trim()}
+                      >
+                        <i className="bi bi-lightning-charge me-1" />Emitir Automaticamente
+                      </button>
+                    )}
                   </div>
                 </>
               );

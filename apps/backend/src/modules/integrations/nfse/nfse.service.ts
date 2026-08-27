@@ -4,7 +4,12 @@ import { BadRequestException, Injectable, InternalServerErrorException, Logger, 
 import { ConfigService } from "@nestjs/config";
 import { Client as MinioClient } from "minio";
 
+import axios from "axios";
+
 import { PrismaService } from "../../database/prisma.service";
+import { DanfsePdfService } from "./danfse-pdf.service";
+import { EmitirNfseNacionalDto } from "./dto/emitir-nfse-nacional.dto";
+import { NfseNacionalService } from "./nfse-nacional.service";
 import { ParsedNfse, parseNfseXml } from "./nfse-xml-parser.util";
 
 export type UploadedXmlFile = {
@@ -29,7 +34,66 @@ export class NfseService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly nfseNacionalService: NfseNacionalService,
+    private readonly danfsePdfService: DanfsePdfService,
   ) {}
+
+  /** Baixa o XML ja anexado/emitido e gera o DANFSe (PDF) para envio ao cliente. */
+  async baixarDanfsePdf(quoteId: string): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
+    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
+    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    if (!quote.nfseLink) throw new BadRequestException("Orcamento nao possui NFS-e anexada.");
+
+    const xmlResp = await axios.get(quote.nfseLink, { responseType: "text", timeout: 15_000 });
+    const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(xmlResp.data as string);
+
+    return { pdfBuffer, nomeArquivo: `NFSe-${quote.nfseNumero ?? quoteId}.pdf` };
+  }
+
+  /** Emite a NFS-e automaticamente via API do Sistema Nacional e anexa o resultado ao orcamento. */
+  async emitirQuoteNfseAutomatica(quoteId: string, dto: EmitirNfseNacionalDto) {
+    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
+    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    if (quote.nfseNumero) {
+      throw new BadRequestException("Orcamento ja possui NFS-e emitida.");
+    }
+
+    const { chaveAcesso, nfseXml } = await this.nfseNacionalService.emitir({
+      codigoServico: dto.codigoServico,
+      descricaoServico: dto.descricaoServico,
+      valorServico: dto.valorServico,
+      incluirIbsCbs: dto.incluirIbsCbs,
+      tomador: {
+        cpf: dto.cpfTomador,
+        cnpj: dto.cnpjTomador,
+        nome: dto.nomeTomador,
+      },
+    });
+
+    const buffer = Buffer.from(nfseXml, "utf-8");
+    const parsed = this.parseXml(buffer);
+    const { publicUrl } = await this.storeXml(buffer, parsed.numeroNfse ?? chaveAcesso, `quotes/${quoteId}`);
+
+    await this.prisma.quote.update({
+      where: { id: quoteId },
+      data: {
+        nfseNumero: parsed.numeroNfse,
+        nfseCodigoVerificacao: parsed.chaveAcesso ?? chaveAcesso,
+        nfseLink: publicUrl,
+        nfseEmitidaEm: parsed.dataEmissao ?? new Date(),
+      },
+    });
+
+    this.logger.log(`NFS-e #${parsed.numeroNfse} emitida automaticamente para o orcamento ${quoteId}.`);
+
+    return {
+      numero: parsed.numeroNfse,
+      codigoVerificacao: parsed.chaveAcesso ?? chaveAcesso,
+      link: publicUrl,
+      dataEmissao: parsed.dataEmissao,
+      valorServico: parsed.valorServico,
+    };
+  }
 
   parseXml(buffer: Buffer): ParsedNfse {
     const xml = buffer.toString("utf-8");

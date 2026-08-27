@@ -8,10 +8,13 @@ import axios from "axios";
 import { ConfigService } from "@nestjs/config";
 
 import { AthosService } from "../integrations/athos/athos.service";
+import { DanfsePdfService } from "../integrations/nfse/danfse-pdf.service";
+import { NfseNacionalService } from "../integrations/nfse/nfse-nacional.service";
 import { NfseService, UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { PrismaService } from "../database/prisma.service";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
+import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
 
 export interface CriarBoletoResponseDto {
   cobrancaId: number;
@@ -32,6 +35,8 @@ export class CobrancaService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly nfseService: NfseService,
+    private readonly nfseNacionalService: NfseNacionalService,
+    private readonly danfsePdfService: DanfsePdfService,
   ) {}
 
   async criarBoleto(dto: CriarBoletoDto): Promise<CriarBoletoResponseDto> {
@@ -350,6 +355,116 @@ export class CobrancaService {
       valor: valorTotal,
       linkNfse: publicUrl,
     };
+  }
+
+  /** Resolve CPF/CNPJ, nome e endereço do tomador direto do Athos, para pre-preencher a emissao automatica. */
+  async buscarTomadorNfse(idclienteAthos: number): Promise<{
+    documento: string | null;
+    nome: string | null;
+    endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+  }> {
+    const cliente = await this.athosService.buscarClientePorId(idclienteAthos);
+    return {
+      documento: cliente?.documento ?? null,
+      nome: cliente?.name ?? null,
+      endereco: cliente?.endereco ?? null,
+    };
+  }
+
+  /** Emite a NFS-e automaticamente via API do Sistema Nacional e vincula aos títulos selecionados. */
+  async emitirNfseAutomatica(dto: EmitirNfseCobrancaDto): Promise<{
+    nfseEmitidaId: number;
+    numeroNfse: string;
+    valor: number;
+    linkNfse: string | null;
+  }> {
+    const todosTitulos = await this.athosService.buscarTitulosClienteContasReceber(dto.idclienteAthos);
+    const titulosFiltrados = todosTitulos.filter((t) => dto.idcontasReceber.includes(t.idcontareceber));
+
+    for (const id of dto.idcontasReceber) {
+      if (!titulosFiltrados.find((t) => t.idcontareceber === id)) {
+        throw new BadRequestException(`Título ${id} não encontrado para este cliente.`);
+      }
+    }
+
+    const idvendasUnicas = [...new Set(titulosFiltrados.map((t) => t.idvenda).filter((v): v is number => v != null))];
+    for (const idvenda of idvendasUnicas) {
+      const existente = await this.prisma.nfseEmitida.findFirst({ where: { idvenda } });
+      if (existente) {
+        throw new BadRequestException(`NFS-e já anexada para venda ${idvenda} (Nº ${existente.numeroNfse})`);
+      }
+    }
+
+    const valorTotal = dto.valorServico ?? titulosFiltrados.reduce((s, t) => s + t.valor, 0);
+
+    // Endereco sempre resolvido aqui no backend a partir do Athos (nunca do
+    // que o frontend mandar) para nao divergir do cadastro oficial do cliente.
+    const clienteAthos = await this.athosService.buscarClientePorId(dto.idclienteAthos);
+    const endereco = clienteAthos?.endereco
+      ? {
+          logradouro: clienteAthos.endereco.logradouro,
+          numero: clienteAthos.endereco.numero,
+          bairro: clienteAthos.endereco.bairro,
+          cep: clienteAthos.endereco.cep,
+          codigoMunicipio: clienteAthos.endereco.codigoMunicipio,
+        }
+      : undefined;
+
+    const { chaveAcesso, nfseXml } = await this.nfseNacionalService.emitir({
+      codigoServico: dto.codigoServico,
+      descricaoServico: dto.descricaoServico,
+      valorServico: valorTotal,
+      incluirIbsCbs: dto.incluirIbsCbs,
+      tomador: { cpf: dto.cpfTomador, cnpj: dto.cnpjTomador, nome: dto.nomeTomador, endereco },
+    });
+
+    const buffer = Buffer.from(nfseXml, "utf-8");
+    const parsed = this.nfseService.parseXml(buffer);
+    const { publicUrl, objectName } = await this.nfseService.storeXml(
+      buffer,
+      parsed.numeroNfse ?? chaveAcesso,
+      `cobranca/${dto.idclienteAthos}`,
+    );
+
+    const nfseEmitida = await this.prisma.nfseEmitida.create({
+      data: {
+        numeroNfse: parsed.numeroNfse,
+        idclienteAthos: dto.idclienteAthos,
+        valorServico: valorTotal,
+        idvenda: idvendasUnicas[0] ?? null,
+        chaveAcesso: parsed.chaveAcesso ?? chaveAcesso,
+        linkNfse: publicUrl,
+        arquivoPath: objectName,
+        arquivoNome: `NFSe-${parsed.numeroNfse ?? chaveAcesso}.xml`,
+        dataEmissao: parsed.dataEmissao ?? new Date(),
+        titulos: {
+          createMany: {
+            data: titulosFiltrados.map((t) => ({ idcontareceber: t.idcontareceber, valor: t.valor })),
+          },
+        },
+      },
+    });
+
+    this.logger.log(`NFS-e #${parsed.numeroNfse} emitida automaticamente — ${titulosFiltrados.length} título(s).`);
+
+    return {
+      nfseEmitidaId: nfseEmitida.id,
+      numeroNfse: parsed.numeroNfse!,
+      valor: valorTotal,
+      linkNfse: publicUrl,
+    };
+  }
+
+  /** Baixa o DANFSe (PDF) gerado localmente a partir do XML de uma NFS-e emitida para cobrança. */
+  async baixarDanfsePdf(nfseEmitidaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
+    const nfseEmitida = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
+    if (!nfseEmitida) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não encontrada.`);
+    if (!nfseEmitida.linkNfse) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não possui XML armazenado.`);
+
+    const xmlResp = await axios.get(nfseEmitida.linkNfse, { responseType: "text", timeout: 15_000 });
+    const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(xmlResp.data as string);
+
+    return { pdfBuffer, nomeArquivo: `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.pdf` };
   }
 
   async processarNotificacaoEFI(token: string): Promise<void> {

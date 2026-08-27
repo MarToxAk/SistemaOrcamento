@@ -13,3 +13,9 @@ coverage/
 deploy/box.env
 deploy/*.env
 !deploy/*.env.example
+
+# Certificados digitais (nunca commitar)
+*.pfx
+*.p12
+*.pem
+!deploy/*.pem.example

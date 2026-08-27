@@ -8,6 +8,7 @@ import { UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { CobrancaService } from "./cobranca.service";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
+import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
 
 const NFSE_XML_MAX_SIZE_BYTES = 2 * 1024 * 1024;
 const NFSE_XML_MIME_PATTERN = /^(application\/xml|text\/xml)$/;
@@ -42,6 +43,27 @@ export class CobrancaController {
       throw new BadRequestException("Arquivo deve ser XML (application/xml ou text/xml).");
     }
     return this.cobrancaService.anexarNfse(dto, file);
+  }
+
+  /** Emite a NFS-e automaticamente via API do Sistema Nacional (ADN/Sefin Nacional). */
+  @Post("nfse/emitir")
+  async emitirNfse(@Body() dto: EmitirNfseCobrancaDto) {
+    return this.cobrancaService.emitirNfseAutomatica(dto);
+  }
+
+  /** Resolve CPF/CNPJ e nome do tomador direto do Athos, para pre-preencher a emissao automatica. */
+  @Get("nfse/tomador/:idclienteAthos")
+  async tomadorNfse(@Param("idclienteAthos", ParseIntPipe) idclienteAthos: number) {
+    return this.cobrancaService.buscarTomadorNfse(idclienteAthos);
+  }
+
+  /** Download do DANFSe (PDF) gerado localmente a partir do XML, para envio ao cliente. */
+  @Get("nfse/:id/pdf")
+  async baixarNfsePdf(@Param("id", ParseIntPipe) id: number, @Res() res: ExpressResponse) {
+    const { pdfBuffer, nomeArquivo } = await this.cobrancaService.baixarDanfsePdf(id);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
+    res.send(pdfBuffer);
   }
 
   /**
