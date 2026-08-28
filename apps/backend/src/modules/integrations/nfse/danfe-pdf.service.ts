@@ -76,6 +76,8 @@ export class DanfePdfService {
         timeout: 5000,
         maxContentLength: DanfePdfService.LOGO_MAX_BYTES,
         maxBodyLength: DanfePdfService.LOGO_MAX_BYTES,
+        // Alguns hosts (ex. Wikimedia) bloqueiam requisições sem User-Agent identificado (403).
+        headers: { "User-Agent": "SistemaOrcamentoBomCusto/1.0 (+https://bomcustoilhabela.com.br)" },
       });
       const contentType = String(res.headers["content-type"] ?? "").split(";")[0].trim();
       if (!contentType.startsWith("image/")) return undefined;
