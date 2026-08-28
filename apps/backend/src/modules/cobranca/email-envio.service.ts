@@ -5,11 +5,13 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import * as nodemailer from "nodemailer";
 
 import { AthosService } from "../integrations/athos/athos.service";
+import { DanfePdfService } from "../integrations/nfse/danfe-pdf.service";
 import { PrismaService } from "../database/prisma.service";
 import { CobrancaService } from "./cobranca.service";
 
@@ -40,6 +42,7 @@ export class EmailEnvioService {
     private readonly prisma: PrismaService,
     private readonly cobrancaService: CobrancaService,
     private readonly athosService: AthosService,
+    private readonly danfePdfService: DanfePdfService,
   ) {}
 
   private getRequiredConfig(key: string): string {
@@ -110,12 +113,24 @@ export class EmailEnvioService {
       const notasXml = idcontas.length
         ? await this.athosService.buscarNotasFiscaisXmlPorTitulos(idcontas)
         : [];
-      for (const { numero, xml } of notasXml) {
-        attachments.push({
-          filename: `NF-e-${numero}.xml`,
-          content: xml,
-          contentType: "application/xml",
-        });
+      for (const { numero, xml, cancelada } of notasXml) {
+        try {
+          const pdf = await this.danfePdfService.gerarDanfe({ xml, cancelada });
+          attachments.push({
+            filename: `NF-e-${numero}.pdf`,
+            content: pdf,
+            contentType: "application/pdf",
+          });
+        } catch (err) {
+          this.logger.warn(
+            `DANFE render falhou p/ NF-e ${numero}: ${err instanceof Error ? err.message : String(err)}; anexando XML cru.`,
+          );
+          attachments.push({
+            filename: `NF-e-${numero}.xml`,
+            content: xml,
+            contentType: "application/xml",
+          });
+        }
       }
       nfeNumeros = notasXml.map((n) => n.numero);
     }
@@ -134,7 +149,7 @@ export class EmailEnvioService {
 
     const nNfse = nfseIdsUnicos.length;
     const mNfe = nfeNumeros.length;
-    const listaAnexosFrase = `Serão anexados: boleto (PDF) + ${nNfse} NFS-e (PDF) + ${mNfe} NF-e (XML)`;
+    const listaAnexosFrase = `Serão anexados: boleto (PDF) + ${nNfse} NFS-e (PDF) + ${mNfe} NF-e (PDF)`;
 
     const rodapeLinhas = [empresaNome, empresaTelefones, empresaEmail].filter(Boolean);
     const rodapeHtml = rodapeLinhas.map((l) => `<div>${l}</div>`).join("");
@@ -192,6 +207,35 @@ ${rodapeText}`;
     });
 
     return { id: row.id, token, destinatario, status: row.status, anexos };
+  }
+
+  /**
+   * Debug: renderiza o DANFE (PDF) de uma NF-e por tras de um boleto, sem
+   * disparar e-mail. Reaproveita exatamente o caminho do envio
+   * (titulos do boleto -> buscarNotasFiscaisXmlPorTitulos). Se `numero`
+   * for omitido, renderiza a 1a NF-e do boleto.
+   */
+  async previewDanfePdf(
+    cobrancaBoletoId: number,
+    numero?: string,
+  ): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
+    const boleto = await this.prisma.cobrancaBoleto.findUnique({
+      where: { id: cobrancaBoletoId },
+      include: { titulos: { select: { idcontareceber: true } } },
+    });
+    const idcontas = boleto?.titulos.map((t) => t.idcontareceber) ?? [];
+    const notas = idcontas.length
+      ? await this.athosService.buscarNotasFiscaisXmlPorTitulos(idcontas)
+      : [];
+    const alvo = numero?.trim() ? notas.find((n) => n.numero === numero.trim()) : notas[0];
+    if (!alvo) {
+      throw new NotFoundException("NF-e nao encontrada para esse boleto/numero.");
+    }
+    const pdfBuffer = await this.danfePdfService.gerarDanfe({
+      xml: alvo.xml,
+      cancelada: alvo.cancelada,
+    });
+    return { pdfBuffer, nomeArquivo: `NF-e-${alvo.numero}.pdf` };
   }
 
   async registrarAbertura(token: string): Promise<Buffer> {
