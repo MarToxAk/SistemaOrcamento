@@ -147,6 +147,23 @@ export default function ClienteDetalhePage({
   const [buscandoNf, setBuscandoNf] = useState(false);
   const nfatRef = useRef<HTMLDivElement>(null);
 
+  // ─── Envio de e-mail (boleto + NFS-e + NF-e XML) ───
+  const [emailModalState, setEmailModalState] = useState<
+    "idle" | "confirm" | "loading" | "success" | "error"
+  >("idle");
+  const [emailCtx, setEmailCtx] = useState<{
+    cobrancaId: number;
+    nfseEmitidaIds: number[];
+    nfeCount: number;
+  } | null>(null);
+  const [emailDestinatario, setEmailDestinatario] = useState("");
+  const [emailResult, setEmailResult] = useState<{
+    destinatario: string;
+    status: string;
+    anexos?: string[];
+  } | null>(null);
+  const [emailErro, setEmailErro] = useState("");
+
   const checkboxRef = useRef<HTMLInputElement>(null);
 
   const totalSelecionado = titulos
@@ -654,6 +671,60 @@ export default function ClienteDetalhePage({
     }
   }
 
+  function abreEmailModal(
+    boleto: NonNullable<(typeof titulos)[0]["boletoAtivo"]>,
+    tsBoleto: typeof titulos,
+  ) {
+    const nfseIds = [
+      ...new Set(
+        tsBoleto
+          .map((t) => t.nfseAtivo?.nfseEmitidaId)
+          .filter((v): v is number => !!v),
+      ),
+    ];
+    const nfeCount = new Set(
+      tsBoleto
+        .filter((t) => t.tipoNf?.includes("NF-e"))
+        .map((t) => t.numeroNf)
+        .filter(Boolean),
+    ).size;
+    setEmailCtx({ cobrancaId: boleto.cobrancaId, nfseEmitidaIds: nfseIds, nfeCount });
+    setEmailDestinatario(
+      dadosCliente?.emailcobrancacliente ?? dadosCliente?.emailcliente ?? "",
+    );
+    setEmailErro("");
+    setEmailResult(null);
+    setEmailModalState("confirm");
+  }
+
+  async function confirmarEnviarEmail() {
+    if (!emailCtx) return;
+    setEmailModalState("loading");
+    try {
+      const res = await fetch("/api/cobranca/email/enviar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idclienteAthos: Number(idcliente),
+          cobrancaBoletoId: emailCtx.cobrancaId,
+          nfseEmitidaIds: emailCtx.nfseEmitidaIds,
+          destinatario: emailDestinatario.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setEmailResult(data);
+        setEmailModalState("success");
+      } else {
+        setEmailErro(data.message ?? data.error ?? "Falha ao enviar.");
+        setEmailModalState("error");
+      }
+    } catch {
+      setEmailErro("Falha ao conectar. Tente novamente.");
+      setEmailModalState("error");
+    }
+  }
+
   // Derived variables for the modal
   const titulosSelecionadosParaBoleto = titulos.filter((t) => selectedIds.has(t.idcontareceber));
   // Títulos de valor negativo (desconto/abatimento) não exigem NF própria.
@@ -808,6 +879,11 @@ export default function ClienteDetalhePage({
                                   window.location.reload();
                                 }}>
                                 <i className="bi bi-arrow-clockwise me-1" />Verificar
+                              </button>
+                              <button type="button" className="btn btn-sm btn-outline-success"
+                                title="Enviar boleto e notas por e-mail"
+                                onClick={() => abreEmailModal(boleto, tsBoleto)}>
+                                <i className="bi bi-envelope me-1" />E-mail
                               </button>
                               {!isPago && (
                                 <button type="button" className="btn btn-sm btn-outline-danger"
@@ -1887,6 +1963,145 @@ export default function ClienteDetalhePage({
                     }}
                   >
                     Tentar Novamente
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal envio de e-mail — 4 estados */}
+      {emailModalState !== "idle" && emailCtx && (
+        <div
+          className="boleto-modal-backdrop"
+          onClick={emailModalState !== "loading" ? () => setEmailModalState("idle") : undefined}
+        >
+          <div
+            className="boleto-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Enviar boleto e notas por e-mail"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="boleto-modal-header">
+              <h5 className="mb-0 fw-semibold" style={{ fontSize: "var(--fs-lg, 1.35rem)" }}>
+                <i className="bi bi-send me-2" />Enviar por e-mail
+              </h5>
+              {emailModalState !== "loading" && (
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setEmailModalState("idle")}
+                  aria-label="Fechar"
+                />
+              )}
+            </div>
+
+            {emailModalState === "confirm" && (
+              <>
+                <div className="boleto-modal-body">
+                  <label className="form-label small fw-semibold" htmlFor="email-destinatario">
+                    Destinatário
+                  </label>
+                  <input
+                    id="email-destinatario"
+                    type="email"
+                    className="form-control mb-3"
+                    value={emailDestinatario}
+                    onChange={(e) => setEmailDestinatario(e.target.value)}
+                    placeholder="cliente@exemplo.com"
+                  />
+                  <small className="text-muted d-block">
+                    Serão anexados: boleto (PDF) + {emailCtx.nfseEmitidaIds.length} NFS-e (PDF) +{" "}
+                    {emailCtx.nfeCount} NF-e (XML)
+                  </small>
+                </div>
+                <div className="boleto-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setEmailModalState("idle")}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    disabled={!emailDestinatario.trim()}
+                    onClick={confirmarEnviarEmail}
+                  >
+                    <i className="bi bi-send me-1" />Enviar e-mail
+                  </button>
+                </div>
+              </>
+            )}
+
+            {emailModalState === "loading" && (
+              <div className="boleto-modal-body text-center py-4">
+                <div className="spinner-border text-success mb-2" role="status">
+                  <span className="visually-hidden">Enviando…</span>
+                </div>
+                <div className="small text-muted">Enviando e-mail…</div>
+              </div>
+            )}
+
+            {emailModalState === "success" && emailResult && (
+              <>
+                <div className="boleto-modal-body">
+                  <div className="alert alert-success d-flex gap-2">
+                    <i className="bi bi-check-circle-fill flex-shrink-0" />
+                    <div>E-mail enviado para {emailResult.destinatario}</div>
+                  </div>
+                  {emailResult.anexos && emailResult.anexos.length > 0 && (
+                    <ul className="small mb-2">
+                      {emailResult.anexos.map((a, i) => (
+                        <li key={i}>{a}</li>
+                      ))}
+                    </ul>
+                  )}
+                  <small className="text-muted d-block">
+                    A confirmação de leitura depende do cliente abrir a imagem ou clicar no link de
+                    confirmação — o pixel pode não registrar em alguns provedores.
+                  </small>
+                </div>
+                <div className="boleto-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setEmailModalState("idle")}
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </>
+            )}
+
+            {emailModalState === "error" && (
+              <>
+                <div className="boleto-modal-body" role="alert" aria-live="assertive">
+                  <div className="alert alert-danger d-flex gap-2">
+                    <i className="bi bi-exclamation-triangle-fill flex-shrink-0" />
+                    <div>{emailErro || "Não foi possível enviar o e-mail."}</div>
+                  </div>
+                </div>
+                <div className="boleto-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setEmailModalState("idle")}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    onClick={() => {
+                      setEmailErro("");
+                      setEmailModalState("confirm");
+                    }}
+                  >
+                    Tentar novamente
                   </button>
                 </div>
               </>
