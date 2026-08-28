@@ -94,6 +94,16 @@ export class CobrancaController {
     return this.cobrancaService.emitirNfseAutomatica(dto);
   }
 
+  /**
+   * Backfill manual das NFS-e via Distribuicao de DF-e do ADN: preenche chaveAcesso + xmlNacional.
+   * Rodar UMA vez apos o deploy. Idempotente (re-rodar nao duplica nem regride). Sem cron.
+   * Requer autenticacao via x-internal-api-key (InternalAuthGuard global).
+   */
+  @Post("nfse/sincronizar-dfe")
+  async sincronizarNfseDfe() {
+    return this.cobrancaService.sincronizarNfseDfe();
+  }
+
   /** Resolve CPF/CNPJ e nome do tomador direto do Athos, para pre-preencher a emissao automatica. */
   @Get("nfse/tomador/:idclienteAthos")
   async tomadorNfse(@Param("idclienteAthos", ParseIntPipe) idclienteAthos: number) {
