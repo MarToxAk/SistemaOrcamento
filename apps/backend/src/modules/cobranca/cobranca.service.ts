@@ -8,7 +8,9 @@ import axios from "axios";
 import { ConfigService } from "@nestjs/config";
 
 import { AthosService } from "../integrations/athos/athos.service";
+import { DanfseNacionalPdfService } from "../integrations/nfse/danfse-nacional-pdf.service";
 import { DanfsePdfService } from "../integrations/nfse/danfse-pdf.service";
+import { NfseNacionalDistribuicaoService } from "../integrations/nfse/nfse-nacional-distribuicao.service";
 import { NfseNacionalService } from "../integrations/nfse/nfse-nacional.service";
 import { NfseService, UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { PrismaService } from "../database/prisma.service";
@@ -37,6 +39,8 @@ export class CobrancaService {
     private readonly nfseService: NfseService,
     private readonly nfseNacionalService: NfseNacionalService,
     private readonly danfsePdfService: DanfsePdfService,
+    private readonly danfseNacionalPdfService: DanfseNacionalPdfService,
+    private readonly nfseNacionalDistribuicaoService: NfseNacionalDistribuicaoService,
   ) {}
 
   async criarBoleto(dto: CriarBoletoDto): Promise<CriarBoletoResponseDto> {
@@ -456,22 +460,52 @@ export class CobrancaService {
   }
 
   /**
-   * Retorna o PDF de uma NFS-e emitida para cobrança.
+   * Retorna o PDF de uma NFS-e emitida para cobrança, em 3 níveis de prioridade:
    *
-   * O `linkNfse` tem duas naturezas conforme a origem da nota:
-   *  - NFS-e da era iiBrasil (Ilhabela, `chaveAcesso` nulo): o link já devolve
-   *    um PDF pronto do provedor — repassamos os bytes como estão.
-   *  - NFS-e do padrão Nacional (XML anexado/assinado): o link devolve XML e o
-   *    DANFSe é renderizado localmente a partir dele.
-   * Faz sniff dos primeiros bytes (`%PDF`) para decidir, sem depender só de
-   * `chaveAcesso`.
+   *  1. `xmlNacional` presente (cache do XML assinado, preenchido pelo backfill
+   *     de Distribuição DF-e ou por uma consulta anterior): renderiza o DANFSe
+   *     nacional (NT 008/2026, com canhoto) via `DanfseNacionalPdfService`
+   *     (`nfse-node`).
+   *  2. senão, `chaveAcesso` presente: consulta a NFS-e por chave no SEFIN
+   *     (`consultarXmlPorChave`), persiste o XML em `xmlNacional` e renderiza
+   *     como no nível 1. Falha na consulta cai no fallback do nível 3.
+   *  3. fallback (comportamento legado): baixa `linkNfse`.
+   *     - NFS-e da era iiBrasil (Ilhabela, `chaveAcesso` nulo): o link já devolve
+   *       um PDF pronto do provedor — repassamos os bytes como estão.
+   *     - NFS-e do padrão Nacional sem cache: o link devolve XML e o DANFSe é
+   *       renderizado localmente pelo `DanfsePdfService` (Handlebars/Puppeteer).
+   *     Faz sniff dos primeiros bytes (`%PDF`) para decidir, sem depender só de
+   *     `chaveAcesso`.
    */
   async baixarDanfsePdf(nfseEmitidaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
     const nfseEmitida = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
     if (!nfseEmitida) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não encontrada.`);
-    if (!nfseEmitida.linkNfse) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não possui documento armazenado.`);
 
     const nomeArquivo = `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.pdf`;
+
+    // Tier 1: xmlNacional em cache.
+    if (nfseEmitida.xmlNacional) {
+      const pdfBuffer = await this.danfseNacionalPdfService.gerar(nfseEmitida.xmlNacional);
+      return { pdfBuffer, nomeArquivo };
+    }
+
+    // Tier 2: chaveAcesso conhecida — consulta, persiste em cache e renderiza.
+    if (nfseEmitida.chaveAcesso) {
+      try {
+        const xml = await this.nfseNacionalDistribuicaoService.consultarXmlPorChave(nfseEmitida.chaveAcesso);
+        await this.prisma.nfseEmitida.update({ where: { id: nfseEmitidaId }, data: { xmlNacional: xml } });
+        const pdfBuffer = await this.danfseNacionalPdfService.gerar(xml);
+        return { pdfBuffer, nomeArquivo };
+      } catch (err) {
+        this.logger.warn(
+          `consultarNfse falhou p/ NFS-e ${nfseEmitidaId} (chave ${nfseEmitida.chaveAcesso}): ${err instanceof Error ? err.message : String(err)}; caindo no fallback.`,
+        );
+      }
+    }
+
+    // Tier 3: fallback legado (linkNfse).
+    if (!nfseEmitida.linkNfse) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não possui documento armazenado.`);
+
     const resp = await axios.get<ArrayBuffer>(nfseEmitida.linkNfse, {
       responseType: "arraybuffer",
       timeout: 15_000,
@@ -483,9 +517,17 @@ export class CobrancaService {
       return { pdfBuffer: raw, nomeArquivo };
     }
 
-    // Padrão Nacional: o link é XML, renderiza o DANFSe localmente.
+    // Padrão Nacional (sem cache): o link é XML, renderiza o DANFSe legado localmente.
     const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(raw.toString("utf8"));
     return { pdfBuffer, nomeArquivo };
+  }
+
+  /**
+   * Backfill manual: caminha a Distribuição DF-e do ADN e preenche chaveAcesso
+   * + xmlNacional nas NfseEmitida. Idempotente.
+   */
+  async sincronizarNfseDfe() {
+    return this.nfseNacionalDistribuicaoService.sincronizar();
   }
 
   async processarNotificacaoEFI(token: string): Promise<void> {
