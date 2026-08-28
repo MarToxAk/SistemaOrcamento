@@ -43,7 +43,19 @@ interface TituloReceber {
   numeroordem: string | null;
   tipoNf?: string | null;
   numeroNf?: string | null;
-  boletoAtivo?: { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null } | null;
+  boletoAtivo?: {
+    cobrancaId: number;
+    status: string;
+    linkBoleto: string | null;
+    nomeArquivo: string | null;
+    ultimoEmail?: {
+      status: string;
+      destinatario: string;
+      enviadoEm: string;
+      abertoEm: string | null;
+      confirmadoEm: string | null;
+    } | null;
+  } | null;
   nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null } | null;
 }
 
@@ -53,6 +65,33 @@ function formatBRL(value: number): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+function formatDateHora(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+/** Indicador de leitura do último e-mail enviado para o boleto (enviado -> aberto -> confirmado). */
+function StatusEmailBadge({ ultimoEmail }: { ultimoEmail: NonNullable<TituloReceber["boletoAtivo"]>["ultimoEmail"] }) {
+  if (!ultimoEmail) return null;
+  const config = {
+    confirmado: { classe: "bg-success", icone: "bi-check-circle-fill", texto: "Confirmado", data: ultimoEmail.confirmadoEm },
+    aberto: { classe: "bg-warning text-dark", icone: "bi-eye-fill", texto: "Aberto", data: ultimoEmail.abertoEm },
+    enviado: { classe: "bg-secondary", icone: "bi-envelope-check", texto: "Enviado", data: ultimoEmail.enviadoEm },
+  }[ultimoEmail.status] ?? { classe: "bg-secondary", icone: "bi-envelope", texto: ultimoEmail.status, data: ultimoEmail.enviadoEm };
+
+  return (
+    <span
+      className={`badge ${config.classe}`}
+      title={`E-mail para ${ultimoEmail.destinatario} — enviado em ${formatDateHora(ultimoEmail.enviadoEm)}${
+        ultimoEmail.abertoEm ? ` · aberto em ${formatDateHora(ultimoEmail.abertoEm)}` : ""
+      }${ultimoEmail.confirmadoEm ? ` · confirmado em ${formatDateHora(ultimoEmail.confirmadoEm)}` : ""}`}
+    >
+      <i className={`bi ${config.icone} me-1`} />
+      {config.texto}
+      {config.data ? ` · ${formatDateHora(config.data)}` : ""}
+    </span>
+  );
 }
 
 function badgeClassName(tipoNf?: string | null): string {
@@ -220,7 +259,7 @@ export default function ClienteDetalhePage({
               const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: string | null; numeroNf: string | null }>;
               const nfMap = new Map(nfData.map((n) => [n.idcontareceber, { tipoNf: n.tipoNf, numeroNf: n.numeroNf }]));
               // Verificar boletos ativos para os mesmos títulos
-                let boletoMap = new Map<number, { cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null }>();
+                let boletoMap = new Map<number, NonNullable<TituloReceber["boletoAtivo"]>>();
                 try {
                   const boletoRes = await fetch("/api/cobranca/boleto/titulos-em-uso", {
                     method: "POST",
@@ -229,8 +268,21 @@ export default function ClienteDetalhePage({
                     cache: "no-store",
                   });
                   if (boletoRes.ok) {
-                    const boletoData = (await boletoRes.json()) as Array<{ idcontareceber: number; cobrancaId: number; status: string; linkBoleto: string | null; nomeArquivo: string | null }>;
-                    boletoMap = new Map(boletoData.map((b) => [b.idcontareceber, { cobrancaId: b.cobrancaId, status: b.status, linkBoleto: b.linkBoleto, nomeArquivo: b.nomeArquivo }]));
+                    const boletoData = (await boletoRes.json()) as Array<
+                      { idcontareceber: number } & NonNullable<TituloReceber["boletoAtivo"]>
+                    >;
+                    boletoMap = new Map(
+                      boletoData.map((b) => [
+                        b.idcontareceber,
+                        {
+                          cobrancaId: b.cobrancaId,
+                          status: b.status,
+                          linkBoleto: b.linkBoleto,
+                          nomeArquivo: b.nomeArquivo,
+                          ultimoEmail: b.ultimoEmail ?? null,
+                        },
+                      ]),
+                    );
                   }
                 } catch { /* silently ignore */ }
 
@@ -863,6 +915,7 @@ export default function ClienteDetalhePage({
                             </span>
                             <span className="small fw-semibold">{formatBRL(totalBoleto)}</span>
                             <span className="small text-muted">({tsBoleto.length} título{tsBoleto.length > 1 ? "s" : ""})</span>
+                            <StatusEmailBadge ultimoEmail={boleto.ultimoEmail} />
                             <div className="ms-auto d-flex gap-2">
                               {boleto.linkBoleto && (
                                 <a href={`/api/cobranca/boleto/${boleto.cobrancaId}/pdf`}

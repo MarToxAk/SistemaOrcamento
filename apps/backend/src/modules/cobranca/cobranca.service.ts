@@ -616,6 +616,15 @@ export class CobrancaService {
     idcontareceber: number;
     cobrancaId: number;
     status: string;
+    linkBoleto: string | null;
+    nomeArquivo: string | null;
+    ultimoEmail: {
+      status: string;
+      destinatario: string;
+      enviadoEm: Date;
+      abertoEm: Date | null;
+      confirmadoEm: Date | null;
+    } | null;
   }>> {
     if (idcontasReceber.length === 0) return [];
     const rows = await this.prisma.cobrancaBoletoTitulo.findMany({
@@ -625,16 +634,41 @@ export class CobrancaService {
       },
       select: {
         idcontareceber: true,
-        cobrancaBoleto: { select: { id: true, status: true, linkBoleto: true, nomeArquivo: true } },
+        cobrancaBoleto: {
+          select: {
+            id: true,
+            status: true,
+            linkBoleto: true,
+            nomeArquivo: true,
+            // Só o envio de e-mail mais recente — é só um indicador de leitura na tela, não histórico completo.
+            emailEnvios: {
+              orderBy: { enviadoEm: "desc" },
+              take: 1,
+              select: { status: true, destinatario: true, enviadoEm: true, abertoEm: true, confirmadoEm: true },
+            },
+          },
+        },
       },
     });
-    return rows.map((r) => ({
-      idcontareceber: r.idcontareceber,
-      cobrancaId: r.cobrancaBoleto.id,
-      status: r.cobrancaBoleto.status,
-      linkBoleto: r.cobrancaBoleto.linkBoleto,
-      nomeArquivo: r.cobrancaBoleto.nomeArquivo,
-    }));
+    return rows.map((r) => {
+      const ultimo = r.cobrancaBoleto.emailEnvios[0];
+      return {
+        idcontareceber: r.idcontareceber,
+        cobrancaId: r.cobrancaBoleto.id,
+        status: r.cobrancaBoleto.status,
+        linkBoleto: r.cobrancaBoleto.linkBoleto,
+        nomeArquivo: r.cobrancaBoleto.nomeArquivo,
+        ultimoEmail: ultimo
+          ? {
+              status: ultimo.status,
+              destinatario: ultimo.destinatario,
+              enviadoEm: ultimo.enviadoEm,
+              abertoEm: ultimo.abertoEm,
+              confirmadoEm: ultimo.confirmadoEm,
+            }
+          : null,
+      };
+    });
   }
 
   async downloadBoletoPdf(cobrancaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
