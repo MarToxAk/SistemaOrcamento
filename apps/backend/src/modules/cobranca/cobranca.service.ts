@@ -455,16 +455,37 @@ export class CobrancaService {
     };
   }
 
-  /** Baixa o DANFSe (PDF) gerado localmente a partir do XML de uma NFS-e emitida para cobrança. */
+  /**
+   * Retorna o PDF de uma NFS-e emitida para cobrança.
+   *
+   * O `linkNfse` tem duas naturezas conforme a origem da nota:
+   *  - NFS-e da era iiBrasil (Ilhabela, `chaveAcesso` nulo): o link já devolve
+   *    um PDF pronto do provedor — repassamos os bytes como estão.
+   *  - NFS-e do padrão Nacional (XML anexado/assinado): o link devolve XML e o
+   *    DANFSe é renderizado localmente a partir dele.
+   * Faz sniff dos primeiros bytes (`%PDF`) para decidir, sem depender só de
+   * `chaveAcesso`.
+   */
   async baixarDanfsePdf(nfseEmitidaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
     const nfseEmitida = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
     if (!nfseEmitida) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não encontrada.`);
-    if (!nfseEmitida.linkNfse) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não possui XML armazenado.`);
+    if (!nfseEmitida.linkNfse) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não possui documento armazenado.`);
 
-    const xmlResp = await axios.get(nfseEmitida.linkNfse, { responseType: "text", timeout: 15_000 });
-    const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(xmlResp.data as string);
+    const nomeArquivo = `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.pdf`;
+    const resp = await axios.get<ArrayBuffer>(nfseEmitida.linkNfse, {
+      responseType: "arraybuffer",
+      timeout: 15_000,
+    });
+    const raw = Buffer.from(resp.data);
 
-    return { pdfBuffer, nomeArquivo: `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.pdf` };
+    // O provedor iiBrasil já entrega PDF pronto — repassa direto.
+    if (raw.subarray(0, 5).toString("latin1") === "%PDF-") {
+      return { pdfBuffer: raw, nomeArquivo };
+    }
+
+    // Padrão Nacional: o link é XML, renderiza o DANFSe localmente.
+    const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(raw.toString("utf8"));
+    return { pdfBuffer, nomeArquivo };
   }
 
   async processarNotificacaoEFI(token: string): Promise<void> {
