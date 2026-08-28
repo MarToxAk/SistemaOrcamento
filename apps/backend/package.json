@@ -30,6 +30,7 @@
     "minio": "^8.0.7",
     "next": "^16.2.5",
     "nfe-danfe-pdf": "^1.0.3",
+    "nfse-node": "^0.3.2",
     "nodemailer": "^9.0.6",
     "puppeteer": "^24.40.0",
     "reflect-metadata": "^0.2.2",
