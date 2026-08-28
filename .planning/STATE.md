@@ -30,7 +30,7 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 Phase: 39 (scaffold-leitura-e-spikes-de-introspec-o) — EXECUTING
 Plan: 1 of 3
 Status: Executing Phase 39
-Last activity: 2026-08-22 - Completed quick task 260822-hg9: Liberar whitelist de campos na API de produtos do Athos (T3 verificacao manual pendente)
+Last activity: 2026-08-28 - Completed quick task 260827-ood: Contas a receber envia boleto + NFS-e (PDF) + NF-e (XML) por e-mail com verificacao de leitura (verificacao ponta-a-ponta manual pendente)
 
 Progress: [░░░░░░░░░░] 0% (0/2 phases complete)
 
@@ -208,6 +208,7 @@ Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 | 260807-oxc | Pagina contas a receber: campo de busca por nome ou id, exibindo id junto ao nome nos cards | 2026-08-07 | e189c1c | [260807-oxc-pagina-contas-a-receber-adicionar-campo-](./quick/260807-oxc-pagina-contas-a-receber-adicionar-campo-/) |
 | 260820-smb-ip-dinamico | IP do share SMB de anexos (192.168.3.203) movido de hardcoded para .env via SMB_HOST | 2026-08-20 | 671f3a3 | [260820-smb-ip-dinamico](./quick/260820-smb-ip-dinamico/) |
 | 260822-hg9 | Liberar whitelist de campos na API de produtos do Athos (iddeposito, estoquedeposito, cfopsat, idunidadetrib, margemvenda1, estoqueminimo) nas tres camadas: DTO, INSERT e UPDATE — POST/PATCH descartavam esses campos silenciosamente. T3 (verificacao manual contra Athos real) pendente | 2026-08-22 | 363f24e, 345d202 | [260822-hg9-liberar-whitelist-de-campos-na-api-de-pr](./quick/260822-hg9-liberar-whitelist-de-campos-na-api-de-pr/) |
+| 260827-ood | Contas a receber: acao "E-mail" que envia num unico e-mail ao cliente o boleto (PDF), a NFS-e (PDF DANFSe) e a NF-e de produto (XML cru), com verificacao de leitura (pixel 1x1 + link "Confirmar recebimento", token opaco). Model CobrancaEmailEnvio + migration, AthosService.buscarNotasFiscaisXmlPorTitulos, EmailEnvioService (nodemailer + Gmail SMTP), endpoints @Public de pixel/confirmacao, teste unitario, botao + modal no frontend. Verificacao ponta-a-ponta (curl/psql/envio real) pendente — precisa backend + DB + Gmail rodando | 2026-08-28 | 2b63a46, 1ca4fa8, 65c2723, bcfff9c, 2eb5728, 149c312, 6bba324 | [260827-ood-no-contas-a-receber-enviar-boleto-e-nota](./quick/260827-ood-no-contas-a-receber-enviar-boleto-e-nota/) |
 
 ---
 
