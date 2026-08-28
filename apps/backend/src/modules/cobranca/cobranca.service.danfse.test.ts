@@ -43,6 +43,8 @@ describe("CobrancaService.baixarDanfsePdf", () => {
 
     expect(result.pdfBuffer.toString()).toBe("%PDF-nac");
     expect(result.nomeArquivo).toBe("NFSe-239.pdf");
+    expect(result.xml).toBe("<NFSe/>");
+    expect(result.xmlNomeArquivo).toBe("NFSe-239.xml");
     expect(danfseNacionalPdfService.gerar).toHaveBeenCalledTimes(1);
     expect(danfseNacionalPdfService.gerar).toHaveBeenCalledWith("<NFSe/>");
     expect(axios.get).not.toHaveBeenCalled();
@@ -63,6 +65,7 @@ describe("CobrancaService.baixarDanfsePdf", () => {
     const result = await service.baixarDanfsePdf(74);
 
     expect(result.pdfBuffer.toString()).toBe("%PDF-2");
+    expect(result.xml).toBe("<NFSe>y</NFSe>");
     expect(prisma.nfseEmitida.update).toHaveBeenCalledWith({
       where: { id: 74 },
       data: { xmlNacional: "<NFSe>y</NFSe>" },
@@ -86,6 +89,7 @@ describe("CobrancaService.baixarDanfsePdf", () => {
     const result = await service.baixarDanfsePdf(74);
 
     expect(result.pdfBuffer.toString()).toBe("%PDF-legacy");
+    expect(result.xml).toBe("<NFSe>fallback</NFSe>");
     expect((service as any).logger.warn).toHaveBeenCalledTimes(1);
   });
 
@@ -103,6 +107,7 @@ describe("CobrancaService.baixarDanfsePdf", () => {
     const result = await service.baixarDanfsePdf(74);
 
     expect(result.pdfBuffer.toString()).toBe("%PDF-1.4 provedor");
+    expect(result.xml).toBeUndefined();
     expect(danfsePdfService.gerarPdfDoXml).not.toHaveBeenCalled();
   });
 

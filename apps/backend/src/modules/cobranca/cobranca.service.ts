@@ -477,16 +477,19 @@ export class CobrancaService {
    *     Faz sniff dos primeiros bytes (`%PDF`) para decidir, sem depender só de
    *     `chaveAcesso`.
    */
-  async baixarDanfsePdf(nfseEmitidaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
+  async baixarDanfsePdf(
+    nfseEmitidaId: number,
+  ): Promise<{ pdfBuffer: Buffer; nomeArquivo: string; xml?: string; xmlNomeArquivo?: string }> {
     const nfseEmitida = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
     if (!nfseEmitida) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não encontrada.`);
 
     const nomeArquivo = `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.pdf`;
+    const xmlNomeArquivo = `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.xml`;
 
     // Tier 1: xmlNacional em cache.
     if (nfseEmitida.xmlNacional) {
       const pdfBuffer = await this.danfseNacionalPdfService.gerar(nfseEmitida.xmlNacional);
-      return { pdfBuffer, nomeArquivo };
+      return { pdfBuffer, nomeArquivo, xml: nfseEmitida.xmlNacional, xmlNomeArquivo };
     }
 
     // Tier 2: chaveAcesso conhecida — consulta, persiste em cache e renderiza.
@@ -495,7 +498,7 @@ export class CobrancaService {
         const xml = await this.nfseNacionalDistribuicaoService.consultarXmlPorChave(nfseEmitida.chaveAcesso);
         await this.prisma.nfseEmitida.update({ where: { id: nfseEmitidaId }, data: { xmlNacional: xml } });
         const pdfBuffer = await this.danfseNacionalPdfService.gerar(xml);
-        return { pdfBuffer, nomeArquivo };
+        return { pdfBuffer, nomeArquivo, xml, xmlNomeArquivo };
       } catch (err) {
         this.logger.warn(
           `consultarNfse falhou p/ NFS-e ${nfseEmitidaId} (chave ${nfseEmitida.chaveAcesso}): ${err instanceof Error ? err.message : String(err)}; caindo no fallback.`,
@@ -512,14 +515,15 @@ export class CobrancaService {
     });
     const raw = Buffer.from(resp.data);
 
-    // O provedor iiBrasil já entrega PDF pronto — repassa direto.
+    // O provedor iiBrasil já entrega PDF pronto — repassa direto. Sem XML de origem neste caso.
     if (raw.subarray(0, 5).toString("latin1") === "%PDF-") {
       return { pdfBuffer: raw, nomeArquivo };
     }
 
     // Padrão Nacional (sem cache): o link é XML, renderiza o DANFSe legado localmente.
-    const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(raw.toString("utf8"));
-    return { pdfBuffer, nomeArquivo };
+    const xmlText = raw.toString("utf8");
+    const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(xmlText);
+    return { pdfBuffer, nomeArquivo, xml: xmlText, xmlNomeArquivo };
   }
 
   /**
