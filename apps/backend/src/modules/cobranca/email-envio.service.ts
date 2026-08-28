@@ -100,7 +100,20 @@ export class EmailEnvioService {
 
     for (const id of nfseIdsUnicos) {
       const danfse = await this.cobrancaService.baixarDanfsePdf(id);
-      attachments.push({ filename: danfse.nomeArquivo, content: danfse.pdfBuffer });
+      attachments.push({
+        filename: danfse.nomeArquivo,
+        content: danfse.pdfBuffer,
+        contentType: "application/pdf",
+      });
+      // Anexa o XML junto ao PDF sempre que a origem tiver o XML assinado disponível
+      // (padrão Nacional). Notas antigas iiBrasil só têm o PDF do provedor — sem XML de origem.
+      if (danfse.xml && danfse.xmlNomeArquivo) {
+        attachments.push({
+          filename: danfse.xmlNomeArquivo,
+          content: danfse.xml,
+          contentType: "application/xml",
+        });
+      }
     }
 
     let nfeNumeros: string[] = [];
@@ -120,6 +133,12 @@ export class EmailEnvioService {
             filename: `NF-e-${numero}.pdf`,
             content: pdf,
             contentType: "application/pdf",
+          });
+          // Anexa o XML junto ao PDF (o XML é o documento fiscal; o PDF é so a representação).
+          attachments.push({
+            filename: `NF-e-${numero}.xml`,
+            content: xml,
+            contentType: "application/xml",
           });
         } catch (err) {
           this.logger.warn(
@@ -149,7 +168,7 @@ export class EmailEnvioService {
 
     const nNfse = nfseIdsUnicos.length;
     const mNfe = nfeNumeros.length;
-    const listaAnexosFrase = `Serão anexados: boleto (PDF) + ${nNfse} NFS-e (PDF) + ${mNfe} NF-e (PDF)`;
+    const listaAnexosFrase = `Serão anexados: boleto (PDF) + ${nNfse} NFS-e (PDF + XML) + ${mNfe} NF-e (PDF + XML)`;
 
     const rodapeLinhas = [empresaNome, empresaTelefones, empresaEmail].filter(Boolean);
     const rodapeHtml = rodapeLinhas.map((l) => `<div>${l}</div>`).join("");

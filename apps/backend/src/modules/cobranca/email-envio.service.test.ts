@@ -41,9 +41,12 @@ function makeService() {
     downloadBoletoPdf: jest
       .fn()
       .mockResolvedValue({ pdfBuffer: Buffer.from("b"), nomeArquivo: "boleto.pdf" }),
-    baixarDanfsePdf: jest
-      .fn()
-      .mockResolvedValue({ pdfBuffer: Buffer.from("n"), nomeArquivo: "nfse.pdf" }),
+    baixarDanfsePdf: jest.fn().mockResolvedValue({
+      pdfBuffer: Buffer.from("n"),
+      nomeArquivo: "nfse.pdf",
+      xml: "<NFSe/>",
+      xmlNomeArquivo: "nfse.xml",
+    }),
   };
   (service as any).athosService = {
     buscarDadosClienteContasReceber: jest.fn().mockResolvedValue({
@@ -63,7 +66,7 @@ function makeService() {
 }
 
 describe("EmailEnvioService.enviarBoletoENotas", () => {
-  it("1. anexa boleto + 2 NFS-e + 2 NF-e PDF e grava o log", async () => {
+  it("1. anexa boleto + 2 NFS-e (PDF+XML) + 2 NF-e (PDF+XML) e grava o log", async () => {
     const { service, sendMail } = makeService();
 
     const out = await service.enviarBoletoENotas({
@@ -77,12 +80,24 @@ describe("EmailEnvioService.enviarBoletoENotas", () => {
     const mail = sendMail.mock.calls[0][0];
     expect(mail.to).toBe("cli@x.com");
     expect(mail.from).toBe("F <u@g.com>");
-    expect(mail.attachments).toHaveLength(5);
+    // boleto(1) + 2 NFS-e x (PDF+XML) + 2 NF-e x (PDF+XML) = 1 + 4 + 4
+    expect(mail.attachments).toHaveLength(9);
 
-    const pdfs = mail.attachments.filter((a: any) => a.contentType === "application/pdf");
-    expect(pdfs).toHaveLength(2);
-    expect(pdfs.map((a: any) => a.filename)).toEqual(["NF-e-440.pdf", "NF-e-441.pdf"]);
-    expect(pdfs.every((a: any) => a.content.subarray(0, 4).toString() === "%PDF")).toBe(true);
+    const nfsePdfs = mail.attachments.filter((a: any) => a.filename === "nfse.pdf");
+    expect(nfsePdfs).toHaveLength(2);
+    const nfseXmls = mail.attachments.filter(
+      (a: any) => a.filename === "nfse.xml" && a.contentType === "application/xml",
+    );
+    expect(nfseXmls).toHaveLength(2);
+    expect(nfseXmls[0].content).toBe("<NFSe/>");
+
+    const nfePdfs = mail.attachments.filter((a: any) => /^NF-e-\d+\.pdf$/.test(a.filename));
+    expect(nfePdfs.map((a: any) => a.filename)).toEqual(["NF-e-440.pdf", "NF-e-441.pdf"]);
+    expect(nfePdfs.every((a: any) => a.content.subarray(0, 4).toString() === "%PDF")).toBe(true);
+
+    const nfeXmls = mail.attachments.filter((a: any) => /^NF-e-\d+\.xml$/.test(a.filename));
+    expect(nfeXmls.map((a: any) => a.filename)).toEqual(["NF-e-440.xml", "NF-e-441.xml"]);
+    expect(nfeXmls.every((a: any) => a.content === "<NFe/>")).toBe(true);
 
     const gerarDanfe = (service as any).danfePdfService.gerarDanfe as jest.Mock;
     expect(gerarDanfe).toHaveBeenCalledTimes(2);
@@ -100,10 +115,10 @@ describe("EmailEnvioService.enviarBoletoENotas", () => {
     expect(createArg.nfeNumeros).toEqual(["440", "441"]);
     expect(createArg.nfseEmitidaIds).toEqual([20, 21]);
 
-    expect(out.anexos).toHaveLength(5);
+    expect(out.anexos).toHaveLength(9);
   });
 
-  it("1b. render DANFE falha p/ uma NF-e -> fallback XML cru; e-mail sai normal", async () => {
+  it("1b. render DANFE falha p/ uma NF-e -> fallback XML cru; sucesso p/ a outra anexa PDF+XML", async () => {
     const { service, sendMail } = makeService();
     (service as any).danfePdfService.gerarDanfe
       .mockRejectedValueOnce(new Error("boom"))
@@ -117,15 +132,16 @@ describe("EmailEnvioService.enviarBoletoENotas", () => {
 
     expect(sendMail).toHaveBeenCalledTimes(1);
     const mail = sendMail.mock.calls[0][0];
+    // boleto(1) + NF-e 440 fallback (so xml, 1) + NF-e 441 sucesso (pdf+xml, 2)
+    expect(mail.attachments).toHaveLength(4);
 
-    const xmlFallback = mail.attachments.filter((a: any) => a.contentType === "application/xml");
-    expect(xmlFallback).toHaveLength(1);
-    expect(xmlFallback[0].filename).toBe("NF-e-440.xml");
-    expect(xmlFallback[0].content).toBe("<NFe/>");
+    const nfeXmls = mail.attachments.filter((a: any) => /^NF-e-\d+\.xml$/.test(a.filename));
+    expect(nfeXmls.map((a: any) => a.filename)).toEqual(["NF-e-440.xml", "NF-e-441.xml"]);
+    expect(nfeXmls.every((a: any) => a.content === "<NFe/>")).toBe(true);
 
-    const pdfs = mail.attachments.filter((a: any) => a.contentType === "application/pdf");
-    expect(pdfs).toHaveLength(1);
-    expect(pdfs[0].filename).toBe("NF-e-441.pdf");
+    const nfePdfs = mail.attachments.filter((a: any) => /^NF-e-\d+\.pdf$/.test(a.filename));
+    expect(nfePdfs).toHaveLength(1);
+    expect(nfePdfs[0].filename).toBe("NF-e-441.pdf");
 
     const createArg = (service as any).prisma.cobrancaEmailEnvio.create.mock.calls[0][0].data;
     expect(createArg.nfeNumeros).toEqual(["440", "441"]);
@@ -154,7 +170,7 @@ describe("EmailEnvioService.enviarBoletoENotas", () => {
     expect(sendMail).not.toHaveBeenCalled();
   });
 
-  it("5. sem NF-e Athos -> anexos so boleto + NFS-e; nfeNumeros vazio", async () => {
+  it("5. sem NF-e Athos -> anexos so boleto + NFS-e (PDF+XML); nfeNumeros vazio", async () => {
     const { service, sendMail } = makeService();
     (service as any).athosService.buscarNotasFiscaisXmlPorTitulos.mockResolvedValue([]);
     await service.enviarBoletoENotas({
@@ -162,7 +178,8 @@ describe("EmailEnvioService.enviarBoletoENotas", () => {
       cobrancaBoletoId: 10,
       nfseEmitidaIds: [20],
     });
-    expect(sendMail.mock.calls[0][0].attachments).toHaveLength(2);
+    // boleto(1) + NFS-e 20 (PDF+XML, 2)
+    expect(sendMail.mock.calls[0][0].attachments).toHaveLength(3);
     const createArg = (service as any).prisma.cobrancaEmailEnvio.create.mock.calls[0][0].data;
     expect(createArg.nfeNumeros).toEqual([]);
   });

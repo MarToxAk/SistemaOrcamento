@@ -2013,8 +2013,8 @@ export default function ClienteDetalhePage({
                     placeholder="cliente@exemplo.com"
                   />
                   <small className="text-muted d-block">
-                    Serão anexados: boleto (PDF) + {emailCtx.nfseEmitidaIds.length} NFS-e (PDF) +{" "}
-                    {emailCtx.nfeCount} NF-e (PDF)
+                    Serão anexados: boleto (PDF) + {emailCtx.nfseEmitidaIds.length} NFS-e (PDF + XML) +{" "}
+                    {emailCtx.nfeCount} NF-e (PDF + XML)
                   </small>
                 </div>
                 <div className="boleto-modal-footer">
