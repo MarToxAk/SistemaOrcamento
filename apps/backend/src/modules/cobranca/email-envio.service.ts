@@ -13,7 +13,9 @@ import { AthosService } from "../integrations/athos/athos.service";
 import { PrismaService } from "../database/prisma.service";
 import { CobrancaService } from "./cobranca.service";
 
-const GIF_1X1_BASE64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+// GIF89a transparente 1x1 canonico = 43 bytes (o acceptance do PLAN espera size_download=43).
+// A string do PLAN (...AAIBRAA7) decodifica para 42 bytes; usamos a variante de 43 bytes.
+const GIF_1X1_BASE64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface EnviarInput {
