@@ -241,6 +241,28 @@ model CobrancaBoleto {
   criadoEm       DateTime               @default(now())
   atualizadoEm   DateTime               @updatedAt
   titulos        CobrancaBoletoTitulo[]
+  emailEnvios    CobrancaEmailEnvio[]
+}
+
+model CobrancaEmailEnvio {
+  id               Int             @id @default(autoincrement())
+  token            String          @unique
+  idclienteAthos   Int
+  destinatario     String
+  assunto          String?
+  status           String          @default("enviado") // enviado | aberto | confirmado
+  cobrancaBoletoId Int?
+  nfseEmitidaIds   Int[]
+  nfeNumeros       String[]        // Athos nota.numero (texto curto) das NF-e anexadas como XML
+  enviadoEm        DateTime        @default(now())
+  abertoEm         DateTime?
+  confirmadoEm     DateTime?
+  criadoEm         DateTime        @default(now())
+  atualizadoEm     DateTime        @updatedAt
+  cobrancaBoleto   CobrancaBoleto? @relation(fields: [cobrancaBoletoId], references: [id], onDelete: SetNull)
+
+  @@index([idclienteAthos])
+  @@index([cobrancaBoletoId])
 }
 
 model CobrancaBoletoTitulo {
