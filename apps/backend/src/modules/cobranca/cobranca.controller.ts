@@ -6,9 +6,11 @@ type ExpressResponse = any;
 import { Public } from "../security/public.decorator";
 import { UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { CobrancaService } from "./cobranca.service";
+import { EmailEnvioService } from "./email-envio.service";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
+import { EnviarEmailCobrancaDto } from "./dto/enviar-email-cobranca.dto";
 
 const NFSE_XML_MAX_SIZE_BYTES = 2 * 1024 * 1024;
 const NFSE_XML_MIME_PATTERN = /^(application\/xml|text\/xml)$/;
@@ -17,7 +19,10 @@ const NFSE_XML_MIME_PATTERN = /^(application\/xml|text\/xml)$/;
 export class CobrancaController {
   private readonly logger = new Logger(CobrancaController.name);
 
-  constructor(private readonly cobrancaService: CobrancaService) {}
+  constructor(
+    private readonly cobrancaService: CobrancaService,
+    private readonly emailEnvioService: EmailEnvioService,
+  ) {}
 
   /**
    * Cria um boleto consolidado EFI para os títulos selecionados.
@@ -26,6 +31,44 @@ export class CobrancaController {
   @Post("boleto")
   async criarBoleto(@Body() dto: CriarBoletoDto) {
     return this.cobrancaService.criarBoleto(dto);
+  }
+
+  /**
+   * Envia num unico e-mail ao cliente: boleto (PDF) + NFS-e (PDF DANFSe) + NF-e (XML cru).
+   * Grava CobrancaEmailEnvio com token de verificacao de leitura.
+   * Requer autenticacao via x-internal-api-key (guard global).
+   * Declarado ANTES dos handlers com ":token" para nao colidir.
+   */
+  @Post("email/enviar")
+  async enviarEmail(@Body() dto: EnviarEmailCobrancaDto) {
+    return this.emailEnvioService.enviarBoletoENotas(dto);
+  }
+
+  /** Pixel 1x1 (@Public) — grava abertoEm na 1a carga. Sempre responde o gif. */
+  @Public()
+  @Get("email/:token/pixel.gif")
+  async pixel(@Param("token") token: string, @Res() res: ExpressResponse) {
+    const gif = await this.emailEnvioService.registrarAbertura(token);
+    res.setHeader("Content-Type", "image/gif");
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Content-Length", gif.length);
+    res.end(gif);
+  }
+
+  /** Link "Confirmar recebimento" (@Public) — grava confirmadoEm. Pagina identica com token invalido. */
+  @Public()
+  @Get("email/:token/confirmar")
+  async confirmar(@Param("token") token: string, @Res() res: ExpressResponse) {
+    await this.emailEnvioService.registrarConfirmacao(token);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.send(
+      "<!doctype html><meta charset=utf-8><title>Recebimento confirmado</title>" +
+        "<div style='font-family:system-ui;max-width:32rem;margin:4rem auto;text-align:center'>" +
+        "<h1 style='color:#198754'>Recebimento confirmado</h1>" +
+        "<p>Obrigado! Registramos que voce recebeu o boleto e a(s) nota(s) fiscal(is).</p></div>",
+    );
   }
 
   /**
