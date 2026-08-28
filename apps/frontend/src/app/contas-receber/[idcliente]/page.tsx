@@ -2014,7 +2014,7 @@ export default function ClienteDetalhePage({
                   />
                   <small className="text-muted d-block">
                     Serão anexados: boleto (PDF) + {emailCtx.nfseEmitidaIds.length} NFS-e (PDF) +{" "}
-                    {emailCtx.nfeCount} NF-e (XML)
+                    {emailCtx.nfeCount} NF-e (PDF)
                   </small>
                 </div>
                 <div className="boleto-modal-footer">

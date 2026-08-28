@@ -109,6 +109,22 @@ export class CobrancaController {
     res.send(pdfBuffer);
   }
 
+  /** Debug: renderiza o DANFE (PDF) de uma NF-e por tras de um boleto, sem disparar e-mail. AUTHED (guard global). */
+  @Get("nfe/danfe")
+  async previewDanfe(
+    @Query("cobrancaBoletoId", ParseIntPipe) cobrancaBoletoId: number,
+    @Query("numero") numero: string | undefined,
+    @Res() res: ExpressResponse,
+  ) {
+    const { pdfBuffer, nomeArquivo } = await this.emailEnvioService.previewDanfePdf(
+      cobrancaBoletoId,
+      numero,
+    );
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${nomeArquivo}"`);
+    res.send(pdfBuffer);
+  }
+
   /**
    * Retorna quais idcontareceber já possuem boleto pendente ou pago.
    * Usado pelo frontend para desabilitar seleção e mostrar aviso.
