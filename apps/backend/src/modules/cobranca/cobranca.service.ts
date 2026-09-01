@@ -437,6 +437,13 @@ export class CobrancaService {
         valorServico: valorTotal,
         idvenda: idvendasUnicas[0] ?? null,
         chaveAcesso: parsed.chaveAcesso ?? chaveAcesso,
+        // A propria resposta da emissao ja traz o XML nacional completo e
+        // assinado (nfseXml) — cachear direto em xmlNacional evita que o
+        // primeiro baixarDanfsePdf() dependa de uma consulta a Distribuicao
+        // DF-e do ADN (Tier 2), que pode falhar logo apos a emissao por o NSU
+        // ainda nao estar indexado, derrubando o PDF para o template legado
+        // simplificado (Tier 3) sem aviso nenhum ao usuario.
+        xmlNacional: nfseXml,
         linkNfse: publicUrl,
         arquivoPath: objectName,
         arquivoNome: `NFSe-${parsed.numeroNfse ?? chaveAcesso}.xml`,
