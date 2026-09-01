@@ -5,11 +5,12 @@ import { EfiModule } from "../integrations/efi/efi.module";
 import { NfseModule } from "../integrations/nfse/nfse.module";
 import { CobrancaController } from "./cobranca.controller";
 import { CobrancaService } from "./cobranca.service";
+import { EmailEnvioService } from "./email-envio.service";
 
 @Module({
   imports: [EfiModule, AthosModule, NfseModule],
   controllers: [CobrancaController],
-  providers: [CobrancaService],
+  providers: [CobrancaService, EmailEnvioService],
 })
 export class CobrancaModule {}
 

@@ -8,7 +8,9 @@ import axios from "axios";
 import { ConfigService } from "@nestjs/config";
 
 import { AthosService } from "../integrations/athos/athos.service";
+import { DanfseNacionalPdfService } from "../integrations/nfse/danfse-nacional-pdf.service";
 import { DanfsePdfService } from "../integrations/nfse/danfse-pdf.service";
+import { NfseNacionalDistribuicaoService } from "../integrations/nfse/nfse-nacional-distribuicao.service";
 import { NfseNacionalService } from "../integrations/nfse/nfse-nacional.service";
 import { NfseService, UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { PrismaService } from "../database/prisma.service";
@@ -37,6 +39,8 @@ export class CobrancaService {
     private readonly nfseService: NfseService,
     private readonly nfseNacionalService: NfseNacionalService,
     private readonly danfsePdfService: DanfsePdfService,
+    private readonly danfseNacionalPdfService: DanfseNacionalPdfService,
+    private readonly nfseNacionalDistribuicaoService: NfseNacionalDistribuicaoService,
   ) {}
 
   async criarBoleto(dto: CriarBoletoDto): Promise<CriarBoletoResponseDto> {
@@ -455,16 +459,79 @@ export class CobrancaService {
     };
   }
 
-  /** Baixa o DANFSe (PDF) gerado localmente a partir do XML de uma NFS-e emitida para cobrança. */
-  async baixarDanfsePdf(nfseEmitidaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
+  /**
+   * Retorna o PDF de uma NFS-e emitida para cobrança, em 3 níveis de prioridade:
+   *
+   *  1. `xmlNacional` presente (cache do XML assinado, preenchido pelo backfill
+   *     de Distribuição DF-e ou por uma consulta anterior): renderiza o DANFSe
+   *     nacional (NT 008/2026, com canhoto) via `DanfseNacionalPdfService`
+   *     (`nfse-node`).
+   *  2. senão, `chaveAcesso` presente: consulta a NFS-e por chave no SEFIN
+   *     (`consultarXmlPorChave`), persiste o XML em `xmlNacional` e renderiza
+   *     como no nível 1. Falha na consulta cai no fallback do nível 3.
+   *  3. fallback (comportamento legado): baixa `linkNfse`.
+   *     - NFS-e da era iiBrasil (Ilhabela, `chaveAcesso` nulo): o link já devolve
+   *       um PDF pronto do provedor — repassamos os bytes como estão.
+   *     - NFS-e do padrão Nacional sem cache: o link devolve XML e o DANFSe é
+   *       renderizado localmente pelo `DanfsePdfService` (Handlebars/Puppeteer).
+   *     Faz sniff dos primeiros bytes (`%PDF`) para decidir, sem depender só de
+   *     `chaveAcesso`.
+   */
+  async baixarDanfsePdf(
+    nfseEmitidaId: number,
+  ): Promise<{ pdfBuffer: Buffer; nomeArquivo: string; xml?: string; xmlNomeArquivo?: string }> {
     const nfseEmitida = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
     if (!nfseEmitida) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não encontrada.`);
-    if (!nfseEmitida.linkNfse) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não possui XML armazenado.`);
 
-    const xmlResp = await axios.get(nfseEmitida.linkNfse, { responseType: "text", timeout: 15_000 });
-    const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(xmlResp.data as string);
+    const nomeArquivo = `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.pdf`;
+    const xmlNomeArquivo = `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.xml`;
 
-    return { pdfBuffer, nomeArquivo: `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.pdf` };
+    // Tier 1: xmlNacional em cache.
+    if (nfseEmitida.xmlNacional) {
+      const pdfBuffer = await this.danfseNacionalPdfService.gerar(nfseEmitida.xmlNacional);
+      return { pdfBuffer, nomeArquivo, xml: nfseEmitida.xmlNacional, xmlNomeArquivo };
+    }
+
+    // Tier 2: chaveAcesso conhecida — consulta, persiste em cache e renderiza.
+    if (nfseEmitida.chaveAcesso) {
+      try {
+        const xml = await this.nfseNacionalDistribuicaoService.consultarXmlPorChave(nfseEmitida.chaveAcesso);
+        await this.prisma.nfseEmitida.update({ where: { id: nfseEmitidaId }, data: { xmlNacional: xml } });
+        const pdfBuffer = await this.danfseNacionalPdfService.gerar(xml);
+        return { pdfBuffer, nomeArquivo, xml, xmlNomeArquivo };
+      } catch (err) {
+        this.logger.warn(
+          `consultarNfse falhou p/ NFS-e ${nfseEmitidaId} (chave ${nfseEmitida.chaveAcesso}): ${err instanceof Error ? err.message : String(err)}; caindo no fallback.`,
+        );
+      }
+    }
+
+    // Tier 3: fallback legado (linkNfse).
+    if (!nfseEmitida.linkNfse) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não possui documento armazenado.`);
+
+    const resp = await axios.get<ArrayBuffer>(nfseEmitida.linkNfse, {
+      responseType: "arraybuffer",
+      timeout: 15_000,
+    });
+    const raw = Buffer.from(resp.data);
+
+    // O provedor iiBrasil já entrega PDF pronto — repassa direto. Sem XML de origem neste caso.
+    if (raw.subarray(0, 5).toString("latin1") === "%PDF-") {
+      return { pdfBuffer: raw, nomeArquivo };
+    }
+
+    // Padrão Nacional (sem cache): o link é XML, renderiza o DANFSe legado localmente.
+    const xmlText = raw.toString("utf8");
+    const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(xmlText);
+    return { pdfBuffer, nomeArquivo, xml: xmlText, xmlNomeArquivo };
+  }
+
+  /**
+   * Backfill manual: caminha a Distribuição DF-e do ADN e preenche chaveAcesso
+   * + xmlNacional nas NfseEmitida. Idempotente.
+   */
+  async sincronizarNfseDfe() {
+    return this.nfseNacionalDistribuicaoService.sincronizar();
   }
 
   async processarNotificacaoEFI(token: string): Promise<void> {
@@ -549,6 +616,15 @@ export class CobrancaService {
     idcontareceber: number;
     cobrancaId: number;
     status: string;
+    linkBoleto: string | null;
+    nomeArquivo: string | null;
+    ultimoEmail: {
+      status: string;
+      destinatario: string;
+      enviadoEm: Date;
+      abertoEm: Date | null;
+      confirmadoEm: Date | null;
+    } | null;
   }>> {
     if (idcontasReceber.length === 0) return [];
     const rows = await this.prisma.cobrancaBoletoTitulo.findMany({
@@ -558,16 +634,41 @@ export class CobrancaService {
       },
       select: {
         idcontareceber: true,
-        cobrancaBoleto: { select: { id: true, status: true, linkBoleto: true, nomeArquivo: true } },
+        cobrancaBoleto: {
+          select: {
+            id: true,
+            status: true,
+            linkBoleto: true,
+            nomeArquivo: true,
+            // Só o envio de e-mail mais recente — é só um indicador de leitura na tela, não histórico completo.
+            emailEnvios: {
+              orderBy: { enviadoEm: "desc" },
+              take: 1,
+              select: { status: true, destinatario: true, enviadoEm: true, abertoEm: true, confirmadoEm: true },
+            },
+          },
+        },
       },
     });
-    return rows.map((r) => ({
-      idcontareceber: r.idcontareceber,
-      cobrancaId: r.cobrancaBoleto.id,
-      status: r.cobrancaBoleto.status,
-      linkBoleto: r.cobrancaBoleto.linkBoleto,
-      nomeArquivo: r.cobrancaBoleto.nomeArquivo,
-    }));
+    return rows.map((r) => {
+      const ultimo = r.cobrancaBoleto.emailEnvios[0];
+      return {
+        idcontareceber: r.idcontareceber,
+        cobrancaId: r.cobrancaBoleto.id,
+        status: r.cobrancaBoleto.status,
+        linkBoleto: r.cobrancaBoleto.linkBoleto,
+        nomeArquivo: r.cobrancaBoleto.nomeArquivo,
+        ultimoEmail: ultimo
+          ? {
+              status: ultimo.status,
+              destinatario: ultimo.destinatario,
+              enviadoEm: ultimo.enviadoEm,
+              abertoEm: ultimo.abertoEm,
+              confirmadoEm: ultimo.confirmadoEm,
+            }
+          : null,
+      };
+    });
   }
 
   async downloadBoletoPdf(cobrancaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {

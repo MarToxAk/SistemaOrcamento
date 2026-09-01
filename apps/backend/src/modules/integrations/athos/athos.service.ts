@@ -2069,6 +2069,50 @@ export class AthosService {
   }
 
   /**
+   * Retorna o XML cru autorizado das NF-e (produto) por tras dos titulos de contas a receber.
+   * Ancorado em conta_receber (nao depende de status de titulo) — molde de buscarTodasNfesParaTitulos.
+   * Usado pelo envio de e-mail para anexar cada NF-e como arquivo .xml (application/xml).
+   * Nunca quebra o envio: no catch faz warn + return [].
+   */
+  async buscarNotasFiscaisXmlPorTitulos(
+    idcontasReceber: number[],
+  ): Promise<Array<{ numero: string; xml: string; cancelada: boolean }>> {
+    if (idcontasReceber.length === 0) return [];
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT DISTINCT n.numero, n.xml, n.cancelada
+         FROM conta_receber cr
+         JOIN venda_nota vn ON vn.idvenda = cr.idvenda
+         JOIN nota n ON n.idnota = vn.idnota
+         WHERE cr.idcontareceber = ANY($1)
+           AND n.xml IS NOT NULL
+           AND n.nfechaveacesso IS NOT NULL
+           AND COALESCE(n.cancelada, false) = false
+         ORDER BY n.numero`,
+        [idcontasReceber],
+      );
+      const dedup = new Map<string, { xml: string; cancelada: boolean }>();
+      for (const r of result.rows as Array<{ numero: unknown; xml: unknown; cancelada: unknown }>) {
+        const numero = String(r["numero"] ?? "").trim();
+        const xml = String(r["xml"] ?? "");
+        const cancelada = r["cancelada"] === true || r["cancelada"] === "t";
+        if (!numero || !xml) continue;
+        if (!dedup.has(numero)) dedup.set(numero, { xml, cancelada });
+      }
+      return [...dedup.entries()].map(([numero, { xml, cancelada }]) => ({ numero, xml, cancelada }));
+    } catch (err) {
+      this.logger.warn(
+        `buscarNotasFiscaisXmlPorTitulos: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Retorna TODOS os itens (produto físico + serviço) de uma venda, com flag tipoFisico.
    * Usado pelo boleto EFI para criar 1 item por venda_item.
    */

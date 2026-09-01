@@ -241,6 +241,28 @@ model CobrancaBoleto {
   criadoEm       DateTime               @default(now())
   atualizadoEm   DateTime               @updatedAt
   titulos        CobrancaBoletoTitulo[]
+  emailEnvios    CobrancaEmailEnvio[]
+}
+
+model CobrancaEmailEnvio {
+  id               Int             @id @default(autoincrement())
+  token            String          @unique
+  idclienteAthos   Int
+  destinatario     String
+  assunto          String?
+  status           String          @default("enviado") // enviado | aberto | confirmado
+  cobrancaBoletoId Int?
+  nfseEmitidaIds   Int[]
+  nfeNumeros       String[]        // Athos nota.numero (texto curto) das NF-e anexadas como XML
+  enviadoEm        DateTime        @default(now())
+  abertoEm         DateTime?
+  confirmadoEm     DateTime?
+  criadoEm         DateTime        @default(now())
+  atualizadoEm     DateTime        @updatedAt
+  cobrancaBoleto   CobrancaBoleto? @relation(fields: [cobrancaBoletoId], references: [id], onDelete: SetNull)
+
+  @@index([idclienteAthos])
+  @@index([cobrancaBoletoId])
 }
 
 model CobrancaBoletoTitulo {
@@ -262,6 +284,7 @@ model NfseEmitida {
   valorServico   Decimal             @db.Decimal(12, 2)
   linkNfse       String?             // URL publica do XML anexado manualmente
   chaveAcesso    String?             // Id do infNFSe (padrao nacional NBS)
+  xmlNacional    String?             @db.Text   // cache do XML assinado (padrao nacional) p/ render do DANFSe via nfse-node
   arquivoPath    String?             // objectName no MinIO
   arquivoNome    String?             // nome original do arquivo enviado
   dataEmissao    DateTime            @default(now())
@@ -281,6 +304,14 @@ model NfseEmitidaTitulo {
 
   @@index([nfseEmitidaId])
   @@index([idcontareceber])
+}
+
+// Cursor singleton (id fixo = 1) da Distribuicao de DF-e do ADN. ultimoNsu = maior NSU
+// ja processado pelo backfill (NfseNacionalDistribuicaoService.sincronizar). Idempotente.
+model NfseDfeSync {
+  id           Int      @id @default(1)
+  ultimoNsu    Int      @default(0)
+  atualizadoEm DateTime @updatedAt
 }
 
 enum PdfTemplateKind {
