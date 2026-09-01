@@ -1,4 +1,6 @@
-import { ArrayMinSize, IsArray, IsInt, IsNumber, IsOptional, IsPositive, IsString, Min } from "class-validator";
+import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, ValidateIf } from "class-validator";
+
+const CODIGOS_SERVICO = ["130501", "140801", "240101"] as const;
 
 export class EmitirNfseCobrancaDto {
   @IsInt()
@@ -11,15 +13,33 @@ export class EmitirNfseCobrancaDto {
   @IsPositive({ each: true })
   idcontasReceber!: number[];
 
+  @IsIn(CODIGOS_SERVICO)
+  codigoServico!: (typeof CODIGOS_SERVICO)[number];
+
+  @ValidateIf((dto) => !dto.cnpjTomador)
+  @IsString()
+  @IsNotEmpty()
+  cpfTomador?: string;
+
+  @ValidateIf((dto) => !dto.cpfTomador)
+  @IsString()
+  @IsNotEmpty()
+  cnpjTomador?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  nomeTomador!: string;
+
+  @IsOptional()
   @IsNumber()
-  @Min(0.01)
-  valor!: number;
+  @IsPositive()
+  valorServico?: number;
 
   @IsOptional()
   @IsString()
   descricaoServico?: string;
 
   @IsOptional()
-  @IsString()
-  servicoCodigo?: string;
+  @IsBoolean()
+  incluirIbsCbs?: boolean;
 }

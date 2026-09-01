@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   InternalServerErrorException,
@@ -31,8 +32,10 @@ import {
 } from "@nestjs/swagger";
 import { AthosService } from "./athos.service";
 import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
+import { CreateOrcamentoItemCorrecaoDto } from "./dto/create-orcamento-item-correcao.dto";
 import { UpdateContaPagarDto } from "./dto/update-conta-pagar.dto";
 import { UploadContaPagarAnexoDto } from "./dto/upload-conta-pagar-anexo.dto";
+import { AdminOnly } from "../../security/admin.decorator";
 
 const ATHOS_ATTACHMENT_MAX_SIZE_BYTES = 10 * 1024 * 1024;
 const ATHOS_ATTACHMENT_MIME_PATTERN = /^(application\/pdf|image\/png|image\/jpeg)$/;
@@ -62,6 +65,40 @@ export class AthosController {
     if (!isValid) {
       throw new UnauthorizedException("Token invalido ou ausente");
     }
+  }
+
+  // Correcoes manuais de itens de orcamento do Athos (PDV) — o banco do Athos e
+  // dado de producao do PDV e nao pode ser alterado diretamente. Estes endpoints
+  // gravam a correcao apenas no nosso banco; buscarOrcamentoPorNumero aplica a
+  // correcao por cima do valor lido do Athos sem tocar no PDV.
+  @ApiOperation({
+    summary: "Registrar correcao manual de item de orcamento",
+    description:
+      "Corrige o valor de um item de orcamento lido do Athos (ex: erro de digitacao no caixa) sem alterar o banco do PDV.",
+  })
+  @ApiOkResponse({ description: "Correcao registrada" })
+  @AdminOnly()
+  @Post("orcamento-correcoes")
+  async registrarCorrecaoItem(@Body() dto: CreateOrcamentoItemCorrecaoDto) {
+    return this.athosService.registrarCorrecaoItem(dto);
+  }
+
+  @ApiOperation({ summary: "Listar correcoes manuais de itens de orcamento" })
+  @ApiQuery({ name: "idOrcamento", required: false, example: "21659" })
+  @ApiOkResponse({ description: "Lista de correcoes registradas" })
+  @AdminOnly()
+  @Get("orcamento-correcoes")
+  async listarCorrecoes(@Query("idOrcamento") idOrcamento?: string) {
+    return this.athosService.listarCorrecoes(idOrcamento);
+  }
+
+  @ApiOperation({ summary: "Remover correcao manual de item de orcamento" })
+  @ApiOkResponse({ description: "Correcao removida" })
+  @AdminOnly()
+  @Delete("orcamento-correcoes/:id")
+  async removerCorrecaoItem(@Param("id") id: string) {
+    await this.athosService.removerCorrecaoItem(id);
+    return { ok: true };
   }
 
   // Lista todas as contas a pagar encontradas no banco Athos, ordenadas decrescentemente

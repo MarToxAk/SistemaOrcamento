@@ -8,7 +8,7 @@ import { useEmpresa } from "@/lib/empresa";
 interface NfseEmitidaCliente {
   id: number;
   numeroNfse: string | null;
-  numeroRps: number;
+  numeroRps: number | null;
   valorServico: number;
   linkNfse: string | null;
   dataEmissao: string;
@@ -104,16 +104,22 @@ export default function ClienteDetalhePage({
   } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
-  // Modal NFS-e states
+  // Modal NFS-e (anexo manual — emissão SOAP foi descontinuada pela prefeitura)
   const [nfseModalState, setNfseModalState] = useState<"idle" | "confirm" | "loading" | "success" | "error">("idle");
   const [nfseValor, setNfseValor] = useState("");
-  const [nfseDescricao, setNfseDescricao] = useState("");
-  const [nfseServico, setNfseServico] = useState("24.01");
   const [nfseAvisoFisico, setNfseAvisoFisico] = useState(false);
+  const [nfseFile, setNfseFile] = useState<File | null>(null);
+  const [nfseModoEmissao, setNfseModoEmissao] = useState<"manual" | "automatico">("manual");
+  const [nfseCodigoServico, setNfseCodigoServico] = useState("130501");
+  const [nfseDocumentoTomador, setNfseDocumentoTomador] = useState("");
+  const [nfseNomeTomador, setNfseNomeTomador] = useState("");
+  const [nfseIncluirIbsCbs, setNfseIncluirIbsCbs] = useState(false);
+  const [nfseEnderecoTomador, setNfseEnderecoTomador] = useState<string | null>(null);
+  const [nfseDescricaoServico, setNfseDescricaoServico] = useState("");
+  const [nfseItensServico, setNfseItensServico] = useState<Array<{ nome: string; quantidade: number; valor: number }>>([]);
   const [nfseResult, setNfseResult] = useState<{
     nfseEmitidaId: number;
     numeroNfse: string;
-    numeroRps: number;
     valor: number;
     linkNfse?: string | null;
   } | null>(null);
@@ -464,6 +470,7 @@ export default function ClienteDetalhePage({
     setNfseResult(null);
     setNfseErro("");
     setNfseErroDetalhe("");
+    setNfseFile(null);
 
     // Buscar tipo-produto para cada idvenda único em paralelo
     type ItemServico = { nome: string; quantidade: number; valor: number };
@@ -514,39 +521,104 @@ export default function ClienteDetalhePage({
       }
     }
 
-    // Pré-preencher descrição com itens de serviço das vendas elegíveis
-    const itensDescricao: ItemServico[] = [];
-    for (const idv of vendasElegiveis) {
-      const tipo = tipoPorVenda.get(idv);
-      if (tipo?.itensServico?.length) itensDescricao.push(...tipo.itensServico);
-    }
-    const descricaoAuto = itensDescricao
-      .map((i) => {
-        const qtd = Number.isInteger(i.quantidade) ? `${i.quantidade}x` : `${i.quantidade.toFixed(2).replace(".", ",")}x`;
-        const val = `R$${i.valor.toFixed(2).replace(".", ",")}`;
-        return `${i.nome} (${qtd}) - ${val}`;
-      })
-      .join("; ");
+    // Itens de serviço de todas as vendas elegíveis, para conferência antes de emitir
+    // (mesma ideia do iiBrasil: mostrar a descrição que vai para a nota).
+    const itensServico = [...vendasElegiveis].flatMap((idv) => tipoPorVenda.get(idv)?.itensServico ?? []);
+    setNfseItensServico(itensServico);
+    setNfseDescricaoServico(
+      itensServico.length > 0
+        ? itensServico.map((i) => `${i.quantidade}x ${i.nome}`).join("; ")
+        : "",
+    );
+    setNfseIncluirIbsCbs(false);
 
     setNfseTitulosElegiveis(elegiveis);
     setNfseAvisoFisico(temFisico);
     setNfseValor(elegiveis.length > 0 ? totalServicos.toFixed(2) : "0");
-    setNfseDescricao(descricaoAuto);
+    setNfseModoEmissao("manual");
+    setNfseNomeTomador(dadosCliente?.nome_cliente ?? "");
+    setNfseDocumentoTomador("");
+    setNfseEnderecoTomador(null);
     setNfseModalState("confirm");
+
+    // Resolve CPF/CNPJ e endereço do tomador direto do Athos (fonte oficial),
+    // para pre-preencher a emissão automática e evitar digitação divergente.
+    type TomadorApi = {
+      documento?: string | null;
+      nome?: string | null;
+      endereco?: { logradouro: string; numero: string; bairro: string; cep: string; uf: string } | null;
+    };
+    fetch(`/api/cobranca/nfse/tomador/${idcliente}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: TomadorApi | null) => {
+        if (data?.documento) setNfseDocumentoTomador(data.documento);
+        if (data?.nome) setNfseNomeTomador(data.nome);
+        if (data?.endereco) {
+          const e = data.endereco;
+          setNfseEnderecoTomador(`${e.logradouro}, ${e.numero} - ${e.bairro} - ${e.uf}, CEP ${e.cep}`);
+        }
+      })
+      .catch(() => {/* falha silenciosa — usuário preenche manualmente */});
   }
 
-  async function confirmarEmitirNfse() {
+  // Emissão automática (SOAP) foi descontinuada pela prefeitura — a nota é
+  // emitida manualmente fora do sistema e o XML assinado é anexado aqui.
+  async function confirmarAnexarNfse() {
+    if (!nfseFile) {
+      setNfseErro("Selecione o arquivo XML da NFS-e.");
+      return;
+    }
     setNfseModalState("loading");
     try {
-      const res = await fetch("/api/cobranca/nfse", {
+      const formData = new FormData();
+      formData.append("idclienteAthos", String(Number(idcliente)));
+      formData.append("idcontasReceber", JSON.stringify(nfseTitulosElegiveis));
+      formData.append("file", nfseFile);
+      const res = await fetch("/api/cobranca/nfse", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
+      if (!res.ok) {
+        setNfseErro(
+          (data as { message?: string; error?: string })?.message ??
+            (data as { message?: string; error?: string })?.error ??
+            "Não foi possível anexar a NFS-e. Verifique o arquivo e tente novamente.",
+        );
+        setNfseErroDetalhe(`HTTP ${res.status}`);
+        setNfseModalState("error");
+      } else {
+        setNfseResult(data as typeof nfseResult);
+        setNfseModalState("success");
+      }
+    } catch (err) {
+      setNfseErro("Falha na conexão.");
+      setNfseErroDetalhe(err instanceof Error ? err.message : "");
+      setNfseModalState("error");
+    }
+  }
+
+  async function confirmarEmitirNfseAutomatica() {
+    const documento = nfseDocumentoTomador.replace(/\D/g, "");
+    if (documento.length !== 11 && documento.length !== 14) {
+      setNfseErro("Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido do tomador.");
+      return;
+    }
+    if (!nfseNomeTomador.trim()) {
+      setNfseErro("Informe o nome do tomador.");
+      return;
+    }
+    setNfseModalState("loading");
+    try {
+      const res = await fetch("/api/cobranca/nfse/emitir", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           idclienteAthos: Number(idcliente),
           idcontasReceber: nfseTitulosElegiveis,
-          valor: parseFloat(nfseValor),
-          descricaoServico: nfseDescricao || undefined,
-          servicoCodigo: nfseServico,
+          codigoServico: nfseCodigoServico,
+          nomeTomador: nfseNomeTomador,
+          valorServico: Number(nfseValor),
+          descricaoServico: nfseDescricaoServico || undefined,
+          incluirIbsCbs: nfseIncluirIbsCbs,
+          ...(documento.length === 14 ? { cnpjTomador: documento } : { cpfTomador: documento }),
         }),
       });
       const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
@@ -554,7 +626,7 @@ export default function ClienteDetalhePage({
         setNfseErro(
           (data as { message?: string; error?: string })?.message ??
             (data as { message?: string; error?: string })?.error ??
-            "Não foi possível emitir a NFS-e. Verifique a conexão e tente novamente.",
+            "Não foi possível emitir a NFS-e automaticamente.",
         );
         setNfseErroDetalhe(`HTTP ${res.status}`);
         setNfseModalState("error");
@@ -574,6 +646,8 @@ export default function ClienteDetalhePage({
     setNfseResult(null);
     setNfseErro("");
     setNfseErroDetalhe("");
+    setNfseFile(null);
+    setNfseModoEmissao("manual");
     if (withRefetch) {
       setLoadingTitulos(true);
       setRefetchKey((k) => k + 1);
@@ -772,11 +846,9 @@ export default function ClienteDetalhePage({
                                           <span className={`badge ${badgeClassName(t.tipoNf)}`}>
                                             {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
                                           </span>
-                                          {t.nfseAtivo?.linkNfse && (
+                                          {t.nfseAtivo?.nfseEmitidaId && (
                                             <a
-                                              href={safeHttpUrl(t.nfseAtivo.linkNfse) ?? undefined}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
+                                              href={`/api/cobranca/nfse/${t.nfseAtivo.nfseEmitidaId}/pdf`}
                                               className="btn btn-link btn-sm p-0 text-success"
                                               title="Baixar PDF da NFS-e"
                                               style={{ lineHeight: 1 }}
@@ -842,11 +914,9 @@ export default function ClienteDetalhePage({
                                       title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
                                       {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
                                     </span>
-                                    {titulo.nfseAtivo?.linkNfse && (
+                                    {titulo.nfseAtivo?.nfseEmitidaId && (
                                       <a
-                                        href={safeHttpUrl(titulo.nfseAtivo.linkNfse) ?? undefined}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                        href={`/api/cobranca/nfse/${titulo.nfseAtivo.nfseEmitidaId}/pdf`}
                                         className="btn btn-link btn-sm p-0 text-success"
                                         title="Baixar PDF da NFS-e"
                                         style={{ lineHeight: 1 }}
@@ -858,10 +928,10 @@ export default function ClienteDetalhePage({
                                       <button
                                         type="button"
                                         className="btn btn-link btn-sm p-0 text-danger"
-                                        title="Remover NFS-e do banco (permite re-emissão)"
+                                        title="Remover NFS-e do banco (permite novo anexo)"
                                         style={{ lineHeight: 1 }}
                                         onClick={async () => {
-                                          if (!confirm(`Remover registro da NFS-e #${titulo.nfseAtivo!.numeroNfse ?? titulo.nfseAtivo!.nfseEmitidaId} do banco?\n\nIsso NÃO cancela a nota na prefeitura, apenas libera o título para nova emissão.`)) return;
+                                          if (!confirm(`Remover registro da NFS-e #${titulo.nfseAtivo!.numeroNfse ?? titulo.nfseAtivo!.nfseEmitidaId} do banco?\n\nIsso NÃO cancela a nota na prefeitura, apenas libera o título para novo anexo.`)) return;
                                           try {
                                             const res = await fetch(`/api/cobranca/nfse/${titulo.nfseAtivo!.nfseEmitidaId}`, { method: "DELETE" });
                                             if (!res.ok) {
@@ -946,7 +1016,7 @@ export default function ClienteDetalhePage({
                         <tr key={nfse.id}>
                           <td className="small">{formatDate(nfse.dataEmissao)}</td>
                           <td className="small">{nfse.numeroNfse ?? "—"}</td>
-                          <td className="small">{nfse.numeroRps}</td>
+                          <td className="small">{nfse.numeroRps ?? "—"}</td>
                           <td className="small fw-semibold">{formatBRL(nfse.valorServico)}</td>
                           <td className="small">
                             {nfse.titulos.length > 0
@@ -974,11 +1044,11 @@ export default function ClienteDetalhePage({
                               <button
                                 type="button"
                                 className="btn btn-sm btn-outline-danger"
-                                title="Remove do sistema. O cancelamento na prefeitura pode não ser suportado."
+                                title="Remove o anexo local. Não cancela a nota na prefeitura."
                                 onClick={async () => {
                                   if (
                                     !confirm(
-                                      `Cancelar NFS-e ${nfse.numeroNfse ? `#${nfse.numeroNfse}` : `(ID ${nfse.id})`}?\n\nO cancelamento na prefeitura pode não ser suportado. O registro será removido do banco local.`,
+                                      `Remover anexo da NFS-e ${nfse.numeroNfse ? `#${nfse.numeroNfse}` : `(ID ${nfse.id})`}?\n\nIsso NÃO cancela a nota na prefeitura, apenas remove o registro local e libera o título para novo anexo.`,
                                     )
                                   )
                                     return;
@@ -1167,7 +1237,7 @@ export default function ClienteDetalhePage({
               className="btn btn-primary"
               onClick={abreNfseModal}
             >
-              <i className="bi bi-file-earmark-text me-1" />Emitir NFS-e
+              <i className="bi bi-file-earmark-arrow-up me-1" />Anexar NFS-e
             </button>
           </div>
         </div>
@@ -1495,7 +1565,7 @@ export default function ClienteDetalhePage({
             <div className="nfse-modal-header">
               <div>
                 <h5 className="mb-0 fw-semibold nfse-modal-title" style={{ fontSize: "var(--fs-lg, 1.35rem)" }}>
-                  <i className="bi bi-file-earmark-text me-1" />Emitir NFS-e
+                  <i className="bi bi-file-earmark-arrow-up me-1" />Anexar NFS-e
                 </h5>
                 <small className="text-muted">
                   {titulos.filter((t) => selectedIds.has(t.idcontareceber)).length} título(s) selecionado(s)
@@ -1514,8 +1584,6 @@ export default function ClienteDetalhePage({
             {/* ESTADO 1 — CONFIRMAÇÃO */}
             {nfseModalState === "confirm" && (() => {
               const titulosSel = titulos.filter((t) => selectedIds.has(t.idcontareceber));
-              const nfseValorNum = parseFloat(nfseValor);
-              const valorInvalido = isNaN(nfseValorNum) || nfseValorNum <= 0;
               return (
                 <>
                   <div className="nfse-modal-body">
@@ -1540,65 +1608,142 @@ export default function ClienteDetalhePage({
                       </div>
                     </div>
 
-                    {/* Campo de valor */}
+                    {/* Valor esperado (referência — o valor real vem do XML anexado) */}
                     <div className="mb-3">
                       <label className="form-label fw-semibold small" htmlFor="nfse-valor">
-                        Valor da NFS-e (R$)
+                        Valor esperado dos serviços (R$)
                       </label>
                       <input
                         id="nfse-valor"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        className={`form-control-plaintext fw-semibold${valorInvalido && nfseValor !== "" ? " is-invalid" : ""}`}
-                        value={nfseValor}
-                        aria-required="true"
+                        type="text"
+                        className="form-control-plaintext fw-semibold"
+                        value={nfseValor ? formatBRL(parseFloat(nfseValor)) : ""}
                         readOnly
                       />
-                      {valorInvalido && nfseValor !== "" && (
-                        <div className="invalid-feedback">
-                          {nfseAvisoFisico && nfseValor === "0"
-                            ? "Esta venda contém apenas produtos físicos. NFS-e só pode ser emitida para serviços."
-                            : "Informe um valor maior que zero."}
+                      {nfseAvisoFisico && nfseValor === "0" && (
+                        <div className="text-danger small">
+                          Esta venda contém apenas produtos físicos. NFS-e só cobre serviços.
                         </div>
                       )}
                     </div>
 
-                    {/* Tipo de serviço */}
-                    <div className="mb-3">
-                      <label className="form-label fw-semibold small" htmlFor="nfse-servico">
-                        Tipo de Serviço
-                      </label>
-                      <select
-                        id="nfse-servico"
-                        className="form-select form-select-sm"
-                        value={nfseServico}
-                        onChange={(e) => setNfseServico(e.target.value)}
+                    {/* Modo de emissão */}
+                    <div className="btn-group w-100 mb-3" role="group">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${nfseModoEmissao === "manual" ? "btn-primary" : "btn-outline-primary"}`}
+                        onClick={() => setNfseModoEmissao("manual")}
                       >
-                        <option value="24.01">24.01 — Confecção de carimbos, banners, placas e sinalização</option>
-                        <option value="24.01-02">24.01-02 — Gravação de objetos e joias</option>
-                        <option value="13.05">13.05 — Composição gráfica e confecção de matrizes</option>
-                        <option value="14.08">14.08 — Encadernação e acabamento</option>
-                      </select>
+                        Anexar XML manual
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${nfseModoEmissao === "automatico" ? "btn-warning" : "btn-outline-warning"}`}
+                        onClick={() => setNfseModoEmissao("automatico")}
+                      >
+                        <i className="bi bi-lightning-charge me-1" />Emitir automaticamente
+                      </button>
                     </div>
 
-                    {/* Campo de descrição do serviço */}
-                    <div className="mb-3">
-                      <label className="form-label fw-semibold small" htmlFor="nfse-descricao">
-                        Descrição do Serviço (opcional)
-                      </label>
-                      <textarea
-                        id="nfse-descricao"
-                        rows={2}
-                        className="form-control"
-                        placeholder={`Ex: Prestação de serviços gráficos conforme pedido(s)`}
-                        value={nfseDescricao}
-                        onChange={(e) => setNfseDescricao(e.target.value)}
-                      />
-                    </div>
+                    {nfseItensServico.length > 0 && (
+                      <div className="mb-3">
+                        <div className="text-muted small fw-semibold mb-1">Itens de serviço (compõem a descrição da nota)</div>
+                        <ul className="list-unstyled mb-0 small border rounded p-2">
+                          {nfseItensServico.map((item, idx) => (
+                            <li key={idx} className="d-flex justify-content-between border-bottom py-1">
+                              <span>{item.quantidade}x {item.nome}</span>
+                              <span className="text-muted">{formatBRL(item.valor)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {nfseModoEmissao === "manual" ? (
+                      <div className="mb-3">
+                        <label className="form-label fw-semibold small" htmlFor="nfse-xml">
+                          Arquivo XML da NFS-e (padrão nacional NBS)
+                        </label>
+                        <input
+                          id="nfse-xml"
+                          type="file"
+                          accept=".xml,application/xml,text/xml"
+                          className="form-control form-control-sm"
+                          onChange={(e) => setNfseFile(e.target.files?.[0] ?? null)}
+                        />
+                        <small className="text-muted d-block mt-1">
+                          Emita a nota fora do sistema e anexe aqui o XML assinado.
+                        </small>
+                      </div>
+                    ) : (
+                      <div className="mb-3">
+                        <div className="mb-2">
+                          <label className="form-label small">Serviço</label>
+                          <select
+                            className="form-select form-select-sm"
+                            value={nfseCodigoServico}
+                            onChange={(e) => setNfseCodigoServico(e.target.value)}
+                          >
+                            <option value="130501">13.05 — Composição gráfica / impressão</option>
+                            <option value="140801">14.08 — Encadernação e acabamento</option>
+                            <option value="240101">24.01 — Confecção de carimbos e sinalização</option>
+                          </select>
+                        </div>
+                        <div className="mb-2">
+                          <label className="form-label small">CPF ou CNPJ do tomador</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            value={nfseDocumentoTomador}
+                            onChange={(e) => setNfseDocumentoTomador(e.target.value)}
+                            placeholder="Somente números"
+                          />
+                        </div>
+                        <div className="mb-2">
+                          <label className="form-label small">Nome do tomador</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            value={nfseNomeTomador}
+                            onChange={(e) => setNfseNomeTomador(e.target.value)}
+                          />
+                        </div>
+                        {nfseEnderecoTomador && (
+                          <div className="mb-2">
+                            <label className="form-label small mb-0">Endereço (vindo do cadastro Athos)</label>
+                            <div className="small text-muted">{nfseEnderecoTomador}</div>
+                          </div>
+                        )}
+                        <div className="mb-2">
+                          <label className="form-label small">Descrição do serviço (vai na nota)</label>
+                          <textarea
+                            className="form-control form-control-sm"
+                            rows={2}
+                            value={nfseDescricaoServico}
+                            onChange={(e) => setNfseDescricaoServico(e.target.value)}
+                          />
+                        </div>
+                        <div className="form-check">
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
+                            id="nfse-ibscbs"
+                            checked={nfseIncluirIbsCbs}
+                            onChange={(e) => setNfseIncluirIbsCbs(e.target.checked)}
+                          />
+                          <label className="form-check-label small" htmlFor="nfse-ibscbs">
+                            Incluir grupo IBS/CBS (reforma tributária)
+                          </label>
+                          <small className="text-muted d-block">
+                            Ilhabela ainda não exige — o Sistema Nacional calcula o valor a partir da classificação
+                            declarada (não é uma alíquota escolhida aqui).
+                          </small>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Dados do tomador */}
-                    {dadosCliente && (
+                    {dadosCliente && nfseModoEmissao === "manual" && (
                       <div className="mb-3">
                         <div className="text-muted small fw-semibold mb-1">Tomador</div>
                         <div className="text-muted small">{dadosCliente.nome_cliente}</div>
@@ -1624,14 +1769,25 @@ export default function ClienteDetalhePage({
                     >
                       Cancelar
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={confirmarEmitirNfse}
-                      disabled={valorInvalido}
-                    >
-                      <i className="bi bi-check-lg me-1" />Confirmar Emissão
-                    </button>
+                    {nfseModoEmissao === "manual" ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={confirmarAnexarNfse}
+                        disabled={!nfseFile}
+                      >
+                        <i className="bi bi-check-lg me-1" />Confirmar Anexo
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-warning"
+                        onClick={confirmarEmitirNfseAutomatica}
+                        disabled={!nfseNomeTomador.trim() || !nfseDocumentoTomador.trim()}
+                      >
+                        <i className="bi bi-lightning-charge me-1" />Emitir Automaticamente
+                      </button>
+                    )}
                   </div>
                 </>
               );
@@ -1641,9 +1797,9 @@ export default function ClienteDetalhePage({
             {nfseModalState === "loading" && (
               <div className="nfse-modal-body d-flex flex-column align-items-center justify-content-center py-5">
                 <div className="spinner-border text-primary" role="status">
-                  <span className="visually-hidden">Emitindo NFS-e...</span>
+                  <span className="visually-hidden">Enviando XML...</span>
                 </div>
-                <p className="mt-3 text-muted mb-0">Emitindo NFS-e...</p>
+                <p className="mt-3 text-muted mb-0">Enviando XML...</p>
               </div>
             )}
 
@@ -1653,7 +1809,7 @@ export default function ClienteDetalhePage({
                 <div className="nfse-modal-body" role="status" aria-live="polite">
                   <div className="text-center mb-4">
                     <i className="bi bi-check-circle-fill fs-1 text-success" />
-                    <h5 className="fw-semibold text-success mt-2">NFS-e Emitida com Sucesso</h5>
+                    <h5 className="fw-semibold text-success mt-2">NFS-e Anexada com Sucesso</h5>
                   </div>
                   <div className="card border-0 bg-light mb-3">
                     <div className="card-body p-3">
@@ -1662,10 +1818,6 @@ export default function ClienteDetalhePage({
                         <span className="fw-semibold text-success" style={{ fontSize: "var(--fs-lg, 1.35rem)" }}>
                           <i className="bi bi-hash" />{nfseResult.numeroNfse}
                         </span>
-                      </div>
-                      <div className="d-flex justify-content-between mb-2">
-                        <span className="text-muted small">RPS</span>
-                        <span className="small text-muted">{nfseResult.numeroRps}</span>
                       </div>
                       <div className="d-flex justify-content-between">
                         <span className="text-muted small">Valor</span>
@@ -1683,7 +1835,7 @@ export default function ClienteDetalhePage({
                         rel="noopener noreferrer"
                         className="btn btn-outline-primary btn-sm"
                       >
-                        <i className="bi bi-download me-1" />Baixar NFS-e PDF
+                        <i className="bi bi-download me-1" />Baixar XML da NFS-e
                       </a>
                     </div>
                   )}
@@ -1709,7 +1861,7 @@ export default function ClienteDetalhePage({
                     <div>
                       <div>
                         {nfseErro ||
-                          "Não foi possível emitir a NFS-e. Verifique a conexão e tente novamente."}
+                          "Não foi possível anexar a NFS-e. Verifique o arquivo e tente novamente."}
                       </div>
                       {nfseErroDetalhe && (
                         <small className="text-muted d-block mt-1">{nfseErroDetalhe}</small>

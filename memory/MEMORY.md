@@ -1,6 +1,7 @@
 # Memory Index
 
 - [NFS-e iiBrasil - Integração](nfse-iibrasil-integracao.md) — Regras críticas, template XML validado, erros resolvidos e credenciais para emissão NFS-e SOAP no provedor iiBrasil (Ilhabela-SP)
+- [NFS-e Nacional (Sefin) - Integração](nfse-nacional-sefin-integracao.md) — Emissão automática via API do governo: código pronto, certificado A1 configurado/validado, mas BLOQUEADO por cadastro do município (erro E0084) até habilitação do CNPJ em Ilhabela entrar em vigor 01/09/2026
 - [Visão Geral do Projeto](project-overview.md) — Arquitetura geral, tecnologias, workspaces e propósito do Sistema de Orçamento BomCusto
 - [Backend — Arquitetura NestJS](backend-architecture.md) — Estrutura de módulos, entry point, configuração global e convenções do backend NestJS
 - [Módulo de Orçamentos (Quotes)](quotes-module.md) — Endpoints, lógica de negócio, geração de PDF e fluxo de aprovação do módulo principal

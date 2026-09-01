@@ -1,11 +1,17 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Query, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
 
 import { Public } from "../security/public.decorator";
+import { UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { CobrancaService } from "./cobranca.service";
+import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
+
+const NFSE_XML_MAX_SIZE_BYTES = 2 * 1024 * 1024;
+const NFSE_XML_MIME_PATTERN = /^(application\/xml|text\/xml)$/;
 
 @Controller("cobranca")
 export class CobrancaController {
@@ -23,12 +29,41 @@ export class CobrancaController {
   }
 
   /**
-   * Emite NFS-e para os títulos selecionados via iiBrasil.
-   * Requer autenticação via x-internal-api-key (InternalAuthGuard global).
+   * Anexa manualmente o XML da NFS-e (emissão SOAP descontinuada pela prefeitura)
+   * aos títulos selecionados. Requer autenticação via x-internal-api-key.
    */
   @Post("nfse")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: NFSE_XML_MAX_SIZE_BYTES } }))
+  async anexarNfse(
+    @Body() dto: AnexarNfseCobrancaDto,
+    @UploadedFile() file?: UploadedXmlFile,
+  ) {
+    if (!file) throw new BadRequestException("Arquivo XML da NFS-e não enviado.");
+    if (!NFSE_XML_MIME_PATTERN.test(file.mimetype)) {
+      throw new BadRequestException("Arquivo deve ser XML (application/xml ou text/xml).");
+    }
+    return this.cobrancaService.anexarNfse(dto, file);
+  }
+
+  /** Emite a NFS-e automaticamente via API do Sistema Nacional (ADN/Sefin Nacional). */
+  @Post("nfse/emitir")
   async emitirNfse(@Body() dto: EmitirNfseCobrancaDto) {
-    return this.cobrancaService.emitirNfse(dto);
+    return this.cobrancaService.emitirNfseAutomatica(dto);
+  }
+
+  /** Resolve CPF/CNPJ e nome do tomador direto do Athos, para pre-preencher a emissao automatica. */
+  @Get("nfse/tomador/:idclienteAthos")
+  async tomadorNfse(@Param("idclienteAthos", ParseIntPipe) idclienteAthos: number) {
+    return this.cobrancaService.buscarTomadorNfse(idclienteAthos);
+  }
+
+  /** Download do DANFSe (PDF) gerado localmente a partir do XML, para envio ao cliente. */
+  @Get("nfse/:id/pdf")
+  async baixarNfsePdf(@Param("id", ParseIntPipe) id: number, @Res() res: ExpressResponse) {
+    const { pdfBuffer, nomeArquivo } = await this.cobrancaService.baixarDanfsePdf(id);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
+    res.send(pdfBuffer);
   }
 
   /**
@@ -51,7 +86,7 @@ export class CobrancaController {
     return this.cobrancaService.buscarNfseEmitidaParaTitulos(body.idcontasReceber ?? []);
   }
 
-  /** Remove registro NfseEmitida do banco para permitir re-emissão */
+  /** Remove registro NfseEmitida do banco para permitir novo anexo */
   @Delete("nfse/:id")
   async cancelarNfse(@Param("id", ParseIntPipe) id: number) {
     return this.cobrancaService.cancelarNfseEmitida(id);

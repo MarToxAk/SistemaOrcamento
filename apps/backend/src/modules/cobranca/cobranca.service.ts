@@ -8,8 +8,11 @@ import axios from "axios";
 import { ConfigService } from "@nestjs/config";
 
 import { AthosService } from "../integrations/athos/athos.service";
-import { NfseService } from "../integrations/nfse/nfse.service";
+import { DanfsePdfService } from "../integrations/nfse/danfse-pdf.service";
+import { NfseNacionalService } from "../integrations/nfse/nfse-nacional.service";
+import { NfseService, UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { PrismaService } from "../database/prisma.service";
+import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
 
@@ -32,6 +35,8 @@ export class CobrancaService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly nfseService: NfseService,
+    private readonly nfseNacionalService: NfseNacionalService,
+    private readonly danfsePdfService: DanfsePdfService,
   ) {}
 
   async criarBoleto(dto: CriarBoletoDto): Promise<CriarBoletoResponseDto> {
@@ -276,10 +281,13 @@ export class CobrancaService {
     };
   }
 
-  async emitirNfse(dto: EmitirNfseCobrancaDto): Promise<{
+  /**
+   * Anexa manualmente o XML da NFS-e (emissao SOAP descontinuada pela prefeitura)
+   * aos títulos selecionados de um cliente.
+   */
+  async anexarNfse(dto: AnexarNfseCobrancaDto, file: UploadedXmlFile): Promise<{
     nfseEmitidaId: number;
     numeroNfse: string;
-    numeroRps: number;
     valor: number;
     linkNfse: string | null;
   }> {
@@ -301,38 +309,33 @@ export class CobrancaService {
       const existente = await this.prisma.nfseEmitida.findFirst({ where: { idvenda } });
       if (existente) {
         throw new BadRequestException(
-          `NFS-e já emitida para venda ${idvenda} (Nº ${existente.numeroNfse})`,
+          `NFS-e já anexada para venda ${idvenda} (Nº ${existente.numeroNfse})`,
         );
       }
     }
 
-    // Passo 3: Emitir via NfseService (SOAP iiBrasil)
-    let resultado: { numero: string; numeroRps: number; codigoVerificacao: string | null; link: string | null };
-    try {
-      resultado = await this.nfseService.emitirParaContaReceber({
-        clienteAthosId: dto.idclienteAthos,
-        valor: dto.valor,
-        servicoCodigo: dto.servicoCodigo,
-        discriminacao: dto.descricaoServico,
-      });
-    } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status;
-      const detail = (e as { response?: { data?: unknown }; message?: string })?.response?.data ??
-        (e as { message?: string })?.message;
-      this.logger.error(
-        `Falha ao emitir NFS-e. status=${status} detalhe=${JSON.stringify(detail)}`,
-      );
-      throw new InternalServerErrorException("Não foi possível emitir a NFS-e.");
-    }
+    // Passo 3: Parsear XML e guardar arquivo no MinIO
+    const parsed = this.nfseService.parseXml(file.buffer);
+    const { publicUrl, objectName } = await this.nfseService.storeXml(
+      file.buffer,
+      parsed.numeroNfse!,
+      `cobranca/${dto.idclienteAthos}`,
+    );
+
+    const valorTotal = parsed.valorServico ?? titulosFiltrados.reduce((s, t) => s + t.valor, 0);
 
     // Passo 4: Persistir em NfseEmitida com nested write
     const nfseEmitida = await this.prisma.nfseEmitida.create({
       data: {
-        numeroNfse: resultado.numero,
-        numeroRps: resultado.numeroRps,
+        numeroNfse: parsed.numeroNfse,
         idclienteAthos: dto.idclienteAthos,
-        valorServico: dto.valor,
+        valorServico: valorTotal,
         idvenda: idvendasUnicas[0] ?? null,
+        chaveAcesso: parsed.chaveAcesso,
+        linkNfse: publicUrl,
+        arquivoPath: objectName,
+        arquivoNome: file.originalname,
+        dataEmissao: parsed.dataEmissao ?? new Date(),
         titulos: {
           createMany: {
             data: titulosFiltrados.map((t) => ({
@@ -344,23 +347,124 @@ export class CobrancaService {
       },
     });
 
-    // Salvar linkNfse via raw SQL — coluna adicionada em migração; Prisma client pode estar
-    // desatualizado em ambientes onde o DLL engine está em uso e prisma generate não foi rodado.
-    if (resultado.link) {
-      const updated = await this.prisma.$executeRaw`UPDATE "NfseEmitida" SET "linkNfse" = ${resultado.link} WHERE id = ${nfseEmitida.id}`;
-      if (updated === 0) {
-        this.logger.warn(`linkNfse não persistido para NfseEmitida ${nfseEmitida.id} — coluna inexistente ou migração pendente.`);
+    this.logger.log(`NFS-e #${parsed.numeroNfse} anexada manualmente — ${titulosFiltrados.length} título(s).`);
+
+    return {
+      nfseEmitidaId: nfseEmitida.id,
+      numeroNfse: parsed.numeroNfse!,
+      valor: valorTotal,
+      linkNfse: publicUrl,
+    };
+  }
+
+  /** Resolve CPF/CNPJ, nome e endereço do tomador direto do Athos, para pre-preencher a emissao automatica. */
+  async buscarTomadorNfse(idclienteAthos: number): Promise<{
+    documento: string | null;
+    nome: string | null;
+    endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+  }> {
+    const cliente = await this.athosService.buscarClientePorId(idclienteAthos);
+    return {
+      documento: cliente?.documento ?? null,
+      nome: cliente?.name ?? null,
+      endereco: cliente?.endereco ?? null,
+    };
+  }
+
+  /** Emite a NFS-e automaticamente via API do Sistema Nacional e vincula aos títulos selecionados. */
+  async emitirNfseAutomatica(dto: EmitirNfseCobrancaDto): Promise<{
+    nfseEmitidaId: number;
+    numeroNfse: string;
+    valor: number;
+    linkNfse: string | null;
+  }> {
+    const todosTitulos = await this.athosService.buscarTitulosClienteContasReceber(dto.idclienteAthos);
+    const titulosFiltrados = todosTitulos.filter((t) => dto.idcontasReceber.includes(t.idcontareceber));
+
+    for (const id of dto.idcontasReceber) {
+      if (!titulosFiltrados.find((t) => t.idcontareceber === id)) {
+        throw new BadRequestException(`Título ${id} não encontrado para este cliente.`);
       }
     }
 
-    // Passo 5: Retornar resposta
+    const idvendasUnicas = [...new Set(titulosFiltrados.map((t) => t.idvenda).filter((v): v is number => v != null))];
+    for (const idvenda of idvendasUnicas) {
+      const existente = await this.prisma.nfseEmitida.findFirst({ where: { idvenda } });
+      if (existente) {
+        throw new BadRequestException(`NFS-e já anexada para venda ${idvenda} (Nº ${existente.numeroNfse})`);
+      }
+    }
+
+    const valorTotal = dto.valorServico ?? titulosFiltrados.reduce((s, t) => s + t.valor, 0);
+
+    // Endereco sempre resolvido aqui no backend a partir do Athos (nunca do
+    // que o frontend mandar) para nao divergir do cadastro oficial do cliente.
+    const clienteAthos = await this.athosService.buscarClientePorId(dto.idclienteAthos);
+    const endereco = clienteAthos?.endereco
+      ? {
+          logradouro: clienteAthos.endereco.logradouro,
+          numero: clienteAthos.endereco.numero,
+          bairro: clienteAthos.endereco.bairro,
+          cep: clienteAthos.endereco.cep,
+          codigoMunicipio: clienteAthos.endereco.codigoMunicipio,
+        }
+      : undefined;
+
+    const { chaveAcesso, nfseXml } = await this.nfseNacionalService.emitir({
+      codigoServico: dto.codigoServico,
+      descricaoServico: dto.descricaoServico,
+      valorServico: valorTotal,
+      incluirIbsCbs: dto.incluirIbsCbs,
+      tomador: { cpf: dto.cpfTomador, cnpj: dto.cnpjTomador, nome: dto.nomeTomador, endereco },
+    });
+
+    const buffer = Buffer.from(nfseXml, "utf-8");
+    const parsed = this.nfseService.parseXml(buffer);
+    const { publicUrl, objectName } = await this.nfseService.storeXml(
+      buffer,
+      parsed.numeroNfse ?? chaveAcesso,
+      `cobranca/${dto.idclienteAthos}`,
+    );
+
+    const nfseEmitida = await this.prisma.nfseEmitida.create({
+      data: {
+        numeroNfse: parsed.numeroNfse,
+        idclienteAthos: dto.idclienteAthos,
+        valorServico: valorTotal,
+        idvenda: idvendasUnicas[0] ?? null,
+        chaveAcesso: parsed.chaveAcesso ?? chaveAcesso,
+        linkNfse: publicUrl,
+        arquivoPath: objectName,
+        arquivoNome: `NFSe-${parsed.numeroNfse ?? chaveAcesso}.xml`,
+        dataEmissao: parsed.dataEmissao ?? new Date(),
+        titulos: {
+          createMany: {
+            data: titulosFiltrados.map((t) => ({ idcontareceber: t.idcontareceber, valor: t.valor })),
+          },
+        },
+      },
+    });
+
+    this.logger.log(`NFS-e #${parsed.numeroNfse} emitida automaticamente — ${titulosFiltrados.length} título(s).`);
+
     return {
       nfseEmitidaId: nfseEmitida.id,
-      numeroNfse: resultado.numero,
-      numeroRps: resultado.numeroRps,
-      valor: dto.valor,
-      linkNfse: resultado.link ?? null,
+      numeroNfse: parsed.numeroNfse!,
+      valor: valorTotal,
+      linkNfse: publicUrl,
     };
+  }
+
+  /** Baixa o DANFSe (PDF) gerado localmente a partir do XML de uma NFS-e emitida para cobrança. */
+  async baixarDanfsePdf(nfseEmitidaId: number): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
+    const nfseEmitida = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
+    if (!nfseEmitida) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não encontrada.`);
+    if (!nfseEmitida.linkNfse) throw new BadRequestException(`NFS-e ${nfseEmitidaId} não possui XML armazenado.`);
+
+    const xmlResp = await axios.get(nfseEmitida.linkNfse, { responseType: "text", timeout: 15_000 });
+    const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(xmlResp.data as string);
+
+    return { pdfBuffer, nomeArquivo: `NFSe-${nfseEmitida.numeroNfse ?? nfseEmitidaId}.pdf` };
   }
 
   async processarNotificacaoEFI(token: string): Promise<void> {
@@ -618,7 +722,7 @@ export class CobrancaService {
 
   /** Busca todas as NFS-e emitidas de um cliente com seus títulos vinculados */
   async buscarNfseEmitidaCliente(idclienteAthos: number): Promise<Array<{
-    id: number; numeroNfse: string | null; numeroRps: number;
+    id: number; numeroNfse: string | null; numeroRps: number | null;
     valorServico: number; linkNfse: string | null; dataEmissao: Date;
     titulos: number[];
   }>> {
@@ -639,42 +743,15 @@ export class CobrancaService {
   }
 
   /**
-   * Cancela NFS-e na prefeitura (SOAP CancelarNfse) e remove todos os registros
-   * com o mesmo numeroNfse do nosso banco — segurança: notas com mesmo número cancelam juntas.
+   * Remove o anexo local da NFS-e (todos os registros com o mesmo numeroNfse —
+   * segurança para notas duplicadas). Não cancela a nota na prefeitura: a
+   * emissão agora é manual, então o cancelamento também deve ser feito lá.
    */
-  async cancelarNfseEmitida(nfseEmitidaId: number): Promise<{ ok: boolean; mensagem: string; soapErros?: string[] }> {
+  async cancelarNfseEmitida(nfseEmitidaId: number): Promise<{ ok: boolean; mensagem: string }> {
     const nfse = await this.prisma.nfseEmitida.findUnique({ where: { id: nfseEmitidaId } });
     if (!nfse) throw new BadRequestException(`NFS-e emitida ${nfseEmitidaId} não encontrada.`);
 
     const numeroNfse = nfse.numeroNfse;
-    let soapErros: string[] = [];
-    let soapOk = !numeroNfse;
-
-    // 1. Tentar cancelar na prefeitura via SOAP (se tiver número emitido)
-    if (numeroNfse) {
-      try {
-        const resultado = await this.nfseService.cancelarNfse(numeroNfse);
-        soapErros = resultado.erros;
-        if (resultado.soapIndisponivel) {
-          // Endpoint IIBR não implementa CancelarNfse neste município.
-          // Prossegue com remoção local — usuário deve confirmar cancelamento na prefeitura.
-          this.logger.warn(`SOAP CancelarNfse indisponível para #${numeroNfse}; removendo apenas do banco.`);
-        } else if (!resultado.cancelada) {
-          throw new BadRequestException(
-            `Falha ao cancelar NFS-e #${numeroNfse} na prefeitura: ${resultado.erros.join(" | ") || "erro desconhecido"}`,
-          );
-        } else {
-          soapOk = true;
-        }
-      } catch (err) {
-        if (err instanceof BadRequestException) throw err;
-        throw new BadRequestException(
-          `Erro ao comunicar com a prefeitura: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
-
-    // 2. Remover TODOS os registros com o mesmo numeroNfse do nosso banco (segurança)
     const registros = numeroNfse
       ? await this.prisma.nfseEmitida.findMany({ where: { numeroNfse }, select: { id: true } })
       : [{ id: nfseEmitidaId }];
@@ -688,13 +765,9 @@ export class CobrancaService {
 
     this.logger.log(`NFS-e #${numeroNfse ?? "?"} removida: ${registros.length} registro(s).`);
 
-    const aviso = !soapOk && numeroNfse
-      ? " Atenção: cancelamento na prefeitura não foi confirmado via SOAP — verifique manualmente se necessário."
-      : "";
     return {
       ok: true,
-      mensagem: `NFS-e #${numeroNfse ?? nfseEmitidaId}: ${registros.length} registro(s) removido(s) do banco.${aviso}`,
-      soapErros: soapErros.length > 0 ? soapErros : undefined,
+      mensagem: `NFS-e #${numeroNfse ?? nfseEmitidaId}: ${registros.length} registro(s) removido(s) do banco. Isso não cancela a nota na prefeitura.`,
     };
   }
 
