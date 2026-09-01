@@ -157,7 +157,14 @@ export function buildAndSignDps(
     `<trib>` +
     `<tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN></tribMun>` +
     `<tribFed><piscofins><CST>00</CST><tpRetPisCofins>0</tpRetPisCofins></piscofins></tribFed>` +
-    `<totTrib><indTotTrib>0</indTotTrib></totTrib>` +
+    // <totTrib> e obrigatorio (grupo <xs:choice> em TCTribTotal, XSD v1.01) e
+    // NAO aceita <indTotTrib> para prestador ME/EPP (opSimpNac=3, hardcoded
+    // acima) — regra E0712: "Para ME/EPP o indicador de informacao de valor
+    // total de tributos nao pode ser informado". O XSD reserva justamente
+    // <pTotTribSN> (percentual aproximado da aliquota do Simples Nacional)
+    // para este regime; "0" nao calcula uma aliquota efetiva mas satisfaz o
+    // schema (TSDec2V2 aceita "0") sem violar a regra de negocio.
+    `<totTrib><pTotTribSN>0</pTotTribSN></totTrib>` +
     `</trib>` +
     `</valores>` +
     (params.incluirIbsCbs ? buildIbsCbsXml() : "") +
