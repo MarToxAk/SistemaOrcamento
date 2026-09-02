@@ -40,6 +40,12 @@ export class NfseController {
     return this.nfseService.emitirQuoteNfseAutomatica(quoteId, dto);
   }
 
+  /** Resolve CPF/CNPJ, nome e endereco do tomador via cliente Athos vinculado ao orcamento (pre-preenchimento). */
+  @Get("tomador")
+  async tomador(@Param("quoteId") quoteId: string) {
+    return this.nfseService.resolverTomadorQuote(quoteId);
+  }
+
   /** Download do DANFSe (PDF) gerado localmente a partir do XML, para envio ao cliente. */
   @Get("pdf")
   async baixarPdf(@Param("quoteId") quoteId: string, @Res() res: ExpressResponse) {
