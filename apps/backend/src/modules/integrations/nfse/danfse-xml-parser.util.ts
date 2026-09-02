@@ -39,8 +39,9 @@ function toNumber(raw: string | null): number | null {
 }
 
 export function parseDanfseFields(xml: string): DanfseFields {
+  // Id = "NFS" + chave de acesso (50 digitos, TSChaveNFSe) — exibir so a chave.
   const idMatch = xml.match(/<infNFSe\s+[^>]*Id="([^"]+)"/);
-  const chaveAcesso = idMatch ? idMatch[1] : null;
+  const chaveAcesso = idMatch ? idMatch[1].replace(/^NFS/, "") : null;
 
   const dhRaw = extractTag(xml, "dhProc") ?? extractTag(xml, "dhEmi");
   const dataEmissao = dhRaw ? new Date(dhRaw) : null;

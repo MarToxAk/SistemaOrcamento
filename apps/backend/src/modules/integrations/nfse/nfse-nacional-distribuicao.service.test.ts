@@ -71,7 +71,7 @@ describe("NfseNacionalDistribuicaoService.sincronizar", () => {
     const call = prisma.nfseEmitida.updateMany.mock.calls[0][0];
     expect(call.where.numeroNfse).toBe("239");
     expect(call.where.OR).toEqual(expect.arrayContaining([{ chaveAcesso: null }, { xmlNacional: null }]));
-    expect(call.data.chaveAcesso).toBe("NFS239");
+    expect(call.data.chaveAcesso).toBe("239");
     expect(call.data.xmlNacional).toBe(nfseXml("239", "62391927000157"));
 
     expect(prisma.nfseDfeSync.upsert).toHaveBeenCalledWith(

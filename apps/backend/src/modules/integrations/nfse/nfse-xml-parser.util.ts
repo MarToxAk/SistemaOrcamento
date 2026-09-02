@@ -17,8 +17,13 @@ function extractTag(xml: string, tag: string): string | null {
 export function parseNfseXml(xml: string): ParsedNfse {
   const numeroNfse = extractTag(xml, "nNFSe");
 
+  // O atributo Id e "NFS" + chave de acesso (TSChaveNFSe, XSD v1.01: exatamente
+  // 50 digitos numericos). Guardar o Id inteiro corrompe qualquer chamada que
+  // use chaveAcesso como parametro de API (ex.: GET /nfse/{chaveAcesso} em
+  // consultarXmlPorChave) — o SEFIN rejeita com HTTP 400 por causa dos 3
+  // caracteres "NFS" extras no inicio.
   const idMatch = xml.match(/<infNFSe\s+[^>]*Id="([^"]+)"/);
-  const chaveAcesso = idMatch ? idMatch[1] : null;
+  const chaveAcesso = idMatch ? idMatch[1].replace(/^NFS/, "") : null;
 
   const dhRaw = extractTag(xml, "dhProc") ?? extractTag(xml, "dhEmi");
   const dataEmissao = dhRaw ? new Date(dhRaw) : null;
