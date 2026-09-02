@@ -169,9 +169,14 @@ export class EmailEnvioService {
     const anexos = attachments.map((a) => a.filename);
 
     const token = randomBytes(24).toString("hex");
+    // APP_BASE_URL e o dominio publico do FRONTEND (mesmo usado no link de
+    // aprovacao de orcamento, quotes.service.ts) — o cliente final e o
+    // cliente de e-mail dele nunca devem acessar o backend diretamente.
+    // As rotas /cobranca/confirmar/[token] e /cobranca/pixel/[token] no
+    // frontend fazem o proxy para o backend real (backendFetch, server-side).
     const base = this.getRequiredConfig("APP_BASE_URL").replace(/\/+$/, "");
-    const pixelUrl = `${base}/api/cobranca/email/${token}/pixel.gif`;
-    const confirmUrl = `${base}/api/cobranca/email/${token}/confirmar`;
+    const pixelUrl = `${base}/cobranca/pixel/${token}`;
+    const confirmUrl = `${base}/cobranca/confirmar/${token}`;
 
     // White-label: nada de marca fixa aqui — nome/cor/logo vêm sempre das EMPRESA_* (multi-tenant).
     const empresaNome = this.config.get<string>("EMPRESA_NOME") ?? "Bom Custo";
