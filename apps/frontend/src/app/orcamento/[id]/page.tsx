@@ -354,12 +354,21 @@ export default function OrcamentoDetailPage() {
           ...(documento.length === 14 ? { cnpjTomador: documento } : { cpfTomador: documento }),
         }),
       });
-      const data = await res.json().catch(() => ({})) as { numero?: string; link?: string; message?: string; error?: string };
+      const data = await res.json().catch(() => ({})) as {
+        numero?: string;
+        link?: string;
+        message?: string;
+        error?: string;
+        envioChatwoot?: { enviado: boolean; motivo?: string };
+      };
       if (!res.ok) throw new Error(data?.message || data?.error || "Falha ao emitir NFS-e.");
       setNfseNumero(data.numero ?? null);
       setNfseLink(data.link ?? null);
       setNfseState("sucesso");
-      setNfseMsg(`NFS-e emitida automaticamente! Número: ${data.numero}`);
+      const entregaMsg = data.envioChatwoot?.enviado
+        ? " O DANFSe foi enviado ao cliente pelo Chatwoot."
+        : ` A nota foi emitida, mas o envio ao cliente pelo Chatwoot não ocorreu${data.envioChatwoot?.motivo ? ` (${data.envioChatwoot.motivo})` : ""}.`;
+      setNfseMsg(`NFS-e emitida automaticamente! Número: ${data.numero}.${entregaMsg}`);
       setEmitirFormOpen(false);
     } catch (err) {
       setNfseState("erro");
