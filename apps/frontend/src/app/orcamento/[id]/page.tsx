@@ -124,6 +124,10 @@ export default function OrcamentoDetailPage() {
   const [emitirDocumentoTomador, setEmitirDocumentoTomador] = useState("");
   const [emitirNomeTomador, setEmitirNomeTomador] = useState("");
   const [emitirValorServico, setEmitirValorServico] = useState("");
+  const [emitirDescricaoServico, setEmitirDescricaoServico] = useState("");
+  const [emitirIncluirIbsCbs, setEmitirIncluirIbsCbs] = useState(false);
+  const [emitirEnderecoTomador, setEmitirEnderecoTomador] = useState<string | null>(null);
+  const [emitirPrefill, setEmitirPrefill] = useState<"idle" | "carregando" | "pronto" | "sem-cliente">("idle");
 
   useEffect(() => {
     const isDevBypass =
@@ -280,6 +284,48 @@ export default function OrcamentoDetailPage() {
     }
   }
 
+  // Abre o card de emissao automatica, semeia valor/descricao a partir do
+  // orcamento e, sem bloquear a UI, busca CPF/CNPJ/nome/endereco do tomador
+  // no cadastro do cliente Athos vinculado (D-01/D-02/D-04).
+  function abrirFormularioEmissao() {
+    setEmitirFormOpen(true);
+
+    const valorTotal = quote?.body?.totais?.valor;
+    if (typeof valorTotal === "number" && Number.isFinite(valorTotal)) {
+      setEmitirValorServico(valorTotal.toFixed(2));
+    }
+
+    const itens = Array.isArray(quote?.body?.itens) ? quote!.body!.itens! : [];
+    const descricao = itens
+      .map((item) => {
+        const nome = item.produto?.descricaoproduto ?? item.produto?.descricaocurta;
+        if (!nome) return null;
+        return `${item.quantidadeitem ?? 1}x ${nome}`;
+      })
+      .filter((v): v is string => Boolean(v))
+      .join("; ");
+    setEmitirDescricaoServico(descricao);
+
+    setEmitirEnderecoTomador(null);
+    setEmitirPrefill("carregando");
+    fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse/tomador`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { idclienteAthos?: number | null; documento?: string | null; nome?: string | null; endereco?: { logradouro: string; numero: string; bairro: string; cep: string; uf: string } | null } | null) => {
+        if (!data?.idclienteAthos) {
+          setEmitirPrefill("sem-cliente");
+          return;
+        }
+        if (data.documento) setEmitirDocumentoTomador(data.documento);
+        if (data.nome) setEmitirNomeTomador(data.nome);
+        if (data.endereco) {
+          const e = data.endereco;
+          setEmitirEnderecoTomador(`${e.logradouro}, ${e.numero} - ${e.bairro} - ${e.uf}, CEP ${e.cep}`);
+        }
+        setEmitirPrefill("pronto");
+      })
+      .catch(() => setEmitirPrefill("sem-cliente"));
+  }
+
   async function handleEmitirNfseAutomatica() {
     setEmitirState("enviando");
     setNfseState("idle");
@@ -294,6 +340,8 @@ export default function OrcamentoDetailPage() {
         throw new Error("Informe um valor de serviço válido.");
       }
 
+      const descricaoServicoTrimada = emitirDescricaoServico.trim();
+
       const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse/emitir`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -301,6 +349,8 @@ export default function OrcamentoDetailPage() {
           codigoServico: emitirCodigoServico,
           nomeTomador: emitirNomeTomador,
           valorServico: valor,
+          incluirIbsCbs: emitirIncluirIbsCbs,
+          ...(descricaoServicoTrimada ? { descricaoServico: descricaoServicoTrimada } : {}),
           ...(documento.length === 14 ? { cnpjTomador: documento } : { cpfTomador: documento }),
         }),
       });
@@ -595,7 +645,7 @@ export default function OrcamentoDetailPage() {
                       <button
                         type="button"
                         className="btn btn-outline-warning mb-0"
-                        onClick={() => setEmitirFormOpen((open) => !open)}
+                        onClick={() => (emitirFormOpen ? setEmitirFormOpen(false) : abrirFormularioEmissao())}
                       >
                         <i className="bi bi-lightning-charge me-2" />
                         Emitir NFS-e automaticamente
@@ -682,7 +732,12 @@ export default function OrcamentoDetailPage() {
                           />
                         </div>
                         <div className="col-md-6">
-                          <label className="form-label small">CPF ou CNPJ do tomador</label>
+                          <label className="form-label small">
+                            CPF ou CNPJ do tomador
+                            {emitirPrefill === "carregando" ? (
+                              <span className="spinner-border spinner-border-sm ms-2" role="status" />
+                            ) : null}
+                          </label>
                           <input
                             type="text"
                             className="form-control"
@@ -699,6 +754,44 @@ export default function OrcamentoDetailPage() {
                             value={emitirNomeTomador}
                             onChange={(e) => setEmitirNomeTomador(e.target.value)}
                           />
+                        </div>
+                        <div className="col-12">
+                          <label className="form-label small">Descrição do Serviço</label>
+                          <textarea
+                            className="form-control"
+                            rows={2}
+                            maxLength={2000}
+                            value={emitirDescricaoServico}
+                            onChange={(e) => setEmitirDescricaoServico(e.target.value)}
+                          />
+                        </div>
+                        <div className="col-12">
+                          <div className="form-check">
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              id="emitir-incluir-ibs-cbs"
+                              checked={emitirIncluirIbsCbs}
+                              onChange={(e) => setEmitirIncluirIbsCbs(e.target.checked)}
+                            />
+                            <label className="form-check-label small" htmlFor="emitir-incluir-ibs-cbs">
+                              Incluir Grupo IBS/CBS
+                            </label>
+                          </div>
+                          <div className="form-text">
+                            O Sistema Nacional calcula os valores a partir da classificação tributária declarada;
+                            este campo apenas liga ou desliga o grupo IBS/CBS na nota.
+                          </div>
+                        </div>
+                        <div className="col-12">
+                          <label className="form-label small">Endereço do Tomador</label>
+                          {emitirEnderecoTomador ? (
+                            <p className="form-text mb-0">{emitirEnderecoTomador}</p>
+                          ) : emitirPrefill === "sem-cliente" || emitirPrefill === "pronto" ? (
+                            <div className="alert alert-warning py-2 small mb-0">
+                              O cadastro do cliente no Athos não tem endereço — a nota será emitida sem esse grupo.
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                       <div className="d-flex gap-2 mt-3">
