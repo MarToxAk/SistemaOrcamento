@@ -7,6 +7,9 @@ import { Client as MinioClient } from "minio";
 import axios from "axios";
 
 import { PrismaService } from "../../database/prisma.service";
+import { AthosService } from "../athos/athos.service";
+import { ChatwootService } from "../chatwoot/chatwoot.service";
+import { DanfseNacionalPdfService } from "./danfse-nacional-pdf.service";
 import { DanfsePdfService } from "./danfse-pdf.service";
 import { EmitirNfseNacionalDto } from "./dto/emitir-nfse-nacional.dto";
 import { NfseNacionalService } from "./nfse-nacional.service";
@@ -36,7 +39,50 @@ export class NfseService {
     private readonly configService: ConfigService,
     private readonly nfseNacionalService: NfseNacionalService,
     private readonly danfsePdfService: DanfsePdfService,
+    private readonly athosService: AthosService,
+    private readonly danfseNacionalPdfService: DanfseNacionalPdfService,
+    private readonly chatwootService: ChatwootService,
   ) {}
+
+  /**
+   * Resolve CPF/CNPJ, nome e endereco do tomador a partir do cliente Athos
+   * vinculado ao orcamento, para pre-preencher o formulario de emissao
+   * automatica. Todo o trecho Athos e best-effort: qualquer falha e apenas
+   * logada e o metodo devolve tudo nulo, sem nunca lancar por causa do Athos.
+   */
+  async resolverTomadorQuote(quoteId: string): Promise<{
+    idclienteAthos: number | null;
+    documento: string | null;
+    nome: string | null;
+    endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+  }> {
+    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
+    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+
+    try {
+      const lookupId = String((quote as any).externalQuoteId ?? (quote as any).internalNumber ?? "");
+      const athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
+      const mapped = (athosData as any)?.mapped ?? null;
+      const idclienteAthos = mapped?.idcliente ?? mapped?.clienteid ?? null;
+
+      if (!idclienteAthos) {
+        return { idclienteAthos: null, documento: null, nome: null, endereco: null };
+      }
+
+      const cliente = await this.athosService.buscarClientePorId(idclienteAthos);
+      return {
+        idclienteAthos,
+        documento: cliente?.documento ?? null,
+        nome: cliente?.name ?? null,
+        endereco: cliente?.endereco ?? null,
+      };
+    } catch (err) {
+      this.logger.debug(
+        `Falha ao resolver tomador Athos para o orcamento ${quoteId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return { idclienteAthos: null, documento: null, nome: null, endereco: null };
+    }
+  }
 
   /** Baixa o XML ja anexado/emitido e gera o DANFSe (PDF) para envio ao cliente. */
   async baixarDanfsePdf(quoteId: string): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
@@ -58,6 +104,21 @@ export class NfseService {
       throw new BadRequestException("Orcamento ja possui NFS-e emitida.");
     }
 
+    // Endereco sempre resolvido aqui no backend a partir do Athos (nunca do
+    // que o frontend mandar), para nao divergir do cadastro oficial do
+    // cliente vinculado ao orcamento. Ausencia de cliente ou falha no Athos
+    // apenas omite o grupo <end> — a emissao segue normalmente (best-effort).
+    const tomadorAthos = await this.resolverTomadorQuote(quoteId);
+    const endereco = tomadorAthos.endereco
+      ? {
+          logradouro: tomadorAthos.endereco.logradouro,
+          numero: tomadorAthos.endereco.numero,
+          bairro: tomadorAthos.endereco.bairro,
+          cep: tomadorAthos.endereco.cep,
+          codigoMunicipio: tomadorAthos.endereco.codigoMunicipio,
+        }
+      : undefined;
+
     const { chaveAcesso, nfseXml } = await this.nfseNacionalService.emitir({
       codigoServico: dto.codigoServico,
       descricaoServico: dto.descricaoServico,
@@ -67,6 +128,7 @@ export class NfseService {
         cpf: dto.cpfTomador,
         cnpj: dto.cnpjTomador,
         nome: dto.nomeTomador,
+        endereco,
       },
     });
 
@@ -86,13 +148,47 @@ export class NfseService {
 
     this.logger.log(`NFS-e #${parsed.numeroNfse} emitida automaticamente para o orcamento ${quoteId}.`);
 
+    const envioChatwoot = await this.enviarDanfseParaCliente(quote, nfseXml, parsed.numeroNfse ?? null);
+
     return {
       numero: parsed.numeroNfse,
       codigoVerificacao: parsed.chaveAcesso ?? chaveAcesso,
       link: publicUrl,
       dataEmissao: parsed.dataEmissao,
       valorServico: parsed.valorServico,
+      envioChatwoot,
     };
+  }
+
+  /**
+   * Gera o DANFSe nacional a partir do XML assinado e entrega ao cliente pelo
+   * Chatwoot, anexado a mensagem. Best-effort: nunca lanca — a nota ja esta
+   * fiscalmente definitiva no SEFIN quando este metodo e chamado (D-04), e o
+   * destino e resolvido exclusivamente por quote.conversationId (D-05,
+   * T-HAL-01) — nunca por busca de contato por nome/documento.
+   */
+  private async enviarDanfseParaCliente(
+    quote: { id: string; conversationId: bigint | null },
+    nfseXml: string,
+    numeroNfse: string | null,
+  ): Promise<{ enviado: boolean; motivo?: string }> {
+    const convId = quote.conversationId ? String(quote.conversationId) : undefined;
+    if (!convId) {
+      this.logger.debug(`Orcamento ${quote.id} sem conversationId no Chatwoot — DANFSe nao enviado ao cliente.`);
+      return { enviado: false, motivo: "orcamento sem conversa vinculada no Chatwoot" };
+    }
+
+    try {
+      const pdfBuffer = await this.danfseNacionalPdfService.gerar(nfseXml);
+      const mensagem = `Sua Nota Fiscal de Servico (NFS-e) n. ${numeroNfse} foi emitida. O documento (DANFSe) esta em anexo.`;
+      await this.chatwootService.sendOutgoingMessage(convId, mensagem);
+      await this.chatwootService.sendAttachment(convId, pdfBuffer, `NFSe-${numeroNfse ?? quote.id}.pdf`, "application/pdf");
+      return { enviado: true };
+    } catch (err) {
+      const motivo = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Falha ao entregar DANFSe pelo Chatwoot para o orcamento ${quote.id}: ${motivo}`);
+      return { enviado: false, motivo };
+    }
   }
 
   parseXml(buffer: Buffer): ParsedNfse {
