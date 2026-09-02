@@ -105,7 +105,9 @@ describe("EmailEnvioService.enviarBoletoENotas", () => {
 
     const token = out.token;
     expect(token).toMatch(/^[0-9a-f]{48}$/);
-    expect(mail.html).toContain(`https://app.exemplo.com/api/cobranca/email/${token}`);
+    // Links do frontend (proxy) — nunca expor o backend direto ao cliente final.
+    expect(mail.html).toContain(`https://app.exemplo.com/cobranca/pixel/${token}`);
+    expect(mail.html).toContain(`https://app.exemplo.com/cobranca/confirmar/${token}`);
     expect(mail.html).toContain("<img");
     expect(mail.html).toContain("ACME LTDA");
 
