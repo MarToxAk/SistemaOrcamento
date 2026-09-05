@@ -10,6 +10,16 @@ const RECONCILIACAO_MAX_POR_CICLO = 300;
 @Injectable()
 export class CobrancaReconciliationJob {
   private readonly logger = new Logger(CobrancaReconciliationJob.name);
+  /**
+   * Guarda em memoria de processo — previne apenas ciclos sobrepostos dentro
+   * da MESMA instancia do backend. Risco residual aceito e documentado desde
+   * o plano original (41-02-PLAN.md, T-41-02-02): em um deploy com mais de
+   * uma replica/processo (PM2 cluster, multiplos containers/pods), cada
+   * instancia teria seu proprio `running` e o trafego a EFI dobraria, com
+   * risco de corrida ao atualizar o mesmo boleto. O deploy atual e de
+   * instancia unica; se isso mudar, substituir por um lock distribuido
+   * (ex.: `pg_try_advisory_lock` do Postgres) antes de escalar horizontalmente.
+   */
   private running = false;
 
   constructor(
