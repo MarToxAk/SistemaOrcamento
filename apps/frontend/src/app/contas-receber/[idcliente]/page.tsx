@@ -1365,16 +1365,30 @@ export default function ClienteDetalhePage({
           </div>
 
         {/* ─── SEÇÃO NFS-e Emitidas ─── */}
-        <div className="mt-2">
+        <div className="pa-card mt-4">
           <button
-            className="btn btn-link p-0 text-decoration-none fw-semibold text-dark"
-            onClick={() => setNfseAberta(!nfseAberta)}
             type="button"
+            className="pa-card-header"
+            style={{
+              width: "100%",
+              background: "none",
+              borderTop: "none",
+              borderLeft: "none",
+              borderRight: "none",
+              cursor: "pointer",
+              textAlign: "left",
+              font: "inherit",
+              color: "inherit",
+            }}
+            onClick={() => setNfseAberta(!nfseAberta)}
           >
-            {nfseAberta ? "▼" : "►"} NFS-e Emitidas
+            <strong>
+              <i className={`bi ${nfseAberta ? "bi-chevron-down" : "bi-chevron-right"} me-2`} />
+              NFS-e Emitidas
+            </strong>
           </button>
           {nfseAberta && (
-            <div ref={nfseRef} className="mt-2">
+            <div ref={nfseRef} className="pa-card-body">
               {loadingNfse ? (
                 <div className="text-center py-3">
                   <div className="spinner-border spinner-border-sm text-primary" role="status">
@@ -1382,11 +1396,13 @@ export default function ClienteDetalhePage({
                   </div>
                 </div>
               ) : nfseCarregada && nfseEmitidas.length === 0 ? (
-                <p className="text-muted text-center py-3">Nenhuma NFS-e emitida para este cliente</p>
+                <div className="pa-empty">
+                  <span>Nenhuma NFS-e emitida para este cliente</span>
+                </div>
               ) : nfseEmitidas.length > 0 ? (
-                <div className="table-responsive">
-                  <table className="table table-sm table-hover table-bordered">
-                    <thead className="table-light">
+                <div>
+                  <table className="pa-table">
+                    <thead>
                       <tr>
                         <th>Data emissão</th>
                         <th>Nº NFS-e</th>
@@ -1468,16 +1484,30 @@ export default function ClienteDetalhePage({
         </div>
 
         {/* ─── SEÇÃO Notas Fiscais Athos ─── */}
-        <div className="mt-2">
+        <div className="pa-card mt-4 mb-4">
           <button
-            className="btn btn-link p-0 text-decoration-none fw-semibold text-dark"
-            onClick={() => setNfatAberta(!nfatAberta)}
             type="button"
+            className="pa-card-header"
+            style={{
+              width: "100%",
+              background: "none",
+              borderTop: "none",
+              borderLeft: "none",
+              borderRight: "none",
+              cursor: "pointer",
+              textAlign: "left",
+              font: "inherit",
+              color: "inherit",
+            }}
+            onClick={() => setNfatAberta(!nfatAberta)}
           >
-            {nfatAberta ? "▼" : "►"} Notas Fiscais Athos
+            <strong>
+              <i className={`bi ${nfatAberta ? "bi-chevron-down" : "bi-chevron-right"} me-2`} />
+              Notas Fiscais Athos
+            </strong>
           </button>
           {nfatAberta && (
-            <div ref={nfatRef} className="mt-2">
+            <div ref={nfatRef} className="pa-card-body">
               {/* Campo de busca por número */}
               <div className="d-flex gap-2 mb-3">
                 <input
@@ -1517,8 +1547,8 @@ export default function ClienteDetalhePage({
                   {resultadoBuscaNf.length === 0 ? (
                     <span className="ms-1">Nenhuma nota encontrada com este número.</span>
                   ) : (
-                    <div className="table-responsive mt-2">
-                      <table className="table table-sm mb-0">
+                    <div className="mt-2">
+                      <table className="pa-table">
                         <thead>
                           <tr>
                             <th>Nº da nota</th>
@@ -1533,7 +1563,7 @@ export default function ClienteDetalhePage({
                               <td className="small">{nf.numero}</td>
                               <td className="small">{nf.dataemissao ? formatDate(nf.dataemissao) : "—"}</td>
                               <td className="small fw-semibold">{formatBRL(nf.valor)}</td>
-                              <td className="small"><span className="badge bg-primary">{nf.tipo}</span></td>
+                              <td className="small"><span className="pa-pill pa-pill-secondary">{nf.tipo}</span></td>
                             </tr>
                           ))}
                         </tbody>
@@ -1551,11 +1581,13 @@ export default function ClienteDetalhePage({
                   </div>
                 </div>
               ) : nfatCarregada && notasFiscaisAthos.length === 0 ? (
-                <p className="text-muted text-center py-3">Nenhuma nota fiscal encontrada no Athos</p>
+                <div className="pa-empty">
+                  <span>Nenhuma nota fiscal encontrada no Athos</span>
+                </div>
               ) : notasFiscaisAthos.length > 0 ? (
-                <div className="table-responsive">
-                  <table className="table table-sm table-hover table-bordered">
-                    <thead className="table-light">
+                <div>
+                  <table className="pa-table">
+                    <thead>
                       <tr>
                         <th>Nº da nota</th>
                         <th>Data emissão</th>
@@ -1569,7 +1601,7 @@ export default function ClienteDetalhePage({
                           <td className="small">{nf.numero}</td>
                           <td className="small">{nf.dataemissao ? formatDate(nf.dataemissao) : "—"}</td>
                           <td className="small fw-semibold">{formatBRL(nf.valor)}</td>
-                          <td className="small"><span className="badge bg-primary">{nf.tipo}</span></td>
+                          <td className="small"><span className="pa-pill pa-pill-secondary">{nf.tipo}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -1582,17 +1614,7 @@ export default function ClienteDetalhePage({
 
         {/* Barra de ações — visível SOMENTE quando há seleção */}
         {selectedIds.size > 0 && (
-        <div
-          style={{
-            position: "sticky",
-            bottom: 0,
-            background: "white",
-            borderTop: "1px solid #dee2e6",
-            padding: "12px 16px",
-            zIndex: 10,
-          }}
-          className="d-flex align-items-center gap-3 flex-wrap"
-        >
+        <div className="pa-actionbar d-flex align-items-center gap-3 flex-wrap">
           <span className="text-muted small">
             <strong>{selectedIds.size}</strong> título(s) selecionado(s) —{" "}
             <strong>{formatBRL(totalSelecionado)}</strong>
@@ -1606,7 +1628,7 @@ export default function ClienteDetalhePage({
             )}
             <button
               type="button"
-              className="btn btn-warning"
+              className="pa-btn-accent"
               onClick={abreBoletoModal}
               disabled={selecionadosSemNf.length > 0}
               title={selecionadosSemNf.length > 0 ? "Selecione apenas títulos com NF emitida para gerar boleto" : undefined}
@@ -1615,7 +1637,7 @@ export default function ClienteDetalhePage({
             </button>
             <button
               type="button"
-              className="btn btn-primary"
+              className="pa-btn-accent"
               onClick={abreNfseModal}
             >
               <i className="bi bi-file-earmark-arrow-up me-1" />Anexar NFS-e

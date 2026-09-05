@@ -431,6 +431,26 @@ export default function AdminShell({ activeHref, title, subtitle, actions, child
         .bg-orange { background-color: #fd7e14 !important; }
         .bg-danger-soft { background-color: #ff6b6b !important; }
 
+        .pa-actionbar {
+          position: sticky;
+          bottom: 0;
+          background: var(--pa-surface);
+          border-top: 1px solid var(--pa-border);
+          padding: 12px 16px;
+          z-index: 20;
+        }
+        .pa-btn-accent {
+          background: var(--pa-accent);
+          color: #fff;
+          border: none;
+          border-radius: 6px;
+          padding: 0.4rem 0.9rem;
+          font-size: 0.85rem;
+          font-weight: 600;
+        }
+        .pa-btn-accent:hover { opacity: 0.9; color: #fff; }
+        .pa-btn-accent:disabled { opacity: 0.5; cursor: not-allowed; }
+
         @media (max-width: 992px) {
           .pa-stat-grid { grid-template-columns: repeat(2, 1fr); }
           .pa-aging-grid { grid-template-columns: repeat(2, 1fr); }
