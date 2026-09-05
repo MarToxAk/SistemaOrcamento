@@ -59,6 +59,24 @@ interface TituloReceber {
   nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null } | null;
 }
 
+interface HistoricoCliente {
+  pagos: Array<{
+    idcontareceber: number;
+    numerotitulo: string | null;
+    datavencimento: string;
+    datapagamento: string | null;
+    valor: number;
+    valorpago: number;
+    juros: number;
+    desconto: number;
+    idvenda: number | null;
+    numeroordem: string | null;
+  }>;
+  truncado: boolean;
+  totalPago: number;
+  titulosPagos: number;
+}
+
 function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -115,6 +133,9 @@ export default function ClienteDetalhePage({
   const [loadingTitulos, setLoadingTitulos] = useState(true);
   const [erroCliente, setErroCliente] = useState("");
   const [erroTitulos, setErroTitulos] = useState("");
+  const [historico, setHistorico] = useState<HistoricoCliente | null>(null);
+  const [loadingHistorico, setLoadingHistorico] = useState(true);
+  const [erroHistorico, setErroHistorico] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // Modal boleto states
@@ -336,6 +357,18 @@ export default function ClienteDetalhePage({
       })
       .catch(() => setErroTitulos("Erro ao carregar títulos."))
       .finally(() => setLoadingTitulos(false));
+
+    // Fetch histórico de consumo do cliente (contas pagas, itens mais comprados, mês de maior gasto)
+    setLoadingHistorico(true);
+    fetch(`/api/athos/contas-receber/cliente/${idcliente}/historico`, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Erro ao carregar histórico.");
+        const data = (await res.json()) as HistoricoCliente;
+        setHistorico(data);
+        setErroHistorico("");
+      })
+      .catch(() => setErroHistorico("Erro ao carregar histórico do cliente."))
+      .finally(() => setLoadingHistorico(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idcliente, refetchKey]);
 
@@ -1099,6 +1132,69 @@ export default function ClienteDetalhePage({
                       </tfoot>
                     </table>
                   </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Contas Pagas */}
+          <div className="mt-4">
+            <h5 className="fw-semibold mb-3">
+              <i className="bi bi-check2-circle me-2 text-primary" />Contas Pagas
+            </h5>
+            {loadingHistorico ? (
+              <div className="text-center py-3">
+                <div className="spinner-border spinner-border-sm text-primary" role="status">
+                  <span className="visually-hidden">Carregando...</span>
+                </div>
+              </div>
+            ) : erroHistorico ? (
+              <div className="alert alert-danger">{erroHistorico}</div>
+            ) : !historico || historico.pagos.length === 0 ? (
+              <div className="alert alert-info">
+                <i className="bi bi-info-circle me-2" />Nenhuma conta paga encontrada para este cliente.
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm table-hover table-bordered">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Título</th>
+                      <th>Vencimento</th>
+                      <th>Pagamento</th>
+                      <th>Valor</th>
+                      <th>Valor Pago</th>
+                      <th>Juros</th>
+                      <th>Desconto</th>
+                      <th>Pedido</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historico.pagos.map((p) => (
+                      <tr key={p.idcontareceber}>
+                        <td className="small">{p.numerotitulo ?? "—"}</td>
+                        <td className="small">{formatDate(p.datavencimento)}</td>
+                        <td className="small">{p.datapagamento ? formatDate(p.datapagamento) : "—"}</td>
+                        <td className="small">{formatBRL(p.valor)}</td>
+                        <td className="small fw-semibold">{formatBRL(p.valorpago)}</td>
+                        <td className="small">{formatBRL(p.juros)}</td>
+                        <td className="small">{formatBRL(p.desconto)}</td>
+                        <td className="small">{p.numeroordem ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="table-secondary">
+                      <td colSpan={8} className="small text-muted">
+                        {historico.titulosPagos} título(s) pago(s) — Total: <strong>{formatBRL(historico.totalPago)}</strong>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+                {historico.truncado && (
+                  <p className="small text-muted mb-0">
+                    Mostrando os 200 pagamentos mais recentes. O total acima considera todo o histórico.
+                  </p>
                 )}
               </div>
             )}

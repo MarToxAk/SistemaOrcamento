@@ -2106,6 +2106,124 @@ export class AthosService {
   }
 
   /**
+   * Histórico de consumo do cliente para a página de detalhe: contas já pagas (JOIN com
+   * conta_recebida, D-01), itens mais comprados (por valor e por quantidade, D-04) e mês de
+   * maior gasto (D-05). Roda um único PoolClient para todas as consultas; cada consulta tem
+   * try/catch independente — falha em uma nunca derruba as demais (D-03).
+   */
+  async buscarHistoricoClienteContasReceber(idcliente: number): Promise<{
+    pagos: Array<{
+      idcontareceber: number;
+      numerotitulo: string | null;
+      datavencimento: string;
+      datapagamento: string | null;
+      valor: number;
+      valorpago: number;
+      juros: number;
+      desconto: number;
+      idvenda: number | null;
+      numeroordem: string | null;
+    }>;
+    truncado: boolean;
+    totalPago: number;
+    titulosPagos: number;
+  }> {
+    this.logger.log(`buscarHistoricoClienteContasReceber: idcliente=${idcliente}`);
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      let pagos: Array<{
+        idcontareceber: number;
+        numerotitulo: string | null;
+        datavencimento: string;
+        datapagamento: string | null;
+        valor: number;
+        valorpago: number;
+        juros: number;
+        desconto: number;
+        idvenda: number | null;
+        numeroordem: string | null;
+      }> = [];
+      let truncado = false;
+      try {
+        const result = await client.query(
+          `SELECT
+              cr.idcontareceber, cr.numerotitulo, cr.datavencimento, cr.valor, cr.idvenda,
+              cre.datapagamento, cre.valorpago, cre.juros, cre.desconto,
+              v.numeroordem
+           FROM conta_receber cr
+           JOIN conta_recebida cre ON cre.idcontareceber = cr.idcontareceber
+           LEFT JOIN venda v ON v.idvenda = cr.idvenda
+           WHERE cr.idcliente = $1
+           ORDER BY cre.datapagamento DESC NULLS LAST, cr.idcontareceber DESC
+           LIMIT 200`,
+          [idcliente],
+        );
+        pagos = (result.rows as Row[]).map((row) => {
+          const datavenc = row["datavencimento"];
+          const datapag = row["datapagamento"];
+          const numerotitulo = row["numerotitulo"];
+          const numeroordem = row["numeroordem"];
+          return {
+            idcontareceber: Number(row["idcontareceber"]),
+            numerotitulo: typeof numerotitulo === "string" && numerotitulo.trim() ? numerotitulo.trim() : null,
+            datavencimento:
+              datavenc instanceof Date
+                ? datavenc.toISOString().slice(0, 10)
+                : typeof datavenc === "string" && datavenc.trim()
+                ? datavenc.trim()
+                : String(datavenc),
+            datapagamento:
+              datapag instanceof Date
+                ? datapag.toISOString().slice(0, 10)
+                : typeof datapag === "string" && datapag.trim()
+                ? datapag.trim()
+                : null,
+            valor: Number(row["valor"]),
+            valorpago: Number(row["valorpago"] ?? 0),
+            juros: Number(row["juros"] ?? 0),
+            desconto: Number(row["desconto"] ?? 0),
+            idvenda: row["idvenda"] != null ? Number(row["idvenda"]) : null,
+            numeroordem: typeof numeroordem === "string" && numeroordem.trim() ? numeroordem.trim() : null,
+          };
+        });
+        truncado = pagos.length === 200;
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (pagos) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        pagos = [];
+        truncado = false;
+      }
+
+      let totalPago = 0;
+      let titulosPagos = 0;
+      try {
+        const aggResult = await client.query(
+          `SELECT COUNT(*) AS titulos_pagos, COALESCE(SUM(cre.valorpago), 0) AS total_pago
+           FROM conta_receber cr
+           JOIN conta_recebida cre ON cre.idcontareceber = cr.idcontareceber
+           WHERE cr.idcliente = $1`,
+          [idcliente],
+        );
+        const row = aggResult.rows[0] as Row | undefined;
+        titulosPagos = Number(row?.["titulos_pagos"] ?? 0);
+        totalPago = Number(row?.["total_pago"] ?? 0);
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (agregado) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        totalPago = 0;
+        titulosPagos = 0;
+      }
+
+      return { pagos, truncado, totalPago, titulosPagos };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Verifica se cada título possui NF emitida (NF-e via venda.idnota ou NFS-e via lotenfse).
    * Retorna tipo de NF por título para validação antes de gerar boleto.
    */

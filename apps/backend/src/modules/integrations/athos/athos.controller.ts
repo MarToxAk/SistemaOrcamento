@@ -308,6 +308,30 @@ export class AthosController {
   }
 
   @ApiOperation({
+    summary: "Histórico de consumo do cliente (contas a receber)",
+    description:
+      "Retorna contas já pagas, itens mais comprados (por valor e por quantidade) e mês de maior gasto do cliente.",
+  })
+  @ApiParam({ name: "idcliente", example: "123", description: "ID do cliente no Athos" })
+  @ApiOkResponse({
+    description: "Histórico agregado: pagos, itensPorValor, itensPorQuantidade, meses, mesMaiorGasto",
+  })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/cliente/:idcliente/historico")
+  async historicoClienteContasReceber(
+    @Param("idcliente") idcliente: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idcliente);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException("idcliente inválido");
+    }
+    return this.athosService.buscarHistoricoClienteContasReceber(id);
+  }
+
+  @ApiOperation({
     summary: "Verificar NF emitida para títulos de contas a receber",
     description: "Para cada idcontareceber informado, verifica se há NF-e (venda.idnota) ou NFS-e (lotenfse) associada.",
   })
