@@ -287,6 +287,24 @@ export class AthosController {
   }
 
   @ApiOperation({
+    summary: "Indicadores da pagina principal de contas a receber (item mais vendido e clientes inativos)",
+    description:
+      "Retorna, para a loja toda desde o inicio (sem filtro de data nem de cliente): produto fisico mais vendido por valor, servico mais vendido por valor, e lista de clientes que ja fizeram pedido mas nao pedem ha mais de 180 dias.",
+  })
+  @ApiOkResponse({
+    description: "topProduto, topServico, clientesInativos, totalClientesInativos, truncado",
+  })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/dashboard/indicadores")
+  async indicadoresContasReceber(
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    return this.athosService.buscarIndicadoresContasReceber();
+  }
+
+  @ApiOperation({
     summary: "Títulos individuais de um cliente (contas a receber)",
     description: "Retorna títulos em aberto (ABE) do cliente para exibição no drawer. Lazy load.",
   })

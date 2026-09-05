@@ -2041,6 +2041,112 @@ export class AthosService {
     }
   }
 
+  /**
+   * Indicadores agregados para o dashboard PRINCIPAL de contas a receber (loja toda, sem filtro
+   * de cliente nem de data): item mais vendido historico (produto fisico e servico, separados por
+   * produto.tipoproduto — D-04) e lista de clientes inativos (D-01/D-05). Roda um unico PoolClient
+   * para as quatro consultas; cada uma tem try/catch independente — falha em uma degrada so o
+   * proprio campo, nunca derruba as demais nem a pagina (D-03).
+   */
+  async buscarIndicadoresContasReceber(): Promise<{
+    topProduto: { idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number } | null;
+    topServico: { idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number } | null;
+    clientesInativos: Array<{
+      idcliente: number;
+      nome_cliente: string;
+      telefone_completo: string | null;
+      emailcliente: string | null;
+      ultimoPedido: string | null;
+      diasInativo: number | null;
+      totalPedidos: number;
+    }>;
+    totalClientesInativos: number;
+    truncado: boolean;
+  }> {
+    this.logger.log("buscarIndicadoresContasReceber: iniciando consulta agregada de indicadores");
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const mapTopItemRow = (row: Row) => {
+        const descricaoRaw = row["descricao"];
+        const idproduto = Number(row["idproduto"]);
+        return {
+          idproduto,
+          descricao: String(descricaoRaw ?? "").trim() || `Produto #${idproduto}`,
+          quantidade: Number(row["quantidade"] ?? 0),
+          valorTotal: Number(row["valor_total"] ?? 0),
+          compras: Number(row["compras"] ?? 0),
+        };
+      };
+
+      let topProduto: { idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number } | null = null;
+      try {
+        const result = await client.query(
+          `SELECT p.idproduto, p.descricaoproduto AS descricao,
+                  SUM(vi.quantidadeitem) AS quantidade,
+                  SUM(vi.vendavalorfinalitem) AS valor_total,
+                  COUNT(DISTINCT v.idvenda) AS compras
+           FROM venda v
+           JOIN venda_item vi ON vi.idvenda = v.idvenda
+           JOIN produto p ON p.idproduto = vi.idproduto
+           WHERE COALESCE(vi.vendavalorfinalitem, 0) > 0 AND p.tipoproduto = true
+           GROUP BY p.idproduto, p.descricaoproduto
+           ORDER BY valor_total DESC
+           LIMIT 1`,
+        );
+        const row = (result.rows as Row[])[0];
+        topProduto = row ? mapTopItemRow(row) : null;
+      } catch (err) {
+        this.logger.warn(
+          `buscarIndicadoresContasReceber (topProduto): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        topProduto = null;
+      }
+
+      let topServico: { idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number } | null = null;
+      try {
+        const result = await client.query(
+          `SELECT p.idproduto, p.descricaoproduto AS descricao,
+                  SUM(vi.quantidadeitem) AS quantidade,
+                  SUM(vi.vendavalorfinalitem) AS valor_total,
+                  COUNT(DISTINCT v.idvenda) AS compras
+           FROM venda v
+           JOIN venda_item vi ON vi.idvenda = v.idvenda
+           JOIN produto p ON p.idproduto = vi.idproduto
+           WHERE COALESCE(vi.vendavalorfinalitem, 0) > 0 AND COALESCE(p.tipoproduto, false) = false
+           GROUP BY p.idproduto, p.descricaoproduto
+           ORDER BY valor_total DESC
+           LIMIT 1`,
+        );
+        const row = (result.rows as Row[])[0];
+        topServico = row ? mapTopItemRow(row) : null;
+      } catch (err) {
+        this.logger.warn(
+          `buscarIndicadoresContasReceber (topServico): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        topServico = null;
+      }
+
+      // Task 2 (QT-GXV-02) substitui estes tres defaults por consultas reais de clientes
+      // inativos, sem alterar a assinatura do metodo nem a rota/proxy ja provados na Task 1.
+      const clientesInativos: Array<{
+        idcliente: number;
+        nome_cliente: string;
+        telefone_completo: string | null;
+        emailcliente: string | null;
+        ultimoPedido: string | null;
+        diasInativo: number | null;
+        totalPedidos: number;
+      }> = [];
+      const totalClientesInativos = 0;
+      const truncado = false;
+
+      return { topProduto, topServico, clientesInativos, totalClientesInativos, truncado };
+    } finally {
+      client.release();
+    }
+  }
+
   async buscarTitulosClienteContasReceber(idcliente: number): Promise<
     Array<{
       idcontareceber: number;

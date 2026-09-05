@@ -55,12 +55,42 @@ interface ClienteDevedor {
   maior_atraso_dias: number | null;
 }
 
+interface TopItemVendido {
+  idproduto: number;
+  descricao: string;
+  quantidade: number;
+  valorTotal: number;
+  compras: number;
+}
+
+interface ClienteInativo {
+  idcliente: number;
+  nome_cliente: string;
+  telefone_completo: string | null;
+  emailcliente: string | null;
+  ultimoPedido: string | null;
+  diasInativo: number | null;
+  totalPedidos: number;
+}
+
+interface IndicadoresContasReceber {
+  topProduto: TopItemVendido | null;
+  topServico: TopItemVendido | null;
+  clientesInativos: ClienteInativo[];
+  totalClientesInativos: number;
+  truncado: boolean;
+}
+
 function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function formatPercent(value: number): string {
   return `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR");
 }
 
 
@@ -268,6 +298,31 @@ function ContasReceberDashboard() {
   const [busca, setBusca] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("total_atrasado");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const [indicadores, setIndicadores] = useState<IndicadoresContasReceber | null>(null);
+  const [loadingIndicadores, setLoadingIndicadores] = useState(true);
+  const [erroIndicadores, setErroIndicadores] = useState("");
+
+  async function fetchIndicadores() {
+    setLoadingIndicadores(true);
+    setErroIndicadores("");
+    try {
+      const res = await fetch("/api/athos/contas-receber/dashboard/indicadores", { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error("Erro ao carregar indicadores de contas a receber.");
+      }
+      const data = (await res.json()) as IndicadoresContasReceber;
+      setIndicadores(data);
+    } catch {
+      setErroIndicadores("Erro ao carregar indicadores de contas a receber.");
+    } finally {
+      setLoadingIndicadores(false);
+    }
+  }
+
+  useEffect(() => {
+    void fetchIndicadores();
+  }, []);
 
   async function fetchDashboard(status: StatusFiltro = statusFiltro) {
     setLoading(true);
@@ -590,6 +645,79 @@ function ContasReceberDashboard() {
                 </div>
               </div>
             )}
+
+            {/* SEÇÃO 3 — Item Mais Vendido (Histórico) — QT-GXV-01 */}
+            <div className="pa-card">
+              <div className="pa-card-header">
+                <strong>Item Mais Vendido (Histórico)</strong>
+              </div>
+              <div className="pa-card-body">
+                {loadingIndicadores ? (
+                  <div className="text-center py-4">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Carregando...</span>
+                    </div>
+                  </div>
+                ) : erroIndicadores ? (
+                  <div className="pa-empty pa-empty-erro">
+                    <span>{erroIndicadores}</span>
+                    <button
+                      type="button"
+                      className="pa-icon-btn"
+                      onClick={() => void fetchIndicadores()}
+                      title="Atualizar"
+                    >
+                      <i className="bi bi-arrow-clockwise" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pa-stat-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+                    <div className="pa-card pa-stat">
+                      <div className="pa-stat-icon">
+                        <i className="bi bi-box-seam" />
+                      </div>
+                      <div className="pa-stat-body">
+                        <p className="pa-stat-label">Produto Mais Vendido</p>
+                        {indicadores?.topProduto ? (
+                          <>
+                            <h4 className="pa-stat-value pa-stat-value-text">
+                              {indicadores.topProduto.descricao}
+                            </h4>
+                            <div className="fw-bold">{formatBRL(indicadores.topProduto.valorTotal)}</div>
+                            <small className="text-muted">
+                              {indicadores.topProduto.compras} compra(s)
+                            </small>
+                          </>
+                        ) : (
+                          <h4 className="pa-stat-value pa-stat-value-text">—</h4>
+                        )}
+                      </div>
+                    </div>
+                    <div className="pa-card pa-stat">
+                      <div className="pa-stat-icon">
+                        <i className="bi bi-tools" />
+                      </div>
+                      <div className="pa-stat-body">
+                        <p className="pa-stat-label">Serviço Mais Vendido</p>
+                        {indicadores?.topServico ? (
+                          <>
+                            <h4 className="pa-stat-value pa-stat-value-text">
+                              {indicadores.topServico.descricao}
+                            </h4>
+                            <div className="fw-bold">{formatBRL(indicadores.topServico.valorTotal)}</div>
+                            <small className="text-muted">
+                              {indicadores.topServico.compras} compra(s)
+                            </small>
+                          </>
+                        ) : (
+                          <h4 className="pa-stat-value pa-stat-value-text">—</h4>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </>
         )}
       </AdminShell>
