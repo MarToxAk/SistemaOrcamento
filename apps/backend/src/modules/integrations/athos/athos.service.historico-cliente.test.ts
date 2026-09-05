@@ -249,4 +249,98 @@ describe("AthosService - buscarHistoricoClienteContasReceber", () => {
     expect(result.titulosPagos).toBe(0);
     expect(client.release).toHaveBeenCalled();
   });
+
+  // Helper: resolve pagos (query A) e agregado (query B) com fixtures vazios,
+  // para isolar o comportamento das consultas de itens nos testes abaixo.
+  function mockPagosEAgregadoVazios(client: { query: jest.Mock }) {
+    client.query
+      .mockResolvedValueOnce({ rows: [] }) // consulta A (pagos)
+      .mockResolvedValueOnce({ rows: [{ titulos_pagos: "0", total_pago: "0" }] }); // consulta B (agregado)
+  }
+
+  it("itensPorValor e itensPorQuantidade saem de consultas distintas e preservam ordens distintas", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    mockPagosEAgregadoVazios(client);
+
+    // itensPorValor: item de MAIOR VALOR primeiro (produto 20, valor 500, quantidade baixa)
+    client.query.mockResolvedValueOnce({
+      rows: [
+        { idproduto: 20, descricao: "Caneta Premium", quantidade: "5", valor_total: "500.00", compras: "3" },
+        { idproduto: 10, descricao: "Papel Sulfite", quantidade: "1000", valor_total: "300.00", compras: "10" },
+      ],
+    });
+    // itensPorQuantidade: item de MAIOR QUANTIDADE primeiro (produto 10, NÃO é o de maior valor)
+    client.query.mockResolvedValueOnce({
+      rows: [
+        { idproduto: 10, descricao: "Papel Sulfite", quantidade: "1000", valor_total: "300.00", compras: "10" },
+        { idproduto: 20, descricao: "Caneta Premium", quantidade: "5", valor_total: "500.00", compras: "3" },
+      ],
+    });
+
+    const result = await service.buscarHistoricoClienteContasReceber(2829);
+
+    expect(result.itensPorValor[0].idproduto).toBe(20);
+    expect(result.itensPorValor[0].valorTotal).toBe(500);
+    expect(result.itensPorQuantidade[0].idproduto).toBe(10);
+    expect(result.itensPorQuantidade[0].quantidade).toBe(1000);
+    // Confirma que o item de maior valor NÃO é o de maior quantidade (fixture intencional)
+    expect(result.itensPorValor[0].idproduto).not.toBe(result.itensPorQuantidade[0].idproduto);
+  });
+
+  it("descricao vazia cai no fallback Produto #<idproduto>", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    mockPagosEAgregadoVazios(client);
+    client.query.mockResolvedValueOnce({
+      rows: [{ idproduto: 99, descricao: "  ", quantidade: "1", valor_total: "10.00", compras: "1" }],
+    });
+    client.query.mockResolvedValueOnce({
+      rows: [{ idproduto: 99, descricao: "  ", quantidade: "1", valor_total: "10.00", compras: "1" }],
+    });
+
+    const result = await service.buscarHistoricoClienteContasReceber(2829);
+
+    expect(result.itensPorValor[0].descricao).toBe("Produto #99");
+    expect(result.itensPorQuantidade[0].descricao).toBe("Produto #99");
+  });
+
+  it("falha das consultas de itens devolve arrays vazios sem afetar pagos nem totalPago", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            idcontareceber: 1,
+            numerotitulo: "T001",
+            datavencimento: "2026-03-10",
+            valor: "10.00",
+            idvenda: null,
+            datapagamento: "2026-03-12",
+            valorpago: "10.00",
+            juros: "0",
+            desconto: "0",
+            numeroordem: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ titulos_pagos: "1", total_pago: "10.00" }] })
+      .mockRejectedValueOnce(new Error("itensPorValor falhou"))
+      .mockRejectedValueOnce(new Error("itensPorQuantidade falhou"));
+
+    const result = await service.buscarHistoricoClienteContasReceber(2829);
+
+    expect(result.itensPorValor).toEqual([]);
+    expect(result.itensPorQuantidade).toEqual([]);
+    expect(result.pagos).toHaveLength(1);
+    expect(result.totalPago).toBe(10);
+    expect(client.release).toHaveBeenCalled();
+  });
 });

@@ -75,6 +75,8 @@ interface HistoricoCliente {
   truncado: boolean;
   totalPago: number;
   titulosPagos: number;
+  itensPorValor: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
+  itensPorQuantidade: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
 }
 
 function formatBRL(value: number): string {
@@ -136,6 +138,7 @@ export default function ClienteDetalhePage({
   const [historico, setHistorico] = useState<HistoricoCliente | null>(null);
   const [loadingHistorico, setLoadingHistorico] = useState(true);
   const [erroHistorico, setErroHistorico] = useState("");
+  const [ordemItens, setOrdemItens] = useState<"valor" | "quantidade">("valor");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // Modal boleto states
@@ -1196,6 +1199,68 @@ export default function ClienteDetalhePage({
                     Mostrando os 200 pagamentos mais recentes. O total acima considera todo o histórico.
                   </p>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* Itens Mais Comprados */}
+          <div className="mt-4">
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+              <h5 className="fw-semibold mb-0">
+                <i className="bi bi-bag-check me-2 text-primary" />Itens Mais Comprados
+              </h5>
+              <div className="btn-group" role="group">
+                <button
+                  type="button"
+                  className={`btn btn-sm ${ordemItens === "valor" ? "btn-primary" : "btn-outline-primary"}`}
+                  onClick={() => setOrdemItens("valor")}
+                >
+                  Por Valor
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${ordemItens === "quantidade" ? "btn-primary" : "btn-outline-primary"}`}
+                  onClick={() => setOrdemItens("quantidade")}
+                >
+                  Por Quantidade
+                </button>
+              </div>
+            </div>
+            {loadingHistorico ? (
+              <div className="text-center py-3">
+                <div className="spinner-border spinner-border-sm text-primary" role="status">
+                  <span className="visually-hidden">Carregando...</span>
+                </div>
+              </div>
+            ) : erroHistorico ? (
+              <div className="alert alert-danger">{erroHistorico}</div>
+            ) : !historico ||
+              (ordemItens === "valor" ? historico.itensPorValor : historico.itensPorQuantidade).length === 0 ? (
+              <div className="alert alert-info">
+                <i className="bi bi-info-circle me-2" />Não há itens de venda registrados para este cliente.
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm table-hover table-bordered">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Produto</th>
+                      <th>Quantidade</th>
+                      <th>Compras</th>
+                      <th>Total Gasto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(ordemItens === "valor" ? historico.itensPorValor : historico.itensPorQuantidade).map((item) => (
+                      <tr key={item.idproduto}>
+                        <td className="small">{item.descricao}</td>
+                        <td className="small">{item.quantidade}</td>
+                        <td className="small">{item.compras}</td>
+                        <td className="small fw-semibold">{formatBRL(item.valorTotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

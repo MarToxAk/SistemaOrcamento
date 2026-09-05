@@ -2127,6 +2127,8 @@ export class AthosService {
     truncado: boolean;
     totalPago: number;
     titulosPagos: number;
+    itensPorValor: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
+    itensPorQuantidade: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
   }> {
     this.logger.log(`buscarHistoricoClienteContasReceber: idcliente=${idcliente}`);
     const pool = this.getPool();
@@ -2217,7 +2219,67 @@ export class AthosService {
         titulosPagos = 0;
       }
 
-      return { pagos, truncado, totalPago, titulosPagos };
+      const mapItemRow = (row: Row) => {
+        const descricaoRaw = row["descricao"];
+        const idproduto = Number(row["idproduto"]);
+        return {
+          idproduto,
+          descricao: String(descricaoRaw ?? "").trim() || `Produto #${idproduto}`,
+          quantidade: Number(row["quantidade"] ?? 0),
+          valorTotal: Number(row["valor_total"] ?? 0),
+          compras: Number(row["compras"] ?? 0),
+        };
+      };
+
+      let itensPorValor: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }> = [];
+      try {
+        const result = await client.query(
+          `SELECT p.idproduto, p.descricaoproduto AS descricao,
+                  SUM(vi.quantidadeitem) AS quantidade,
+                  SUM(vi.vendavalorfinalitem) AS valor_total,
+                  COUNT(DISTINCT v.idvenda) AS compras
+           FROM venda v
+           JOIN venda_item vi ON vi.idvenda = v.idvenda
+           JOIN produto p ON p.idproduto = vi.idproduto
+           WHERE v.idcliente = $1 AND COALESCE(vi.vendavalorfinalitem, 0) > 0
+           GROUP BY p.idproduto, p.descricaoproduto
+           ORDER BY valor_total DESC
+           LIMIT 10`,
+          [idcliente],
+        );
+        itensPorValor = (result.rows as Row[]).map(mapItemRow);
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (itensPorValor) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        itensPorValor = [];
+      }
+
+      let itensPorQuantidade: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }> = [];
+      try {
+        const result = await client.query(
+          `SELECT p.idproduto, p.descricaoproduto AS descricao,
+                  SUM(vi.quantidadeitem) AS quantidade,
+                  SUM(vi.vendavalorfinalitem) AS valor_total,
+                  COUNT(DISTINCT v.idvenda) AS compras
+           FROM venda v
+           JOIN venda_item vi ON vi.idvenda = v.idvenda
+           JOIN produto p ON p.idproduto = vi.idproduto
+           WHERE v.idcliente = $1 AND COALESCE(vi.vendavalorfinalitem, 0) > 0
+           GROUP BY p.idproduto, p.descricaoproduto
+           ORDER BY quantidade DESC
+           LIMIT 10`,
+          [idcliente],
+        );
+        itensPorQuantidade = (result.rows as Row[]).map(mapItemRow);
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (itensPorQuantidade) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        itensPorQuantidade = [];
+      }
+
+      return { pagos, truncado, totalPago, titulosPagos, itensPorValor, itensPorQuantidade };
     } finally {
       client.release();
     }
