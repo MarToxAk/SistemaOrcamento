@@ -9,6 +9,19 @@ interface DashboardSummary {
   total_a_receber: number;
   total_atrasado: number;
   total_clientes_devedores: number;
+  total_recebido_mes: number;
+  taxa_inadimplencia: number;
+  aging: {
+    d1_30: number;
+    d31_60: number;
+    d61_90: number;
+    d90_mais: number;
+  };
+  a_vencer: {
+    d7: number;
+    d15: number;
+    d30: number;
+  };
 }
 
 type NfseStatusBoleto = "completa" | "parcial" | "pendente";
@@ -43,6 +56,10 @@ interface ClienteDevedor {
 
 function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatPercent(value: number): string {
+  return `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
 
@@ -340,10 +357,10 @@ function ContasReceberDashboard() {
             <div className="alert alert-danger">{erro}</div>
           ) : (
             <>
-              {/* SEÇÃO 1 — Top Cards */}
+              {/* SEÇÃO 1 — Fileira 1: resumo (D-02) */}
               {summary && (
                 <div className="row g-3 mb-4">
-                  <div className="col-md-4">
+                  <div className="col-md-3">
                     <div className="card border-0 shadow-sm h-100">
                       <div className="card-body">
                         <p className="text-muted small mb-1">
@@ -353,7 +370,7 @@ function ContasReceberDashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className="col-md-4">
+                  <div className="col-md-3">
                     <div className="card border-0 shadow-sm h-100">
                       <div className="card-body">
                         <p className="text-muted small mb-1">
@@ -363,13 +380,121 @@ function ContasReceberDashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className="col-md-4">
+                  <div className="col-md-3">
                     <div className="card border-0 shadow-sm h-100">
                       <div className="card-body">
                         <p className="text-muted small mb-1">
-                          <i className="bi bi-people-fill me-1" />Clientes Devedores
+                          <i className="bi bi-graph-up-arrow me-1" />Recebido no Mês
                         </p>
-                        <h4 className="fw-bold">{summary.total_clientes_devedores} clientes</h4>
+                        <h4 className="fw-bold text-success">{formatBRL(summary.total_recebido_mes)}</h4>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card border-0 shadow-sm h-100">
+                      <div className="card-body">
+                        <p className="text-muted small mb-1">
+                          <i className="bi bi-percent me-1" />Taxa de Inadimplência
+                        </p>
+                        <h4 className="fw-bold">{formatPercent(summary.taxa_inadimplencia)}</h4>
+                        <small className="text-muted">
+                          {summary.total_clientes_devedores} cliente(s) com título em aberto
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SEÇÃO 1B — Fileira 2: aging da inadimplência (D-07) */}
+              {summary && (
+                <div className="mb-4">
+                  <p className="small text-muted fw-bold mb-2">Inadimplência por faixa</p>
+                  <div className="row g-3">
+                    <div className="col-md-3">
+                      <div className="card border-0 shadow-sm h-100">
+                        <div className="card-body py-2">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <span className="text-muted small">1-30 dias</span>
+                            <span className="badge bg-warning text-dark">1-30</span>
+                          </div>
+                          <div className="fw-bold">{formatBRL(summary.aging.d1_30)}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="card border-0 shadow-sm h-100">
+                        <div className="card-body py-2">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <span className="text-muted small">31-60 dias</span>
+                            <span className="badge bg-orange text-white">31-60</span>
+                          </div>
+                          <div className="fw-bold">{formatBRL(summary.aging.d31_60)}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="card border-0 shadow-sm h-100">
+                        <div className="card-body py-2">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <span className="text-muted small">61-90 dias</span>
+                            <span className="badge bg-danger-soft text-white">61-90</span>
+                          </div>
+                          <div className="fw-bold">{formatBRL(summary.aging.d61_90)}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="card border-0 shadow-sm h-100">
+                        <div className="card-body py-2">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <span className="text-muted small">Mais de 90 dias</span>
+                            <span className="badge bg-danger">90+</span>
+                          </div>
+                          <div className="fw-bold">{formatBRL(summary.aging.d90_mais)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SEÇÃO 1C — Fileira 3: próximos vencimentos (D-09) */}
+              {summary && (
+                <div className="mb-4">
+                  <p className="small text-muted fw-bold mb-2">A vencer</p>
+                  <div className="row g-3">
+                    <div className="col-md-4">
+                      <div className="card border-0 shadow-sm h-100">
+                        <div className="card-body py-2">
+                          <p className="text-muted small mb-1">
+                            <i className="bi bi-calendar-event me-1" />Próximos 7 dias
+                          </p>
+                          <div className="fw-bold">{formatBRL(summary.a_vencer.d7)}</div>
+                          <small className="text-muted">Acumulado a partir de hoje</small>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="card border-0 shadow-sm h-100">
+                        <div className="card-body py-2">
+                          <p className="text-muted small mb-1">
+                            <i className="bi bi-calendar-event me-1" />Próximos 15 dias
+                          </p>
+                          <div className="fw-bold">{formatBRL(summary.a_vencer.d15)}</div>
+                          <small className="text-muted">Acumulado a partir de hoje</small>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="card border-0 shadow-sm h-100">
+                        <div className="card-body py-2">
+                          <p className="text-muted small mb-1">
+                            <i className="bi bi-calendar-event me-1" />Próximos 30 dias
+                          </p>
+                          <div className="fw-bold">{formatBRL(summary.a_vencer.d30)}</div>
+                          <small className="text-muted">Acumulado a partir de hoje</small>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -471,6 +596,7 @@ function ContasReceberDashboard() {
         .orcamento-section { border-radius: 0 0 8px 8px; }
         .logo-img { max-width: 140px; max-height: 88px; background: #fff; border-radius: 8px; padding: 6px; }
         .bg-orange { background-color: #fd7e14 !important; }
+        .bg-danger-soft { background-color: #ff6b6b !important; }
       `}</style>
     </>
   );
