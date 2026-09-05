@@ -11,6 +11,22 @@ interface DashboardSummary {
   total_clientes_devedores: number;
 }
 
+type NfseStatusBoleto = "completa" | "parcial" | "pendente";
+
+interface BoletoDashboardItem {
+  id: number;
+  idclienteAthos: number;
+  nomeCliente: string;
+  status: string;
+  valor: number;
+  expireAt: string | null;
+  diasParaVencer: number | null;
+  linkBoleto: string | null;
+  criadoEm: string;
+  titulos: number[];
+  nfseStatus: NfseStatusBoleto;
+}
+
 interface ClienteDevedor {
   idcliente: number;
   nome_cliente: string;
@@ -40,6 +56,125 @@ function getBadgeClass(maior_atraso_dias: number | null): string {
 function getBadgeLabel(dias: number | null): string {
   if (dias === null || dias === 0) return "Em dia";
   return `${dias}d atraso`;
+}
+
+function getStatusBoletoBadgeClass(status: string): string {
+  if (status === "pendente") return "badge bg-warning text-dark";
+  if (status === "pago") return "badge bg-success";
+  return "badge bg-secondary";
+}
+
+function getVencimentoSuffix(dias: number | null): string {
+  if (dias === null) return "";
+  if (dias > 0) return `${dias}d`;
+  if (dias === 0) return "vence hoje";
+  return `${Math.abs(dias)}d em atraso`;
+}
+
+function BoletosConsolidadosPanel() {
+  const [boletos, setBoletos] = useState<BoletoDashboardItem[]>([]);
+  const [boletosLoading, setBoletosLoading] = useState(true);
+  const [boletosErro, setBoletosErro] = useState("");
+
+  async function fetchBoletosDashboard() {
+    setBoletosLoading(true);
+    setBoletosErro("");
+    try {
+      const res = await fetch("/api/cobranca/boleto/dashboard", { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error("Erro ao carregar boletos consolidados.");
+      }
+      const data = (await res.json()) as BoletoDashboardItem[];
+      setBoletos(data);
+    } catch {
+      setBoletosErro("Erro ao carregar boletos consolidados.");
+    } finally {
+      setBoletosLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void fetchBoletosDashboard();
+  }, []);
+
+  return (
+    <div className="card border-0 shadow-sm mb-4">
+      <div className="card-header d-flex justify-content-between align-items-center bg-transparent border-bottom">
+        <div>
+          <strong>Boletos a Receber</strong>
+          <span className="text-muted small ms-2">({boletos.length})</span>
+        </div>
+        <button
+          type="button"
+          className="btn btn-sm btn-light border"
+          onClick={() => void fetchBoletosDashboard()}
+          title="Atualizar"
+        >
+          <i className="bi bi-arrow-clockwise" />
+        </button>
+      </div>
+      <div className="card-body" style={{ maxHeight: "320px", overflowY: "auto" }}>
+        {boletosLoading ? (
+          <div className="text-center py-4">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Carregando...</span>
+            </div>
+          </div>
+        ) : boletosErro ? (
+          <div className="alert alert-danger d-flex justify-content-between align-items-center mb-0">
+            <span>{boletosErro}</span>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-danger"
+              onClick={() => void fetchBoletosDashboard()}
+              title="Atualizar"
+            >
+              <i className="bi bi-arrow-clockwise" />
+            </button>
+          </div>
+        ) : boletos.length === 0 ? (
+          <div className="alert alert-info mb-0">
+            <strong>Nenhum boleto pendente</strong>
+            <div className="small mt-1">
+              Todos os boletos emitidos já foram pagos, cancelados, ou não há boletos ativos no momento.
+            </div>
+          </div>
+        ) : (
+          <div className="d-flex flex-column gap-2">
+            {boletos.map((boleto) => (
+              <div
+                key={boleto.id}
+                className="d-flex align-items-center justify-content-between gap-2 border-bottom pb-2"
+              >
+                <div className="d-flex align-items-center gap-2" style={{ minWidth: 0, flex: "1 1 auto" }}>
+                  <span className="badge bg-secondary-subtle text-secondary-emphasis">
+                    #{boleto.idclienteAthos}
+                  </span>
+                  <span className="text-truncate" title={boleto.nomeCliente}>
+                    {boleto.nomeCliente}
+                  </span>
+                </div>
+                <div className="text-nowrap fw-bold">{formatBRL(boleto.valor)}</div>
+                <div className="text-nowrap small text-muted">
+                  {boleto.expireAt ?? "-"}
+                  {getVencimentoSuffix(boleto.diasParaVencer) && (
+                    <span className="ms-1">({getVencimentoSuffix(boleto.diasParaVencer)})</span>
+                  )}
+                </div>
+                <span className={getStatusBoletoBadgeClass(boleto.status)}>{boleto.status}</span>
+                <a
+                  href={`/contas-receber/${boleto.idclienteAthos}`}
+                  className="btn btn-sm btn-outline-primary text-nowrap"
+                >
+                  Ver Cliente
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 type StatusFiltro = "AVC" | "VEN" | "REC" | "CAN" | "";
@@ -177,6 +312,8 @@ function ContasReceberDashboard() {
 
         {/* Main section */}
         <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
+          <BoletosConsolidadosPanel />
+
           {loading ? (
             <div className="text-center py-5">
               <div className="spinner-border text-primary" role="status">

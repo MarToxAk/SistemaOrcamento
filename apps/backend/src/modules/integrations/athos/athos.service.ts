@@ -1154,6 +1154,38 @@ export class AthosService {
     }
   }
 
+  /** Resolve o nome de cada cliente em UMA unica consulta em lote (sem N+1). */
+  async buscarNomesClientes(idclientes: number[]): Promise<Array<{ idcliente: number; nome_cliente: string }>> {
+    const idsSanitizados = idclientes.filter((n) => Number.isInteger(n) && n > 0);
+    if (idsSanitizados.length === 0) return [];
+
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT c.idcliente,
+          COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial, 'Cliente #' || c.idcliente::text) AS nome_cliente
+        FROM cliente c
+        LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+        LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+        WHERE c.idcliente = ANY($1)`,
+        [idsSanitizados],
+      );
+      return result.rows.map((row: Row) => {
+        const idcliente = Number(row["idcliente"]);
+        return {
+          idcliente,
+          nome_cliente: pickString(row, ["nome_cliente"]) || `Cliente #${idcliente}`,
+        };
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao buscar nomes em lote no Athos: ${err instanceof Error ? err.message : String(err)}`);
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
   async buscarRelacaoOrcamentoVenda(idorcamento: number): Promise<{ idvenda: number | null }> {
     this.logger.log(`buscarRelacaoOrcamentoVenda: idorcamento=${idorcamento}`);
     const pool = this.getPool();
