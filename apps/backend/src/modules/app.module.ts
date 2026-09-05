@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import path from "node:path";
 
@@ -75,6 +76,7 @@ function validateEnv(config: Record<string, unknown>) {
     AthosModule,
     NfseModule,
     PdvModule,
+    ScheduleModule.forRoot(),
     CobrancaModule,
     PdfTemplatesModule,
   ],
