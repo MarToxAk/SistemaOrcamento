@@ -220,6 +220,15 @@ const STATUS_OPTIONS: { value: StatusFiltro; label: string; cls: string }[] = [
   { value: "CAN", label: "Cancelados",      cls: "btn-outline-dark"      },
 ];
 
+type SortKey = "nome" | "total_devido" | "total_atrasado";
+type SortDir = "asc" | "desc";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "total_atrasado", label: "Valor Vencido" },
+  { value: "total_devido",   label: "Valor em Aberto" },
+  { value: "nome",           label: "Nome" },
+];
+
 export default function ContasReceberPage() {
   return (
     <PasswordGate title="Contas a Receber" description="Esta area exibe dados financeiros de clientes. Digite a senha de configuracoes para continuar.">
@@ -236,6 +245,8 @@ function ContasReceberDashboard() {
   const [erro, setErro] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("");
   const [busca, setBusca] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("total_atrasado");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   async function fetchDashboard(status: StatusFiltro = statusFiltro) {
     setLoading(true);
@@ -269,6 +280,14 @@ function ContasReceberDashboard() {
           String(c.idcliente).includes(buscaNormalizada),
       )
     : clientes;
+
+  const clientesOrdenados = [...clientesFiltrados].sort((a, b) => {
+    const mult = sortDir === "asc" ? 1 : -1;
+    if (sortBy === "nome") {
+      return a.nome_cliente.localeCompare(b.nome_cliente, "pt-BR") * mult;
+    }
+    return (a[sortBy] - b[sortBy]) * mult;
+  });
 
   return (
     <>
@@ -318,6 +337,29 @@ function ContasReceberDashboard() {
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
               />
+            </div>
+            <div className="d-flex align-items-center gap-2">
+              <small className="text-muted">Ordenar por</small>
+              <select
+                className="form-select form-select-sm"
+                style={{ width: "170px" }}
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortKey)}
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                title="Alternar direção da ordenação"
+              >
+                <i className={`bi ${sortDir === "desc" ? "bi-sort-down" : "bi-sort-up"}`} />
+              </button>
             </div>
             {STATUS_OPTIONS.map((opt) => (
               <button
@@ -512,17 +554,21 @@ function ContasReceberDashboard() {
                 </div>
               ) : (
                 <div className="row g-3">
-                  {clientesFiltrados.map((cliente) => {
+                  {clientesOrdenados.map((cliente) => {
                     const pct =
                       cliente.limitecredito > 0
                         ? Math.min(100, Math.round((cliente.total_devido / cliente.limitecredito) * 100))
                         : 0;
                     const progressBarClass =
                       pct >= 80 ? "progress-bar bg-danger" : pct >= 50 ? "progress-bar bg-warning" : "progress-bar bg-success";
+                    const destaqueCritico =
+                      cliente.maior_atraso_dias !== null && cliente.maior_atraso_dias > 90
+                        ? " status-border-critico"
+                        : "";
 
                     return (
                       <div key={cliente.idcliente} className="col-md-6 col-lg-4">
-                        <div className="card h-100 border-0 shadow-sm">
+                        <div className={`card h-100 border-0 shadow-sm${destaqueCritico}`}>
                           <div className="card-header d-flex justify-content-between align-items-center bg-transparent border-bottom">
                             <div className="text-truncate" style={{ maxWidth: "65%" }} title={cliente.nome_cliente}>
                               <span className="badge bg-secondary-subtle text-secondary-emphasis me-1">
@@ -597,6 +643,7 @@ function ContasReceberDashboard() {
         .logo-img { max-width: 140px; max-height: 88px; background: #fff; border-radius: 8px; padding: 6px; }
         .bg-orange { background-color: #fd7e14 !important; }
         .bg-danger-soft { background-color: #ff6b6b !important; }
+        .status-border-critico { border-left: 4px solid #ee3637; }
       `}</style>
     </>
   );
