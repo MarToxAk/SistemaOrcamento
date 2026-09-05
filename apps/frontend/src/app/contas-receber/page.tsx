@@ -98,6 +98,13 @@ function getNfseBadge(nfseStatus: NfseStatusBoleto, totalTitulos: number): { cls
   return { cls: "badge bg-secondary", label: "NFS-e pendente", title: `0 de ${totalTitulos} título(s) com NFS-e` };
 }
 
+/** Traduz a classe de cor de um badge Bootstrap (bg-success/bg-warning/...) para a variante de pill --pa-*. */
+function paPillVariant(badgeClass: string): "success" | "warning" | "secondary" {
+  if (badgeClass.includes("bg-success")) return "success";
+  if (badgeClass.includes("bg-warning")) return "warning";
+  return "secondary";
+}
+
 function BoletosConsolidadosPanel() {
   const [boletos, setBoletos] = useState<BoletoDashboardItem[]>([]);
   const [boletosLoading, setBoletosLoading] = useState(true);
@@ -125,22 +132,22 @@ function BoletosConsolidadosPanel() {
   }, []);
 
   return (
-    <div className="card border-0 shadow-sm mb-4">
-      <div className="card-header d-flex justify-content-between align-items-center bg-transparent border-bottom">
+    <div className="pa-card">
+      <div className="pa-card-header">
         <div>
           <strong>Boletos a Receber</strong>
-          <span className="text-muted small ms-2">({boletos.length})</span>
+          <span className="pa-card-header-count">({boletos.length})</span>
         </div>
         <button
           type="button"
-          className="btn btn-sm btn-light border"
+          className="pa-icon-btn"
           onClick={() => void fetchBoletosDashboard()}
           title="Atualizar"
         >
           <i className="bi bi-arrow-clockwise" />
         </button>
       </div>
-      <div className="card-body" style={{ maxHeight: "320px", overflowY: "auto" }}>
+      <div className="pa-card-body pa-card-body-scroll">
         {boletosLoading ? (
           <div className="text-center py-4">
             <div className="spinner-border text-primary" role="status">
@@ -148,11 +155,11 @@ function BoletosConsolidadosPanel() {
             </div>
           </div>
         ) : boletosErro ? (
-          <div className="alert alert-danger d-flex justify-content-between align-items-center mb-0">
+          <div className="pa-empty pa-empty-erro">
             <span>{boletosErro}</span>
             <button
               type="button"
-              className="btn btn-sm btn-outline-danger"
+              className="pa-icon-btn"
               onClick={() => void fetchBoletosDashboard()}
               title="Atualizar"
             >
@@ -160,50 +167,64 @@ function BoletosConsolidadosPanel() {
             </button>
           </div>
         ) : boletos.length === 0 ? (
-          <div className="alert alert-info mb-0">
+          <div className="pa-empty">
             <strong>Nenhum boleto pendente</strong>
-            <div className="small mt-1">
+            <div className="small mt-1 text-muted">
               Todos os boletos emitidos já foram pagos, cancelados, ou não há boletos ativos no momento.
             </div>
           </div>
         ) : (
-          <div className="d-flex flex-column gap-2">
-            {boletos.map((boleto) => {
-              const nfseBadge = getNfseBadge(boleto.nfseStatus, boleto.titulos.length);
-              return (
-                <div
-                  key={boleto.id}
-                  className="d-flex align-items-center justify-content-between gap-2 border-bottom pb-2"
-                >
-                  <div className="d-flex align-items-center gap-2" style={{ minWidth: 0, flex: "1 1 auto" }}>
-                    <span className="badge bg-secondary-subtle text-secondary-emphasis">
-                      #{boleto.idclienteAthos}
-                    </span>
-                    <span className="text-truncate" title={boleto.nomeCliente}>
-                      {boleto.nomeCliente}
-                    </span>
-                  </div>
-                  <div className="text-nowrap fw-bold">{formatBRL(boleto.valor)}</div>
-                  <div className="text-nowrap small text-muted">
-                    {boleto.expireAt ?? "-"}
-                    {getVencimentoSuffix(boleto.diasParaVencer) && (
-                      <span className="ms-1">({getVencimentoSuffix(boleto.diasParaVencer)})</span>
-                    )}
-                  </div>
-                  <span className={getStatusBoletoBadgeClass(boleto.status)}>{boleto.status}</span>
-                  <span className={nfseBadge.cls} title={nfseBadge.title}>
-                    {nfseBadge.label}
-                  </span>
-                  <a
-                    href={`/contas-receber/${boleto.idclienteAthos}`}
-                    className="btn btn-sm btn-outline-primary text-nowrap"
-                  >
-                    Ver Cliente
-                  </a>
-                </div>
-              );
-            })}
-          </div>
+          <table className="pa-table">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Valor</th>
+                <th>Vencimento</th>
+                <th>Status</th>
+                <th>NFS-e</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {boletos.map((boleto) => {
+                const nfseBadge = getNfseBadge(boleto.nfseStatus, boleto.titulos.length);
+                const vencimentoSuffix = getVencimentoSuffix(boleto.diasParaVencer);
+                return (
+                  <tr key={boleto.id}>
+                    <td className="pa-td-cliente">
+                      <span className="pa-id-badge">#{boleto.idclienteAthos}</span>
+                      <span className="text-truncate" title={boleto.nomeCliente}>
+                        {boleto.nomeCliente}
+                      </span>
+                    </td>
+                    <td className="text-nowrap fw-bold">{formatBRL(boleto.valor)}</td>
+                    <td className="text-nowrap small">
+                      {boleto.expireAt ?? "-"}
+                      {vencimentoSuffix && <span className="text-muted ms-1">({vencimentoSuffix})</span>}
+                    </td>
+                    <td>
+                      <span className={`pa-pill pa-pill-${paPillVariant(getStatusBoletoBadgeClass(boleto.status))}`}>
+                        {boleto.status}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={`pa-pill pa-pill-${paPillVariant(nfseBadge.cls)}`}
+                        title={nfseBadge.title}
+                      >
+                        {nfseBadge.label}
+                      </span>
+                    </td>
+                    <td>
+                      <a href={`/contas-receber/${boleto.idclienteAthos}`} className="pa-link-btn text-nowrap">
+                        Ver Cliente
+                      </a>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
@@ -223,10 +244,10 @@ const STATUS_OPTIONS: { value: StatusFiltro; label: string; cls: string }[] = [
 type SortKey = "nome" | "total_devido" | "total_atrasado";
 type SortDir = "asc" | "desc";
 
-const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: "total_atrasado", label: "Valor Vencido" },
-  { value: "total_devido",   label: "Valor em Aberto" },
-  { value: "nome",           label: "Nome" },
+const CLIENTE_SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "nome",           label: "Cliente" },
+  { key: "total_devido",   label: "Total devido" },
+  { key: "total_atrasado", label: "Atrasado" },
 ];
 
 export default function ContasReceberPage() {
@@ -270,6 +291,15 @@ function ContasReceberDashboard() {
     void fetchDashboard(statusFiltro);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function handleSort(key: SortKey) {
+    if (sortBy === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortDir("desc");
+    }
+  }
 
   const buscaNormalizada = busca.trim().toLowerCase();
   const clientesFiltrados = buscaNormalizada
@@ -325,45 +355,24 @@ function ContasReceberDashboard() {
                 onChange={(e) => setBusca(e.target.value)}
               />
             </div>
-            <div className="d-flex align-items-center gap-2">
-              <small className="text-muted">Ordenar por</small>
-              <select
-                className="form-select form-select-sm"
-                style={{ width: "170px" }}
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortKey)}
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-                title="Alternar direção da ordenação"
-              >
-                <i className={`bi ${sortDir === "desc" ? "bi-sort-down" : "bi-sort-up"}`} />
-              </button>
+            <div className="pa-seg">
+              {STATUS_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`pa-seg-btn${statusFiltro === opt.value ? " pa-seg-btn-active" : ""}`}
+                  onClick={() => {
+                    setStatusFiltro(opt.value);
+                    void fetchDashboard(opt.value);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
-            {STATUS_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className={`btn btn-sm ${statusFiltro === opt.value ? opt.cls.replace("outline-", "") : opt.cls}`}
-                onClick={() => {
-                  setStatusFiltro(opt.value);
-                  void fetchDashboard(opt.value);
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
             <button
               type="button"
-              className="btn btn-sm btn-light border"
+              className="pa-icon-btn"
               onClick={() => void fetchDashboard(statusFiltro)}
               title="Atualizar"
             >
@@ -372,257 +381,403 @@ function ContasReceberDashboard() {
           </>
         }
       >
-        <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
-          <BoletosConsolidadosPanel />
+        <BoletosConsolidadosPanel />
 
-          {loading ? (
-            <div className="text-center py-5">
-              <div className="spinner-border text-primary" role="status">
-                <span className="visually-hidden">Carregando...</span>
-              </div>
+        {loading ? (
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Carregando...</span>
             </div>
-          ) : erro ? (
-            <div className="alert alert-danger">{erro}</div>
-          ) : (
-            <>
-              {/* SEÇÃO 1 — Fileira 1: resumo (D-02) */}
-              {summary && (
-                <div className="row g-3 mb-4">
-                  <div className="col-md-3">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-body">
-                        <p className="text-muted small mb-1">
-                          <i className="bi bi-cash-stack me-1" />Total a Receber
-                        </p>
-                        <h4 className="fw-bold text-primary">{formatBRL(summary.total_a_receber)}</h4>
-                      </div>
-                    </div>
+          </div>
+        ) : erro ? (
+          <div className="alert alert-danger">{erro}</div>
+        ) : (
+          <>
+            {/* SEÇÃO 1 — Fileira 1: resumo (D-02) */}
+            {summary && (
+              <div className="pa-stat-grid">
+                <div className="pa-card pa-stat">
+                  <div className="pa-stat-icon">
+                    <i className="bi bi-cash-stack" />
                   </div>
-                  <div className="col-md-3">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-body">
-                        <p className="text-muted small mb-1">
-                          <i className="bi bi-exclamation-triangle-fill me-1" />Inadimplência Ativa
-                        </p>
-                        <h4 className="fw-bold text-danger">{formatBRL(summary.total_atrasado)}</h4>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-body">
-                        <p className="text-muted small mb-1">
-                          <i className="bi bi-graph-up-arrow me-1" />Recebido no Mês
-                        </p>
-                        <h4 className="fw-bold text-success">{formatBRL(summary.total_recebido_mes)}</h4>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-body">
-                        <p className="text-muted small mb-1">
-                          <i className="bi bi-percent me-1" />Taxa de Inadimplência
-                        </p>
-                        <h4 className="fw-bold">{formatPercent(summary.taxa_inadimplencia)}</h4>
-                        <small className="text-muted">
-                          {summary.total_clientes_devedores} cliente(s) com título em aberto
-                        </small>
-                      </div>
-                    </div>
+                  <div className="pa-stat-body">
+                    <p className="pa-stat-label">Total a Receber</p>
+                    <h4 className="pa-stat-value pa-stat-value-accent">{formatBRL(summary.total_a_receber)}</h4>
                   </div>
                 </div>
-              )}
+                <div className="pa-card pa-stat">
+                  <div className="pa-stat-icon">
+                    <i className="bi bi-exclamation-triangle-fill" />
+                  </div>
+                  <div className="pa-stat-body">
+                    <p className="pa-stat-label">Inadimplência Ativa</p>
+                    <h4 className="pa-stat-value pa-stat-value-danger">{formatBRL(summary.total_atrasado)}</h4>
+                  </div>
+                </div>
+                <div className="pa-card pa-stat">
+                  <div className="pa-stat-icon">
+                    <i className="bi bi-graph-up-arrow" />
+                  </div>
+                  <div className="pa-stat-body">
+                    <p className="pa-stat-label">Recebido no Mês</p>
+                    <h4 className="pa-stat-value pa-stat-value-success">{formatBRL(summary.total_recebido_mes)}</h4>
+                  </div>
+                </div>
+                <div className="pa-card pa-stat">
+                  <div className="pa-stat-icon">
+                    <i className="bi bi-percent" />
+                  </div>
+                  <div className="pa-stat-body">
+                    <p className="pa-stat-label">Taxa de Inadimplência</p>
+                    <h4 className="pa-stat-value pa-stat-value-text">{formatPercent(summary.taxa_inadimplencia)}</h4>
+                    <small className="text-muted">
+                      {summary.total_clientes_devedores} cliente(s) com título em aberto
+                    </small>
+                  </div>
+                </div>
+              </div>
+            )}
 
-              {/* SEÇÃO 1B — Fileira 2: aging da inadimplência (D-07) */}
-              {summary && (
-                <div className="mb-4">
-                  <p className="small text-muted fw-bold mb-2">Inadimplência por faixa</p>
-                  <div className="row g-3">
-                    <div className="col-md-3">
-                      <div className="card border-0 shadow-sm h-100">
-                        <div className="card-body py-2">
-                          <div className="d-flex justify-content-between align-items-center mb-1">
-                            <span className="text-muted small">1-30 dias</span>
-                            <span className="badge bg-warning text-dark">1-30</span>
-                          </div>
-                          <div className="fw-bold">{formatBRL(summary.aging.d1_30)}</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="card border-0 shadow-sm h-100">
-                        <div className="card-body py-2">
-                          <div className="d-flex justify-content-between align-items-center mb-1">
-                            <span className="text-muted small">31-60 dias</span>
-                            <span className="badge bg-orange text-white">31-60</span>
-                          </div>
-                          <div className="fw-bold">{formatBRL(summary.aging.d31_60)}</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="card border-0 shadow-sm h-100">
-                        <div className="card-body py-2">
-                          <div className="d-flex justify-content-between align-items-center mb-1">
-                            <span className="text-muted small">61-90 dias</span>
-                            <span className="badge bg-danger-soft text-white">61-90</span>
-                          </div>
-                          <div className="fw-bold">{formatBRL(summary.aging.d61_90)}</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="card border-0 shadow-sm h-100">
-                        <div className="card-body py-2">
-                          <div className="d-flex justify-content-between align-items-center mb-1">
-                            <span className="text-muted small">Mais de 90 dias</span>
-                            <span className="badge bg-danger">90+</span>
-                          </div>
-                          <div className="fw-bold">{formatBRL(summary.aging.d90_mais)}</div>
-                        </div>
-                      </div>
-                    </div>
+            {/* SEÇÃO 1B — Fileira 2: aging da inadimplência (D-07) */}
+            {summary && (
+              <div className="mb-4">
+                <p className="small text-muted fw-bold mb-2">Inadimplência por faixa</p>
+                <div className="pa-aging-grid">
+                  <div className="pa-card pa-aging-card pa-aging-1">
+                    <span className="text-muted small">1-30 dias</span>
+                    <div className="fw-bold">{formatBRL(summary.aging.d1_30)}</div>
+                  </div>
+                  <div className="pa-card pa-aging-card pa-aging-2">
+                    <span className="text-muted small">31-60 dias</span>
+                    <div className="fw-bold">{formatBRL(summary.aging.d31_60)}</div>
+                  </div>
+                  <div className="pa-card pa-aging-card pa-aging-3">
+                    <span className="text-muted small">61-90 dias</span>
+                    <div className="fw-bold">{formatBRL(summary.aging.d61_90)}</div>
+                  </div>
+                  <div className="pa-card pa-aging-card pa-aging-4">
+                    <span className="text-muted small">Mais de 90 dias</span>
+                    <div className="fw-bold">{formatBRL(summary.aging.d90_mais)}</div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* SEÇÃO 1C — Fileira 3: próximos vencimentos (D-09) */}
-              {summary && (
-                <div className="mb-4">
-                  <p className="small text-muted fw-bold mb-2">A vencer</p>
-                  <div className="row g-3">
-                    <div className="col-md-4">
-                      <div className="card border-0 shadow-sm h-100">
-                        <div className="card-body py-2">
-                          <p className="text-muted small mb-1">
-                            <i className="bi bi-calendar-event me-1" />Próximos 7 dias
-                          </p>
-                          <div className="fw-bold">{formatBRL(summary.a_vencer.d7)}</div>
-                          <small className="text-muted">Acumulado a partir de hoje</small>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="card border-0 shadow-sm h-100">
-                        <div className="card-body py-2">
-                          <p className="text-muted small mb-1">
-                            <i className="bi bi-calendar-event me-1" />Próximos 15 dias
-                          </p>
-                          <div className="fw-bold">{formatBRL(summary.a_vencer.d15)}</div>
-                          <small className="text-muted">Acumulado a partir de hoje</small>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="card border-0 shadow-sm h-100">
-                        <div className="card-body py-2">
-                          <p className="text-muted small mb-1">
-                            <i className="bi bi-calendar-event me-1" />Próximos 30 dias
-                          </p>
-                          <div className="fw-bold">{formatBRL(summary.a_vencer.d30)}</div>
-                          <small className="text-muted">Acumulado a partir de hoje</small>
-                        </div>
-                      </div>
-                    </div>
+            {/* SEÇÃO 1C — Fileira 3: próximos vencimentos (D-09) */}
+            {summary && (
+              <div className="mb-4">
+                <p className="small text-muted fw-bold mb-2">A vencer</p>
+                <div className="pa-vencer-grid">
+                  <div className="pa-card pa-vencer-card">
+                    <p className="text-muted small mb-1">
+                      <i className="bi bi-calendar-event pa-icon-muted me-1" />Próximos 7 dias
+                    </p>
+                    <div className="fw-bold">{formatBRL(summary.a_vencer.d7)}</div>
+                    <small className="text-muted">Acumulado a partir de hoje</small>
+                  </div>
+                  <div className="pa-card pa-vencer-card">
+                    <p className="text-muted small mb-1">
+                      <i className="bi bi-calendar-event pa-icon-muted me-1" />Próximos 15 dias
+                    </p>
+                    <div className="fw-bold">{formatBRL(summary.a_vencer.d15)}</div>
+                    <small className="text-muted">Acumulado a partir de hoje</small>
+                  </div>
+                  <div className="pa-card pa-vencer-card">
+                    <p className="text-muted small mb-1">
+                      <i className="bi bi-calendar-event pa-icon-muted me-1" />Próximos 30 dias
+                    </p>
+                    <div className="fw-bold">{formatBRL(summary.a_vencer.d30)}</div>
+                    <small className="text-muted">Acumulado a partir de hoje</small>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* SEÇÃO 2 — Grid de Cards por cliente */}
-              {clientes.length === 0 ? (
-                <div className="alert alert-info">
-                  <i className="bi bi-info-circle me-2" />Nenhum cliente com contas em aberto.
-                </div>
-              ) : clientesFiltrados.length === 0 ? (
-                <div className="alert alert-info">
-                  <i className="bi bi-info-circle me-2" />Nenhum cliente encontrado para &quot;{busca}&quot;.
-                </div>
-              ) : (
-                <div className="row g-3">
-                  {clientesOrdenados.map((cliente) => {
-                    const pct =
-                      cliente.limitecredito > 0
-                        ? Math.min(100, Math.round((cliente.total_devido / cliente.limitecredito) * 100))
-                        : 0;
-                    const progressBarClass =
-                      pct >= 80 ? "progress-bar bg-danger" : pct >= 50 ? "progress-bar bg-warning" : "progress-bar bg-success";
-                    const destaqueCritico =
-                      cliente.maior_atraso_dias !== null && cliente.maior_atraso_dias > 90
-                        ? " status-border-critico"
-                        : "";
+            {/* SEÇÃO 2 — Tabela de clientes */}
+            {clientes.length === 0 ? (
+              <div className="alert alert-info">
+                <i className="bi bi-info-circle me-2" />Nenhum cliente com contas em aberto.
+              </div>
+            ) : clientesFiltrados.length === 0 ? (
+              <div className="alert alert-info">
+                <i className="bi bi-info-circle me-2" />Nenhum cliente encontrado para &quot;{busca}&quot;.
+              </div>
+            ) : (
+              <div className="pa-card">
+                <div className="pa-card-body pa-card-body-flush">
+                  <table className="pa-table">
+                    <thead>
+                      <tr>
+                        {CLIENTE_SORT_COLUMNS.map((col) => (
+                          <th key={col.key}>
+                            <button type="button" className="pa-th-sort" onClick={() => handleSort(col.key)}>
+                              {col.label}
+                              {sortBy === col.key && (
+                                <i className={`bi ${sortDir === "desc" ? "bi-sort-down" : "bi-sort-up"} ms-1`} />
+                              )}
+                            </button>
+                          </th>
+                        ))}
+                        <th>Títulos</th>
+                        <th>Limite de crédito</th>
+                        <th>Atraso</th>
+                        <th>Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientesOrdenados.map((cliente) => {
+                        const pct =
+                          cliente.limitecredito > 0
+                            ? Math.min(100, Math.round((cliente.total_devido / cliente.limitecredito) * 100))
+                            : 0;
+                        const progressBarClass =
+                          pct >= 80 ? "pa-progress-bar-danger" : pct >= 50 ? "pa-progress-bar-warning" : "pa-progress-bar-success";
+                        const critico = cliente.maior_atraso_dias !== null && cliente.maior_atraso_dias > 90;
 
-                    return (
-                      <div key={cliente.idcliente} className="col-md-6 col-lg-4">
-                        <div className={`card h-100 border-0 shadow-sm${destaqueCritico}`}>
-                          <div className="card-header d-flex justify-content-between align-items-center bg-transparent border-bottom">
-                            <div className="text-truncate" style={{ maxWidth: "65%" }} title={cliente.nome_cliente}>
-                              <span className="badge bg-secondary-subtle text-secondary-emphasis me-1">
-                                #{cliente.idcliente}
+                        return (
+                          <tr key={cliente.idcliente} className={critico ? "pa-row-critico" : ""}>
+                            <td className="pa-td-cliente">
+                              <span className="pa-id-badge">#{cliente.idcliente}</span>
+                              <span className="text-truncate" title={cliente.nome_cliente}>
+                                {cliente.nome_cliente}
                               </span>
-                              <strong>{cliente.nome_cliente}</strong>
-                            </div>
-                            <span className={getBadgeClass(cliente.maior_atraso_dias)}>
-                              {getBadgeLabel(cliente.maior_atraso_dias)}
-                            </span>
-                          </div>
-                          <div className="card-body pb-2">
-                            <div className="d-flex justify-content-between mb-1">
-                              <span className="text-muted small">Total devido</span>
-                              <span className="fw-semibold">{formatBRL(cliente.total_devido)}</span>
-                            </div>
-                            {cliente.total_atrasado > 0 && (
-                              <div className="d-flex justify-content-between mb-1">
-                                <span className="text-muted small">Atrasado</span>
-                                <span className="text-danger fw-semibold">{formatBRL(cliente.total_atrasado)}</span>
-                              </div>
-                            )}
-                            <small className="text-muted">
-                              {cliente.titulos_pendentes} título(s) em aberto
-                            </small>
-                            {cliente.limitecredito > 0 && (
-                              <div className="mt-2">
-                                <div className="d-flex justify-content-between small text-muted mb-1">
-                                  <span>Limite de crédito</span>
-                                  <span>{formatBRL(cliente.limitecredito)}</span>
-                                </div>
-                                <div className="progress" style={{ height: "6px" }}>
-                                  <div
-                                    className={progressBarClass}
-                                    role="progressbar"
-                                    style={{ width: `${pct}%` }}
-                                    aria-valuenow={pct}
-                                    aria-valuemin={0}
-                                    aria-valuemax={100}
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          <div className="card-footer bg-transparent border-top">
-                            <a
-                              href={`/contas-receber/${cliente.idcliente}`}
-                              className="btn btn-sm btn-outline-primary"
-                            >
-                              <i className="bi bi-person-lines-fill me-1" />Ver Detalhe
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                            </td>
+                            <td className="fw-semibold text-nowrap">{formatBRL(cliente.total_devido)}</td>
+                            <td className="text-nowrap">
+                              {cliente.total_atrasado > 0 ? (
+                                <span style={{ color: "var(--pa-danger)" }} className="fw-semibold">
+                                  {formatBRL(cliente.total_atrasado)}
+                                </span>
+                              ) : (
+                                <span className="text-muted">—</span>
+                              )}
+                            </td>
+                            <td className="text-muted small">{cliente.titulos_pendentes}</td>
+                            <td style={{ minWidth: "160px" }}>
+                              {cliente.limitecredito > 0 ? (
+                                <>
+                                  <div className="d-flex justify-content-between small text-muted mb-1">
+                                    <span>{formatBRL(cliente.limitecredito)}</span>
+                                    <span>{pct}%</span>
+                                  </div>
+                                  <div className="pa-progress">
+                                    <div
+                                      className={`pa-progress-bar ${progressBarClass}`}
+                                      role="progressbar"
+                                      style={{ width: `${pct}%` }}
+                                      aria-valuenow={pct}
+                                      aria-valuemin={0}
+                                      aria-valuemax={100}
+                                    />
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-muted small">—</span>
+                              )}
+                            </td>
+                            <td>
+                              <span className={getBadgeClass(cliente.maior_atraso_dias)}>
+                                {getBadgeLabel(cliente.maior_atraso_dias)}
+                              </span>
+                            </td>
+                            <td>
+                              <a href={`/contas-receber/${cliente.idcliente}`} className="pa-link-btn text-nowrap">
+                                Ver Detalhe
+                              </a>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-            </>
-          )}
-        </div>
+              </div>
+            )}
+          </>
+        )}
       </AdminShell>
 
       <style>{`
-        .orcamento-section { border-radius: 8px; }
+        .pa-card {
+          background: var(--pa-surface);
+          border: 1px solid var(--pa-border);
+          border-radius: 10px;
+          box-shadow: 0 1px 3px rgba(16, 24, 40, .06);
+          margin-bottom: 1.5rem;
+        }
+        .pa-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0.9rem 1.1rem;
+          border-bottom: 1px solid var(--pa-border);
+        }
+        .pa-card-header-count { color: var(--pa-text-muted); font-size: 0.85rem; margin-left: 0.4rem; }
+        .pa-card-body { padding: 1.1rem; }
+        .pa-card-body-scroll { max-height: 320px; overflow-y: auto; }
+        .pa-card-body-flush { padding: 0; }
+
+        .pa-icon-btn {
+          border: 1px solid var(--pa-border);
+          background: var(--pa-surface);
+          color: var(--pa-text-muted);
+          border-radius: 6px;
+          width: 30px;
+          height: 30px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .pa-icon-btn:hover { background: var(--pa-bg); }
+        .pa-icon-muted { color: var(--pa-text-muted); }
+
+        .pa-empty {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          padding: 1rem;
+          border-radius: 8px;
+          background: var(--pa-bg);
+          color: var(--pa-text);
+        }
+        .pa-empty-erro { color: var(--pa-danger); }
+
+        .pa-id-badge {
+          display: inline-block;
+          font-size: 0.72rem;
+          font-weight: 600;
+          padding: 0.1rem 0.4rem;
+          border-radius: 4px;
+          background: var(--pa-bg);
+          color: var(--pa-text-muted);
+          margin-right: 0.4rem;
+        }
+
+        .pa-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        .pa-table thead th {
+          position: sticky;
+          top: 0;
+          background: var(--pa-surface);
+          color: var(--pa-text-muted);
+          text-align: left;
+          font-weight: 600;
+          font-size: 0.76rem;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+          padding: 0.65rem 1rem;
+          border-bottom: 1px solid var(--pa-border);
+          white-space: nowrap;
+          z-index: 1;
+        }
+        .pa-table tbody td {
+          padding: 0.65rem 1rem;
+          border-bottom: 1px solid var(--pa-border);
+          vertical-align: middle;
+        }
+        .pa-table tbody tr:last-child td { border-bottom: none; }
+        .pa-table tbody tr:hover { background: var(--pa-bg); }
+        .pa-td-cliente { max-width: 260px; }
+        .pa-td-cliente .text-truncate { display: inline-block; max-width: 180px; vertical-align: middle; }
+
+        .pa-th-sort {
+          background: none;
+          border: none;
+          padding: 0;
+          font: inherit;
+          text-transform: inherit;
+          letter-spacing: inherit;
+          color: inherit;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+        }
+        .pa-th-sort:hover { color: var(--pa-accent); }
+
+        .pa-pill {
+          display: inline-block;
+          padding: 0.2rem 0.55rem;
+          border-radius: 999px;
+          font-size: 0.74rem;
+          font-weight: 600;
+        }
+        .pa-pill-success { background: rgba(30, 181, 100, 0.14); color: var(--pa-success); }
+        .pa-pill-warning { background: rgba(247, 166, 0, 0.16); color: #8a5a00; }
+        .pa-pill-secondary { background: var(--pa-bg); color: var(--pa-text-muted); }
+
+        .pa-row-critico td:first-child { border-left: 4px solid var(--pa-danger); }
+        .pa-row-critico { background: rgba(229, 72, 77, 0.05); }
+
+        .pa-link-btn {
+          display: inline-block;
+          padding: 0.25rem 0.65rem;
+          border-radius: 6px;
+          border: 1px solid var(--pa-accent);
+          color: var(--pa-accent);
+          font-size: 0.8rem;
+          text-decoration: none;
+        }
+        .pa-link-btn:hover { background: var(--pa-accent); color: #fff; }
+
+        .pa-seg { display: inline-flex; border: 1px solid var(--pa-border); border-radius: 8px; overflow: hidden; }
+        .pa-seg-btn {
+          background: var(--pa-surface);
+          color: var(--pa-text-muted);
+          border: none;
+          border-right: 1px solid var(--pa-border);
+          padding: 0.35rem 0.7rem;
+          font-size: 0.8rem;
+        }
+        .pa-seg-btn:last-child { border-right: none; }
+        .pa-seg-btn:hover { background: var(--pa-bg); }
+        .pa-seg-btn-active { background: var(--pa-accent); color: #fff; }
+
+        .pa-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .pa-stat { display: flex; align-items: flex-start; gap: 0.85rem; padding: 1.1rem; }
+        .pa-stat-icon {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+          border-radius: 10px;
+          background: var(--pa-accent-soft);
+          color: var(--pa-accent);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.15rem;
+        }
+        .pa-stat-body { min-width: 0; }
+        .pa-stat-label { color: var(--pa-text-muted); font-size: 0.82rem; margin-bottom: 0.15rem; }
+        .pa-stat-value { font-weight: 700; margin: 0; font-size: 1.3rem; }
+        .pa-stat-value-accent { color: var(--pa-accent); }
+        .pa-stat-value-danger { color: var(--pa-danger); }
+        .pa-stat-value-success { color: var(--pa-success); }
+        .pa-stat-value-text { color: var(--pa-text); }
+
+        .pa-aging-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+        .pa-aging-card { padding: 0.85rem 1rem; border-left: 4px solid transparent; }
+        .pa-aging-1 { border-left-color: var(--pa-warning); }
+        .pa-aging-2 { border-left-color: var(--pa-orange); }
+        .pa-aging-3 { border-left-color: var(--pa-danger-soft); }
+        .pa-aging-4 { border-left-color: var(--pa-danger); }
+
+        .pa-vencer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+        .pa-vencer-card { padding: 0.85rem 1rem; }
+
+        .pa-progress { height: 6px; border-radius: 4px; background: var(--pa-bg); overflow: hidden; }
+        .pa-progress-bar { height: 100%; border-radius: 4px; }
+        .pa-progress-bar-success { background: var(--pa-success); }
+        .pa-progress-bar-warning { background: var(--pa-warning); }
+        .pa-progress-bar-danger { background: var(--pa-danger); }
+
         .bg-orange { background-color: #fd7e14 !important; }
         .bg-danger-soft { background-color: #ff6b6b !important; }
-        .status-border-critico { border-left: 4px solid #ee3637; }
+
+        @media (max-width: 992px) {
+          .pa-stat-grid { grid-template-columns: repeat(2, 1fr); }
+          .pa-aging-grid { grid-template-columns: repeat(2, 1fr); }
+          .pa-vencer-grid { grid-template-columns: 1fr; }
+        }
       `}</style>
     </>
   );
