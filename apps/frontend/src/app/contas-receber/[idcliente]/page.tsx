@@ -3,7 +3,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { safeHttpUrl } from "@/lib/safe-url";
-import { useEmpresa } from "@/lib/empresa";
+import AdminShell from "../admin-shell";
 
 interface NfseEmitidaCliente {
   id: number;
@@ -135,7 +135,6 @@ export default function ClienteDetalhePage({
   params: Promise<{ idcliente: string }>;
 }) {
   const { idcliente } = use(params);
-  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
 
   const [dadosCliente, setDadosCliente] = useState<DadosCliente | null>(null);
   const [titulos, setTitulos] = useState<TituloReceber[]>([]);
@@ -847,33 +846,17 @@ export default function ClienteDetalhePage({
         href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"
       />
 
-      <div className="container my-4">
-        {/* Header */}
-        <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top">
-          <div className="d-flex align-items-center gap-3 flex-wrap">
-            {EMPRESA_LOGO_URL && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={EMPRESA_LOGO_URL}
-                alt={EMPRESA_NOME}
-                className="logo-img"
-              />
-            )}
-            <div>
-              <h3 className="mb-1">Detalhe do Cliente</h3>
-              <small className="text-muted">Dados cadastrais e títulos em aberto</small>
-            </div>
-          </div>
-          <div>
-            <a href="/contas-receber" className="btn btn-sm btn-outline-secondary me-3">
-              <i className="bi bi-arrow-left me-1" />Contas a Receber
-            </a>
-          </div>
-        </div>
-
-        {/* Main section */}
-        <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
-          {/* Dados do cliente */}
+      <AdminShell
+        activeHref="/contas-receber"
+        title="Detalhe do Cliente"
+        subtitle={dadosCliente ? dadosCliente.nome_cliente : `Cliente #${idcliente}`}
+        actions={
+          <a href="/contas-receber" className="pa-link-btn text-nowrap">
+            <i className="bi bi-arrow-left me-1" />Contas a Receber
+          </a>
+        }
+      >
+        {/* Dados do cliente */}
           <div className="mb-4">
             <h5 className="fw-semibold mb-3">
               <i className="bi bi-person-circle me-2 text-primary" />Dados Cadastrais
@@ -1369,12 +1352,8 @@ export default function ClienteDetalhePage({
               </div>
             )}
           </div>
-        </div>
-      </div>
 
-      {/* ─── SEÇÃO NFS-e Emitidas ─── */}
-      <div className="container mt-3">
-        <hr />
+        {/* ─── SEÇÃO NFS-e Emitidas ─── */}
         <div className="mt-2">
           <button
             className="btn btn-link p-0 text-decoration-none fw-semibold text-dark"
@@ -1476,11 +1455,8 @@ export default function ClienteDetalhePage({
             </div>
           )}
         </div>
-      </div>
 
-      {/* ─── SEÇÃO Notas Fiscais Athos ─── */}
-      <div className="container mt-2 mb-3">
-        <hr />
+        {/* ─── SEÇÃO Notas Fiscais Athos ─── */}
         <div className="mt-2">
           <button
             className="btn btn-link p-0 text-decoration-none fw-semibold text-dark"
@@ -1592,10 +1568,9 @@ export default function ClienteDetalhePage({
             </div>
           )}
         </div>
-      </div>
 
-      {/* Barra de ações — visível SOMENTE quando há seleção */}
-      {selectedIds.size > 0 && (
+        {/* Barra de ações — visível SOMENTE quando há seleção */}
+        {selectedIds.size > 0 && (
         <div
           style={{
             position: "sticky",
@@ -1637,6 +1612,7 @@ export default function ClienteDetalhePage({
           </div>
         </div>
       )}
+      </AdminShell>
 
       {/* Modal boleto — 4 estados */}
       {boletoModalState !== "idle" && (
@@ -2430,15 +2406,6 @@ export default function ClienteDetalhePage({
       )}
 
       <style>{`
-        body { background: #f7f1e3; font-size: 1.02rem; }
-        .orcamento-header {
-          background: linear-gradient(135deg, #c5f2e8 0%, #cbe1f9 25%, #e7d8f9 50%, #f9e7f5 75%, #f0cacb 100%);
-          color: #222;
-          border-radius: 8px 8px 0 0;
-        }
-        .orcamento-section { border-radius: 0 0 8px 8px; }
-        .logo-img { max-width: 140px; max-height: 88px; background: #fff; border-radius: 8px; padding: 6px; }
-        .bg-orange { background-color: #fd7e14 !important; }
         .boleto-modal-backdrop {
           position: fixed;
           inset: 0;
