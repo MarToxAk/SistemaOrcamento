@@ -2001,7 +2001,16 @@ export class AthosService {
           clientesComTituloAberto > 0
             ? Number(((clientesInadimplentes / clientesComTituloAberto) * 100).toFixed(2))
             : 0;
+      } catch (error) {
+        this.logger.warn(
+          `buscarDashboardContasReceber: falha ao calcular aging/a_vencer/taxa_inadimplencia — retornando zeros. Causa: ${String(error)}`,
+        );
+        taxa_inadimplencia = 0;
+        aging = { d1_30: 0, d31_60: 0, d61_90: 0, d90_mais: 0 };
+        a_vencer = { d7: 0, d15: 0, d30: 0 };
+      }
 
+      try {
         const recebidoMesResult = await client.query(`
           SELECT COALESCE(SUM(cre.valorpago), 0) AS total_recebido_mes
           FROM conta_recebida cre
@@ -2013,12 +2022,9 @@ export class AthosService {
         );
       } catch (error) {
         this.logger.warn(
-          `buscarDashboardContasReceber: falha ao calcular agregados fiscais (aging/a_vencer/recebido_mes/taxa_inadimplencia) — retornando zeros. Causa: ${String(error)}`,
+          `buscarDashboardContasReceber: falha ao calcular recebido no mes — retornando zero. Causa: ${String(error)}`,
         );
         total_recebido_mes = 0;
-        taxa_inadimplencia = 0;
-        aging = { d1_30: 0, d31_60: 0, d61_90: 0, d90_mais: 0 };
-        a_vencer = { d7: 0, d15: 0, d30: 0 };
       }
 
       const summary = {

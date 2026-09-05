@@ -200,11 +200,12 @@ describe("AthosService - buscarDashboardContasReceber (agregados fiscais D-02, D
     expect(client.release).toHaveBeenCalledTimes(1);
   });
 
-  it("degrada para zeros quando a consulta de agregados falha", async () => {
+  it("degrada aging/a_vencer/taxa para zeros quando a consulta de agregados falha, sem afetar recebido_mes", async () => {
     const { client } = setupClient();
     (client.query as jest.Mock)
       .mockResolvedValueOnce({ rows: [CLIENTE_ROW] })
-      .mockRejectedValueOnce(new Error("falha simulada na consulta de agregados"));
+      .mockRejectedValueOnce(new Error("falha simulada na consulta de agregados"))
+      .mockResolvedValueOnce({ rows: [{ total_recebido_mes: 999 }] });
 
     const result = await service.buscarDashboardContasReceber();
 
@@ -214,13 +215,48 @@ describe("AthosService - buscarDashboardContasReceber (agregados fiscais D-02, D
     expect(result.summary.total_atrasado).toBe(200);
     expect(result.summary.total_clientes_devedores).toBe(1);
 
-    // campos novos vem zerados
-    expect(result.summary.total_recebido_mes).toBe(0);
+    // campos da consulta que falhou vem zerados
     expect(result.summary.taxa_inadimplencia).toBe(0);
     expect(result.summary.aging).toEqual({ d1_30: 0, d31_60: 0, d61_90: 0, d90_mais: 0 });
     expect(result.summary.a_vencer).toEqual({ d7: 0, d15: 0, d30: 0 });
 
-    // a terceira consulta (recebido no mes) nunca roda, pois a segunda ja falhou
-    expect(client.query).toHaveBeenCalledTimes(2);
+    // a terceira consulta (recebido no mes) roda de forma independente e seu
+    // resultado NAO e descartado pela falha da segunda consulta (CR-01)
+    expect(result.summary.total_recebido_mes).toBe(999);
+    expect(client.query).toHaveBeenCalledTimes(3);
+  });
+
+  it("preserva aging/a_vencer/taxa validos quando apenas a consulta de recebido_mes falha (CR-01)", async () => {
+    const { client } = setupClient();
+    (client.query as jest.Mock)
+      .mockResolvedValueOnce({ rows: [CLIENTE_ROW] })
+      .mockResolvedValueOnce({
+        rows: [
+          agregadosRow({
+            aging_1_30: 100,
+            aging_31_60: 200,
+            aging_61_90: 300,
+            aging_90_mais: 400,
+            a_vencer_7d: 10,
+            a_vencer_15d: 25,
+            a_vencer_30d: 40,
+            clientes_inadimplentes: 3,
+            clientes_com_titulo_aberto: 8,
+          }),
+        ],
+      })
+      .mockRejectedValueOnce(new Error("falha simulada na consulta de recebido no mes"));
+
+    const result = await service.buscarDashboardContasReceber();
+
+    // os agregados fiscais calculados com sucesso NAO sao descartados pela
+    // falha da consulta independente de recebido_mes
+    expect(result.summary.aging).toEqual({ d1_30: 100, d31_60: 200, d61_90: 300, d90_mais: 400 });
+    expect(result.summary.a_vencer).toEqual({ d7: 10, d15: 25, d30: 40 });
+    expect(result.summary.taxa_inadimplencia).toBe(37.5);
+
+    // apenas o campo cuja consulta falhou degrada para zero
+    expect(result.summary.total_recebido_mes).toBe(0);
+    expect(client.query).toHaveBeenCalledTimes(3);
   });
 });
