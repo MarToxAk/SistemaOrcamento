@@ -857,10 +857,11 @@ export default function ClienteDetalhePage({
         }
       >
         {/* Dados do cliente */}
-          <div className="mb-4">
-            <h5 className="fw-semibold mb-3">
-              <i className="bi bi-person-circle me-2 text-primary" />Dados Cadastrais
-            </h5>
+        <div className="pa-card">
+          <div className="pa-card-header">
+            <strong><i className="bi bi-person-circle me-2 text-primary" />Dados Cadastrais</strong>
+          </div>
+          <div className="pa-card-body">
             {loadingCliente ? (
               <div className="text-center py-3">
                 <div className="spinner-border spinner-border-sm text-primary" role="status">
@@ -868,47 +869,45 @@ export default function ClienteDetalhePage({
                 </div>
               </div>
             ) : erroCliente ? (
-              <div className="alert alert-danger">{erroCliente}</div>
+              <div className="pa-empty pa-empty-erro">{erroCliente}</div>
             ) : dadosCliente ? (
-              <div className="card border-0 shadow-sm">
-                <div className="card-body">
-                  <div className="row g-2">
-                    <div className="col-md-6">
-                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span className="text-muted small">Nome</span>
-                        <strong className="small text-end">{dadosCliente.nome_cliente}</strong>
-                      </div>
-                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span className="text-muted small">Telefone</span>
-                        <span className="small">{dadosCliente.telefone_completo ?? "—"}</span>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                        <span className="text-muted small">E-mail</span>
-                        <span className="small">{dadosCliente.emailcliente ?? "—"}</span>
-                      </div>
-                      <div className="d-flex justify-content-between pb-2">
-                        <span className="text-muted small">Limite de Crédito</span>
-                        <span className="small fw-semibold">
-                          {formatBRL(dadosCliente.limitecredito)}
-                          {dadosCliente.bloqueaprazo === "S" && (
-                            <span className="badge bg-danger ms-2">Bloqueado</span>
-                          )}
-                        </span>
-                      </div>
-                    </div>
+              <div className="row g-2">
+                <div className="col-md-6">
+                  <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span className="text-muted small">Nome</span>
+                    <strong className="small text-end">{dadosCliente.nome_cliente}</strong>
+                  </div>
+                  <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span className="text-muted small">Telefone</span>
+                    <span className="small">{dadosCliente.telefone_completo ?? "—"}</span>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span className="text-muted small">E-mail</span>
+                    <span className="small">{dadosCliente.emailcliente ?? "—"}</span>
+                  </div>
+                  <div className="d-flex justify-content-between pb-2">
+                    <span className="text-muted small">Limite de Crédito</span>
+                    <span className="small fw-semibold">
+                      {formatBRL(dadosCliente.limitecredito)}
+                      {dadosCliente.bloqueaprazo === "S" && (
+                        <span className="pa-pill pa-pill-danger ms-2">Bloqueado</span>
+                      )}
+                    </span>
                   </div>
                 </div>
               </div>
             ) : null}
           </div>
+        </div>
 
-          {/* Tabela de títulos */}
-          <div>
-            <h5 className="fw-semibold mb-3">
-              <i className="bi bi-receipt me-2 text-primary" />Títulos em Aberto
-            </h5>
+        {/* Tabela de títulos */}
+        <div className="pa-card">
+          <div className="pa-card-header">
+            <strong><i className="bi bi-receipt me-2 text-primary" />Títulos em Aberto</strong>
+          </div>
+          <div className="pa-card-body">
             {loadingTitulos ? (
               <div className="text-center py-3">
                 <div className="spinner-border spinner-border-sm text-primary" role="status">
@@ -932,18 +931,20 @@ export default function ClienteDetalhePage({
                     {[...boletoGrupos.values()].map(({ boleto, titulos: tsBoleto }) => {
                       const totalBoleto = tsBoleto.reduce((s, t) => s + t.valor, 0);
                       const isPago = boleto.status === "pago";
-                      const isStatus = isPago ? "bg-success" : boleto.status === "cancelado" ? "bg-secondary" : "bg-warning text-dark";
+                      const pillVariante = isPago ? "success" : boleto.status === "cancelado" ? "secondary" : "warning";
                       return (
-                        <div key={boleto.cobrancaId} className="border rounded mb-2 overflow-hidden">
+                        <div key={boleto.cobrancaId} className="pa-card mb-2">
                           {/* Cabeçalho do grupo */}
-                          <div className={`d-flex align-items-center gap-2 px-3 py-2 ${isPago ? "bg-success bg-opacity-10" : "bg-warning bg-opacity-10"}`}>
-                            <span className={`badge ${isStatus}`}>
-                              <i className="bi bi-receipt me-1" />Boleto #{boleto.cobrancaId} — {boleto.status}
-                            </span>
-                            <span className="small fw-semibold">{formatBRL(totalBoleto)}</span>
-                            <span className="small text-muted">({tsBoleto.length} título{tsBoleto.length > 1 ? "s" : ""})</span>
-                            <StatusEmailBadge ultimoEmail={boleto.ultimoEmail} />
-                            <div className="ms-auto d-flex gap-2">
+                          <div className="pa-card-header flex-wrap gap-2">
+                            <div className="d-flex align-items-center gap-2 flex-wrap">
+                              <span className={`pa-pill pa-pill-${pillVariante}`}>
+                                <i className="bi bi-receipt me-1" />Boleto #{boleto.cobrancaId} — {boleto.status}
+                              </span>
+                              <span className="small fw-semibold">{formatBRL(totalBoleto)}</span>
+                              <span className="small text-muted">({tsBoleto.length} título{tsBoleto.length > 1 ? "s" : ""})</span>
+                              <StatusEmailBadge ultimoEmail={boleto.ultimoEmail} />
+                            </div>
+                            <div className="d-flex gap-2">
                               {boleto.linkBoleto && (
                                 <a href={`/api/cobranca/boleto/${boleto.cobrancaId}/pdf`}
                                   download={boleto.nomeArquivo ?? undefined}
@@ -979,47 +980,49 @@ export default function ClienteDetalhePage({
                             </div>
                           </div>
                           {/* Sub-tabela de títulos deste boleto */}
-                          <table className="table table-sm mb-0">
-                            <thead className="table-light">
-                              <tr>
-                                <th className="small text-muted fw-normal">Título</th>
-                                <th className="small text-muted fw-normal">Vencimento</th>
-                                <th className="small text-muted fw-normal">Valor</th>
-                                <th className="small text-muted fw-normal">NF</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {tsBoleto.map((t) => {
-                                const vencido = new Date(t.datavencimento) < new Date();
-                                return (
-                                  <tr key={t.idcontareceber}>
-                                    <td className="small">{t.numerotitulo ?? "—"}</td>
-                                    <td className={`small${vencido ? " text-danger" : ""}`}>{formatDate(t.datavencimento)}</td>
-                                    <td className="small fw-semibold">{formatBRL(t.valor)}</td>
-                                    <td>
-                                      {t.tipoNf ? (
-                                        <span className="d-inline-flex align-items-center gap-1">
-                                          <span className={`badge ${badgeClassName(t.tipoNf)}`}>
-                                            {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
+                          <div className="pa-card-body-flush">
+                            <table className="pa-table">
+                              <thead>
+                                <tr>
+                                  <th>Título</th>
+                                  <th>Vencimento</th>
+                                  <th>Valor</th>
+                                  <th>NF</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {tsBoleto.map((t) => {
+                                  const vencido = new Date(t.datavencimento) < new Date();
+                                  return (
+                                    <tr key={t.idcontareceber}>
+                                      <td className="small">{t.numerotitulo ?? "—"}</td>
+                                      <td className={`small${vencido ? " text-danger" : ""}`}>{formatDate(t.datavencimento)}</td>
+                                      <td className="small fw-semibold">{formatBRL(t.valor)}</td>
+                                      <td>
+                                        {t.tipoNf ? (
+                                          <span className="d-inline-flex align-items-center gap-1">
+                                            <span className={`badge ${badgeClassName(t.tipoNf)}`}>
+                                              {t.tipoNf}{t.numeroNf ? ` #${t.numeroNf}` : ""}
+                                            </span>
+                                            {t.nfseAtivo?.nfseEmitidaId && (
+                                              <a
+                                                href={`/api/cobranca/nfse/${t.nfseAtivo.nfseEmitidaId}/pdf`}
+                                                className="btn btn-link btn-sm p-0 text-success"
+                                                title="Baixar PDF da NFS-e"
+                                                style={{ lineHeight: 1 }}
+                                              >
+                                                <i className="bi bi-file-earmark-arrow-down" />
+                                              </a>
+                                            )}
                                           </span>
-                                          {t.nfseAtivo?.nfseEmitidaId && (
-                                            <a
-                                              href={`/api/cobranca/nfse/${t.nfseAtivo.nfseEmitidaId}/pdf`}
-                                              className="btn btn-link btn-sm p-0 text-success"
-                                              title="Baixar PDF da NFS-e"
-                                              style={{ lineHeight: 1 }}
-                                            >
-                                              <i className="bi bi-file-earmark-arrow-down" />
-                                            </a>
-                                          )}
-                                        </span>
-                                      ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                                        ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       );
                     })}
@@ -1028,14 +1031,14 @@ export default function ClienteDetalhePage({
 
                 {/* ─── TÍTULOS LIVRES (sem boleto) ─── */}
                 {titulosLivres.length === 0 && boletoGrupos.size > 0 ? null : (
-                  <div className="table-responsive">
+                  <div>
                     {boletoGrupos.size > 0 && (
                       <h6 className="text-muted small mb-2">
                         <i className="bi bi-list-check me-1" />Títulos disponíveis
                       </h6>
                     )}
-                    <table className="table table-sm table-hover table-bordered">
-                      <thead className="table-light">
+                    <table className="pa-table">
+                      <thead>
                         <tr>
                           <th style={{ width: "40px" }}>
                             <input type="checkbox" className="form-check-input"
@@ -1130,57 +1133,62 @@ export default function ClienteDetalhePage({
               </div>
             )}
           </div>
+        </div>
 
-          {/* Cards de resumo do histórico */}
+        {/* Cards de resumo do histórico */}
           {!loadingHistorico && !erroHistorico && historico && (
-            <div className="row g-3 mt-1 mb-1">
-              <div className="col-md-4">
-                <div className="card border-0 shadow-sm h-100">
-                  <div className="card-body">
-                    <div className="text-muted small mb-1">Total Já Pago</div>
-                    <div className="fs-5 fw-semibold">{formatBRL(historico.totalPago)}</div>
-                    <div className="small text-muted">{historico.titulosPagos} título(s) quitado(s)</div>
-                  </div>
+            <div className="pa-stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+              <div className="pa-card pa-stat">
+                <div className="pa-stat-icon">
+                  <i className="bi bi-cash-coin" />
+                </div>
+                <div className="pa-stat-body">
+                  <p className="pa-stat-label">Total Já Pago</p>
+                  <h4 className="pa-stat-value pa-stat-value-success">{formatBRL(historico.totalPago)}</h4>
+                  <small className="text-muted">{historico.titulosPagos} título(s) quitado(s)</small>
                 </div>
               </div>
-              <div className="col-md-4">
-                <div className="card border-0 shadow-sm h-100">
-                  <div className="card-body">
-                    <div className="text-muted small mb-1">Mês de Maior Gasto</div>
-                    {historico.mesMaiorGasto ? (
-                      <>
-                        <div className="fs-5 fw-semibold">{formatMesAno(historico.mesMaiorGasto.mes)}</div>
-                        <div className="small text-muted">{formatBRL(historico.mesMaiorGasto.total)} — por data de pagamento</div>
-                      </>
-                    ) : (
-                      <div className="fs-5 fw-semibold">—</div>
-                    )}
-                  </div>
+              <div className="pa-card pa-stat">
+                <div className="pa-stat-icon">
+                  <i className="bi bi-calendar3" />
+                </div>
+                <div className="pa-stat-body">
+                  <p className="pa-stat-label">Mês de Maior Gasto</p>
+                  {historico.mesMaiorGasto ? (
+                    <>
+                      <h4 className="pa-stat-value pa-stat-value-accent">{formatMesAno(historico.mesMaiorGasto.mes)}</h4>
+                      <small className="text-muted">{formatBRL(historico.mesMaiorGasto.total)} — por data de pagamento</small>
+                    </>
+                  ) : (
+                    <h4 className="pa-stat-value pa-stat-value-accent">—</h4>
+                  )}
                 </div>
               </div>
-              <div className="col-md-4">
-                <div className="card border-0 shadow-sm h-100">
-                  <div className="card-body">
-                    <div className="text-muted small mb-1">Item de Maior Gasto</div>
-                    {historico.itensPorValor.length > 0 ? (
-                      <>
-                        <div className="fs-5 fw-semibold">{historico.itensPorValor[0].descricao}</div>
-                        <div className="small text-muted">{formatBRL(historico.itensPorValor[0].valorTotal)}</div>
-                      </>
-                    ) : (
-                      <div className="fs-5 fw-semibold">—</div>
-                    )}
-                  </div>
+              <div className="pa-card pa-stat">
+                <div className="pa-stat-icon">
+                  <i className="bi bi-tag" />
+                </div>
+                <div className="pa-stat-body">
+                  <p className="pa-stat-label">Item de Maior Gasto</p>
+                  {historico.itensPorValor.length > 0 ? (
+                    <>
+                      <h4 className="pa-stat-value pa-stat-value-accent">{historico.itensPorValor[0].descricao}</h4>
+                      <small className="text-muted">{formatBRL(historico.itensPorValor[0].valorTotal)}</small>
+                    </>
+                  ) : (
+                    <h4 className="pa-stat-value pa-stat-value-accent">—</h4>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
           {/* Contas Pagas */}
-          <div className="mt-4">
-            <h5 className="fw-semibold mb-3">
-              <i className="bi bi-check2-circle me-2 text-primary" />Contas Pagas
-            </h5>
+          <div className="pa-card mt-4">
+            <div className="pa-card-header">
+              <strong><i className="bi bi-check2-circle me-2 text-primary" />Contas Pagas</strong>
+            </div>
+            <div className="pa-card-body">
             {loadingHistorico ? (
               <div className="text-center py-3">
                 <div className="spinner-border spinner-border-sm text-primary" role="status">
@@ -1188,15 +1196,15 @@ export default function ClienteDetalhePage({
                 </div>
               </div>
             ) : erroHistorico ? (
-              <div className="alert alert-danger">{erroHistorico}</div>
+              <div className="pa-empty pa-empty-erro">{erroHistorico}</div>
             ) : !historico || historico.pagos.length === 0 ? (
-              <div className="alert alert-info">
-                <i className="bi bi-info-circle me-2" />Nenhuma conta paga encontrada para este cliente.
+              <div className="pa-empty">
+                <span><i className="bi bi-info-circle me-2" />Nenhuma conta paga encontrada para este cliente.</span>
               </div>
             ) : (
-              <div className="table-responsive">
-                <table className="table table-sm table-hover table-bordered">
-                  <thead className="table-light">
+              <div>
+                <table className="pa-table">
+                  <thead>
                     <tr>
                       <th>Título</th>
                       <th>Vencimento</th>
@@ -1237,31 +1245,31 @@ export default function ClienteDetalhePage({
                 )}
               </div>
             )}
+            </div>
           </div>
 
           {/* Itens Mais Comprados */}
-          <div className="mt-4">
-            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-              <h5 className="fw-semibold mb-0">
-                <i className="bi bi-bag-check me-2 text-primary" />Itens Mais Comprados
-              </h5>
-              <div className="btn-group" role="group">
+          <div className="pa-card mt-4">
+            <div className="pa-card-header">
+              <strong><i className="bi bi-bag-check me-2 text-primary" />Itens Mais Comprados</strong>
+              <div className="pa-seg">
                 <button
                   type="button"
-                  className={`btn btn-sm ${ordemItens === "valor" ? "btn-primary" : "btn-outline-primary"}`}
+                  className={`pa-seg-btn${ordemItens === "valor" ? " pa-seg-btn-active" : ""}`}
                   onClick={() => setOrdemItens("valor")}
                 >
                   Por Valor
                 </button>
                 <button
                   type="button"
-                  className={`btn btn-sm ${ordemItens === "quantidade" ? "btn-primary" : "btn-outline-primary"}`}
+                  className={`pa-seg-btn${ordemItens === "quantidade" ? " pa-seg-btn-active" : ""}`}
                   onClick={() => setOrdemItens("quantidade")}
                 >
                   Por Quantidade
                 </button>
               </div>
             </div>
+            <div className="pa-card-body">
             {loadingHistorico ? (
               <div className="text-center py-3">
                 <div className="spinner-border spinner-border-sm text-primary" role="status">
@@ -1269,16 +1277,16 @@ export default function ClienteDetalhePage({
                 </div>
               </div>
             ) : erroHistorico ? (
-              <div className="alert alert-danger">{erroHistorico}</div>
+              <div className="pa-empty pa-empty-erro">{erroHistorico}</div>
             ) : !historico ||
               (ordemItens === "valor" ? historico.itensPorValor : historico.itensPorQuantidade).length === 0 ? (
-              <div className="alert alert-info">
-                <i className="bi bi-info-circle me-2" />Não há itens de venda registrados para este cliente.
+              <div className="pa-empty">
+                <span><i className="bi bi-info-circle me-2" />Não há itens de venda registrados para este cliente.</span>
               </div>
             ) : (
-              <div className="table-responsive">
-                <table className="table table-sm table-hover table-bordered">
-                  <thead className="table-light">
+              <div>
+                <table className="pa-table">
+                  <thead>
                     <tr>
                       <th>Produto</th>
                       <th>Quantidade</th>
@@ -1299,13 +1307,15 @@ export default function ClienteDetalhePage({
                 </table>
               </div>
             )}
+            </div>
           </div>
 
           {/* Gasto por Mês */}
-          <div className="mt-4">
-            <h5 className="fw-semibold mb-3">
-              <i className="bi bi-calendar3 me-2 text-primary" />Gasto por Mês
-            </h5>
+          <div className="pa-card mt-4">
+            <div className="pa-card-header">
+              <strong><i className="bi bi-calendar3 me-2 text-primary" />Gasto por Mês</strong>
+            </div>
+            <div className="pa-card-body">
             {loadingHistorico ? (
               <div className="text-center py-3">
                 <div className="spinner-border spinner-border-sm text-primary" role="status">
@@ -1313,15 +1323,15 @@ export default function ClienteDetalhePage({
                 </div>
               </div>
             ) : erroHistorico ? (
-              <div className="alert alert-danger">{erroHistorico}</div>
+              <div className="pa-empty pa-empty-erro">{erroHistorico}</div>
             ) : !historico || historico.meses.length === 0 ? (
-              <div className="alert alert-info">
-                <i className="bi bi-info-circle me-2" />Nenhum pagamento registrado para calcular o gasto mensal.
+              <div className="pa-empty">
+                <span><i className="bi bi-info-circle me-2" />Nenhum pagamento registrado para calcular o gasto mensal.</span>
               </div>
             ) : (
-              <div className="table-responsive">
-                <table className="table table-sm table-hover table-bordered">
-                  <thead className="table-light">
+              <div>
+                <table className="pa-table">
+                  <thead>
                     <tr>
                       <th>Mês</th>
                       <th>Títulos Pagos</th>
@@ -1351,6 +1361,7 @@ export default function ClienteDetalhePage({
                 )}
               </div>
             )}
+            </div>
           </div>
 
         {/* ─── SEÇÃO NFS-e Emitidas ─── */}
