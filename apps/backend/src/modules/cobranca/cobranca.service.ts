@@ -830,13 +830,23 @@ export class CobrancaService {
     const nomes = await this.athosService.buscarNomesClientes(idsClientes);
     const mapaNomes = new Map(nomes.map((n) => [n.idcliente, n.nome_cliente]));
 
+    const todosIdcontareceber = boletos.flatMap((b) => b.titulos.map((t) => t.idcontareceber));
+    const nfseEmitidas =
+      todosIdcontareceber.length > 0 ? await this.buscarNfseEmitidaParaTitulos(todosIdcontareceber) : [];
+    const idsComNfse = new Set(nfseEmitidas.map((n) => n.idcontareceber));
+
     const hojeISO = new Date().toISOString().slice(0, 10);
     const hojeMs = Date.parse(`${hojeISO}T00:00:00Z`);
 
     const linhas = boletos.map((b) => {
       const idsTitulos = b.titulos.map((t) => t.idcontareceber);
-      // nfseStatus calculado na Task 2 (D-08) — placeholder ate la, contrato ja fechado.
-      const nfseStatus: NfseStatusBoleto = "pendente";
+      const totalComNfse = idsTitulos.filter((id) => idsComNfse.has(id)).length;
+      let nfseStatus: NfseStatusBoleto = "pendente";
+      if (idsTitulos.length > 0 && totalComNfse === idsTitulos.length) {
+        nfseStatus = "completa";
+      } else if (totalComNfse > 0) {
+        nfseStatus = "parcial";
+      }
 
       let diasParaVencer: number | null = null;
       if (b.expireAt) {

@@ -71,6 +71,16 @@ function getVencimentoSuffix(dias: number | null): string {
   return `${Math.abs(dias)}d em atraso`;
 }
 
+function getNfseBadge(nfseStatus: NfseStatusBoleto, totalTitulos: number): { cls: string; label: string; title: string } {
+  if (nfseStatus === "completa") {
+    return { cls: "badge bg-success", label: "NFS-e OK", title: `${totalTitulos} de ${totalTitulos} título(s) com NFS-e` };
+  }
+  if (nfseStatus === "parcial") {
+    return { cls: "badge bg-warning text-dark", label: "NFS-e parcial", title: `Parte dos ${totalTitulos} título(s) já tem NFS-e emitida` };
+  }
+  return { cls: "badge bg-secondary", label: "NFS-e pendente", title: `0 de ${totalTitulos} título(s) com NFS-e` };
+}
+
 function BoletosConsolidadosPanel() {
   const [boletos, setBoletos] = useState<BoletoDashboardItem[]>([]);
   const [boletosLoading, setBoletosLoading] = useState(true);
@@ -141,35 +151,41 @@ function BoletosConsolidadosPanel() {
           </div>
         ) : (
           <div className="d-flex flex-column gap-2">
-            {boletos.map((boleto) => (
-              <div
-                key={boleto.id}
-                className="d-flex align-items-center justify-content-between gap-2 border-bottom pb-2"
-              >
-                <div className="d-flex align-items-center gap-2" style={{ minWidth: 0, flex: "1 1 auto" }}>
-                  <span className="badge bg-secondary-subtle text-secondary-emphasis">
-                    #{boleto.idclienteAthos}
-                  </span>
-                  <span className="text-truncate" title={boleto.nomeCliente}>
-                    {boleto.nomeCliente}
-                  </span>
-                </div>
-                <div className="text-nowrap fw-bold">{formatBRL(boleto.valor)}</div>
-                <div className="text-nowrap small text-muted">
-                  {boleto.expireAt ?? "-"}
-                  {getVencimentoSuffix(boleto.diasParaVencer) && (
-                    <span className="ms-1">({getVencimentoSuffix(boleto.diasParaVencer)})</span>
-                  )}
-                </div>
-                <span className={getStatusBoletoBadgeClass(boleto.status)}>{boleto.status}</span>
-                <a
-                  href={`/contas-receber/${boleto.idclienteAthos}`}
-                  className="btn btn-sm btn-outline-primary text-nowrap"
+            {boletos.map((boleto) => {
+              const nfseBadge = getNfseBadge(boleto.nfseStatus, boleto.titulos.length);
+              return (
+                <div
+                  key={boleto.id}
+                  className="d-flex align-items-center justify-content-between gap-2 border-bottom pb-2"
                 >
-                  Ver Cliente
-                </a>
-              </div>
-            ))}
+                  <div className="d-flex align-items-center gap-2" style={{ minWidth: 0, flex: "1 1 auto" }}>
+                    <span className="badge bg-secondary-subtle text-secondary-emphasis">
+                      #{boleto.idclienteAthos}
+                    </span>
+                    <span className="text-truncate" title={boleto.nomeCliente}>
+                      {boleto.nomeCliente}
+                    </span>
+                  </div>
+                  <div className="text-nowrap fw-bold">{formatBRL(boleto.valor)}</div>
+                  <div className="text-nowrap small text-muted">
+                    {boleto.expireAt ?? "-"}
+                    {getVencimentoSuffix(boleto.diasParaVencer) && (
+                      <span className="ms-1">({getVencimentoSuffix(boleto.diasParaVencer)})</span>
+                    )}
+                  </div>
+                  <span className={getStatusBoletoBadgeClass(boleto.status)}>{boleto.status}</span>
+                  <span className={nfseBadge.cls} title={nfseBadge.title}>
+                    {nfseBadge.label}
+                  </span>
+                  <a
+                    href={`/contas-receber/${boleto.idclienteAthos}`}
+                    className="btn btn-sm btn-outline-primary text-nowrap"
+                  >
+                    Ver Cliente
+                  </a>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
