@@ -343,4 +343,91 @@ describe("AthosService - buscarHistoricoClienteContasReceber", () => {
     expect(result.totalPago).toBe(10);
     expect(client.release).toHaveBeenCalled();
   });
+
+  // Helper: resolve pagos/agregado/itensPorValor/itensPorQuantidade vazios,
+  // isolando o comportamento da consulta mensal nos testes abaixo.
+  function mockTudoAteItensVazio(client: { query: jest.Mock }) {
+    client.query
+      .mockResolvedValueOnce({ rows: [] }) // pagos
+      .mockResolvedValueOnce({ rows: [{ titulos_pagos: "0", total_pago: "0" }] }) // agregado
+      .mockResolvedValueOnce({ rows: [] }) // itensPorValor
+      .mockResolvedValueOnce({ rows: [] }); // itensPorQuantidade
+  }
+
+  it("mesMaiorGasto aponta para o mes de maior total mesmo quando nao e o primeiro da ordenacao por data", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    mockTudoAteItensVazio(client);
+    // Ordenado por data DESC (mais recente primeiro) — o mais recente NÃO é o de maior total
+    client.query.mockResolvedValueOnce({
+      rows: [
+        { mes: "2026-04", total: "100.00", titulos: "2" },
+        { mes: "2026-03", total: "999.00", titulos: "5" },
+        { mes: "2026-02", total: "50.00", titulos: "1" },
+      ],
+    });
+
+    const result = await service.buscarHistoricoClienteContasReceber(2829);
+
+    expect(result.meses).toHaveLength(3);
+    expect(result.mesMaiorGasto).toEqual({ mes: "2026-03", total: 999 });
+  });
+
+  it("serie vazia produz mesMaiorGasto: null", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    mockTudoAteItensVazio(client);
+    client.query.mockResolvedValueOnce({ rows: [] }); // meses vazio
+
+    const result = await service.buscarHistoricoClienteContasReceber(2829);
+
+    expect(result.meses).toEqual([]);
+    expect(result.mesMaiorGasto).toBeNull();
+  });
+
+  it("falha da consulta mensal devolve meses:[] e mesMaiorGasto:null preservando pagos, totalPago e itens", async () => {
+    const pool = pgMock.Pool.mock.results[0]?.value ?? new (pgMock.Pool)();
+    const client = { query: jest.fn(), release: jest.fn() };
+    pool.connect = jest.fn().mockResolvedValue(client);
+
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            idcontareceber: 1,
+            numerotitulo: "T001",
+            datavencimento: "2026-03-10",
+            valor: "10.00",
+            idvenda: null,
+            datapagamento: "2026-03-12",
+            valorpago: "10.00",
+            juros: "0",
+            desconto: "0",
+            numeroordem: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ titulos_pagos: "1", total_pago: "10.00" }] })
+      .mockResolvedValueOnce({
+        rows: [{ idproduto: 5, descricao: "Caneta", quantidade: "1", valor_total: "10.00", compras: "1" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ idproduto: 5, descricao: "Caneta", quantidade: "1", valor_total: "10.00", compras: "1" }],
+      })
+      .mockRejectedValueOnce(new Error("consulta mensal falhou"));
+
+    const result = await service.buscarHistoricoClienteContasReceber(2829);
+
+    expect(result.meses).toEqual([]);
+    expect(result.mesMaiorGasto).toBeNull();
+    expect(result.pagos).toHaveLength(1);
+    expect(result.totalPago).toBe(10);
+    expect(result.itensPorValor).toHaveLength(1);
+    expect(result.itensPorQuantidade).toHaveLength(1);
+    expect(client.release).toHaveBeenCalled();
+  });
 });

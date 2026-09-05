@@ -2129,6 +2129,8 @@ export class AthosService {
     titulosPagos: number;
     itensPorValor: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
     itensPorQuantidade: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
+    meses: Array<{ mes: string; total: number; titulos: number }>;
+    mesMaiorGasto: { mes: string; total: number } | null;
   }> {
     this.logger.log(`buscarHistoricoClienteContasReceber: idcliente=${idcliente}`);
     const pool = this.getPool();
@@ -2279,7 +2281,37 @@ export class AthosService {
         itensPorQuantidade = [];
       }
 
-      return { pagos, truncado, totalPago, titulosPagos, itensPorValor, itensPorQuantidade };
+      let meses: Array<{ mes: string; total: number; titulos: number }> = [];
+      try {
+        const result = await client.query(
+          `SELECT to_char(date_trunc('month', cre.datapagamento::date), 'YYYY-MM') AS mes,
+                  SUM(cre.valorpago) AS total,
+                  COUNT(*) AS titulos
+           FROM conta_receber cr
+           JOIN conta_recebida cre ON cre.idcontareceber = cr.idcontareceber
+           WHERE cr.idcliente = $1 AND cre.datapagamento IS NOT NULL
+           GROUP BY 1
+           ORDER BY 1 DESC`,
+          [idcliente],
+        );
+        meses = (result.rows as Row[]).map((row) => ({
+          mes: String(row["mes"] ?? ""),
+          total: Number(row["total"] ?? 0),
+          titulos: Number(row["titulos"] ?? 0),
+        }));
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (meses) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        meses = [];
+      }
+
+      const mesMaiorGasto = meses.reduce<{ mes: string; total: number } | null>((acc, m) => {
+        if (!acc || m.total > acc.total) return { mes: m.mes, total: m.total };
+        return acc;
+      }, null);
+
+      return { pagos, truncado, totalPago, titulosPagos, itensPorValor, itensPorQuantidade, meses, mesMaiorGasto };
     } finally {
       client.release();
     }

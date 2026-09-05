@@ -77,6 +77,14 @@ interface HistoricoCliente {
   titulosPagos: number;
   itensPorValor: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
   itensPorQuantidade: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
+  meses: Array<{ mes: string; total: number; titulos: number }>;
+  mesMaiorGasto: { mes: string; total: number } | null;
+}
+
+function formatMesAno(mes: string): string {
+  const [ano, m] = mes.split("-");
+  if (!ano || !m) return mes;
+  return `${m}/${ano}`;
 }
 
 function formatBRL(value: number): string {
@@ -1140,6 +1148,51 @@ export default function ClienteDetalhePage({
             )}
           </div>
 
+          {/* Cards de resumo do histórico */}
+          {!loadingHistorico && !erroHistorico && historico && (
+            <div className="row g-3 mt-1 mb-1">
+              <div className="col-md-4">
+                <div className="card border-0 shadow-sm h-100">
+                  <div className="card-body">
+                    <div className="text-muted small mb-1">Total Já Pago</div>
+                    <div className="fs-5 fw-semibold">{formatBRL(historico.totalPago)}</div>
+                    <div className="small text-muted">{historico.titulosPagos} título(s) quitado(s)</div>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-4">
+                <div className="card border-0 shadow-sm h-100">
+                  <div className="card-body">
+                    <div className="text-muted small mb-1">Mês de Maior Gasto</div>
+                    {historico.mesMaiorGasto ? (
+                      <>
+                        <div className="fs-5 fw-semibold">{formatMesAno(historico.mesMaiorGasto.mes)}</div>
+                        <div className="small text-muted">{formatBRL(historico.mesMaiorGasto.total)} — por data de pagamento</div>
+                      </>
+                    ) : (
+                      <div className="fs-5 fw-semibold">—</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-4">
+                <div className="card border-0 shadow-sm h-100">
+                  <div className="card-body">
+                    <div className="text-muted small mb-1">Item de Maior Gasto</div>
+                    {historico.itensPorValor.length > 0 ? (
+                      <>
+                        <div className="fs-5 fw-semibold">{historico.itensPorValor[0].descricao}</div>
+                        <div className="small text-muted">{formatBRL(historico.itensPorValor[0].valorTotal)}</div>
+                      </>
+                    ) : (
+                      <div className="fs-5 fw-semibold">—</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Contas Pagas */}
           <div className="mt-4">
             <h5 className="fw-semibold mb-3">
@@ -1261,6 +1314,58 @@ export default function ClienteDetalhePage({
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+
+          {/* Gasto por Mês */}
+          <div className="mt-4">
+            <h5 className="fw-semibold mb-3">
+              <i className="bi bi-calendar3 me-2 text-primary" />Gasto por Mês
+            </h5>
+            {loadingHistorico ? (
+              <div className="text-center py-3">
+                <div className="spinner-border spinner-border-sm text-primary" role="status">
+                  <span className="visually-hidden">Carregando...</span>
+                </div>
+              </div>
+            ) : erroHistorico ? (
+              <div className="alert alert-danger">{erroHistorico}</div>
+            ) : !historico || historico.meses.length === 0 ? (
+              <div className="alert alert-info">
+                <i className="bi bi-info-circle me-2" />Nenhum pagamento registrado para calcular o gasto mensal.
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm table-hover table-bordered">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Mês</th>
+                      <th>Títulos Pagos</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historico.meses.slice(0, 12).map((m) => {
+                      const isPico = historico.mesMaiorGasto?.mes === m.mes;
+                      return (
+                        <tr key={m.mes} className={isPico ? "table-success" : undefined}>
+                          <td className="small">
+                            {formatMesAno(m.mes)}
+                            {isPico && <span className="badge bg-success ms-2">Pico</span>}
+                          </td>
+                          <td className="small">{m.titulos}</td>
+                          <td className="small fw-semibold">{formatBRL(m.total)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {historico.meses.length > 12 && (
+                  <p className="small text-muted mb-0">
+                    Mostrando os 12 meses mais recentes. O card de resumo considera todo o histórico.
+                  </p>
+                )}
               </div>
             )}
           </div>
