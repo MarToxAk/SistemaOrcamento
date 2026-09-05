@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Script from "next/script";
 import PasswordGate from "@/components/password-gate";
 import AdminShell from "./admin-shell";
+import ClienteAutocomplete from "./cliente-autocomplete";
 
 interface DashboardSummary {
   total_a_receber: number;
@@ -343,18 +344,14 @@ function ContasReceberDashboard() {
         subtitle="Monitoramento de inadimplência"
         actions={
           <>
-            <div className="input-group input-group-sm" style={{ width: "220px" }}>
-              <span className="input-group-text bg-white">
-                <i className="bi bi-search" />
-              </span>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Buscar por nome ou ID..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
-            </div>
+            <ClienteAutocomplete
+              clientes={clientes}
+              valor={busca}
+              onValorChange={setBusca}
+              onSelecionar={(id) => {
+                window.location.href = `/contas-receber/${Number(id)}`;
+              }}
+            />
             <div className="pa-seg">
               {STATUS_OPTIONS.map((opt) => (
                 <button
