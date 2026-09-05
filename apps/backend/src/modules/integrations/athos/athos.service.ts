@@ -1853,11 +1853,38 @@ export class AthosService {
     }
   }
 
+  /**
+   * Agregados fiscais do dashboard de Contas a Receber (D-02, D-07, D-09).
+   *
+   * Os campos `aging`, `a_vencer`, `total_recebido_mes` e `taxa_inadimplencia`
+   * sao SEMPRE calculados sobre TODA a carteira em aberto
+   * (`statusconta IN ('AVC','VEN')`), independentemente do `statusFiltro`
+   * recebido — sao a foto fiscal completa da carteira, nao uma visao filtrada
+   * como a consulta principal de `clientes` (que respeita `statusFiltro` e tem
+   * limite de 100 linhas).
+   *
+   * `taxa_inadimplencia` vem de dois `COUNT(DISTINCT ...)` sem limite — nunca
+   * do array `clientes`, que e limitado a 100 linhas (decisao D-08 de
+   * 2026-05-21 registrada em STATE.md).
+   */
   async buscarDashboardContasReceber(statusFiltro?: string): Promise<{
     summary: {
       total_a_receber: number;
       total_atrasado: number;
       total_clientes_devedores: number;
+      total_recebido_mes: number;
+      taxa_inadimplencia: number;
+      aging: {
+        d1_30: number;
+        d31_60: number;
+        d61_90: number;
+        d90_mais: number;
+      };
+      a_vencer: {
+        d7: number;
+        d15: number;
+        d30: number;
+      };
     };
     clientes: Array<{
       idcliente: number;
@@ -1928,10 +1955,78 @@ export class AthosService {
         };
       });
 
-      const summary = {
+      const summaryLegado = {
         total_a_receber: clientes.reduce((acc, c) => acc + c.total_devido, 0),
         total_atrasado: clientes.reduce((acc, c) => acc + (c.total_atrasado ?? 0), 0),
         total_clientes_devedores: clientes.length,
+      };
+
+      let total_recebido_mes = 0;
+      let taxa_inadimplencia = 0;
+      let aging = { d1_30: 0, d31_60: 0, d61_90: 0, d90_mais: 0 };
+      let a_vencer = { d7: 0, d15: 0, d30: 0 };
+
+      try {
+        const agregadosResult = await client.query(`
+          SELECT
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' AND (CURRENT_DATE - cr.datavencimento::date) BETWEEN 1 AND 30 THEN cr.valor ELSE 0 END) AS aging_1_30,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' AND (CURRENT_DATE - cr.datavencimento::date) BETWEEN 31 AND 60 THEN cr.valor ELSE 0 END) AS aging_31_60,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' AND (CURRENT_DATE - cr.datavencimento::date) BETWEEN 61 AND 90 THEN cr.valor ELSE 0 END) AS aging_61_90,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' AND (CURRENT_DATE - cr.datavencimento::date) > 90 THEN cr.valor ELSE 0 END) AS aging_90_mais,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'AVC' AND (cr.datavencimento::date - CURRENT_DATE) BETWEEN 0 AND 7 THEN cr.valor ELSE 0 END) AS a_vencer_7d,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'AVC' AND (cr.datavencimento::date - CURRENT_DATE) BETWEEN 0 AND 15 THEN cr.valor ELSE 0 END) AS a_vencer_15d,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'AVC' AND (cr.datavencimento::date - CURRENT_DATE) BETWEEN 0 AND 30 THEN cr.valor ELSE 0 END) AS a_vencer_30d,
+            COUNT(DISTINCT CASE WHEN TRIM(cr.statusconta) = 'VEN' THEN cr.idcliente END) AS clientes_inadimplentes,
+            COUNT(DISTINCT cr.idcliente) AS clientes_com_titulo_aberto
+          FROM conta_receber cr
+          WHERE TRIM(cr.statusconta) IN ('AVC', 'VEN')
+        `);
+        const agregadosRow = (agregadosResult.rows as Row[])[0] ?? {};
+
+        aging = {
+          d1_30: Number(agregadosRow["aging_1_30"] ?? 0),
+          d31_60: Number(agregadosRow["aging_31_60"] ?? 0),
+          d61_90: Number(agregadosRow["aging_61_90"] ?? 0),
+          d90_mais: Number(agregadosRow["aging_90_mais"] ?? 0),
+        };
+        a_vencer = {
+          d7: Number(agregadosRow["a_vencer_7d"] ?? 0),
+          d15: Number(agregadosRow["a_vencer_15d"] ?? 0),
+          d30: Number(agregadosRow["a_vencer_30d"] ?? 0),
+        };
+
+        const clientesInadimplentes = Number(agregadosRow["clientes_inadimplentes"] ?? 0);
+        const clientesComTituloAberto = Number(agregadosRow["clientes_com_titulo_aberto"] ?? 0);
+        taxa_inadimplencia =
+          clientesComTituloAberto > 0
+            ? Number(((clientesInadimplentes / clientesComTituloAberto) * 100).toFixed(2))
+            : 0;
+
+        const recebidoMesResult = await client.query(`
+          SELECT COALESCE(SUM(cre.valorpago), 0) AS total_recebido_mes
+          FROM conta_recebida cre
+          WHERE cre.datapagamento::date >= date_trunc('month', CURRENT_DATE)::date
+            AND cre.datapagamento::date < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date
+        `);
+        total_recebido_mes = Number(
+          (recebidoMesResult.rows as Row[])[0]?.["total_recebido_mes"] ?? 0,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `buscarDashboardContasReceber: falha ao calcular agregados fiscais (aging/a_vencer/recebido_mes/taxa_inadimplencia) — retornando zeros. Causa: ${String(error)}`,
+        );
+        total_recebido_mes = 0;
+        taxa_inadimplencia = 0;
+        aging = { d1_30: 0, d31_60: 0, d61_90: 0, d90_mais: 0 };
+        a_vencer = { d7: 0, d15: 0, d30: 0 };
+      }
+
+      const summary = {
+        ...summaryLegado,
+        total_recebido_mes,
+        taxa_inadimplencia,
+        aging,
+        a_vencer,
       };
 
       return { summary, clientes };
