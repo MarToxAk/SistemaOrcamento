@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Script from "next/script";
-import { useEmpresa } from "@/lib/empresa";
 import PasswordGate from "@/components/password-gate";
+import AdminShell from "./admin-shell";
 
 interface DashboardSummary {
   total_a_receber: number;
@@ -238,7 +238,6 @@ export default function ContasReceberPage() {
 }
 
 function ContasReceberDashboard() {
-  const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [clientes, setClientes] = useState<ClienteDevedor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -308,24 +307,12 @@ function ContasReceberDashboard() {
         href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"
       />
 
-      <div className="container my-4">
-        {/* Header */}
-        <div className="orcamento-header d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 rounded-top">
-          <div className="d-flex align-items-center gap-3 flex-wrap">
-            {EMPRESA_LOGO_URL && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={EMPRESA_LOGO_URL}
-                alt={EMPRESA_NOME}
-                className="logo-img"
-              />
-            )}
-            <div>
-              <h3 className="mb-1">Contas a Receber</h3>
-              <small className="text-muted">Monitoramento de inadimplência</small>
-            </div>
-          </div>
-          <div className="d-flex align-items-center gap-2 flex-wrap">
+      <AdminShell
+        activeHref="/contas-receber"
+        title="Contas a Receber"
+        subtitle="Monitoramento de inadimplência"
+        actions={
+          <>
             <div className="input-group input-group-sm" style={{ width: "220px" }}>
               <span className="input-group-text bg-white">
                 <i className="bi bi-search" />
@@ -382,10 +369,9 @@ function ContasReceberDashboard() {
             >
               <i className="bi bi-arrow-clockwise" />
             </button>
-          </div>
-        </div>
-
-        {/* Main section */}
+          </>
+        }
+      >
         <div className="orcamento-section bg-white rounded-bottom shadow-sm p-4">
           <BoletosConsolidadosPanel />
 
@@ -630,17 +616,10 @@ function ContasReceberDashboard() {
             </>
           )}
         </div>
-      </div>
+      </AdminShell>
 
       <style>{`
-        body { background: #f7f1e3; font-size: 1.02rem; }
-        .orcamento-header {
-          background: linear-gradient(135deg, #c5f2e8 0%, #cbe1f9 25%, #e7d8f9 50%, #f9e7f5 75%, #f0cacb 100%);
-          color: #222;
-          border-radius: 8px 8px 0 0;
-        }
-        .orcamento-section { border-radius: 0 0 8px 8px; }
-        .logo-img { max-width: 140px; max-height: 88px; background: #fff; border-radius: 8px; padding: 6px; }
+        .orcamento-section { border-radius: 8px; }
         .bg-orange { background-color: #fd7e14 !important; }
         .bg-danger-soft { background-color: #ff6b6b !important; }
         .status-border-critico { border-left: 4px solid #ee3637; }
