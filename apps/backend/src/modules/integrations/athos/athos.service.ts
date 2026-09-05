@@ -2127,9 +2127,7 @@ export class AthosService {
         topServico = null;
       }
 
-      // Task 2 (QT-GXV-02) substitui estes tres defaults por consultas reais de clientes
-      // inativos, sem alterar a assinatura do metodo nem a rota/proxy ja provados na Task 1.
-      const clientesInativos: Array<{
+      let clientesInativos: Array<{
         idcliente: number;
         nome_cliente: string;
         telefone_completo: string | null;
@@ -2138,8 +2136,77 @@ export class AthosService {
         diasInativo: number | null;
         totalPedidos: number;
       }> = [];
-      const totalClientesInativos = 0;
-      const truncado = false;
+      let truncado = false;
+      try {
+        const result = await client.query(
+          `SELECT
+              c.idcliente,
+              COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial, 'Cliente #' || c.idcliente::text) AS nome_cliente,
+              c.dddtelefoneempresa || c.telefoneempresa AS telefone_completo,
+              c.emailcliente,
+              MAX(v.data)::date AS ultimo_pedido,
+              COUNT(v.idvenda) AS total_pedidos
+           FROM venda v
+           JOIN cliente c ON c.idcliente = v.idcliente
+           LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+           LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+           WHERE v.idcliente IS NOT NULL
+           GROUP BY c.idcliente, cf.nome, cj.nomefantasia, cj.razaosocial,
+                    c.dddtelefoneempresa, c.telefoneempresa, c.emailcliente
+           HAVING MAX(v.data)::date < (CURRENT_DATE - INTERVAL '180 days')
+           ORDER BY MAX(v.data) ASC NULLS FIRST
+           LIMIT 100`,
+        );
+        const rows = result.rows as Row[];
+        clientesInativos = rows.map((row) => {
+          const ultimoPedidoRaw = row["ultimo_pedido"];
+          const ultimoPedido =
+            ultimoPedidoRaw instanceof Date
+              ? ultimoPedidoRaw.toISOString().slice(0, 10)
+              : typeof ultimoPedidoRaw === "string" && ultimoPedidoRaw.trim()
+              ? ultimoPedidoRaw.trim()
+              : null;
+          const diasInativo = ultimoPedido
+            ? Math.floor((Date.now() - new Date(ultimoPedido).getTime()) / 86400000)
+            : null;
+          const telefone = row["telefone_completo"];
+          const email = row["emailcliente"];
+          return {
+            idcliente: Number(row["idcliente"]),
+            nome_cliente:
+              typeof row["nome_cliente"] === "string" ? row["nome_cliente"] : String(row["idcliente"]),
+            telefone_completo:
+              typeof telefone === "string" && telefone.trim() ? telefone.trim() : null,
+            emailcliente: typeof email === "string" && email.trim() ? email.trim() : null,
+            ultimoPedido,
+            diasInativo,
+            totalPedidos: Number(row["total_pedidos"] ?? 0),
+          };
+        });
+        truncado = rows.length === 100;
+      } catch (err) {
+        this.logger.warn(
+          `buscarIndicadoresContasReceber (clientesInativos): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        clientesInativos = [];
+        truncado = false;
+      }
+
+      let totalClientesInativos = 0;
+      try {
+        const result = await client.query(
+          `SELECT COUNT(*) AS total FROM (
+             SELECT v.idcliente FROM venda v WHERE v.idcliente IS NOT NULL GROUP BY v.idcliente
+             HAVING MAX(v.data)::date < (CURRENT_DATE - INTERVAL '180 days')
+           ) inativos`,
+        );
+        totalClientesInativos = Number((result.rows as Row[])[0]?.["total"] ?? 0);
+      } catch (err) {
+        this.logger.warn(
+          `buscarIndicadoresContasReceber (totalClientesInativos): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        totalClientesInativos = 0;
+      }
 
       return { topProduto, topServico, clientesInativos, totalClientesInativos, truncado };
     } finally {

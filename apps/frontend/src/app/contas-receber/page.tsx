@@ -93,6 +93,12 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
+function getDiasInativoPillClass(diasInativo: number | null): string {
+  if (diasInativo === null) return "pa-pill pa-pill-secondary";
+  if (diasInativo > 365) return "pa-pill pa-pill-danger";
+  return "pa-pill pa-pill-warning";
+}
+
 
 function getBadgeClass(maior_atraso_dias: number | null): string {
   if (maior_atraso_dias === null || maior_atraso_dias === 0) return "badge bg-success";
@@ -715,6 +721,85 @@ function ContasReceberDashboard() {
                       </div>
                     </div>
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* SEÇÃO 4 — Clientes Inativos — QT-GXV-02 */}
+            <div className="pa-card">
+              <div className="pa-card-header">
+                <div>
+                  <strong>Clientes Inativos</strong>
+                  <span className="pa-card-header-count">({indicadores?.totalClientesInativos ?? 0})</span>
+                </div>
+              </div>
+              <div className="pa-card-body pa-card-body-flush">
+                {loadingIndicadores ? (
+                  <div className="text-center py-4">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Carregando...</span>
+                    </div>
+                  </div>
+                ) : erroIndicadores ? (
+                  <div className="pa-empty pa-empty-erro">
+                    <span>{erroIndicadores}</span>
+                  </div>
+                ) : !indicadores || indicadores.clientesInativos.length === 0 ? (
+                  <div className="pa-empty">
+                    <strong>Nenhum cliente inativo</strong>
+                    <div className="small mt-1 text-muted">
+                      Todos os clientes com pedido compraram novamente nos últimos 180 dias.
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <table className="pa-table">
+                      <thead>
+                        <tr>
+                          <th>Cliente</th>
+                          <th>Telefone</th>
+                          <th>E-mail</th>
+                          <th>Último Pedido</th>
+                          <th>Dias sem Pedido</th>
+                          <th>Pedidos</th>
+                          <th>Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {indicadores.clientesInativos.map((cliente) => (
+                          <tr key={cliente.idcliente}>
+                            <td className="pa-td-cliente">
+                              <span className="pa-id-badge">#{cliente.idcliente}</span>
+                              <span className="text-truncate" title={cliente.nome_cliente}>
+                                {cliente.nome_cliente}
+                              </span>
+                            </td>
+                            <td className="text-nowrap small">{cliente.telefone_completo ?? "—"}</td>
+                            <td className="text-nowrap small">{cliente.emailcliente ?? "—"}</td>
+                            <td className="text-nowrap small">
+                              {cliente.ultimoPedido ? formatDate(cliente.ultimoPedido) : "—"}
+                            </td>
+                            <td>
+                              <span className={getDiasInativoPillClass(cliente.diasInativo)}>
+                                {cliente.diasInativo !== null ? `${cliente.diasInativo}d` : "—"}
+                              </span>
+                            </td>
+                            <td className="text-muted small">{cliente.totalPedidos}</td>
+                            <td>
+                              <a href={`/contas-receber/${cliente.idcliente}`} className="pa-link-btn text-nowrap">
+                                Ver Detalhe
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {indicadores.truncado && (
+                      <div className="small text-muted p-3">
+                        Mostrando os 100 clientes inativos há mais tempo. A contagem no cabeçalho cobre o total.
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
