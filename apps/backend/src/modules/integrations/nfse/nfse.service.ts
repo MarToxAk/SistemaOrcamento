@@ -49,38 +49,63 @@ export class NfseService {
    * vinculado ao orcamento, para pre-preencher o formulario de emissao
    * automatica. Todo o trecho Athos e best-effort: qualquer falha e apenas
    * logada e o metodo devolve tudo nulo, sem nunca lancar por causa do Athos.
+   *
+   * `motivo` diagnostica POR QUE o pre-preenchimento nao ocorreu (NFSEQ-01),
+   * para a tela exibir um alerta em vez de ficar em silencio: null no
+   * caminho feliz, "sem-vinculo-athos" quando o orcamento nao tem
+   * externalQuoteId, "orcamento-nao-encontrado"/"athos-indisponivel" quando
+   * a consulta ao orcamento no Athos falha, "cliente-nao-vinculado" quando o
+   * orcamento existe mas nao aponta para um cliente, e "cliente-sem-cadastro"
+   * quando o cliente apontado nao tem cadastro no Athos.
+   *
+   * O identificador de busca vem SOMENTE de `externalQuoteId` — o fallback
+   * anterior para `internalNumber` (autoincrement local) foi removido porque
+   * ele podia casar com um orcamento alheio na tabela `orcamento` do Athos e
+   * pre-preencher o tomador de outro cliente num documento fiscal.
    */
   async resolverTomadorQuote(quoteId: string): Promise<{
     idclienteAthos: number | null;
     documento: string | null;
     nome: string | null;
     endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+    motivo: string | null;
   }> {
     const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
     if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
 
+    const externalQuoteId = (quote as any).externalQuoteId ?? null;
+    if (externalQuoteId == null) {
+      return { idclienteAthos: null, documento: null, nome: null, endereco: null, motivo: "sem-vinculo-athos" };
+    }
+
     try {
-      const lookupId = String((quote as any).externalQuoteId ?? (quote as any).internalNumber ?? "");
+      const lookupId = String(externalQuoteId);
       const athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
       const mapped = (athosData as any)?.mapped ?? null;
       const idclienteAthos = mapped?.idcliente ?? mapped?.clienteid ?? null;
 
       if (!idclienteAthos) {
-        return { idclienteAthos: null, documento: null, nome: null, endereco: null };
+        return { idclienteAthos: null, documento: null, nome: null, endereco: null, motivo: "cliente-nao-vinculado" };
       }
 
       const cliente = await this.athosService.buscarClientePorId(idclienteAthos);
+      if (!cliente) {
+        return { idclienteAthos, documento: null, nome: null, endereco: null, motivo: "cliente-sem-cadastro" };
+      }
+
       return {
         idclienteAthos,
         documento: cliente?.documento ?? null,
         nome: cliente?.name ?? null,
         endereco: cliente?.endereco ?? null,
+        motivo: null,
       };
     } catch (err) {
+      const motivo = err instanceof NotFoundException ? "orcamento-nao-encontrado" : "athos-indisponivel";
       this.logger.debug(
         `Falha ao resolver tomador Athos para o orcamento ${quoteId}: ${err instanceof Error ? err.message : String(err)}`,
       );
-      return { idclienteAthos: null, documento: null, nome: null, endereco: null };
+      return { idclienteAthos: null, documento: null, nome: null, endereco: null, motivo };
     }
   }
 
@@ -104,12 +129,32 @@ export class NfseService {
       throw new BadRequestException("Orcamento ja possui NFS-e emitida.");
     }
 
-    // Endereco sempre resolvido aqui no backend a partir do Athos (nunca do
-    // que o frontend mandar), para nao divergir do cadastro oficial do
-    // cliente vinculado ao orcamento. Ausencia de cliente ou falha no Athos
-    // apenas omite o grupo <end> — a emissao segue normalmente (best-effort).
+    // Precedencia de endereco (D-i7c-01): o endereco digitado manualmente no
+    // formulario vence quando completo — logradouro, CEP e codigo do
+    // municipio, os tres que a DPS realmente exige (xLgr/CEP/cMun); numero e
+    // bairro ja tem default no builder. Sem os tres, usa o endereco resolvido
+    // do cadastro Athos (comportamento anterior). Se nenhum dos dois existir,
+    // o grupo <end> e omitido (best-effort, como hoje). O cadastro Athos ja
+    // provou ser pouco confiavel para o codigo do municipio (260804-g0t);
+    // deixar o operador sobrescrever mitiga esse mesmo risco no orcamento.
     const tomadorAthos = await this.resolverTomadorQuote(quoteId);
-    const endereco = tomadorAthos.endereco
+
+    const enderecoManualValido =
+      Boolean(dto.enderecoLogradouro?.trim()) &&
+      Boolean(dto.enderecoCep?.trim()) &&
+      Boolean(dto.enderecoCodigoMunicipio?.trim());
+
+    const enderecoManual = enderecoManualValido
+      ? {
+          logradouro: dto.enderecoLogradouro!.trim(),
+          numero: dto.enderecoNumero?.trim() ?? "",
+          bairro: dto.enderecoBairro?.trim() ?? "",
+          cep: dto.enderecoCep!.replace(/\D/g, ""),
+          codigoMunicipio: dto.enderecoCodigoMunicipio!.trim(),
+        }
+      : null;
+
+    const enderecoAthos = tomadorAthos.endereco
       ? {
           logradouro: tomadorAthos.endereco.logradouro,
           numero: tomadorAthos.endereco.numero,
@@ -118,6 +163,8 @@ export class NfseService {
           codigoMunicipio: tomadorAthos.endereco.codigoMunicipio,
         }
       : undefined;
+
+    const endereco = enderecoManual ?? enderecoAthos;
 
     const { chaveAcesso, nfseXml } = await this.nfseNacionalService.emitir({
       codigoServico: dto.codigoServico,
