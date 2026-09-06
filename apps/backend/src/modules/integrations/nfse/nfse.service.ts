@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Quote } from "@prisma/client";
 import { Client as MinioClient } from "minio";
 
 import axios from "axios";
 
 import { PrismaService } from "../../database/prisma.service";
+import { findQuoteByIdentifierBasic } from "../../quotes/quote-identifier.util";
 import { AthosService } from "../athos/athos.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
 import { DanfseNacionalPdfService } from "./danfse-nacional-pdf.service";
@@ -121,10 +123,22 @@ export class NfseService {
     return { pdfBuffer, nomeArquivo: `NFSe-${quote.nfseNumero ?? quoteId}.pdf` };
   }
 
+  /**
+   * Resolve o orcamento a partir de um identificador cru vindo da rota
+   * (`internalNumber`, `externalQuoteId` ou UUID) usando a mesma ordem de
+   * resolucao de `QuotesService.findQuoteByIdentifier` (fonte unica em
+   * `quote-identifier.util.ts`). Lanca a mesma excecao/mensagem de antes
+   * quando nao encontra, para nao mudar o contrato de erro do frontend.
+   */
+  private async carregarQuotePorIdentificador(identifier: string): Promise<Quote> {
+    const quote = await findQuoteByIdentifierBasic(this.prisma, identifier);
+    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    return quote;
+  }
+
   /** Emite a NFS-e automaticamente via API do Sistema Nacional e anexa o resultado ao orcamento. */
   async emitirQuoteNfseAutomatica(quoteId: string, dto: EmitirNfseNacionalDto) {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
     if (quote.nfseNumero) {
       throw new BadRequestException("Orcamento ja possui NFS-e emitida.");
     }
@@ -137,7 +151,7 @@ export class NfseService {
     // o grupo <end> e omitido (best-effort, como hoje). O cadastro Athos ja
     // provou ser pouco confiavel para o codigo do municipio (260804-g0t);
     // deixar o operador sobrescrever mitiga esse mesmo risco no orcamento.
-    const tomadorAthos = await this.resolverTomadorQuote(quoteId);
+    const tomadorAthos = await this.resolverTomadorQuote(quote.id);
 
     const enderecoManualValido =
       Boolean(dto.enderecoLogradouro?.trim()) &&
@@ -181,10 +195,10 @@ export class NfseService {
 
     const buffer = Buffer.from(nfseXml, "utf-8");
     const parsed = this.parseXml(buffer);
-    const { publicUrl } = await this.storeXml(buffer, parsed.numeroNfse ?? chaveAcesso, `quotes/${quoteId}`);
+    const { publicUrl } = await this.storeXml(buffer, parsed.numeroNfse ?? chaveAcesso, `quotes/${quote.id}`);
 
     await this.prisma.quote.update({
-      where: { id: quoteId },
+      where: { id: quote.id },
       data: {
         nfseNumero: parsed.numeroNfse,
         nfseCodigoVerificacao: parsed.chaveAcesso ?? chaveAcesso,
@@ -193,7 +207,7 @@ export class NfseService {
       },
     });
 
-    this.logger.log(`NFS-e #${parsed.numeroNfse} emitida automaticamente para o orcamento ${quoteId}.`);
+    this.logger.log(`NFS-e #${parsed.numeroNfse} emitida automaticamente para o orcamento ${quote.id}.`);
 
     const envioChatwoot = await this.enviarDanfseParaCliente(quote, nfseXml, parsed.numeroNfse ?? null);
 
