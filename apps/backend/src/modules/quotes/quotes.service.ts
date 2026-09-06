@@ -8,6 +8,7 @@ import { PriceSource, Prisma, QuoteStatus } from "@prisma/client";
 
 import { PrismaService } from "../database/prisma.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
+import { buildQuoteIdentifierWhereCandidates } from "./quote-identifier.util";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
 
 const statusTransitions = {
@@ -48,6 +49,23 @@ const statusLabels = {
   ENVIADO: "Enviado",
   CANCELADO: "Cancelado",
 } as Record<QuoteStatus, string>;
+
+// Bloco de relacoes usado por findQuoteByIdentifier — extraido para constante
+// unica (era repetido literalmente 3x) para eliminar duplicacao ao consumir
+// buildQuoteIdentifierWhereCandidates.
+const QUOTE_DETAIL_INCLUDE = {
+  customer: true,
+  items: {
+    where: { parentItemId: null },
+    orderBy: { sequence: "asc" },
+    include: { children: { orderBy: { sequence: "asc" } } },
+  },
+  stamps: { orderBy: { number: "asc" } },
+  documents: {
+    orderBy: { generatedAt: "desc" },
+    take: 1,
+  },
+} satisfies Prisma.QuoteInclude;
 
 @Injectable()
 export class QuotesService {
@@ -1227,64 +1245,16 @@ export class QuotesService {
   }
 
   private async findQuoteByIdentifier(identifier: string) {
-    const numericIdentifier = /^\d+$/.test(identifier) ? Number(identifier) : null;
+    const candidates = buildQuoteIdentifierWhereCandidates(identifier);
 
-    if (numericIdentifier !== null) {
-      const byExternalQuoteId = await this.prisma.quote.findFirst({
-        where: { externalQuoteId: BigInt(numericIdentifier) },
-        include: {
-          customer: true,
-          items: {
-            where: { parentItemId: null },
-            orderBy: { sequence: "asc" },
-            include: { children: { orderBy: { sequence: "asc" } } },
-          },
-          stamps: { orderBy: { number: "asc" } },
-          documents: {
-            orderBy: { generatedAt: "desc" },
-            take: 1,
-          },
-        },
-      });
-
-      if (byExternalQuoteId) {
-        return byExternalQuoteId;
+    for (const where of candidates) {
+      const found = await this.prisma.quote.findFirst({ where, include: QUOTE_DETAIL_INCLUDE });
+      if (found) {
+        return found;
       }
-
-      return this.prisma.quote.findFirst({
-        where: { internalNumber: numericIdentifier },
-        include: {
-          customer: true,
-          items: {
-            where: { parentItemId: null },
-            orderBy: { sequence: "asc" },
-            include: { children: { orderBy: { sequence: "asc" } } },
-          },
-          stamps: { orderBy: { number: "asc" } },
-          documents: {
-            orderBy: { generatedAt: "desc" },
-            take: 1,
-          },
-        },
-      });
     }
 
-    return this.prisma.quote.findFirst({
-      where: { id: identifier },
-      include: {
-        customer: true,
-        items: {
-          where: { parentItemId: null },
-          orderBy: { sequence: "asc" },
-          include: { children: { orderBy: { sequence: "asc" } } },
-        },
-        stamps: { orderBy: { number: "asc" } },
-        documents: {
-          orderBy: { generatedAt: "desc" },
-          take: 1,
-        },
-      },
-    });
+    return null;
   }
 
   // Lista externalQuoteId duplicados com as ids das entradas

@@ -4,7 +4,7 @@ import { NfseService } from "./nfse.service";
 
 function makeService() {
   const prisma = {
-    quote: { findUnique: jest.fn(), update: jest.fn() },
+    quote: { findFirst: jest.fn(), update: jest.fn() },
   };
   const athosService = {
     buscarOrcamentoPorNumero: jest.fn(),
@@ -38,7 +38,7 @@ const ENDERECO_ATHOS = {
 describe("NfseService.resolverTomadorQuote", () => {
   it("Teste 1: devolve documento, nome e endereco quando o orcamento tem cliente Athos", async () => {
     const { service, prisma, athosService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q1", externalQuoteId: 555, internalNumber: null });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q1", externalQuoteId: 555, internalNumber: null });
     athosService.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: { idcliente: 123 } });
     athosService.buscarClientePorId.mockResolvedValue({
       id: "123",
@@ -63,7 +63,7 @@ describe("NfseService.resolverTomadorQuote", () => {
 
   it("Teste 2: devolve tudo nulo quando o orcamento nao tem cliente Athos vinculado", async () => {
     const { service, prisma, athosService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q2", externalQuoteId: 556, internalNumber: null });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q2", externalQuoteId: 556, internalNumber: null });
     athosService.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: {} });
 
     const resultado = await service.resolverTomadorQuote("q2");
@@ -74,7 +74,7 @@ describe("NfseService.resolverTomadorQuote", () => {
 
   it("Teste 6: orcamento sem externalQuoteId devolve motivo sem-vinculo-athos e nao consulta o Athos", async () => {
     const { service, prisma, athosService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q6", externalQuoteId: null, internalNumber: 999 });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q6", externalQuoteId: null, internalNumber: 999 });
 
     const resultado = await service.resolverTomadorQuote("q6");
 
@@ -84,14 +84,14 @@ describe("NfseService.resolverTomadorQuote", () => {
 
   it("Teste 7: distingue orcamento-nao-encontrado de athos-indisponivel no catch", async () => {
     const { service: service1, prisma: prisma1, athosService: athosService1 } = makeService();
-    prisma1.quote.findUnique.mockResolvedValue({ id: "q7a", externalQuoteId: 700, internalNumber: null });
+    prisma1.quote.findFirst.mockResolvedValue({ id: "q7a", externalQuoteId: 700, internalNumber: null });
     athosService1.buscarOrcamentoPorNumero.mockRejectedValue(new NotFoundException("nao encontrado"));
 
     const resultado1 = await service1.resolverTomadorQuote("q7a");
     expect(resultado1.motivo).toBe("orcamento-nao-encontrado");
 
     const { service: service2, prisma: prisma2, athosService: athosService2 } = makeService();
-    prisma2.quote.findUnique.mockResolvedValue({ id: "q7b", externalQuoteId: 701, internalNumber: null });
+    prisma2.quote.findFirst.mockResolvedValue({ id: "q7b", externalQuoteId: 701, internalNumber: null });
     athosService2.buscarOrcamentoPorNumero.mockRejectedValue(new Error("timeout"));
 
     const resultado2 = await service2.resolverTomadorQuote("q7b");
@@ -100,14 +100,14 @@ describe("NfseService.resolverTomadorQuote", () => {
 
   it("Teste 8: distingue cliente-nao-vinculado de cliente-sem-cadastro", async () => {
     const { service: service1, prisma: prisma1, athosService: athosService1 } = makeService();
-    prisma1.quote.findUnique.mockResolvedValue({ id: "q8a", externalQuoteId: 800, internalNumber: null });
+    prisma1.quote.findFirst.mockResolvedValue({ id: "q8a", externalQuoteId: 800, internalNumber: null });
     athosService1.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: {} });
 
     const resultado1 = await service1.resolverTomadorQuote("q8a");
     expect(resultado1.motivo).toBe("cliente-nao-vinculado");
 
     const { service: service2, prisma: prisma2, athosService: athosService2 } = makeService();
-    prisma2.quote.findUnique.mockResolvedValue({ id: "q8b", externalQuoteId: 801, internalNumber: null });
+    prisma2.quote.findFirst.mockResolvedValue({ id: "q8b", externalQuoteId: 801, internalNumber: null });
     athosService2.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: { idcliente: 321 } });
     athosService2.buscarClientePorId.mockResolvedValue(null);
 
@@ -117,7 +117,7 @@ describe("NfseService.resolverTomadorQuote", () => {
 
   it("Teste 9: caminho feliz devolve motivo null junto com documento/nome/endereco", async () => {
     const { service, prisma, athosService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q9", externalQuoteId: 900, internalNumber: null });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q9", externalQuoteId: 900, internalNumber: null });
     athosService.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: { idcliente: 456 } });
     athosService.buscarClientePorId.mockResolvedValue({
       id: "456",
@@ -150,7 +150,7 @@ describe("NfseService.emitirQuoteNfseAutomatica — tomador Athos", () => {
 
   it("Teste 3: repassa o endereco do Athos para nfseNacionalService.emitir, sem uf", async () => {
     const { service, prisma, athosService, nfseNacionalService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q3", externalQuoteId: 557, internalNumber: null, nfseNumero: null });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q3", externalQuoteId: 557, internalNumber: null, nfseNumero: null });
     athosService.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: { idcliente: 123 } });
     athosService.buscarClientePorId.mockResolvedValue({
       id: "123",
@@ -177,7 +177,7 @@ describe("NfseService.emitirQuoteNfseAutomatica — tomador Athos", () => {
 
   it("Teste 4: resiliente a falha do Athos — emite mesmo assim com endereco undefined", async () => {
     const { service, prisma, athosService, nfseNacionalService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q4", externalQuoteId: 558, internalNumber: null, nfseNumero: null });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q4", externalQuoteId: 558, internalNumber: null, nfseNumero: null });
     athosService.buscarOrcamentoPorNumero.mockRejectedValue(new Error("Athos indisponivel"));
     nfseNacionalService.emitir.mockResolvedValue({ chaveAcesso: "CHV42", nfseXml: "<xml/>" });
 
@@ -192,7 +192,7 @@ describe("NfseService.emitirQuoteNfseAutomatica — tomador Athos", () => {
 
   it("Teste 5: repassa descricaoServico e incluirIbsCbs do DTO para emitir", async () => {
     const { service, prisma, athosService, nfseNacionalService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q5", externalQuoteId: 559, internalNumber: null, nfseNumero: null });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q5", externalQuoteId: 559, internalNumber: null, nfseNumero: null });
     athosService.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: {} });
     nfseNacionalService.emitir.mockResolvedValue({ chaveAcesso: "CHV42", nfseXml: "<xml/>" });
 
@@ -209,7 +209,7 @@ describe("NfseService.emitirQuoteNfseAutomatica — tomador Athos", () => {
 
   it("Teste 10: endereco manual completo no DTO vence sobre o do Athos", async () => {
     const { service, prisma, athosService, nfseNacionalService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q10", externalQuoteId: 560, internalNumber: null, nfseNumero: null });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q10", externalQuoteId: 560, internalNumber: null, nfseNumero: null });
     athosService.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: { idcliente: 123 } });
     athosService.buscarClientePorId.mockResolvedValue({
       id: "123",
@@ -244,7 +244,7 @@ describe("NfseService.emitirQuoteNfseAutomatica — tomador Athos", () => {
 
   it("Teste 11: DTO sem endereco continua repassando o endereco do Athos (sem regressao)", async () => {
     const { service, prisma, athosService, nfseNacionalService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q11", externalQuoteId: 561, internalNumber: null, nfseNumero: null });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q11", externalQuoteId: 561, internalNumber: null, nfseNumero: null });
     athosService.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: { idcliente: 123 } });
     athosService.buscarClientePorId.mockResolvedValue({
       id: "123",
@@ -269,7 +269,7 @@ describe("NfseService.emitirQuoteNfseAutomatica — tomador Athos", () => {
 
   it("Teste 12: endereco manual parcial (sem CEP) cai de volta no endereco do Athos", async () => {
     const { service, prisma, athosService, nfseNacionalService } = makeService();
-    prisma.quote.findUnique.mockResolvedValue({ id: "q12", externalQuoteId: 562, internalNumber: null, nfseNumero: null });
+    prisma.quote.findFirst.mockResolvedValue({ id: "q12", externalQuoteId: 562, internalNumber: null, nfseNumero: null });
     athosService.buscarOrcamentoPorNumero.mockResolvedValue({ mapped: { idcliente: 123 } });
     athosService.buscarClientePorId.mockResolvedValue({
       id: "123",

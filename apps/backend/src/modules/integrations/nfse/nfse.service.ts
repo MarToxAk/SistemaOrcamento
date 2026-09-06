@@ -72,8 +72,7 @@ export class NfseService {
     endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
     motivo: string | null;
   }> {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
 
     const externalQuoteId = (quote as any).externalQuoteId ?? null;
     if (externalQuoteId == null) {
@@ -105,7 +104,7 @@ export class NfseService {
     } catch (err) {
       const motivo = err instanceof NotFoundException ? "orcamento-nao-encontrado" : "athos-indisponivel";
       this.logger.debug(
-        `Falha ao resolver tomador Athos para o orcamento ${quoteId}: ${err instanceof Error ? err.message : String(err)}`,
+        `Falha ao resolver tomador Athos para o orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
       return { idclienteAthos: null, documento: null, nome: null, endereco: null, motivo };
     }
@@ -113,14 +112,13 @@ export class NfseService {
 
   /** Baixa o XML ja anexado/emitido e gera o DANFSe (PDF) para envio ao cliente. */
   async baixarDanfsePdf(quoteId: string): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
     if (!quote.nfseLink) throw new BadRequestException("Orcamento nao possui NFS-e anexada.");
 
     const xmlResp = await axios.get(quote.nfseLink, { responseType: "text", timeout: 15_000 });
     const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(xmlResp.data as string);
 
-    return { pdfBuffer, nomeArquivo: `NFSe-${quote.nfseNumero ?? quoteId}.pdf` };
+    return { pdfBuffer, nomeArquivo: `NFSe-${quote.nfseNumero ?? quote.id}.pdf` };
   }
 
   /**
@@ -281,14 +279,13 @@ export class NfseService {
   }
 
   async anexarQuoteNfse(quoteId: string, file: UploadedXmlFile) {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
 
     const parsed = this.parseXml(file.buffer);
-    const { publicUrl } = await this.storeXml(file.buffer, parsed.numeroNfse!, `quotes/${quoteId}`);
+    const { publicUrl } = await this.storeXml(file.buffer, parsed.numeroNfse!, `quotes/${quote.id}`);
 
     await this.prisma.quote.update({
-      where: { id: quoteId },
+      where: { id: quote.id },
       data: {
         nfseNumero: parsed.numeroNfse,
         nfseCodigoVerificacao: parsed.chaveAcesso,
@@ -297,7 +294,7 @@ export class NfseService {
       },
     });
 
-    this.logger.log(`NFS-e #${parsed.numeroNfse} anexada manualmente ao orcamento ${quoteId}.`);
+    this.logger.log(`NFS-e #${parsed.numeroNfse} anexada manualmente ao orcamento ${quote.id}.`);
 
     return {
       numero: parsed.numeroNfse,
@@ -309,11 +306,10 @@ export class NfseService {
   }
 
   async removerQuoteNfse(quoteId: string): Promise<{ ok: boolean }> {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
 
     await this.prisma.quote.update({
-      where: { id: quoteId },
+      where: { id: quote.id },
       data: { nfseNumero: null, nfseCodigoVerificacao: null, nfseLink: null, nfseEmitidaEm: null },
     });
 

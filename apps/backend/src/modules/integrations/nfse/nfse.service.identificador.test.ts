@@ -91,3 +91,32 @@ describe("NfseService.emitirQuoteNfseAutomatica — resolucao de identificador (
     );
   });
 });
+
+describe("NfseService.resolverTomadorQuote — resolucao de identificador (Task 2)", () => {
+  it("Teste I: resolve o orcamento pelo segundo candidato (internalNumber) e NAO lanca NotFoundException; sem externalQuoteId, devolve motivo sem-vinculo-athos sem consultar o Athos (T-i7c-03: sem fallback para internalNumber no lookup Athos)", async () => {
+    const { service, prisma, athosService } = makeService();
+    delete (service as any).resolverTomadorQuote; // remove o mock generico do makeService para usar o metodo real do prototype
+    prisma.quote.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(QUOTE_22764);
+
+    const resultado = await service.resolverTomadorQuote("22764");
+
+    expect(resultado).toEqual({ idclienteAthos: null, documento: null, nome: null, endereco: null, motivo: "sem-vinculo-athos" });
+    expect(prisma.quote.findFirst).toHaveBeenCalledTimes(2);
+    expect(athosService.buscarOrcamentoPorNumero).not.toHaveBeenCalled();
+  });
+});
+
+describe("NfseService.removerQuoteNfse — resolucao de identificador (Task 2)", () => {
+  it("Teste J: resolve pelo segundo candidato e chama prisma.quote.update com a chave primaria igual ao UUID resolvido", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(QUOTE_22764);
+    prisma.quote.update.mockResolvedValue({});
+
+    const resultado = await service.removerQuoteNfse("22764");
+
+    expect(resultado).toEqual({ ok: true });
+    expect(prisma.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "uuid-q22764" } }),
+    );
+  });
+});
