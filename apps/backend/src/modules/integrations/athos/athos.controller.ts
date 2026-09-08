@@ -287,6 +287,24 @@ export class AthosController {
   }
 
   @ApiOperation({
+    summary: "Indicadores da pagina principal de contas a receber (item mais vendido e clientes inativos)",
+    description:
+      "Retorna, para a loja toda desde o inicio (sem filtro de data nem de cliente): produto fisico mais vendido por valor, servico mais vendido por valor, e lista de clientes que ja fizeram pedido mas nao pedem ha mais de 180 dias.",
+  })
+  @ApiOkResponse({
+    description: "topProduto, topServico, clientesInativos, totalClientesInativos, truncado",
+  })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/dashboard/indicadores")
+  async indicadoresContasReceber(
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    return this.athosService.buscarIndicadoresContasReceber();
+  }
+
+  @ApiOperation({
     summary: "Títulos individuais de um cliente (contas a receber)",
     description: "Retorna títulos em aberto (ABE) do cliente para exibição no drawer. Lazy load.",
   })
@@ -305,6 +323,30 @@ export class AthosController {
       throw new BadRequestException("idcliente inválido");
     }
     return this.athosService.buscarTitulosClienteContasReceber(id);
+  }
+
+  @ApiOperation({
+    summary: "Histórico de consumo do cliente (contas a receber)",
+    description:
+      "Retorna contas já pagas, itens mais comprados (por valor e por quantidade) e mês de maior gasto do cliente.",
+  })
+  @ApiParam({ name: "idcliente", example: "123", description: "ID do cliente no Athos" })
+  @ApiOkResponse({
+    description: "Histórico agregado: pagos, itensPorValor, itensPorQuantidade, meses, mesMaiorGasto",
+  })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("contas-receber/cliente/:idcliente/historico")
+  async historicoClienteContasReceber(
+    @Param("idcliente") idcliente: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const id = Number(idcliente);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new BadRequestException("idcliente inválido");
+    }
+    return this.athosService.buscarHistoricoClienteContasReceber(id);
   }
 
   @ApiOperation({

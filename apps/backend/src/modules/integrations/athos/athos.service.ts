@@ -1154,6 +1154,38 @@ export class AthosService {
     }
   }
 
+  /** Resolve o nome de cada cliente em UMA unica consulta em lote (sem N+1). */
+  async buscarNomesClientes(idclientes: number[]): Promise<Array<{ idcliente: number; nome_cliente: string }>> {
+    const idsSanitizados = idclientes.filter((n) => Number.isInteger(n) && n > 0);
+    if (idsSanitizados.length === 0) return [];
+
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT c.idcliente,
+          COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial, 'Cliente #' || c.idcliente::text) AS nome_cliente
+        FROM cliente c
+        LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+        LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+        WHERE c.idcliente = ANY($1)`,
+        [idsSanitizados],
+      );
+      return result.rows.map((row: Row) => {
+        const idcliente = Number(row["idcliente"]);
+        return {
+          idcliente,
+          nome_cliente: pickString(row, ["nome_cliente"]) || `Cliente #${idcliente}`,
+        };
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao buscar nomes em lote no Athos: ${err instanceof Error ? err.message : String(err)}`);
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
   async buscarRelacaoOrcamentoVenda(idorcamento: number): Promise<{ idvenda: number | null }> {
     this.logger.log(`buscarRelacaoOrcamentoVenda: idorcamento=${idorcamento}`);
     const pool = this.getPool();
@@ -1821,11 +1853,38 @@ export class AthosService {
     }
   }
 
+  /**
+   * Agregados fiscais do dashboard de Contas a Receber (D-02, D-07, D-09).
+   *
+   * Os campos `aging`, `a_vencer`, `total_recebido_mes` e `taxa_inadimplencia`
+   * sao SEMPRE calculados sobre TODA a carteira em aberto
+   * (`statusconta IN ('AVC','VEN')`), independentemente do `statusFiltro`
+   * recebido — sao a foto fiscal completa da carteira, nao uma visao filtrada
+   * como a consulta principal de `clientes` (que respeita `statusFiltro` e tem
+   * limite de 100 linhas).
+   *
+   * `taxa_inadimplencia` vem de dois `COUNT(DISTINCT ...)` sem limite — nunca
+   * do array `clientes`, que e limitado a 100 linhas (decisao D-08 de
+   * 2026-05-21 registrada em STATE.md).
+   */
   async buscarDashboardContasReceber(statusFiltro?: string): Promise<{
     summary: {
       total_a_receber: number;
       total_atrasado: number;
       total_clientes_devedores: number;
+      total_recebido_mes: number;
+      taxa_inadimplencia: number;
+      aging: {
+        d1_30: number;
+        d31_60: number;
+        d61_90: number;
+        d90_mais: number;
+      };
+      a_vencer: {
+        d7: number;
+        d15: number;
+        d30: number;
+      };
     };
     clientes: Array<{
       idcliente: number;
@@ -1896,13 +1955,260 @@ export class AthosService {
         };
       });
 
-      const summary = {
+      const summaryLegado = {
         total_a_receber: clientes.reduce((acc, c) => acc + c.total_devido, 0),
         total_atrasado: clientes.reduce((acc, c) => acc + (c.total_atrasado ?? 0), 0),
         total_clientes_devedores: clientes.length,
       };
 
+      let total_recebido_mes = 0;
+      let taxa_inadimplencia = 0;
+      let aging = { d1_30: 0, d31_60: 0, d61_90: 0, d90_mais: 0 };
+      let a_vencer = { d7: 0, d15: 0, d30: 0 };
+
+      try {
+        const agregadosResult = await client.query(`
+          SELECT
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' AND (CURRENT_DATE - cr.datavencimento::date) BETWEEN 1 AND 30 THEN cr.valor ELSE 0 END) AS aging_1_30,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' AND (CURRENT_DATE - cr.datavencimento::date) BETWEEN 31 AND 60 THEN cr.valor ELSE 0 END) AS aging_31_60,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' AND (CURRENT_DATE - cr.datavencimento::date) BETWEEN 61 AND 90 THEN cr.valor ELSE 0 END) AS aging_61_90,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'VEN' AND (CURRENT_DATE - cr.datavencimento::date) > 90 THEN cr.valor ELSE 0 END) AS aging_90_mais,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'AVC' AND (cr.datavencimento::date - CURRENT_DATE) BETWEEN 0 AND 7 THEN cr.valor ELSE 0 END) AS a_vencer_7d,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'AVC' AND (cr.datavencimento::date - CURRENT_DATE) BETWEEN 0 AND 15 THEN cr.valor ELSE 0 END) AS a_vencer_15d,
+            SUM(CASE WHEN TRIM(cr.statusconta) = 'AVC' AND (cr.datavencimento::date - CURRENT_DATE) BETWEEN 0 AND 30 THEN cr.valor ELSE 0 END) AS a_vencer_30d,
+            COUNT(DISTINCT CASE WHEN TRIM(cr.statusconta) = 'VEN' THEN cr.idcliente END) AS clientes_inadimplentes,
+            COUNT(DISTINCT cr.idcliente) AS clientes_com_titulo_aberto
+          FROM conta_receber cr
+          WHERE TRIM(cr.statusconta) IN ('AVC', 'VEN')
+        `);
+        const agregadosRow = (agregadosResult.rows as Row[])[0] ?? {};
+
+        aging = {
+          d1_30: Number(agregadosRow["aging_1_30"] ?? 0),
+          d31_60: Number(agregadosRow["aging_31_60"] ?? 0),
+          d61_90: Number(agregadosRow["aging_61_90"] ?? 0),
+          d90_mais: Number(agregadosRow["aging_90_mais"] ?? 0),
+        };
+        a_vencer = {
+          d7: Number(agregadosRow["a_vencer_7d"] ?? 0),
+          d15: Number(agregadosRow["a_vencer_15d"] ?? 0),
+          d30: Number(agregadosRow["a_vencer_30d"] ?? 0),
+        };
+
+        const clientesInadimplentes = Number(agregadosRow["clientes_inadimplentes"] ?? 0);
+        const clientesComTituloAberto = Number(agregadosRow["clientes_com_titulo_aberto"] ?? 0);
+        taxa_inadimplencia =
+          clientesComTituloAberto > 0
+            ? Number(((clientesInadimplentes / clientesComTituloAberto) * 100).toFixed(2))
+            : 0;
+      } catch (error) {
+        this.logger.warn(
+          `buscarDashboardContasReceber: falha ao calcular aging/a_vencer/taxa_inadimplencia — retornando zeros. Causa: ${String(error)}`,
+        );
+        taxa_inadimplencia = 0;
+        aging = { d1_30: 0, d31_60: 0, d61_90: 0, d90_mais: 0 };
+        a_vencer = { d7: 0, d15: 0, d30: 0 };
+      }
+
+      try {
+        const recebidoMesResult = await client.query(`
+          SELECT COALESCE(SUM(cre.valorpago), 0) AS total_recebido_mes
+          FROM conta_recebida cre
+          WHERE cre.datapagamento::date >= date_trunc('month', CURRENT_DATE)::date
+            AND cre.datapagamento::date < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date
+        `);
+        total_recebido_mes = Number(
+          (recebidoMesResult.rows as Row[])[0]?.["total_recebido_mes"] ?? 0,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `buscarDashboardContasReceber: falha ao calcular recebido no mes — retornando zero. Causa: ${String(error)}`,
+        );
+        total_recebido_mes = 0;
+      }
+
+      const summary = {
+        ...summaryLegado,
+        total_recebido_mes,
+        taxa_inadimplencia,
+        aging,
+        a_vencer,
+      };
+
       return { summary, clientes };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Indicadores agregados para o dashboard PRINCIPAL de contas a receber (loja toda, sem filtro
+   * de cliente nem de data): item mais vendido historico (produto fisico e servico, separados por
+   * produto.tipoproduto — D-04) e lista de clientes inativos (D-01/D-05). Roda um unico PoolClient
+   * para as quatro consultas; cada uma tem try/catch independente — falha em uma degrada so o
+   * proprio campo, nunca derruba as demais nem a pagina (D-03).
+   */
+  async buscarIndicadoresContasReceber(): Promise<{
+    topProduto: { idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number } | null;
+    topServico: { idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number } | null;
+    clientesInativos: Array<{
+      idcliente: number;
+      nome_cliente: string;
+      telefone_completo: string | null;
+      emailcliente: string | null;
+      ultimoPedido: string | null;
+      diasInativo: number | null;
+      totalPedidos: number;
+    }>;
+    totalClientesInativos: number;
+    truncado: boolean;
+  }> {
+    this.logger.log("buscarIndicadoresContasReceber: iniciando consulta agregada de indicadores");
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const mapTopItemRow = (row: Row) => {
+        const descricaoRaw = row["descricao"];
+        const idproduto = Number(row["idproduto"]);
+        return {
+          idproduto,
+          descricao: String(descricaoRaw ?? "").trim() || `Produto #${idproduto}`,
+          quantidade: Number(row["quantidade"] ?? 0),
+          valorTotal: Number(row["valor_total"] ?? 0),
+          compras: Number(row["compras"] ?? 0),
+        };
+      };
+
+      let topProduto: { idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number } | null = null;
+      try {
+        const result = await client.query(
+          `SELECT p.idproduto, p.descricaoproduto AS descricao,
+                  SUM(vi.quantidadeitem) AS quantidade,
+                  SUM(vi.vendavalorfinalitem) AS valor_total,
+                  COUNT(DISTINCT v.idvenda) AS compras
+           FROM venda v
+           JOIN venda_item vi ON vi.idvenda = v.idvenda
+           JOIN produto p ON p.idproduto = vi.idproduto
+           WHERE COALESCE(vi.vendavalorfinalitem, 0) > 0 AND p.tipoproduto = true
+           GROUP BY p.idproduto, p.descricaoproduto
+           ORDER BY valor_total DESC
+           LIMIT 1`,
+        );
+        const row = (result.rows as Row[])[0];
+        topProduto = row ? mapTopItemRow(row) : null;
+      } catch (err) {
+        this.logger.warn(
+          `buscarIndicadoresContasReceber (topProduto): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        topProduto = null;
+      }
+
+      let topServico: { idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number } | null = null;
+      try {
+        const result = await client.query(
+          `SELECT p.idproduto, p.descricaoproduto AS descricao,
+                  SUM(vi.quantidadeitem) AS quantidade,
+                  SUM(vi.vendavalorfinalitem) AS valor_total,
+                  COUNT(DISTINCT v.idvenda) AS compras
+           FROM venda v
+           JOIN venda_item vi ON vi.idvenda = v.idvenda
+           JOIN produto p ON p.idproduto = vi.idproduto
+           WHERE COALESCE(vi.vendavalorfinalitem, 0) > 0 AND COALESCE(p.tipoproduto, false) = false
+           GROUP BY p.idproduto, p.descricaoproduto
+           ORDER BY valor_total DESC
+           LIMIT 1`,
+        );
+        const row = (result.rows as Row[])[0];
+        topServico = row ? mapTopItemRow(row) : null;
+      } catch (err) {
+        this.logger.warn(
+          `buscarIndicadoresContasReceber (topServico): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        topServico = null;
+      }
+
+      let clientesInativos: Array<{
+        idcliente: number;
+        nome_cliente: string;
+        telefone_completo: string | null;
+        emailcliente: string | null;
+        ultimoPedido: string | null;
+        diasInativo: number | null;
+        totalPedidos: number;
+      }> = [];
+      let truncado = false;
+      try {
+        const result = await client.query(
+          `SELECT
+              c.idcliente,
+              COALESCE(cf.nome, cj.nomefantasia, cj.razaosocial, 'Cliente #' || c.idcliente::text) AS nome_cliente,
+              c.dddtelefoneempresa || c.telefoneempresa AS telefone_completo,
+              c.emailcliente,
+              MAX(v.data)::date AS ultimo_pedido,
+              COUNT(v.idvenda) AS total_pedidos
+           FROM venda v
+           JOIN cliente c ON c.idcliente = v.idcliente
+           LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+           LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+           WHERE v.idcliente IS NOT NULL
+           GROUP BY c.idcliente, cf.nome, cj.nomefantasia, cj.razaosocial,
+                    c.dddtelefoneempresa, c.telefoneempresa, c.emailcliente
+           HAVING MAX(v.data)::date < (CURRENT_DATE - INTERVAL '180 days')
+           ORDER BY MAX(v.data) ASC NULLS FIRST
+           LIMIT 100`,
+        );
+        const rows = result.rows as Row[];
+        clientesInativos = rows.map((row) => {
+          const ultimoPedidoRaw = row["ultimo_pedido"];
+          const ultimoPedido =
+            ultimoPedidoRaw instanceof Date
+              ? ultimoPedidoRaw.toISOString().slice(0, 10)
+              : typeof ultimoPedidoRaw === "string" && ultimoPedidoRaw.trim()
+              ? ultimoPedidoRaw.trim()
+              : null;
+          const diasInativo = ultimoPedido
+            ? Math.floor((Date.now() - new Date(ultimoPedido).getTime()) / 86400000)
+            : null;
+          const telefone = row["telefone_completo"];
+          const email = row["emailcliente"];
+          return {
+            idcliente: Number(row["idcliente"]),
+            nome_cliente:
+              typeof row["nome_cliente"] === "string" ? row["nome_cliente"] : String(row["idcliente"]),
+            telefone_completo:
+              typeof telefone === "string" && telefone.trim() ? telefone.trim() : null,
+            emailcliente: typeof email === "string" && email.trim() ? email.trim() : null,
+            ultimoPedido,
+            diasInativo,
+            totalPedidos: Number(row["total_pedidos"] ?? 0),
+          };
+        });
+        truncado = rows.length === 100;
+      } catch (err) {
+        this.logger.warn(
+          `buscarIndicadoresContasReceber (clientesInativos): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        clientesInativos = [];
+        truncado = false;
+      }
+
+      let totalClientesInativos = 0;
+      try {
+        const result = await client.query(
+          `SELECT COUNT(*) AS total FROM (
+             SELECT v.idcliente FROM venda v WHERE v.idcliente IS NOT NULL GROUP BY v.idcliente
+             HAVING MAX(v.data)::date < (CURRENT_DATE - INTERVAL '180 days')
+           ) inativos`,
+        );
+        totalClientesInativos = Number((result.rows as Row[])[0]?.["total"] ?? 0);
+      } catch (err) {
+        this.logger.warn(
+          `buscarIndicadoresContasReceber (totalClientesInativos): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        totalClientesInativos = 0;
+      }
+
+      return { topProduto, topServico, clientesInativos, totalClientesInativos, truncado };
     } finally {
       client.release();
     }
@@ -1967,6 +2273,218 @@ export class AthosService {
             typeof numeroordem === "string" && numeroordem.trim() ? numeroordem.trim() : null,
         };
       });
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Histórico de consumo do cliente para a página de detalhe: contas já pagas (JOIN com
+   * conta_recebida, D-01), itens mais comprados (por valor e por quantidade, D-04) e mês de
+   * maior gasto (D-05). Roda um único PoolClient para todas as consultas; cada consulta tem
+   * try/catch independente — falha em uma nunca derruba as demais (D-03).
+   */
+  async buscarHistoricoClienteContasReceber(idcliente: number): Promise<{
+    pagos: Array<{
+      idcontareceber: number;
+      numerotitulo: string | null;
+      datavencimento: string;
+      datapagamento: string | null;
+      valor: number;
+      valorpago: number;
+      juros: number;
+      desconto: number;
+      idvenda: number | null;
+      numeroordem: string | null;
+    }>;
+    truncado: boolean;
+    totalPago: number;
+    titulosPagos: number;
+    itensPorValor: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
+    itensPorQuantidade: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
+    meses: Array<{ mes: string; total: number; titulos: number }>;
+    mesMaiorGasto: { mes: string; total: number } | null;
+  }> {
+    this.logger.log(`buscarHistoricoClienteContasReceber: idcliente=${idcliente}`);
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      let pagos: Array<{
+        idcontareceber: number;
+        numerotitulo: string | null;
+        datavencimento: string;
+        datapagamento: string | null;
+        valor: number;
+        valorpago: number;
+        juros: number;
+        desconto: number;
+        idvenda: number | null;
+        numeroordem: string | null;
+      }> = [];
+      let truncado = false;
+      try {
+        const result = await client.query(
+          `SELECT
+              cr.idcontareceber, cr.numerotitulo, cr.datavencimento, cr.valor, cr.idvenda,
+              cre.datapagamento, cre.valorpago, cre.juros, cre.desconto,
+              v.numeroordem
+           FROM conta_receber cr
+           JOIN conta_recebida cre ON cre.idcontareceber = cr.idcontareceber
+           LEFT JOIN venda v ON v.idvenda = cr.idvenda
+           WHERE cr.idcliente = $1
+           ORDER BY cre.datapagamento DESC NULLS LAST, cr.idcontareceber DESC
+           LIMIT 200`,
+          [idcliente],
+        );
+        pagos = (result.rows as Row[]).map((row) => {
+          const datavenc = row["datavencimento"];
+          const datapag = row["datapagamento"];
+          const numerotitulo = row["numerotitulo"];
+          const numeroordem = row["numeroordem"];
+          return {
+            idcontareceber: Number(row["idcontareceber"]),
+            numerotitulo: typeof numerotitulo === "string" && numerotitulo.trim() ? numerotitulo.trim() : null,
+            datavencimento:
+              datavenc instanceof Date
+                ? datavenc.toISOString().slice(0, 10)
+                : typeof datavenc === "string" && datavenc.trim()
+                ? datavenc.trim()
+                : String(datavenc),
+            datapagamento:
+              datapag instanceof Date
+                ? datapag.toISOString().slice(0, 10)
+                : typeof datapag === "string" && datapag.trim()
+                ? datapag.trim()
+                : null,
+            valor: Number(row["valor"]),
+            valorpago: Number(row["valorpago"] ?? 0),
+            juros: Number(row["juros"] ?? 0),
+            desconto: Number(row["desconto"] ?? 0),
+            idvenda: row["idvenda"] != null ? Number(row["idvenda"]) : null,
+            numeroordem: typeof numeroordem === "string" && numeroordem.trim() ? numeroordem.trim() : null,
+          };
+        });
+        truncado = pagos.length === 200;
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (pagos) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        pagos = [];
+        truncado = false;
+      }
+
+      let totalPago = 0;
+      let titulosPagos = 0;
+      try {
+        const aggResult = await client.query(
+          `SELECT COUNT(*) AS titulos_pagos, COALESCE(SUM(cre.valorpago), 0) AS total_pago
+           FROM conta_receber cr
+           JOIN conta_recebida cre ON cre.idcontareceber = cr.idcontareceber
+           WHERE cr.idcliente = $1`,
+          [idcliente],
+        );
+        const row = aggResult.rows[0] as Row | undefined;
+        titulosPagos = Number(row?.["titulos_pagos"] ?? 0);
+        totalPago = Number(row?.["total_pago"] ?? 0);
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (agregado) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        totalPago = 0;
+        titulosPagos = 0;
+      }
+
+      const mapItemRow = (row: Row) => {
+        const descricaoRaw = row["descricao"];
+        const idproduto = Number(row["idproduto"]);
+        return {
+          idproduto,
+          descricao: String(descricaoRaw ?? "").trim() || `Produto #${idproduto}`,
+          quantidade: Number(row["quantidade"] ?? 0),
+          valorTotal: Number(row["valor_total"] ?? 0),
+          compras: Number(row["compras"] ?? 0),
+        };
+      };
+
+      let itensPorValor: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }> = [];
+      try {
+        const result = await client.query(
+          `SELECT p.idproduto, p.descricaoproduto AS descricao,
+                  SUM(vi.quantidadeitem) AS quantidade,
+                  SUM(vi.vendavalorfinalitem) AS valor_total,
+                  COUNT(DISTINCT v.idvenda) AS compras
+           FROM venda v
+           JOIN venda_item vi ON vi.idvenda = v.idvenda
+           JOIN produto p ON p.idproduto = vi.idproduto
+           WHERE v.idcliente = $1 AND COALESCE(vi.vendavalorfinalitem, 0) > 0
+           GROUP BY p.idproduto, p.descricaoproduto
+           ORDER BY valor_total DESC
+           LIMIT 10`,
+          [idcliente],
+        );
+        itensPorValor = (result.rows as Row[]).map(mapItemRow);
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (itensPorValor) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        itensPorValor = [];
+      }
+
+      let itensPorQuantidade: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }> = [];
+      try {
+        const result = await client.query(
+          `SELECT p.idproduto, p.descricaoproduto AS descricao,
+                  SUM(vi.quantidadeitem) AS quantidade,
+                  SUM(vi.vendavalorfinalitem) AS valor_total,
+                  COUNT(DISTINCT v.idvenda) AS compras
+           FROM venda v
+           JOIN venda_item vi ON vi.idvenda = v.idvenda
+           JOIN produto p ON p.idproduto = vi.idproduto
+           WHERE v.idcliente = $1 AND COALESCE(vi.vendavalorfinalitem, 0) > 0
+           GROUP BY p.idproduto, p.descricaoproduto
+           ORDER BY quantidade DESC
+           LIMIT 10`,
+          [idcliente],
+        );
+        itensPorQuantidade = (result.rows as Row[]).map(mapItemRow);
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (itensPorQuantidade) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        itensPorQuantidade = [];
+      }
+
+      let meses: Array<{ mes: string; total: number; titulos: number }> = [];
+      try {
+        const result = await client.query(
+          `SELECT to_char(date_trunc('month', cre.datapagamento::date), 'YYYY-MM') AS mes,
+                  SUM(cre.valorpago) AS total,
+                  COUNT(*) AS titulos
+           FROM conta_receber cr
+           JOIN conta_recebida cre ON cre.idcontareceber = cr.idcontareceber
+           WHERE cr.idcliente = $1 AND cre.datapagamento IS NOT NULL
+           GROUP BY 1
+           ORDER BY 1 DESC`,
+          [idcliente],
+        );
+        meses = (result.rows as Row[]).map((row) => ({
+          mes: String(row["mes"] ?? ""),
+          total: Number(row["total"] ?? 0),
+          titulos: Number(row["titulos"] ?? 0),
+        }));
+      } catch (err) {
+        this.logger.warn(
+          `buscarHistoricoClienteContasReceber (meses) idcliente=${idcliente}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        meses = [];
+      }
+
+      const mesMaiorGasto = meses.reduce<{ mes: string; total: number } | null>((acc, m) => {
+        if (!acc || m.total > acc.total) return { mes: m.mes, total: m.total };
+        return acc;
+      }, null);
+
+      return { pagos, truncado, totalPago, titulosPagos, itensPorValor, itensPorQuantidade, meses, mesMaiorGasto };
     } finally {
       client.release();
     }

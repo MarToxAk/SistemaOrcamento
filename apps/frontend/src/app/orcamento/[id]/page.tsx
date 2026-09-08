@@ -4,6 +4,7 @@ import Script from "next/script";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useEmpresa } from "@/lib/empresa";
+import TomadorAthosSearch, { type TomadorAthosCliente } from "./tomador-athos-search";
 
 type QuoteItem = {
   sequenciaitem?: number;
@@ -126,8 +127,21 @@ export default function OrcamentoDetailPage() {
   const [emitirValorServico, setEmitirValorServico] = useState("");
   const [emitirDescricaoServico, setEmitirDescricaoServico] = useState("");
   const [emitirIncluirIbsCbs, setEmitirIncluirIbsCbs] = useState(false);
-  const [emitirEnderecoTomador, setEmitirEnderecoTomador] = useState<string | null>(null);
+  const [emitirEnderecoLogradouro, setEmitirEnderecoLogradouro] = useState("");
+  const [emitirEnderecoNumero, setEmitirEnderecoNumero] = useState("");
+  const [emitirEnderecoBairro, setEmitirEnderecoBairro] = useState("");
+  const [emitirEnderecoCep, setEmitirEnderecoCep] = useState("");
+  const [emitirEnderecoCodigoMunicipio, setEmitirEnderecoCodigoMunicipio] = useState("");
+  const [emitirPrefillMotivo, setEmitirPrefillMotivo] = useState<string | null>(null);
   const [emitirPrefill, setEmitirPrefill] = useState<"idle" | "carregando" | "pronto" | "sem-cliente">("idle");
+
+  function limparCamposEndereco() {
+    setEmitirEnderecoLogradouro("");
+    setEmitirEnderecoNumero("");
+    setEmitirEnderecoBairro("");
+    setEmitirEnderecoCep("");
+    setEmitirEnderecoCodigoMunicipio("");
+  }
 
   useEffect(() => {
     const isDevBypass =
@@ -306,24 +320,74 @@ export default function OrcamentoDetailPage() {
       .join("; ");
     setEmitirDescricaoServico(descricao);
 
-    setEmitirEnderecoTomador(null);
+    limparCamposEndereco();
+    setEmitirPrefillMotivo(null);
     setEmitirPrefill("carregando");
     fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse/tomador`, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { idclienteAthos?: number | null; documento?: string | null; nome?: string | null; endereco?: { logradouro: string; numero: string; bairro: string; cep: string; uf: string } | null } | null) => {
-        if (!data?.idclienteAthos) {
-          setEmitirPrefill("sem-cliente");
-          return;
-        }
-        if (data.documento) setEmitirDocumentoTomador(data.documento);
-        if (data.nome) setEmitirNomeTomador(data.nome);
-        if (data.endereco) {
-          const e = data.endereco;
-          setEmitirEnderecoTomador(`${e.logradouro}, ${e.numero} - ${e.bairro} - ${e.uf}, CEP ${e.cep}`);
-        }
-        setEmitirPrefill("pronto");
-      })
-      .catch(() => setEmitirPrefill("sem-cliente"));
+      .then(
+        (
+          data: {
+            idclienteAthos?: number | null;
+            documento?: string | null;
+            nome?: string | null;
+            endereco?: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+            motivo?: string | null;
+          } | null,
+        ) => {
+          setEmitirPrefillMotivo(data?.motivo ?? null);
+          if (!data?.idclienteAthos) {
+            setEmitirPrefill("sem-cliente");
+            return;
+          }
+          if (data.documento) setEmitirDocumentoTomador(data.documento);
+          if (data.nome) setEmitirNomeTomador(data.nome);
+          if (data.endereco) {
+            const e = data.endereco;
+            setEmitirEnderecoLogradouro(e.logradouro ?? "");
+            setEmitirEnderecoNumero(e.numero ?? "");
+            setEmitirEnderecoBairro(e.bairro ?? "");
+            setEmitirEnderecoCep(e.cep ?? "");
+            setEmitirEnderecoCodigoMunicipio(e.codigoMunicipio ?? "");
+          }
+          setEmitirPrefill("pronto");
+        },
+      )
+      .catch(() => {
+        setEmitirPrefillMotivo("falha-consulta");
+        setEmitirPrefill("sem-cliente");
+      });
+  }
+
+  const MOTIVO_TEXTO: Record<string, string> = {
+    "sem-vinculo-athos":
+      "Este orcamento nao tem vinculo com um cliente do Athos. Use a busca de cliente abaixo ou preencha os campos a mao.",
+    "orcamento-nao-encontrado":
+      "O orcamento nao foi localizado no Athos. Use a busca de cliente abaixo ou preencha os campos a mao.",
+    "cliente-nao-vinculado":
+      "O orcamento no Athos nao tem cliente vinculado. Use a busca de cliente abaixo ou preencha os campos a mao.",
+    "cliente-sem-cadastro":
+      "O cliente vinculado nao tem cadastro completo no Athos. Use a busca de cliente abaixo ou preencha os campos a mao.",
+    "athos-indisponivel":
+      "O Athos esta indisponivel no momento. Use a busca de cliente abaixo ou preencha os campos a mao.",
+    "falha-consulta":
+      "Falha ao consultar o tomador. Use a busca de cliente abaixo ou preencha os campos a mao.",
+  };
+
+  function handleSelecionarClienteAthos(cliente: TomadorAthosCliente) {
+    setEmitirNomeTomador(cliente.nome ?? "");
+    setEmitirDocumentoTomador((cliente.documento ?? "").replace(/\D/g, ""));
+    if (cliente.endereco) {
+      setEmitirEnderecoLogradouro(cliente.endereco.logradouro ?? "");
+      setEmitirEnderecoNumero(cliente.endereco.numero ?? "");
+      setEmitirEnderecoBairro(cliente.endereco.bairro ?? "");
+      setEmitirEnderecoCep(cliente.endereco.cep ?? "");
+      setEmitirEnderecoCodigoMunicipio(cliente.endereco.codigoMunicipio ?? "");
+      setEmitirPrefillMotivo(null);
+    } else {
+      limparCamposEndereco();
+      setEmitirPrefillMotivo("cliente-sem-cadastro");
+    }
   }
 
   async function handleEmitirNfseAutomatica() {
@@ -341,6 +405,11 @@ export default function OrcamentoDetailPage() {
       }
 
       const descricaoServicoTrimada = emitirDescricaoServico.trim();
+      const logradouroTrimado = emitirEnderecoLogradouro.trim();
+      const numeroTrimado = emitirEnderecoNumero.trim();
+      const bairroTrimado = emitirEnderecoBairro.trim();
+      const cepDigitos = emitirEnderecoCep.replace(/\D/g, "");
+      const codigoMunicipioDigitos = emitirEnderecoCodigoMunicipio.replace(/\D/g, "");
 
       const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse/emitir`, {
         method: "POST",
@@ -352,6 +421,11 @@ export default function OrcamentoDetailPage() {
           incluirIbsCbs: emitirIncluirIbsCbs,
           ...(descricaoServicoTrimada ? { descricaoServico: descricaoServicoTrimada } : {}),
           ...(documento.length === 14 ? { cnpjTomador: documento } : { cpfTomador: documento }),
+          ...(logradouroTrimado ? { enderecoLogradouro: logradouroTrimado } : {}),
+          ...(numeroTrimado ? { enderecoNumero: numeroTrimado } : {}),
+          ...(bairroTrimado ? { enderecoBairro: bairroTrimado } : {}),
+          ...(cepDigitos ? { enderecoCep: cepDigitos } : {}),
+          ...(codigoMunicipioDigitos ? { enderecoCodigoMunicipio: codigoMunicipioDigitos } : {}),
         }),
       });
       const data = await res.json().catch(() => ({})) as {
@@ -717,6 +791,18 @@ export default function OrcamentoDetailPage() {
                   <div className="card mt-3">
                     <div className="card-body">
                       <h6 className="card-title">Emitir NFS-e automaticamente</h6>
+
+                      {emitirPrefillMotivo ? (
+                        <div className="alert alert-info py-2 small">
+                          {MOTIVO_TEXTO[emitirPrefillMotivo] ?? MOTIVO_TEXTO["falha-consulta"]}
+                        </div>
+                      ) : null}
+
+                      <div className="mb-3">
+                        <label className="form-label small">Buscar cliente no Athos</label>
+                        <TomadorAthosSearch onSelecionar={handleSelecionarClienteAthos} disabled={emitirState === "enviando"} />
+                      </div>
+
                       <div className="row g-2">
                         <div className="col-md-6">
                           <label className="form-label small">Serviço</label>
@@ -793,14 +879,64 @@ export default function OrcamentoDetailPage() {
                           </div>
                         </div>
                         <div className="col-12">
-                          <label className="form-label small">Endereço do Tomador</label>
-                          {emitirEnderecoTomador ? (
-                            <p className="form-text mb-0">{emitirEnderecoTomador}</p>
-                          ) : emitirPrefill === "sem-cliente" || emitirPrefill === "pronto" ? (
-                            <div className="alert alert-warning py-2 small mb-0">
-                              O cadastro do cliente no Athos não tem endereço — a nota será emitida sem esse grupo.
+                          <label className="form-label small mb-1">Endereço do Tomador</label>
+                          <div className="row g-2">
+                            <div className="col-md-6">
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Logradouro"
+                                aria-label="Logradouro"
+                                value={emitirEnderecoLogradouro}
+                                onChange={(e) => setEmitirEnderecoLogradouro(e.target.value)}
+                              />
                             </div>
-                          ) : null}
+                            <div className="col-md-2">
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Número"
+                                aria-label="Número"
+                                value={emitirEnderecoNumero}
+                                onChange={(e) => setEmitirEnderecoNumero(e.target.value)}
+                              />
+                            </div>
+                            <div className="col-md-2">
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Bairro"
+                                aria-label="Bairro"
+                                value={emitirEnderecoBairro}
+                                onChange={(e) => setEmitirEnderecoBairro(e.target.value)}
+                              />
+                            </div>
+                            <div className="col-md-2">
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="CEP"
+                                aria-label="CEP"
+                                value={emitirEnderecoCep}
+                                onChange={(e) => setEmitirEnderecoCep(e.target.value)}
+                              />
+                            </div>
+                            <div className="col-md-3">
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Código do município (IBGE, 7 dígitos)"
+                                aria-label="Código do município"
+                                title="Código IBGE do município (7 dígitos)"
+                                value={emitirEnderecoCodigoMunicipio}
+                                onChange={(e) => setEmitirEnderecoCodigoMunicipio(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="form-text">
+                            Deixando os campos vazios, vale o endereço do cadastro do cliente no Athos. O código do
+                            município é o código IBGE de 7 dígitos.
+                          </div>
                         </div>
                       </div>
                       <div className="d-flex gap-2 mt-3">

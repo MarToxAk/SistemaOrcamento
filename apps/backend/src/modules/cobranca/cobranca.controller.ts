@@ -173,6 +173,12 @@ export class CobrancaController {
     return this.cobrancaService.buscarBoletosCliente(idcliente);
   }
 
+  /** Lista consolidada de boletos de todos os clientes (painel do dashboard). AUTHED via guard global. */
+  @Get("boleto/dashboard")
+  async boletosDashboard() {
+    return this.cobrancaService.buscarBoletosDashboard();
+  }
+
   /** Cancela boleto na EFI e no banco */
   @Post("boleto/:id/cancelar")
   async cancelarBoleto(@Param("id", ParseIntPipe) id: number) {

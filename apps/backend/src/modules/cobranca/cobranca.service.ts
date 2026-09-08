@@ -18,6 +18,8 @@ import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
 
+export type NfseStatusBoleto = "completa" | "parcial" | "pendente";
+
 export interface CriarBoletoResponseDto {
   cobrancaId: number;
   chargeId: number;
@@ -802,6 +804,79 @@ export class CobrancaService {
       txidEfi: b.txidEfi, criadoEm: b.criadoEm,
       titulos: b.titulos.map((t) => ({ idcontareceber: t.idcontareceber, valor: Number(t.valor) })),
     }));
+  }
+
+  /** Lista consolidada de boletos nao cancelados de TODOS os clientes (painel do dashboard, D-06/D-08). */
+  async buscarBoletosDashboard(): Promise<Array<{
+    id: number;
+    idclienteAthos: number;
+    nomeCliente: string;
+    status: string;
+    valor: number;
+    expireAt: string | null;
+    diasParaVencer: number | null;
+    linkBoleto: string | null;
+    criadoEm: Date;
+    titulos: number[];
+    nfseStatus: NfseStatusBoleto;
+  }>> {
+    const boletos = await this.prisma.cobrancaBoleto.findMany({
+      where: { status: { not: "cancelado" } },
+      orderBy: { criadoEm: "desc" },
+      include: { titulos: { select: { idcontareceber: true } } },
+    });
+
+    const idsClientes = [...new Set(boletos.map((b) => b.idclienteAthos))];
+    const nomes = await this.athosService.buscarNomesClientes(idsClientes);
+    const mapaNomes = new Map(nomes.map((n) => [n.idcliente, n.nome_cliente]));
+
+    const todosIdcontareceber = boletos.flatMap((b) => b.titulos.map((t) => t.idcontareceber));
+    const nfseEmitidas =
+      todosIdcontareceber.length > 0 ? await this.buscarNfseEmitidaParaTitulos(todosIdcontareceber) : [];
+    const idsComNfse = new Set(nfseEmitidas.map((n) => n.idcontareceber));
+
+    const hojeISO = new Date().toISOString().slice(0, 10);
+    const hojeMs = Date.parse(`${hojeISO}T00:00:00Z`);
+
+    const linhas = boletos.map((b) => {
+      const idsTitulos = b.titulos.map((t) => t.idcontareceber);
+      const totalComNfse = idsTitulos.filter((id) => idsComNfse.has(id)).length;
+      let nfseStatus: NfseStatusBoleto = "pendente";
+      if (idsTitulos.length > 0 && totalComNfse === idsTitulos.length) {
+        nfseStatus = "completa";
+      } else if (totalComNfse > 0) {
+        nfseStatus = "parcial";
+      }
+
+      let diasParaVencer: number | null = null;
+      if (b.expireAt) {
+        const expireMs = Date.parse(`${b.expireAt}T00:00:00Z`);
+        if (!Number.isNaN(expireMs)) {
+          diasParaVencer = Math.round((expireMs - hojeMs) / 86400000);
+        }
+      }
+
+      return {
+        id: b.id,
+        idclienteAthos: b.idclienteAthos,
+        nomeCliente: mapaNomes.get(b.idclienteAthos) ?? `Cliente #${b.idclienteAthos}`,
+        status: b.status,
+        valor: Number(b.valor),
+        expireAt: b.expireAt,
+        diasParaVencer,
+        linkBoleto: b.linkBoleto,
+        criadoEm: b.criadoEm,
+        titulos: idsTitulos,
+        nfseStatus,
+      };
+    });
+
+    return linhas.sort((a, b) => {
+      if (a.expireAt === null && b.expireAt === null) return 0;
+      if (a.expireAt === null) return 1;
+      if (b.expireAt === null) return -1;
+      return a.expireAt < b.expireAt ? -1 : a.expireAt > b.expireAt ? 1 : 0;
+    });
   }
 
   /** Retorna quais idcontareceber já possuem NFS-e emitida no nosso banco */

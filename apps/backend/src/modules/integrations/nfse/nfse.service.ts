@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Quote } from "@prisma/client";
 import { Client as MinioClient } from "minio";
 
 import axios from "axios";
 
 import { PrismaService } from "../../database/prisma.service";
+import { findQuoteByIdentifierBasic } from "../../quotes/quote-identifier.util";
 import { AthosService } from "../athos/athos.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
 import { DanfseNacionalPdfService } from "./danfse-nacional-pdf.service";
@@ -49,67 +51,122 @@ export class NfseService {
    * vinculado ao orcamento, para pre-preencher o formulario de emissao
    * automatica. Todo o trecho Athos e best-effort: qualquer falha e apenas
    * logada e o metodo devolve tudo nulo, sem nunca lancar por causa do Athos.
+   *
+   * `motivo` diagnostica POR QUE o pre-preenchimento nao ocorreu (NFSEQ-01),
+   * para a tela exibir um alerta em vez de ficar em silencio: null no
+   * caminho feliz, "sem-vinculo-athos" quando o orcamento nao tem
+   * externalQuoteId, "orcamento-nao-encontrado"/"athos-indisponivel" quando
+   * a consulta ao orcamento no Athos falha, "cliente-nao-vinculado" quando o
+   * orcamento existe mas nao aponta para um cliente, e "cliente-sem-cadastro"
+   * quando o cliente apontado nao tem cadastro no Athos.
+   *
+   * O identificador de busca vem SOMENTE de `externalQuoteId` — o fallback
+   * anterior para `internalNumber` (autoincrement local) foi removido porque
+   * ele podia casar com um orcamento alheio na tabela `orcamento` do Athos e
+   * pre-preencher o tomador de outro cliente num documento fiscal.
    */
   async resolverTomadorQuote(quoteId: string): Promise<{
     idclienteAthos: number | null;
     documento: string | null;
     nome: string | null;
     endereco: { logradouro: string; numero: string; bairro: string; cep: string; codigoMunicipio: string; uf: string } | null;
+    motivo: string | null;
   }> {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
+
+    const externalQuoteId = (quote as any).externalQuoteId ?? null;
+    if (externalQuoteId == null) {
+      return { idclienteAthos: null, documento: null, nome: null, endereco: null, motivo: "sem-vinculo-athos" };
+    }
 
     try {
-      const lookupId = String((quote as any).externalQuoteId ?? (quote as any).internalNumber ?? "");
+      const lookupId = String(externalQuoteId);
       const athosData = await this.athosService.buscarOrcamentoPorNumero(lookupId);
       const mapped = (athosData as any)?.mapped ?? null;
       const idclienteAthos = mapped?.idcliente ?? mapped?.clienteid ?? null;
 
       if (!idclienteAthos) {
-        return { idclienteAthos: null, documento: null, nome: null, endereco: null };
+        return { idclienteAthos: null, documento: null, nome: null, endereco: null, motivo: "cliente-nao-vinculado" };
       }
 
       const cliente = await this.athosService.buscarClientePorId(idclienteAthos);
+      if (!cliente) {
+        return { idclienteAthos, documento: null, nome: null, endereco: null, motivo: "cliente-sem-cadastro" };
+      }
+
       return {
         idclienteAthos,
         documento: cliente?.documento ?? null,
         nome: cliente?.name ?? null,
         endereco: cliente?.endereco ?? null,
+        motivo: null,
       };
     } catch (err) {
+      const motivo = err instanceof NotFoundException ? "orcamento-nao-encontrado" : "athos-indisponivel";
       this.logger.debug(
-        `Falha ao resolver tomador Athos para o orcamento ${quoteId}: ${err instanceof Error ? err.message : String(err)}`,
+        `Falha ao resolver tomador Athos para o orcamento ${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
-      return { idclienteAthos: null, documento: null, nome: null, endereco: null };
+      return { idclienteAthos: null, documento: null, nome: null, endereco: null, motivo };
     }
   }
 
   /** Baixa o XML ja anexado/emitido e gera o DANFSe (PDF) para envio ao cliente. */
   async baixarDanfsePdf(quoteId: string): Promise<{ pdfBuffer: Buffer; nomeArquivo: string }> {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
     if (!quote.nfseLink) throw new BadRequestException("Orcamento nao possui NFS-e anexada.");
 
     const xmlResp = await axios.get(quote.nfseLink, { responseType: "text", timeout: 15_000 });
     const pdfBuffer = await this.danfsePdfService.gerarPdfDoXml(xmlResp.data as string);
 
-    return { pdfBuffer, nomeArquivo: `NFSe-${quote.nfseNumero ?? quoteId}.pdf` };
+    return { pdfBuffer, nomeArquivo: `NFSe-${quote.nfseNumero ?? quote.id}.pdf` };
+  }
+
+  /**
+   * Resolve o orcamento a partir de um identificador cru vindo da rota
+   * (`internalNumber`, `externalQuoteId` ou UUID) usando a mesma ordem de
+   * resolucao de `QuotesService.findQuoteByIdentifier` (fonte unica em
+   * `quote-identifier.util.ts`). Lanca a mesma excecao/mensagem de antes
+   * quando nao encontra, para nao mudar o contrato de erro do frontend.
+   */
+  private async carregarQuotePorIdentificador(identifier: string): Promise<Quote> {
+    const quote = await findQuoteByIdentifierBasic(this.prisma, identifier);
+    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    return quote;
   }
 
   /** Emite a NFS-e automaticamente via API do Sistema Nacional e anexa o resultado ao orcamento. */
   async emitirQuoteNfseAutomatica(quoteId: string, dto: EmitirNfseNacionalDto) {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
     if (quote.nfseNumero) {
       throw new BadRequestException("Orcamento ja possui NFS-e emitida.");
     }
 
-    // Endereco sempre resolvido aqui no backend a partir do Athos (nunca do
-    // que o frontend mandar), para nao divergir do cadastro oficial do
-    // cliente vinculado ao orcamento. Ausencia de cliente ou falha no Athos
-    // apenas omite o grupo <end> — a emissao segue normalmente (best-effort).
-    const tomadorAthos = await this.resolverTomadorQuote(quoteId);
-    const endereco = tomadorAthos.endereco
+    // Precedencia de endereco (D-i7c-01): o endereco digitado manualmente no
+    // formulario vence quando completo — logradouro, CEP e codigo do
+    // municipio, os tres que a DPS realmente exige (xLgr/CEP/cMun); numero e
+    // bairro ja tem default no builder. Sem os tres, usa o endereco resolvido
+    // do cadastro Athos (comportamento anterior). Se nenhum dos dois existir,
+    // o grupo <end> e omitido (best-effort, como hoje). O cadastro Athos ja
+    // provou ser pouco confiavel para o codigo do municipio (260804-g0t);
+    // deixar o operador sobrescrever mitiga esse mesmo risco no orcamento.
+    const tomadorAthos = await this.resolverTomadorQuote(quote.id);
+
+    const enderecoManualValido =
+      Boolean(dto.enderecoLogradouro?.trim()) &&
+      Boolean(dto.enderecoCep?.trim()) &&
+      Boolean(dto.enderecoCodigoMunicipio?.trim());
+
+    const enderecoManual = enderecoManualValido
+      ? {
+          logradouro: dto.enderecoLogradouro!.trim(),
+          numero: dto.enderecoNumero?.trim() ?? "",
+          bairro: dto.enderecoBairro?.trim() ?? "",
+          cep: dto.enderecoCep!.replace(/\D/g, ""),
+          codigoMunicipio: dto.enderecoCodigoMunicipio!.trim(),
+        }
+      : null;
+
+    const enderecoAthos = tomadorAthos.endereco
       ? {
           logradouro: tomadorAthos.endereco.logradouro,
           numero: tomadorAthos.endereco.numero,
@@ -118,6 +175,8 @@ export class NfseService {
           codigoMunicipio: tomadorAthos.endereco.codigoMunicipio,
         }
       : undefined;
+
+    const endereco = enderecoManual ?? enderecoAthos;
 
     const { chaveAcesso, nfseXml } = await this.nfseNacionalService.emitir({
       codigoServico: dto.codigoServico,
@@ -134,10 +193,10 @@ export class NfseService {
 
     const buffer = Buffer.from(nfseXml, "utf-8");
     const parsed = this.parseXml(buffer);
-    const { publicUrl } = await this.storeXml(buffer, parsed.numeroNfse ?? chaveAcesso, `quotes/${quoteId}`);
+    const { publicUrl } = await this.storeXml(buffer, parsed.numeroNfse ?? chaveAcesso, `quotes/${quote.id}`);
 
     await this.prisma.quote.update({
-      where: { id: quoteId },
+      where: { id: quote.id },
       data: {
         nfseNumero: parsed.numeroNfse,
         nfseCodigoVerificacao: parsed.chaveAcesso ?? chaveAcesso,
@@ -146,7 +205,7 @@ export class NfseService {
       },
     });
 
-    this.logger.log(`NFS-e #${parsed.numeroNfse} emitida automaticamente para o orcamento ${quoteId}.`);
+    this.logger.log(`NFS-e #${parsed.numeroNfse} emitida automaticamente para o orcamento ${quote.id}.`);
 
     const envioChatwoot = await this.enviarDanfseParaCliente(quote, nfseXml, parsed.numeroNfse ?? null);
 
@@ -220,14 +279,13 @@ export class NfseService {
   }
 
   async anexarQuoteNfse(quoteId: string, file: UploadedXmlFile) {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
 
     const parsed = this.parseXml(file.buffer);
-    const { publicUrl } = await this.storeXml(file.buffer, parsed.numeroNfse!, `quotes/${quoteId}`);
+    const { publicUrl } = await this.storeXml(file.buffer, parsed.numeroNfse!, `quotes/${quote.id}`);
 
     await this.prisma.quote.update({
-      where: { id: quoteId },
+      where: { id: quote.id },
       data: {
         nfseNumero: parsed.numeroNfse,
         nfseCodigoVerificacao: parsed.chaveAcesso,
@@ -236,7 +294,7 @@ export class NfseService {
       },
     });
 
-    this.logger.log(`NFS-e #${parsed.numeroNfse} anexada manualmente ao orcamento ${quoteId}.`);
+    this.logger.log(`NFS-e #${parsed.numeroNfse} anexada manualmente ao orcamento ${quote.id}.`);
 
     return {
       numero: parsed.numeroNfse,
@@ -248,11 +306,10 @@ export class NfseService {
   }
 
   async removerQuoteNfse(quoteId: string): Promise<{ ok: boolean }> {
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
-    if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
 
     await this.prisma.quote.update({
-      where: { id: quoteId },
+      where: { id: quote.id },
       data: { nfseNumero: null, nfseCodigoVerificacao: null, nfseLink: null, nfseEmitidaEm: null },
     });
 
