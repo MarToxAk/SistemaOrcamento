@@ -4,13 +4,16 @@
 # o sorteio NAO entra na rede app_net do stack de orcamento. Isolamento total
 # garante que uma falha do microsite promocional nunca derruba o faturamento.
 #
-# Antes de subir: crie deploy/promo.env a mao a partir de promo/.env.example,
-# preenchendo PROMO_ADMIN_TOKEN com um segredo real (openssl rand -hex 24).
-# As 7 variaveis novas da integracao Athos+WhatsApp (260913-ivr) tambem
-# chegam pelo env_file abaixo — ver promo/.env.example para a lista completa.
+# Variaveis vem de substituicao ${VAR} (nao de env_file): quando este compose
+# e deployado via Portainer/git, o diretorio clonado nao contem nenhum arquivo
+# .env versionado (deploy/promo.env nunca e commitado, ver .gitignore) — um
+# env_file: ./promo.env quebraria com "file not found" nesse fluxo. Preencha
+# as variaveis abaixo na secao "Environment variables" do stack do Portainer
+# (ou exporte-as no shell antes de um `docker compose up` manual na VPS). Ver
+# promo/.env.example para a lista completa e o significado de cada uma.
 # PROMO_ATHOS_BASE_URL pode apontar tanto para o alias de host abaixo
 # (host.docker.internal) quanto para a URL publica do backend, o que for
-# alcancavel da VPS. deploy/promo.env NAO e versionado.
+# alcancavel da VPS.
 #
 # Subir/atualizar: docker compose -f deploy/docker-compose.promo.yml up -d --build
 
@@ -19,9 +22,17 @@ services:
     build: ../promo
     container_name: promo-sorteio
     restart: always
-    env_file: ./promo.env
     environment:
       TRUST_PROXY: "1"
+      PROMO_ADMIN_TOKEN: ${PROMO_ADMIN_TOKEN}
+      PROMO_ATHOS_BASE_URL: ${PROMO_ATHOS_BASE_URL}
+      PROMO_ATHOS_API_TOKEN: ${PROMO_ATHOS_API_TOKEN}
+      PROMO_BACKEND_INTERNAL_API_KEY: ${PROMO_BACKEND_INTERNAL_API_KEY}
+      PROMO_ATHOS_TIMEOUT_MS: ${PROMO_ATHOS_TIMEOUT_MS}
+      PROMO_WHATSAPP_HOST: ${PROMO_WHATSAPP_HOST}
+      PROMO_WHATSAPP_INSTANCE: ${PROMO_WHATSAPP_INSTANCE}
+      PROMO_WHATSAPP_API_KEY: ${PROMO_WHATSAPP_API_KEY}
+      PROMO_WHATSAPP_TIMEOUT_MS: ${PROMO_WHATSAPP_TIMEOUT_MS}
     ports:
       # Bind apenas em loopback — quem expoe na internet e o nginx, com TLS.
       # Publicar em 0.0.0.0 entregaria a API em HTTP puro.
