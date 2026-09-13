@@ -14,9 +14,19 @@ const IMG = {
   BIKE: "/img/bike.png",
 };
 
+const CUPOM_REGEX = /^\d{1,10}$/;
+
+const MENSAGENS_CAMPO = {
+  cupom: "Cupom invalido.",
+  nome: "Nome invalido. Use entre 2 e 80 caracteres.",
+  telefone: "Telefone invalido. Informe DDD + numero (10 ou 11 digitos).",
+  nfce: "Numero da NFC-e invalido.",
+};
+
 export default function App() {
   const params = new URLSearchParams(window.location.search);
-  const cupomId = params.get("id") || params.get("cupom") || "0000";
+  const cupomId = params.get("id") || params.get("cupom") || "";
+  const cupomValido = CUPOM_REGEX.test(cupomId) && Number(cupomId) !== 0;
 
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
@@ -32,6 +42,7 @@ export default function App() {
   }, []);
 
   const handleSubmit = async () => {
+    if (!cupomValido) { setError("Cupom nao identificado. Acesse pela leitura do QR code do seu cupom."); return; }
     if (!nome.trim()) { setError("Preencha seu nome"); return; }
     if (!telefone.trim()) { setError("Preencha seu telefone"); return; }
     setError("");
@@ -49,6 +60,13 @@ export default function App() {
       });
       if (resposta.status === 201) {
         setShowRegras(true);
+      } else if (resposta.status === 409) {
+        setError("Este cupom ja foi cadastrado.");
+      } else if (resposta.status === 400) {
+        const corpo = await resposta.json().catch(() => ({}));
+        setError(MENSAGENS_CAMPO[corpo.campo] || "Dados invalidos. Confira o formulario.");
+      } else if (resposta.status === 429) {
+        setError("Muitas tentativas. Aguarde alguns minutos.");
       } else {
         setError("Nao foi possivel enviar. Tente novamente.");
       }
@@ -116,8 +134,12 @@ export default function App() {
           <img src={IMG.RAINBOW} alt="" style={st.rainbowCorner} />
           <div style={st.cupomLabel}>Seu Cupom</div>
           <div style={st.cupomBox}>
-            <span style={st.cupomNum}>{cupomId}</span>
+            <span style={st.cupomNum}>{cupomValido ? cupomId : "—"}</span>
           </div>
+
+          {!cupomValido && (
+            <div style={st.error}>Cupom nao identificado. Acesse pela leitura do QR code do seu cupom.</div>
+          )}
 
           <div style={st.fieldLabel}>Nome</div>
           <input type="text" value={nome} onChange={e => { setNome(e.target.value); setError(""); }}
@@ -133,7 +155,7 @@ export default function App() {
 
           {error && <div style={st.error}>{error}</div>}
 
-          <button onClick={handleSubmit} disabled={enviando} style={st.submitBtn}>Enviar</button>
+          <button onClick={handleSubmit} disabled={enviando || !cupomValido} style={st.submitBtn}>Enviar</button>
         </div>
 
         {/* fim */}

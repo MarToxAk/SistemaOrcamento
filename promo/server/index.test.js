@@ -102,3 +102,118 @@ test('POST /api/cadastro com metodo errado em /api/cadastro responde 405', async
     assert.equal(resposta.status, 405)
   })
 })
+
+const VALIDO = { cupom: '1001', nome: 'Fulano de Tal', telefone: '11999999999', nfce: '123' }
+
+async function postCadastro(server, overrides) {
+  return fetch(`${baseUrl(server)}/api/cadastro`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...VALIDO, ...overrides }),
+  })
+}
+
+test('POST /api/cadastro com cupom invalido responde 400 com campo cupom', async () => {
+  await withServer(async (server) => {
+    const resposta = await postCadastro(server, { cupom: '0000' })
+    assert.equal(resposta.status, 400)
+    const json = await resposta.json()
+    assert.equal(json.campo, 'cupom')
+  })
+})
+
+test('POST /api/cadastro com nome invalido responde 400 com campo nome', async () => {
+  await withServer(async (server) => {
+    const resposta = await postCadastro(server, { nome: 'A' })
+    assert.equal(resposta.status, 400)
+    const json = await resposta.json()
+    assert.equal(json.campo, 'nome')
+  })
+})
+
+test('POST /api/cadastro com telefone invalido responde 400 com campo telefone', async () => {
+  await withServer(async (server) => {
+    const resposta = await postCadastro(server, { telefone: '123' })
+    assert.equal(resposta.status, 400)
+    const json = await resposta.json()
+    assert.equal(json.campo, 'telefone')
+  })
+})
+
+test('POST /api/cadastro com nfce invalido responde 400 com campo nfce', async () => {
+  await withServer(async (server) => {
+    const resposta = await postCadastro(server, { nfce: 'ABC-XYZ' })
+    assert.equal(resposta.status, 400)
+    const json = await resposta.json()
+    assert.equal(json.campo, 'nfce')
+  })
+})
+
+test('segundo POST com o mesmo cupom responde 409 e o banco segue com 1 linha', async () => {
+  await withServer(async (server, dbPath) => {
+    const r1 = await postCadastro(server, { cupom: '2002' })
+    assert.equal(r1.status, 201)
+
+    const r2 = await postCadastro(server, { cupom: '2002', nome: 'Outro Nome' })
+    assert.equal(r2.status, 409)
+    const json2 = await r2.json()
+    assert.equal(json2.error, 'cupom_ja_cadastrado')
+
+    server.db.close()
+    const check = new DatabaseSync(dbPath)
+    const rows = check.prepare('SELECT cupom FROM cadastro WHERE cupom = ?').all('2002')
+    check.close()
+    assert.equal(rows.length, 1)
+    server.db = new DatabaseSync(dbPath)
+  })
+})
+
+test('acima de 10 POSTs da mesma origem em 10 minutos responde 429', async () => {
+  await withServer(async (server) => {
+    for (let i = 0; i < 10; i += 1) {
+      const resposta = await postCadastro(server, { cupom: String(3000 + i) })
+      assert.equal(resposta.status, 201, `POST ${i + 1} deveria ser 201`)
+    }
+    const decimoPrimeiro = await postCadastro(server, { cupom: '3010' })
+    assert.equal(decimoPrimeiro.status, 429)
+    const json = await decimoPrimeiro.json()
+    assert.equal(json.error, 'muitas_tentativas')
+  })
+})
+
+test('GET /api/cadastros.csv sem PROMO_ADMIN_TOKEN no servidor responde 503', async () => {
+  await withServer(async (server) => {
+    delete process.env.PROMO_ADMIN_TOKEN
+    const resposta = await fetch(`${baseUrl(server)}/api/cadastros.csv`)
+    assert.equal(resposta.status, 503)
+  })
+})
+
+test('GET /api/cadastros.csv sem token responde 401 quando o servidor tem token configurado', async () => {
+  await withServer(async (server) => {
+    process.env.PROMO_ADMIN_TOKEN = 'segredo-de-teste'
+    try {
+      const resposta = await fetch(`${baseUrl(server)}/api/cadastros.csv`)
+      assert.equal(resposta.status, 401)
+    } finally {
+      delete process.env.PROMO_ADMIN_TOKEN
+    }
+  })
+})
+
+test('GET /api/cadastros.csv com token correto responde 200 text/csv com cabecalho e linhas', async () => {
+  await withServer(async (server) => {
+    process.env.PROMO_ADMIN_TOKEN = 'segredo-de-teste'
+    try {
+      await postCadastro(server, { cupom: '4004', nome: '=PERIGO(1)' })
+      const resposta = await fetch(`${baseUrl(server)}/api/cadastros.csv?token=segredo-de-teste`)
+      assert.equal(resposta.status, 200)
+      assert.match(resposta.headers.get('content-type') || '', /text\/csv/)
+      const csv = await resposta.text()
+      assert.ok(csv.includes('cupom,nome,telefone,nfce,criado_em'))
+      assert.ok(csv.includes("'=PERIGO(1)"))
+    } finally {
+      delete process.env.PROMO_ADMIN_TOKEN
+    }
+  })
+})

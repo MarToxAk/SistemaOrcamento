@@ -13,11 +13,17 @@ import {
 } from 'node:fs'
 import { dirname, join, extname, relative } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createHash, timingSafeEqual } from 'node:crypto'
+import { validarCadastro } from './validate.js'
+import { montarCsv } from './csv.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = join(__dirname, '..', 'dist')
 
 const MAX_BODY_BYTES = 4096
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
+const RATE_LIMIT_MAX = 10
+const RATE_LIMIT_MAP_CAP = 5000
 
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -118,6 +124,58 @@ function readBody(req) {
   })
 }
 
+function isUniqueViolation(err) {
+  const msg = String(err?.message || '')
+  return err?.errcode === 2067 || /UNIQUE constraint failed/i.test(msg)
+}
+
+function resolveOrigin(req, trustProxy) {
+  if (trustProxy) {
+    const forwarded = req.headers['x-forwarded-for']
+    if (forwarded) {
+      const first = String(forwarded).split(',')[0].trim()
+      if (first) return first
+    }
+  }
+  return req.socket.remoteAddress || 'desconhecido'
+}
+
+function createRateLimiter({ windowMs, max, mapCap }) {
+  const hits = new Map()
+
+  return function checkLimit(origin) {
+    const now = Date.now()
+    const entry = hits.get(origin)
+
+    if (!entry || now - entry.windowStart >= windowMs) {
+      // Poda entradas expiradas antes de inserir uma nova, para o Map nao
+      // crescer sem teto (ele mesmo seria um vetor de exaustao de memoria).
+      if (hits.size >= mapCap) {
+        for (const [key, value] of hits) {
+          if (now - value.windowStart >= windowMs) {
+            hits.delete(key)
+          }
+        }
+      }
+      hits.set(origin, { count: 1, windowStart: now })
+      return true
+    }
+
+    if (entry.count >= max) {
+      return false
+    }
+
+    entry.count += 1
+    return true
+  }
+}
+
+function tokenConfere(recebido, esperado) {
+  const digestRecebido = createHash('sha256').update(String(recebido)).digest()
+  const digestEsperado = createHash('sha256').update(String(esperado)).digest()
+  return timingSafeEqual(digestRecebido, digestEsperado)
+}
+
 export function createServer({ dbPath }) {
   const dbDir = dirname(dbPath)
   if (!existsSync(dbDir)) {
@@ -128,9 +186,19 @@ export function createServer({ dbPath }) {
   ensureSchema(db)
 
   const staticMap = buildStaticMap(DIST_DIR)
+  const trustProxy = process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true'
+  const checkRateLimit = createRateLimiter({
+    windowMs: RATE_LIMIT_WINDOW_MS,
+    max: RATE_LIMIT_MAX,
+    mapCap: RATE_LIMIT_MAP_CAP,
+  })
 
   const insertStmt = db.prepare(
     'INSERT INTO cadastro (cupom, nome, telefone, nfce, ip, criado_em) VALUES (?, ?, ?, ?, ?, ?)'
+  )
+  const findByCupomStmt = db.prepare('SELECT 1 FROM cadastro WHERE cupom = ?')
+  const selectAllStmt = db.prepare(
+    'SELECT cupom, nome, telefone, nfce, criado_em FROM cadastro ORDER BY id ASC'
   )
 
   const server = createHttpServer(async (req, res) => {
@@ -149,6 +217,13 @@ export function createServer({ dbPath }) {
         return
       }
 
+      const origem = resolveOrigin(req, trustProxy)
+      if (!checkRateLimit(origem)) {
+        res.writeHead(429, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'muitas_tentativas' }))
+        return
+      }
+
       let body
       try {
         body = await readBody(req)
@@ -159,14 +234,19 @@ export function createServer({ dbPath }) {
         return
       }
 
-      const cupom = String(body.cupom ?? '').trim()
-      const nome = String(body.nome ?? '').trim()
-      const telefone = String(body.telefone ?? '').trim()
-      const nfce = body.nfce != null ? String(body.nfce).trim() : null
-
-      if (!cupom || !nome || !telefone) {
+      const validacao = validarCadastro(body)
+      if (!validacao.ok) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: false, error: 'dados_invalidos' }))
+        res.end(JSON.stringify({ ok: false, error: 'dados_invalidos', campo: validacao.campo }))
+        return
+      }
+
+      const { cupom, nome, telefone, nfce } = validacao.valor
+
+      const jaExiste = findByCupomStmt.get(cupom)
+      if (jaExiste) {
+        res.writeHead(409, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'cupom_ja_cadastrado' }))
         return
       }
 
@@ -178,9 +258,45 @@ export function createServer({ dbPath }) {
         res.writeHead(201, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, cupom }))
       } catch (err) {
+        if (isUniqueViolation(err)) {
+          res.writeHead(409, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'cupom_ja_cadastrado' }))
+          return
+        }
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: 'erro_ao_gravar' }))
       }
+      return
+    }
+
+    if (url.pathname === '/api/cadastros.csv') {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'metodo_nao_permitido' }))
+        return
+      }
+
+      const tokenConfigurado = process.env.PROMO_ADMIN_TOKEN
+      if (!tokenConfigurado) {
+        res.writeHead(503, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'exportacao_indisponivel' }))
+        return
+      }
+
+      const tokenRecebido = req.headers['x-admin-token'] || url.searchParams.get('token') || ''
+      if (!tokenRecebido || !tokenConfere(tokenRecebido, tokenConfigurado)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'nao_autorizado' }))
+        return
+      }
+
+      const linhas = selectAllStmt.all()
+      const csv = montarCsv(linhas)
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="cadastros.csv"',
+      })
+      res.end(csv)
       return
     }
 
