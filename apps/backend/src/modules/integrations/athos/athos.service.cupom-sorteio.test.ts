@@ -109,6 +109,17 @@ describe("AthosService - verificarCupomFiscalSorteio", () => {
     expect(result).toEqual({ valido: false, valor: null });
   });
 
+  it("linha com valor exatamente igual ao minimo devolve invalido (estritamente maior)", async () => {
+    const { client } = setupClient();
+    (client.query as jest.Mock).mockResolvedValueOnce({
+      rows: [{ idvenda: 1, coo: "12345", valor: 50, cancelada: false, cupomcancelado: false }],
+    });
+
+    const result = await service.verificarCupomFiscalSorteio("12345", 50);
+
+    expect(result).toEqual({ valido: false, valor: null });
+  });
+
   it("duas linhas com o mesmo coo (20 e 90) devolvem valido com o maior valor", async () => {
     const { client } = setupClient();
     (client.query as jest.Mock).mockResolvedValueOnce({

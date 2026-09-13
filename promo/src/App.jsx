@@ -68,7 +68,7 @@ export default function App() {
         const corpo = await resposta.json().catch(() => ({}));
         setError(MENSAGENS_CAMPO[corpo.campo] || "Dados invalidos. Confira o formulario.");
       } else if (resposta.status === 422) {
-        setError("Nao encontramos uma compra valida (minimo R$50) com este numero de cupom fiscal. Confira o numero do COO impresso no seu cupom fiscal.");
+        setError("Nao encontramos uma compra valida (acima de R$50) com este numero de cupom fiscal. Confira o numero do COO impresso no seu cupom fiscal.");
       } else if (resposta.status === 503) {
         setError("Nao conseguimos validar seu cupom fiscal agora. Tente novamente em alguns minutos.");
       } else if (resposta.status === 429) {

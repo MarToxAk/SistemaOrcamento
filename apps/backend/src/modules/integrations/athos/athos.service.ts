@@ -2762,7 +2762,8 @@ export class AthosService {
    * Valida o cupom fiscal (COO) digitado no microsite do sorteio contra a
    * tabela `venda`. Considera valida a linha com maior valor entre as que
    * batem coo, nao estao canceladas, nao tem cupom cancelado e tem valor
-   * >= valorMinimo (D-01). Os tres criterios sao avaliados em JS de proposito
+   * > valorMinimo (D-01, estritamente maior — R$50,00 exatos nao valem). Os
+   * tres criterios sao avaliados em JS de proposito
    * (nao em SQL): colunas booleanas deste Athos podem nao ser boolean de
    * verdade, e `valor` e o dominio `monetario` de tipo base nao
    * introspeccionado — um filtro/cast em SQL que estourasse por tipo
@@ -2794,7 +2795,7 @@ export class AthosService {
         if (ehVerdadeiroAthos(row.cupomcancelado)) continue;
         const valor = parseValorMonetario(row.valor);
         if (valor == null) continue;
-        if (valor < valorMinimo) continue;
+        if (valor <= valorMinimo) continue;
         if (maiorValorValido == null || valor > maiorValorValido) {
           maiorValorValido = valor;
         }
