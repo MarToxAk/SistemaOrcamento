@@ -30,7 +30,10 @@ function readWithoutComments(filepath) {
   const raw = readFileSync(filepath, 'utf8')
   return raw
     .split('\n')
-    .filter((line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+    .filter((line) => {
+      const trimmed = line.trim()
+      return !trimmed.startsWith('//') && !trimmed.startsWith('*') && !trimmed.startsWith('#')
+    })
     .join('\n')
 }
 
