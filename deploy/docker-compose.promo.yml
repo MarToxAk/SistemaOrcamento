@@ -15,6 +15,15 @@
 # (host.docker.internal) quanto para a URL publica do backend, o que for
 # alcancavel da VPS.
 #
+# Proxy reverso: esta VPS usa Nginx Proxy Manager (container), NAO nginx de
+# arquivo de config (deploy/nginx-promo.conf fica como referencia p/ quem usa
+# nginx tradicional, mas nao se aplica aqui). Por isso o servico entra tambem
+# na rede externa do NPM (nginx-proxy-manager_default) — sem isso o container
+# do NPM nao alcanca promo-sorteio pelo nome, so pelo IP do HOST, que o bind
+# em 127.0.0.1:3100 (loopback do host) bloqueia de proposito. No Proxy Host do
+# NPM, configure: Forward Hostname/IP = promo-sorteio, Forward Port = 3100,
+# SSL via Let's Encrypt do proprio NPM.
+#
 # Subir/atualizar: docker compose -f deploy/docker-compose.promo.yml up -d --build
 
 services:
@@ -22,6 +31,9 @@ services:
     build: ../promo
     container_name: promo-sorteio
     restart: always
+    networks:
+      - default
+      - npm_proxy
     environment:
       TRUST_PROXY: "1"
       PROMO_ADMIN_TOKEN: ${PROMO_ADMIN_TOKEN}
@@ -48,3 +60,8 @@ services:
 
 volumes:
   promo_data:
+
+networks:
+  npm_proxy:
+    external: true
+    name: nginx-proxy-manager_default
