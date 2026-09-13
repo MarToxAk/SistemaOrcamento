@@ -17,6 +17,7 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import { validarCadastro } from './validate.js'
 import { montarCsv } from './csv.js'
 import { criarVerificadorCupomFiscal } from './athos.js'
+import { criarEnviadorWhatsapp } from './whatsapp.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = join(__dirname, '..', 'dist')
@@ -183,11 +184,8 @@ export function createServer({ dbPath, verificarCupomFiscal, enviarWhatsapp } = 
     mkdirSync(dbDir, { recursive: true })
   }
 
-  // enviarWhatsapp fica reservado para a integracao de WhatsApp (Task 3
-  // do plano 260913-ivr) — aceito aqui e ainda ignorado nesta task.
-  void enviarWhatsapp
-
   const verificarCupom = verificarCupomFiscal || criarVerificadorCupomFiscal()
+  const enviarWhatsappMsg = enviarWhatsapp || criarEnviadorWhatsapp()
 
   const db = new DatabaseSync(dbPath)
   ensureSchema(db)
@@ -280,8 +278,6 @@ export function createServer({ dbPath, verificarCupomFiscal, enviarWhatsapp } = 
 
       try {
         insertStmt.run(cupom, nome, telefone, nfce, ip, criadoEm)
-        res.writeHead(201, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, cupom }))
       } catch (err) {
         if (isUniqueViolation(err)) {
           res.writeHead(409, { 'Content-Type': 'application/json' })
@@ -290,7 +286,21 @@ export function createServer({ dbPath, verificarCupomFiscal, enviarWhatsapp } = 
         }
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: 'erro_ao_gravar' }))
+        return
       }
+
+      // Envio de WhatsApp e best-effort: qualquer falha, rejeicao ou excecao
+      // so muda o campo whatsapp da resposta — a linha ja gravada nunca e
+      // desfeita e a resposta continua 201 (D-04).
+      let whatsapp
+      try {
+        whatsapp = await enviarWhatsappMsg({ telefone, cupom })
+      } catch (err) {
+        whatsapp = { enviado: false, motivo: 'erro_inesperado' }
+      }
+
+      res.writeHead(201, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, cupom, whatsapp }))
       return
     }
 

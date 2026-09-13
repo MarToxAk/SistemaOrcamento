@@ -6,7 +6,11 @@
 #
 # Antes de subir: crie deploy/promo.env a mao a partir de promo/.env.example,
 # preenchendo PROMO_ADMIN_TOKEN com um segredo real (openssl rand -hex 24).
-# deploy/promo.env NAO e versionado.
+# As 7 variaveis novas da integracao Athos+WhatsApp (260913-ivr) tambem
+# chegam pelo env_file abaixo — ver promo/.env.example para a lista completa.
+# PROMO_ATHOS_BASE_URL pode apontar tanto para o alias de host abaixo
+# (host.docker.internal) quanto para a URL publica do backend, o que for
+# alcancavel da VPS. deploy/promo.env NAO e versionado.
 #
 # Subir/atualizar: docker compose -f deploy/docker-compose.promo.yml up -d --build
 
@@ -22,6 +26,12 @@ services:
       # Bind apenas em loopback — quem expoe na internet e o nginx, com TLS.
       # Publicar em 0.0.0.0 entregaria a API em HTTP puro.
       - "127.0.0.1:3100:3100"
+    extra_hosts:
+      # Permite ao container alcancar portas publicadas no host da VPS (ex: o
+      # backend de orcamento em host.docker.internal:4001) sem entrar na rede
+      # app_net do stack de orcamento — o isolamento de D-03 (task anterior)
+      # continua valendo, este alias so da acesso ao host, nao a rede do stack.
+      - "host.docker.internal:host-gateway"
     volumes:
       - promo_data:/data
 

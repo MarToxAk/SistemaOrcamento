@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Verificador de gates do microsite de sorteio.
-// Uso: node scripts/check.mjs <tracer|hardening|deploy>
+// Uso: node scripts/check.mjs <tracer|hardening|integracao|deploy>
 // Existe como script em vez de one-liners de shell porque as asercoes
 // precisam procurar literais com barras, aspas e dois-pontos dentro de
 // arquivos, o que nao sobrevive a citacao de shell no Windows.
@@ -155,6 +155,75 @@ function checkHardening() {
   }
 }
 
+const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+const HEX_LONGO_REGEX = /[0-9a-f]{32,}/i
+
+function checkIntegracao() {
+  const athosJsPath = join(ROOT, 'server', 'athos.js')
+  if (!existsSync(athosJsPath)) {
+    fail('promo/server/athos.js nao existe')
+  } else {
+    const athosJs = readFileSync(athosJsPath, 'utf8')
+    for (const nome of ['PROMO_ATHOS_BASE_URL', 'PROMO_ATHOS_API_TOKEN', 'PROMO_BACKEND_INTERNAL_API_KEY']) {
+      if (!athosJs.includes(nome)) fail(`promo/server/athos.js nao referencia ${nome}`)
+      else ok(`promo/server/athos.js referencia ${nome}`)
+    }
+  }
+
+  const whatsappJsPath = join(ROOT, 'server', 'whatsapp.js')
+  if (!existsSync(whatsappJsPath)) {
+    fail('promo/server/whatsapp.js nao existe')
+  } else {
+    const whatsappJs = readFileSync(whatsappJsPath, 'utf8')
+    for (const nome of ['PROMO_WHATSAPP_HOST', 'PROMO_WHATSAPP_INSTANCE', 'PROMO_WHATSAPP_API_KEY']) {
+      if (!whatsappJs.includes(nome)) fail(`promo/server/whatsapp.js nao referencia ${nome}`)
+      else ok(`promo/server/whatsapp.js referencia ${nome}`)
+    }
+  }
+
+  const envExamplePath = join(ROOT, '.env.example')
+  if (!existsSync(envExamplePath)) {
+    fail('promo/.env.example nao existe')
+  } else {
+    const envExample = readFileSync(envExamplePath, 'utf8')
+    const variaveisNovas = [
+      'PROMO_ATHOS_BASE_URL',
+      'PROMO_ATHOS_API_TOKEN',
+      'PROMO_BACKEND_INTERNAL_API_KEY',
+      'PROMO_ATHOS_TIMEOUT_MS',
+      'PROMO_WHATSAPP_HOST',
+      'PROMO_WHATSAPP_INSTANCE',
+      'PROMO_WHATSAPP_API_KEY',
+    ]
+    for (const nome of variaveisNovas) {
+      if (!envExample.includes(nome)) fail(`promo/.env.example nao cita ${nome}`)
+      else ok(`promo/.env.example cita ${nome}`)
+    }
+  }
+
+  // Gate de forma-de-segredo: le CRU (sem filtrar comentarios — segredo em
+  // comentario tambem e segredo) todo arquivo de promo/server/ e falha se
+  // algum casar UUID ou hexadecimal longo (32+ chars). Pega apikey da
+  // instancia ou identificador do painel copiado-e-colado por engano.
+  const serverDir = join(ROOT, 'server')
+  const arquivosServer = readdirSync(serverDir).filter((f) => f.endsWith('.js'))
+  let segredoEncontrado = false
+  for (const arquivo of arquivosServer) {
+    const conteudoCru = readFileSync(join(serverDir, arquivo), 'utf8')
+    if (UUID_REGEX.test(conteudoCru)) {
+      fail(`promo/server/${arquivo} contem um literal com formato de UUID (possivel identificador de instancia)`)
+      segredoEncontrado = true
+    }
+    if (HEX_LONGO_REGEX.test(conteudoCru)) {
+      fail(`promo/server/${arquivo} contem um literal hexadecimal de 32+ caracteres (possivel apikey/token)`)
+      segredoEncontrado = true
+    }
+  }
+  if (!segredoEncontrado) {
+    ok('nenhum literal com formato de UUID ou hexadecimal longo em promo/server/*.js')
+  }
+}
+
 function checkDeploy() {
   const dockerfilePath = join(ROOT, 'Dockerfile')
   if (!existsSync(dockerfilePath)) {
@@ -232,10 +301,12 @@ if (modo === 'tracer') {
   checkTracer()
 } else if (modo === 'hardening') {
   checkHardening()
+} else if (modo === 'integracao') {
+  checkIntegracao()
 } else if (modo === 'deploy') {
   checkDeploy()
 } else {
-  console.error(`Modo desconhecido: "${modo}". Use tracer, hardening ou deploy.`)
+  console.error(`Modo desconhecido: "${modo}". Use tracer, hardening, integracao ou deploy.`)
   process.exit(1)
 }
 

@@ -346,6 +346,115 @@ test('POST /api/cadastro sem nfce responde 400 com campo nfce e nao chega a cham
   )
 })
 
+test('POST /api/cadastro aceito chama o enviador de WhatsApp uma vez com o telefone e o cupom, respondendo 201 com whatsapp.enviado true', async () => {
+  const chamadas = []
+  const enviarWhatsapp = async ({ telefone, cupom }) => {
+    chamadas.push({ telefone, cupom })
+    return { enviado: true }
+  }
+
+  await withServer(
+    async (server) => {
+      const resposta = await postCadastro(server, { cupom: '8001', telefone: '11999997777' })
+      assert.equal(resposta.status, 201)
+      const json = await resposta.json()
+      assert.deepEqual(json.whatsapp, { enviado: true })
+    },
+    { enviarWhatsapp },
+  )
+
+  assert.equal(chamadas.length, 1)
+  assert.equal(chamadas[0].telefone, '11999997777')
+  assert.equal(chamadas[0].cupom, '8001')
+})
+
+test('POST /api/cadastro aceito com enviador que falha responde 201 com whatsapp.enviado false e a linha permanece gravada', async () => {
+  const enviarWhatsapp = async () => ({ enviado: false, motivo: 'http_500' })
+
+  await withServer(
+    async (server, dbPath) => {
+      const resposta = await postCadastro(server, { cupom: '8002' })
+      assert.equal(resposta.status, 201)
+      const json = await resposta.json()
+      assert.equal(json.whatsapp.enviado, false)
+
+      server.db.close()
+      assert.equal(contarLinhas(dbPath), 1)
+      server.db = new DatabaseSync(dbPath)
+    },
+    { enviarWhatsapp },
+  )
+})
+
+test('POST /api/cadastro aceito com enviador que lanca responde 201 e a linha permanece gravada (1 linha)', async () => {
+  const enviarWhatsapp = async () => {
+    throw new Error('falha inesperada no enviador')
+  }
+
+  await withServer(
+    async (server, dbPath) => {
+      const resposta = await postCadastro(server, { cupom: '8003' })
+      assert.equal(resposta.status, 201)
+      const json = await resposta.json()
+      assert.equal(json.whatsapp.enviado, false)
+
+      server.db.close()
+      assert.equal(contarLinhas(dbPath), 1)
+      server.db = new DatabaseSync(dbPath)
+    },
+    { enviarWhatsapp },
+  )
+})
+
+test('cadastro bloqueado (422, 503, 409, 400) nao chama o enviador de WhatsApp', async () => {
+  let chamou = false
+  const enviarWhatsapp = async () => {
+    chamou = true
+    return { enviado: true }
+  }
+
+  await withServer(
+    async (server) => {
+      // 422 — verificador invalido
+      const r422 = await postCadastro(server, { cupom: '8100' })
+      assert.equal(r422.status, 422)
+      assert.equal(chamou, false)
+    },
+    { enviarWhatsapp, verificarCupomFiscal: async () => ({ status: 'invalido' }) },
+  )
+  assert.equal(chamou, false)
+
+  await withServer(
+    async (server) => {
+      const r503 = await postCadastro(server, { cupom: '8101' })
+      assert.equal(r503.status, 503)
+    },
+    { enviarWhatsapp, verificarCupomFiscal: async () => ({ status: 'indisponivel' }) },
+  )
+  assert.equal(chamou, false)
+
+  await withServer(
+    async (server) => {
+      const primeiro = await postCadastro(server, { cupom: '8102' })
+      assert.equal(primeiro.status, 201)
+      chamou = false // reseta: o primeiro cadastro (aceito) chama o enviador; so o segundo (409) importa aqui
+      const segundo = await postCadastro(server, { cupom: '8102', nome: 'Outro Nome' })
+      assert.equal(segundo.status, 409)
+      assert.equal(chamou, false)
+    },
+    { enviarWhatsapp },
+  )
+
+  await withServer(
+    async (server) => {
+      const r400 = await postCadastro(server, { nfce: undefined })
+      assert.equal(r400.status, 400)
+      assert.equal(chamou, false)
+    },
+    { enviarWhatsapp },
+  )
+})
+
 test('GET /api/cadastros.csv com token correto responde 200 text/csv com cabecalho e linhas', async () => {
   await withServer(async (server) => {
     process.env.PROMO_ADMIN_TOKEN = 'segredo-de-teste'

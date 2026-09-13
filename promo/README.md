@@ -109,10 +109,89 @@ Para fazer backup antes do sorteio (com o container rodando):
 docker cp promo-sorteio:/data/promo.db ./backup-promo-$(date +%Y%m%d).db
 ```
 
+## Integrações (validação de cupom fiscal + WhatsApp)
+
+### Regra do sorteio
+
+O cliente só consegue se cadastrar apresentando o número do **cupom fiscal
+(COO)** de uma compra real: o servidor valida o COO contra a tabela `venda`
+do Athos, exigindo uma venda **não cancelada** e de **no mínimo R$ 50,00**.
+Cupom fiscal cancelado (`cupomcancelado`) também não vale.
+
+### Caminho da validação
+
+O microsite **nunca** acessa o Postgres do Athos diretamente. A validação
+passa por uma chamada HTTP autenticada ao backend de orçamento (NestJS)
+já existente:
+
+```
+POST /api/cadastro (promo)
+  -> verificarCupomFiscal (promo/server/athos.js)
+  -> GET {PROMO_ATHOS_BASE_URL}/athos/venda/verificar-cupom (backend NestJS)
+  -> AthosService.verificarCupomFiscalSorteio
+  -> SELECT na tabela venda do Athos
+```
+
+### Comportamento fail-closed
+
+| Situação | Resposta | O que o operador vê |
+|---|---|---|
+| COO não bate nenhuma venda válida | `422 cupom_fiscal_invalido` | Mensagem pedindo para conferir o COO impresso no cupom |
+| Backend indisponível, sem configuração, ou timeout | `503 validacao_indisponivel` | Mensagem pedindo para tentar novamente em alguns minutos |
+
+Em ambos os casos, **nenhuma linha é gravada**. A decisão é deliberada
+(D-03): se o backend de validação cair durante o sorteio, ninguém consegue
+se cadastrar por alguns minutos — o inverso (aceitar sem validar) daria
+prêmio a cupom fiscal inexistente, o que é pior.
+
+### Variáveis novas (validação Athos)
+
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `PROMO_ATHOS_BASE_URL` | sim | URL base do backend NestJS, incluindo `/api` |
+| `PROMO_ATHOS_API_TOKEN` | sim | Mesmo valor de `ATHOS_API_TOKEN` do backend |
+| `PROMO_BACKEND_INTERNAL_API_KEY` | sim | Mesmo valor de `INTERNAL_API_KEY` do backend |
+| `PROMO_ATHOS_TIMEOUT_MS` | não (padrão 5000) | Timeout da chamada de validação |
+
+Grave os valores reais **somente** em `deploy/promo.env` (não versionado).
+
+### Mensagem de WhatsApp (best-effort)
+
+Ao aceitar um cadastro, o servidor dispara — de forma best-effort — uma
+mensagem de confirmação via Evolution API para o telefone digitado, com o
+cupom em 5 dígitos e as 4 regras do sorteio. Falha no envio (API fora,
+número inválido, timeout de 5s) **nunca** desfaz o cadastro: a resposta
+continua `201` e a linha permanece gravada, só o campo `whatsapp.enviado`
+vem `false`.
+
+### Descobrir o nome da instância do WhatsApp
+
+A Evolution API espera o **nome** da instância no path da chamada de envio,
+mas o identificador que aparece na URL do painel
+(`/manager/instance/<uuid>/dashboard`) é o **UUID**, não o nome. Para
+descobrir o nome correspondente:
+
+```bash
+curl -H "apikey: SEU_APIKEY" https://SEU_HOST/instance/fetchInstances
+```
+
+### Variáveis novas (WhatsApp)
+
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `PROMO_WHATSAPP_HOST` | não (sem ela, só não envia) | Raiz do host da instância Evolution (sem `/manager`, sem barra final) |
+| `PROMO_WHATSAPP_INSTANCE` | não | Nome da instância (ver acima) |
+| `PROMO_WHATSAPP_API_KEY` | não | apikey da instância |
+| `PROMO_WHATSAPP_TIMEOUT_MS` | não (padrão 5000) | Timeout do envio |
+
+Grave os valores reais **somente** em `deploy/promo.env` (não versionado).
+Sem as 3 primeiras, o cadastro continua funcionando normalmente — só não
+envia a mensagem.
+
 ## Fora de escopo (deliberado)
 
 - Painel web de administração — o export CSV cobre a necessidade do sorteio.
 - Autenticação de operador com usuário/senha — o token único basta.
 - Geração de QR code ou PDF de cupom (D-05).
-- Qualquer leitura ou escrita no Athos (D-02) ou no banco do app de orçamento
-  (D-01) — este serviço é 100% isolado.
+- Qualquer escrita no Athos, ou leitura fora do endpoint autenticado
+  `GET /athos/venda/verificar-cupom` do backend (D-02).
