@@ -18,5 +18,8 @@
     "name": "Sistema de Orçamento BomCusto",
     "type": "brownfield",
     "stack": "nestjs+nextjs+prisma+postgresql"
+  },
+  "git": {
+    "allow_default_branch_commits": true
   }
 }

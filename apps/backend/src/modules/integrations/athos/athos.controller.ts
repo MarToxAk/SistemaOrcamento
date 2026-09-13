@@ -36,6 +36,7 @@ import { CreateOrcamentoItemCorrecaoDto } from "./dto/create-orcamento-item-corr
 import { UpdateContaPagarDto } from "./dto/update-conta-pagar.dto";
 import { UploadContaPagarAnexoDto } from "./dto/upload-conta-pagar-anexo.dto";
 import { AdminOnly } from "../../security/admin.decorator";
+import { normalizarCoo, valorMinimoSorteio } from "./athos-cupom-sorteio.util";
 
 const ATHOS_ATTACHMENT_MAX_SIZE_BYTES = 10 * 1024 * 1024;
 const ATHOS_ATTACHMENT_MIME_PATTERN = /^(application\/pdf|image\/png|image\/jpeg)$/;
@@ -408,6 +409,28 @@ export class AthosController {
       throw new BadRequestException("idvenda inválido");
     }
     return this.athosService.verificarTipoProdutoVenda(id);
+  }
+
+  @ApiOperation({
+    summary: "Verificar cupom fiscal (COO) para o sorteio",
+    description:
+      "Confere se o COO informado corresponde a uma venda nao cancelada de valor >= minimo configurado no servidor. Usado pelo microsite de sorteio (promo/), nunca aceita o minimo por query param.",
+  })
+  @ApiQuery({ name: "coo", required: true, example: "12345" })
+  @ApiOkResponse({ description: "{ valido: boolean, valor: number | null }" })
+  @ApiUnauthorizedResponse({ description: "Token ausente ou inválido" })
+  @Get("venda/verificar-cupom")
+  async verificarCupomFiscalSorteio(
+    @Query("coo") coo?: string,
+    @Headers("authorization") authorization?: string,
+    @Headers("x-api-token") xApiToken?: string,
+  ) {
+    this.validateAthosToken(authorization, xApiToken);
+    const normalizado = normalizarCoo(coo);
+    if (!normalizado) {
+      throw new BadRequestException("coo invalido");
+    }
+    return this.athosService.verificarCupomFiscalSorteio(normalizado, valorMinimoSorteio());
   }
 
   @ApiOperation({ summary: "Notas fiscais (NF-e) do cliente no Athos" })

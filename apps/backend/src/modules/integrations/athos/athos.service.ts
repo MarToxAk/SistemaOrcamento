@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { Client, Pool, PoolClient } from "pg";
 import {
@@ -7,6 +14,7 @@ import {
   mapContaPagarRow,
   resolveContaPagarIdColumn,
 } from "./athos-conta-pagar.util";
+import { cooCandidatos, ehVerdadeiroAthos, parseValorMonetario } from "./athos-cupom-sorteio.util";
 import { buildContaPagarAnexoPaths, hasSmbMountPath } from "./athos-anexo.util";
 import { getSmbDebugInfo, isSmbEnabled, smbUnlinkContaPagarFile, smbWriteContaPagarFile } from "./athos-smb.util";
 import { CreateContaPagarDto } from "./dto/create-conta-pagar.dto";
@@ -2750,6 +2758,62 @@ export class AthosService {
     }
   }
 
+  /**
+   * Valida o cupom fiscal (COO) digitado no microsite do sorteio contra a
+   * tabela `venda`. Considera valida a linha com maior valor entre as que
+   * batem coo, nao estao canceladas, nao tem cupom cancelado e tem valor
+   * > valorMinimo (D-01, estritamente maior — R$50,00 exatos nao valem). Os
+   * tres criterios sao avaliados em JS de proposito
+   * (nao em SQL): colunas booleanas deste Athos podem nao ser boolean de
+   * verdade, e `valor` e o dominio `monetario` de tipo base nao
+   * introspeccionado — um filtro/cast em SQL que estourasse por tipo
+   * transformaria toda validacao em erro e travaria o sorteio inteiro.
+   * Em caso de falha de consulta, lanca ServiceUnavailableException — o
+   * chamador precisa distinguir "nao existe" de "nao deu para consultar"
+   * (D-03, fail-closed).
+   */
+  async verificarCupomFiscalSorteio(
+    coo: string,
+    valorMinimo: number,
+  ): Promise<{ valido: boolean; valor: number | null }> {
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const candidatos = cooCandidatos(coo);
+      const result = await client.query(
+        `SELECT v.idvenda, v.coo, v.valor, v.cancelada, v.cupomcancelado
+         FROM venda v
+         WHERE v.coo = ANY($1::text[])
+         ORDER BY v.idvenda DESC
+         LIMIT 20`,
+        [candidatos],
+      );
+
+      let maiorValorValido: number | null = null;
+      for (const row of result.rows) {
+        if (ehVerdadeiroAthos(row.cancelada)) continue;
+        if (ehVerdadeiroAthos(row.cupomcancelado)) continue;
+        const valor = parseValorMonetario(row.valor);
+        if (valor == null) continue;
+        if (valor <= valorMinimo) continue;
+        if (maiorValorValido == null || valor > maiorValorValido) {
+          maiorValorValido = valor;
+        }
+      }
+
+      if (maiorValorValido == null) {
+        return { valido: false, valor: null };
+      }
+      return { valido: true, valor: maiorValorValido };
+    } catch (err) {
+      this.logger.warn(
+        `verificarCupomFiscalSorteio coo=${coo}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw new ServiceUnavailableException("Athos indisponivel para validar o cupom fiscal");
+    } finally {
+      client.release();
+    }
+  }
 
   /**
    * Retorna notas fiscais nao-servico (NF-e) de um cliente do Athos via query read-only.
