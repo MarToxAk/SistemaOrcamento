@@ -20,7 +20,7 @@ const MENSAGENS_CAMPO = {
   cupom: "Cupom invalido.",
   nome: "Nome invalido. Use entre 2 e 80 caracteres.",
   telefone: "Telefone invalido. Informe DDD + numero (10 ou 11 digitos).",
-  nfce: "Numero da NFC-e invalido.",
+  nfce: "Informe apenas os numeros do COO impresso no seu cupom fiscal.",
 };
 
 export default function App() {
@@ -46,6 +46,7 @@ export default function App() {
     if (!cupomValido) { setError("Cupom nao identificado. Acesse pela leitura do QR code do seu cupom."); return; }
     if (!nome.trim()) { setError("Preencha seu nome"); return; }
     if (!telefone.trim()) { setError("Preencha seu telefone"); return; }
+    if (!nfce.trim()) { setError("Preencha o numero do cupom fiscal (COO)"); return; }
     setError("");
     setEnviando(true);
     try {
@@ -66,6 +67,10 @@ export default function App() {
       } else if (resposta.status === 400) {
         const corpo = await resposta.json().catch(() => ({}));
         setError(MENSAGENS_CAMPO[corpo.campo] || "Dados invalidos. Confira o formulario.");
+      } else if (resposta.status === 422) {
+        setError("Nao encontramos uma compra valida (minimo R$50) com este numero de cupom fiscal. Confira o numero do COO impresso no seu cupom fiscal.");
+      } else if (resposta.status === 503) {
+        setError("Nao conseguimos validar seu cupom fiscal agora. Tente novamente em alguns minutos.");
       } else if (resposta.status === 429) {
         setError("Muitas tentativas. Aguarde alguns minutos.");
       } else {
@@ -150,9 +155,9 @@ export default function App() {
           <input type="tel" value={telefone} onChange={e => { setTelefone(e.target.value); setError(""); }}
             placeholder="(00) 00000-0000" style={st.input} />
 
-          <div style={st.fieldLabel}>NFC-e n°</div>
+          <div style={st.fieldLabel}>Cupom fiscal (COO)</div>
           <input type="text" value={nfce} onChange={e => { setNfce(e.target.value); setError(""); }}
-            placeholder="Número da nota fiscal" style={st.input} />
+            placeholder="Somente números do COO" style={st.input} />
 
           {error && <div style={st.error}>{error}</div>}
 

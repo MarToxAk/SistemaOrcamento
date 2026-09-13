@@ -20,9 +20,19 @@ export function validarCadastro(body) {
     return { ok: false, campo: 'telefone', erro: 'telefone deve ter 10 ou 11 digitos (DDD + numero)' }
   }
 
-  const nfceBruto = body?.nfce != null ? String(body.nfce).trim() : ''
-  if (nfceBruto.length > 44 || !NFCE_REGEX.test(nfceBruto)) {
-    return { ok: false, campo: 'nfce', erro: 'nfce deve ter ate 44 caracteres, apenas digitos/espacos/hifens' }
+  // O campo nfce carrega o COO (Codigo de Operacao) do cupom fiscal, exigido
+  // pela integracao com o Athos (D-01). Ordem das regras: primeiro rejeita
+  // qualquer caractere fora de digito/espaco/hifen (pega "ABC-123" antes de
+  // reduzir a digitos), depois reduz a somente digitos, depois exige de 1 a
+  // 10 digitos (limite de `coo varchar(10)` no Athos — nao 44 caracteres) e
+  // recusa numericamente zero.
+  const nfceBruto = String(body?.nfce ?? '').trim()
+  if (!NFCE_REGEX.test(nfceBruto)) {
+    return { ok: false, campo: 'nfce', erro: 'informe apenas numeros do cupom fiscal (COO)' }
+  }
+  const nfceDigitos = nfceBruto.replace(/\D/g, '')
+  if (nfceDigitos.length < 1 || nfceDigitos.length > 10 || Number(nfceDigitos) === 0) {
+    return { ok: false, campo: 'nfce', erro: 'informe o numero do COO impresso no seu cupom fiscal (1 a 10 digitos)' }
   }
 
   return {
@@ -31,7 +41,7 @@ export function validarCadastro(body) {
       cupom: cupomBruto,
       nome,
       telefone: telefoneDigitos,
-      nfce: nfceBruto || null,
+      nfce: nfceDigitos,
     },
   }
 }

@@ -62,8 +62,8 @@ test('validarCadastro aceita telefone com 10 digitos (fixo)', () => {
   assert.equal(r.valor.telefone, '1133334444')
 })
 
-test('validarCadastro rejeita nfce acima de 44 caracteres', () => {
-  const r = validarCadastro({ ...BASE, nfce: '1'.repeat(45) })
+test('validarCadastro rejeita nfce com mais de 10 digitos', () => {
+  const r = validarCadastro({ ...BASE, nfce: '1'.repeat(11) })
   assert.equal(r.ok, false)
   assert.equal(r.campo, 'nfce')
 })
@@ -74,10 +74,36 @@ test('validarCadastro rejeita nfce com caractere fora de digito/espaco/hifen', (
   assert.equal(r.campo, 'nfce')
 })
 
-test('validarCadastro aceita nfce ausente (opcional)', () => {
+test('validarCadastro rejeita nfce ausente (agora obrigatoria)', () => {
   const r = validarCadastro({ ...BASE, nfce: undefined })
+  assert.equal(r.ok, false)
+  assert.equal(r.campo, 'nfce')
+})
+
+test('validarCadastro rejeita nfce vazia e nfce so de espacos', () => {
+  const r1 = validarCadastro({ ...BASE, nfce: '' })
+  assert.equal(r1.ok, false)
+  assert.equal(r1.campo, 'nfce')
+
+  const r2 = validarCadastro({ ...BASE, nfce: '   ' })
+  assert.equal(r2.ok, false)
+  assert.equal(r2.campo, 'nfce')
+})
+
+test('validarCadastro rejeita nfce numericamente zero', () => {
+  const r1 = validarCadastro({ ...BASE, nfce: '0' })
+  assert.equal(r1.ok, false)
+  assert.equal(r1.campo, 'nfce')
+
+  const r2 = validarCadastro({ ...BASE, nfce: '0000' })
+  assert.equal(r2.ok, false)
+  assert.equal(r2.campo, 'nfce')
+})
+
+test('validarCadastro normaliza nfce "01 234-5" para "012345"', () => {
+  const r = validarCadastro({ ...BASE, nfce: '01 234-5' })
   assert.equal(r.ok, true)
-  assert.equal(r.valor.nfce, null)
+  assert.equal(r.valor.nfce, '012345')
 })
 
 test('escaparCelula prefixa apostrofo quando a celula comeca com sinal de igual', () => {

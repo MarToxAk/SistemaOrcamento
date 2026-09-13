@@ -258,9 +258,17 @@ export function createServer({ dbPath, verificarCupomFiscal, enviarWhatsapp } = 
       }
 
       // Validacao do cupom fiscal (COO) contra o Athos, antes de qualquer
-      // insert. Nesta task so o ramo feliz esta implementado; os ramos de
-      // bloqueio (422 invalido, 503 indisponivel) sao a Task 2 do plano.
+      // insert — nunca grava linha parcial. Fail-closed (D-03): tambem
+      // responde 503 para configuracao ausente e para timeout. Trade-off
+      // assumido: se o backend de validacao cair durante o sorteio, ninguem
+      // consegue se cadastrar; o inverso (aceitar sem validar) daria premio a
+      // cupom inexistente e e pior.
       const resultadoAthos = await verificarCupom({ coo: nfce })
+      if (resultadoAthos.status === 'invalido') {
+        res.writeHead(422, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'cupom_fiscal_invalido' }))
+        return
+      }
       if (resultadoAthos.status !== 'valido') {
         res.writeHead(503, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: 'validacao_indisponivel' }))

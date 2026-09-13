@@ -88,11 +88,19 @@ function checkHardening() {
   const indexJsPath = join(ROOT, 'server', 'index.js')
   const indexJs = readWithoutComments(indexJsPath)
 
-  for (const status of ['409', '429', '401', '503']) {
+  for (const status of ['409', '429', '401', '503', '422']) {
     if (!indexJs.includes(status)) {
       fail(`promo/server/index.js nao contem o status ${status}`)
     } else {
       ok(`promo/server/index.js contem o status ${status}`)
+    }
+  }
+
+  for (const codigoErro of ['cupom_fiscal_invalido', 'validacao_indisponivel']) {
+    if (!indexJs.includes(codigoErro)) {
+      fail(`promo/server/index.js nao contem o codigo de erro ${codigoErro}`)
+    } else {
+      ok(`promo/server/index.js contem o codigo de erro ${codigoErro}`)
     }
   }
 
@@ -121,6 +129,12 @@ function checkHardening() {
     fail('promo/src/App.jsx ainda usa o default de cupom zerado "0000"')
   } else {
     ok('promo/src/App.jsx nao usa mais o default de cupom zerado')
+  }
+
+  if (!appJsx.includes('422')) {
+    fail('promo/src/App.jsx nao trata o status 422 (cupom fiscal invalido)')
+  } else {
+    ok('promo/src/App.jsx trata o status 422 (cupom fiscal invalido)')
   }
 
   const envExamplePath = join(ROOT, '.env.example')

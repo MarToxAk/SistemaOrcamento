@@ -246,6 +246,106 @@ test('o verificador de cupom fiscal recebe o COO digitado no campo nfce', async 
   assert.deepEqual(chamadasComCoo, ['424242'])
 })
 
+function contarLinhas(dbPath) {
+  const check = new DatabaseSync(dbPath)
+  const total = check.prepare('SELECT COUNT(*) as total FROM cadastro').get().total
+  check.close()
+  return total
+}
+
+test('POST /api/cadastro com verificador que devolve invalido responde 422 e nao grava', async () => {
+  const verificarCupomFiscal = async () => ({ status: 'invalido' })
+
+  await withServer(
+    async (server, dbPath) => {
+      const resposta = await postCadastro(server, { cupom: '7007' })
+      assert.equal(resposta.status, 422)
+      const json = await resposta.json()
+      assert.equal(json.ok, false)
+      assert.equal(json.error, 'cupom_fiscal_invalido')
+
+      server.db.close()
+      assert.equal(contarLinhas(dbPath), 0)
+      server.db = new DatabaseSync(dbPath)
+    },
+    { verificarCupomFiscal },
+  )
+})
+
+test('POST /api/cadastro com verificador que devolve indisponivel responde 503 e nao grava', async () => {
+  const verificarCupomFiscal = async () => ({ status: 'indisponivel', motivo: 'timeout' })
+
+  await withServer(
+    async (server, dbPath) => {
+      const resposta = await postCadastro(server, { cupom: '7008' })
+      assert.equal(resposta.status, 503)
+      const json = await resposta.json()
+      assert.equal(json.ok, false)
+      assert.equal(json.error, 'validacao_indisponivel')
+
+      server.db.close()
+      assert.equal(contarLinhas(dbPath), 0)
+      server.db = new DatabaseSync(dbPath)
+    },
+    { verificarCupomFiscal },
+  )
+})
+
+test('POST /api/cadastro num servidor sem nenhuma env de validacao configurada responde 503 e nao grava', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'promo-test-'))
+  const dbPath = join(dir, 'promo.db')
+  const originais = {
+    PROMO_ATHOS_BASE_URL: process.env.PROMO_ATHOS_BASE_URL,
+    PROMO_ATHOS_API_TOKEN: process.env.PROMO_ATHOS_API_TOKEN,
+    PROMO_BACKEND_INTERNAL_API_KEY: process.env.PROMO_BACKEND_INTERNAL_API_KEY,
+  }
+  delete process.env.PROMO_ATHOS_BASE_URL
+  delete process.env.PROMO_ATHOS_API_TOKEN
+  delete process.env.PROMO_BACKEND_INTERNAL_API_KEY
+
+  try {
+    // Sem injetar verificarCupomFiscal: usa o default criarVerificadorCupomFiscal(),
+    // que le process.env sem as 3 variaveis.
+    const server = await startServer(dbPath)
+    try {
+      const resposta = await postCadastro(server, { cupom: '7009' })
+      assert.equal(resposta.status, 503)
+      const json = await resposta.json()
+      assert.equal(json.error, 'validacao_indisponivel')
+
+      server.db.close()
+      assert.equal(contarLinhas(dbPath), 0)
+    } finally {
+      server.close()
+    }
+  } finally {
+    for (const [chave, valor] of Object.entries(originais)) {
+      if (valor === undefined) delete process.env[chave]
+      else process.env[chave] = valor
+    }
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('POST /api/cadastro sem nfce responde 400 com campo nfce e nao chega a chamar o verificador', async () => {
+  let chamou = false
+  const verificarCupomFiscal = async () => {
+    chamou = true
+    return { status: 'valido' }
+  }
+
+  await withServer(
+    async (server) => {
+      const resposta = await postCadastro(server, { nfce: undefined })
+      assert.equal(resposta.status, 400)
+      const json = await resposta.json()
+      assert.equal(json.campo, 'nfce')
+      assert.equal(chamou, false)
+    },
+    { verificarCupomFiscal },
+  )
+})
+
 test('GET /api/cadastros.csv com token correto responde 200 text/csv com cabecalho e linhas', async () => {
   await withServer(async (server) => {
     process.env.PROMO_ADMIN_TOKEN = 'segredo-de-teste'
