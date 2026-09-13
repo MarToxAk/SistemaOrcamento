@@ -1,4 +1,4 @@
-import { InternalServerErrorException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, InternalServerErrorException, UnauthorizedException } from "@nestjs/common";
 import { AthosController } from "./athos.controller";
 
 describe("AthosController - Autenticacao fail-closed", () => {
@@ -10,6 +10,7 @@ describe("AthosController - Autenticacao fail-closed", () => {
     listarContasPagar: jest.Mock;
     buscarClientes: jest.Mock;
     criarContaPagar: jest.Mock;
+    verificarCupomFiscalSorteio: jest.Mock;
   };
 
   beforeEach(() => {
@@ -20,6 +21,7 @@ describe("AthosController - Autenticacao fail-closed", () => {
       listarContasPagar: jest.fn(),
       buscarClientes: jest.fn(),
       criarContaPagar: jest.fn(),
+      verificarCupomFiscalSorteio: jest.fn(),
     };
     controller = new AthosController(athosServiceMock as any);
   });
@@ -308,6 +310,41 @@ describe("AthosController - Autenticacao fail-closed", () => {
         ),
       ).rejects.toThrow(UnauthorizedException);
       expect(athosServiceMock.criarContaPagar).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("verificarCupomFiscalSorteio", () => {
+    it("deve lancar UnauthorizedException sem token", async () => {
+      process.env.ATHOS_API_TOKEN = "valid-token-123";
+
+      await expect(
+        controller.verificarCupomFiscalSorteio("12345", undefined, undefined),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(athosServiceMock.verificarCupomFiscalSorteio).not.toHaveBeenCalled();
+    });
+
+    it("deve lancar BadRequestException com token valido e coo invalido", async () => {
+      process.env.ATHOS_API_TOKEN = "valid-token-123";
+
+      await expect(
+        controller.verificarCupomFiscalSorteio("abc", undefined, "valid-token-123"),
+      ).rejects.toThrow(BadRequestException);
+      expect(athosServiceMock.verificarCupomFiscalSorteio).not.toHaveBeenCalled();
+    });
+
+    it("deve delegar ao service com o coo normalizado e o minimo do servidor quando token e coo forem validos", async () => {
+      process.env.ATHOS_API_TOKEN = "valid-token-123";
+      delete process.env.SORTEIO_VALOR_MINIMO;
+      athosServiceMock.verificarCupomFiscalSorteio.mockResolvedValue({ valido: true, valor: 80 });
+
+      const result = await controller.verificarCupomFiscalSorteio(
+        " 01 234-5 ",
+        undefined,
+        "valid-token-123",
+      );
+
+      expect(athosServiceMock.verificarCupomFiscalSorteio).toHaveBeenCalledWith("012345", 50);
+      expect(result).toEqual({ valido: true, valor: 80 });
     });
   });
 });

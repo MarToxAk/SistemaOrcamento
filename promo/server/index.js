@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { validarCadastro } from './validate.js'
 import { montarCsv } from './csv.js'
+import { criarVerificadorCupomFiscal } from './athos.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = join(__dirname, '..', 'dist')
@@ -176,11 +177,17 @@ function tokenConfere(recebido, esperado) {
   return timingSafeEqual(digestRecebido, digestEsperado)
 }
 
-export function createServer({ dbPath }) {
+export function createServer({ dbPath, verificarCupomFiscal, enviarWhatsapp } = {}) {
   const dbDir = dirname(dbPath)
   if (!existsSync(dbDir)) {
     mkdirSync(dbDir, { recursive: true })
   }
+
+  // enviarWhatsapp fica reservado para a integracao de WhatsApp (Task 3
+  // do plano 260913-ivr) — aceito aqui e ainda ignorado nesta task.
+  void enviarWhatsapp
+
+  const verificarCupom = verificarCupomFiscal || criarVerificadorCupomFiscal()
 
   const db = new DatabaseSync(dbPath)
   ensureSchema(db)
@@ -247,6 +254,16 @@ export function createServer({ dbPath }) {
       if (jaExiste) {
         res.writeHead(409, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: 'cupom_ja_cadastrado' }))
+        return
+      }
+
+      // Validacao do cupom fiscal (COO) contra o Athos, antes de qualquer
+      // insert. Nesta task so o ramo feliz esta implementado; os ramos de
+      // bloqueio (422 invalido, 503 indisponivel) sao a Task 2 do plano.
+      const resultadoAthos = await verificarCupom({ coo: nfce })
+      if (resultadoAthos.status !== 'valido') {
+        res.writeHead(503, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'validacao_indisponivel' }))
         return
       }
 

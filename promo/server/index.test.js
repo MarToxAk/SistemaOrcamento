@@ -6,9 +6,9 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { createServer } from './index.js'
 
-function startServer(dbPath) {
+function startServer(dbPath, deps = {}) {
   return new Promise((resolve) => {
-    const server = createServer({ dbPath })
+    const server = createServer({ dbPath, ...deps })
     server.listen(0, () => resolve(server))
   })
 }
@@ -18,10 +18,20 @@ function baseUrl(server) {
   return `http://127.0.0.1:${port}`
 }
 
-async function withServer(fn) {
+// Stub padrao: aprova qualquer cupom fiscal, para os testes que nao existem
+// para exercer a integracao Athos continuarem exercendo exatamente o que
+// exerciam antes dela existir.
+function verificadorAprovaTudo() {
+  return async () => ({ status: 'valido', valor: 999 })
+}
+
+async function withServer(fn, deps = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'promo-test-'))
   const dbPath = join(dir, 'promo.db')
-  const server = await startServer(dbPath)
+  const server = await startServer(dbPath, {
+    verificarCupomFiscal: verificadorAprovaTudo(),
+    ...deps,
+  })
   try {
     await fn(server, dbPath)
   } finally {
@@ -76,16 +86,16 @@ test('reabrir o mesmo arquivo de banco nao duplica schema nem dados', async () =
   const dir = mkdtempSync(join(tmpdir(), 'promo-test-'))
   const dbPath = join(dir, 'promo.db')
   try {
-    const server1 = await startServer(dbPath)
+    const server1 = await startServer(dbPath, { verificarCupomFiscal: verificadorAprovaTudo() })
     await fetch(`${baseUrl(server1)}/api/cadastro`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cupom: '5678', nome: 'Ciclana', telefone: '11988887777' }),
+      body: JSON.stringify({ cupom: '5678', nome: 'Ciclana', telefone: '11988887777', nfce: '999' }),
     })
     server1.db.close()
     server1.close()
 
-    const server2 = await startServer(dbPath)
+    const server2 = await startServer(dbPath, { verificarCupomFiscal: verificadorAprovaTudo() })
     const rows = server2.db.prepare('SELECT cupom FROM cadastro').all()
     assert.equal(rows.length, 1)
     assert.equal(rows[0].cupom, '5678')
@@ -199,6 +209,41 @@ test('GET /api/cadastros.csv sem token responde 401 quando o servidor tem token 
       delete process.env.PROMO_ADMIN_TOKEN
     }
   })
+})
+
+test('POST /api/cadastro com verificador stub que aprova responde 201 e grava exatamente 1 linha', async () => {
+  await withServer(async (server, dbPath) => {
+    const resposta = await postCadastro(server, { cupom: '5005', nfce: '4242' })
+    assert.equal(resposta.status, 201)
+    const json = await resposta.json()
+    assert.equal(json.ok, true)
+
+    server.db.close()
+    const check = new DatabaseSync(dbPath)
+    const rows = check.prepare('SELECT cupom, nfce FROM cadastro WHERE cupom = ?').all('5005')
+    check.close()
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].nfce, '4242')
+    server.db = new DatabaseSync(dbPath)
+  })
+})
+
+test('o verificador de cupom fiscal recebe o COO digitado no campo nfce', async () => {
+  const chamadasComCoo = []
+  const verificarCupomFiscal = async ({ coo }) => {
+    chamadasComCoo.push(coo)
+    return { status: 'valido', valor: 100 }
+  }
+
+  await withServer(
+    async (server) => {
+      const resposta = await postCadastro(server, { cupom: '6006', nfce: '424242' })
+      assert.equal(resposta.status, 201)
+    },
+    { verificarCupomFiscal },
+  )
+
+  assert.deepEqual(chamadasComCoo, ['424242'])
 })
 
 test('GET /api/cadastros.csv com token correto responde 200 text/csv com cabecalho e linhas', async () => {

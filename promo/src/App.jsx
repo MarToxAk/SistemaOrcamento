@@ -25,8 +25,9 @@ const MENSAGENS_CAMPO = {
 
 export default function App() {
   const params = new URLSearchParams(window.location.search);
-  const cupomId = params.get("id") || params.get("cupom") || "";
-  const cupomValido = CUPOM_REGEX.test(cupomId) && Number(cupomId) !== 0;
+  const cupomBruto = params.get("id") || params.get("cupom") || "";
+  const cupomValido = CUPOM_REGEX.test(cupomBruto) && Number(cupomBruto) !== 0;
+  const cupomId = cupomValido ? cupomBruto.padStart(5, "0") : cupomBruto;
 
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
