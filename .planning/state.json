@@ -1,0 +1,23 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v2.5 — API de Produtos Compostos (Kits) no Athos",
+  "phases": [
+    {
+      "number": "39",
+      "name": "Scaffold, Leitura e Spikes",
+      "status": "complete"
+    },
+    {
+      "number": "40",
+      "name": "Write CRUD",
+      "status": "complete"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 41 of 3 · 33% · executing"
+  },
+  "updated_at": "2026-10-05T18:25:50.589Z"
+}
