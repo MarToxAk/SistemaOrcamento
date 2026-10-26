@@ -13,3 +13,11 @@
 - [Integração EFI Pay (Pagamentos PIX)](integration-efi.md) — Geração de cobranças PIX, parcelamentos e recebimento de webhooks de pagamento
 - [Integração PDV](integration-pdv.md) — Leitura read-only do banco do PDV para importação de dados de venda
 - [Infraestrutura e Deploy](infra-deployment.md) — Docker, CI/CD GitHub Actions, Nginx, Tailscale VPN e configuração de produção
+
+## Preferências e referências (migradas da memória automática do Claude)
+
+- [Idioma preferido](feedback_idioma.md) — Sempre responder em português brasileiro
+- [Sem AskUserQuestion](feedback_askuserquestion.md) — Usar perguntas em texto numerado, nunca AskUserQuestion
+- [Não mexer no código sem pedido](feedback_nao_mexer_codigo.md) — Perguntas how-to querem explicação, não edição
+- [Athos roda PostgreSQL 9.0.5](athos_postgres_9_0_5.md) — versão antiga; usar pg_catalog, sem pg_sequence_last_value
+- [URLs do projeto](project_urls.md) — VPS orcamentoapi.bomcustoilhabela.com.br primeiro, fallback localhost:4000
