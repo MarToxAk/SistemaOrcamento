@@ -16,7 +16,7 @@
 - ✅ **v2.2 Gestão de Produtos do Athos (API)** — Fases 32-33 (shipped 2026-06-17) — Phase 34 descartada (decisão: API-only)
 - ✅ **v2.3 White-Label Multi-Empresa** — Fases 35-36 + 999.1 (shipped 2026-06-23)
 - ✅ **v2.4 Defaults Inteligentes no Cadastro de Produto** — Fases 37-38 (shipped 2026-06-28)
-- 🔄 **v2.5 API de Produtos Compostos (Kits)** — Fases 39-40 (em andamento)
+- ✅ **v2.5 API de Produtos Compostos (Kits)** — Fases 39-40 (shipped 2026-09-04, Fase 40 verificada retroativamente)
 
 Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-ROADMAP.md`.
 
@@ -32,7 +32,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 ### Phases
 
 - [x] **Phase 39: Scaffold, Leitura e Spikes de Introspecão** - Spikes de introspecção no DB de referência (192.168.3.198), extração de validarFkExiste para util reutilizável, e endpoint GET de listagem enriquecida de componentes — tudo que não depende do write GRANT (completed 2026-06-30)
-- [ ] **Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)** - Quatro endpoints de escrita com validação dual de FK, gerenciamento transacional do flag, PK serial via RETURNING e mapeamento completo de erros Postgres; cobertura de testes Jest
+- [x] **Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)** - Quatro endpoints de escrita com validação dual de FK, gerenciamento transacional do flag, PK serial via RETURNING e mapeamento completo de erros Postgres; cobertura de testes Jest (completed 2026-09-04, verificação retroativa)
 
 ### Phase Details
 
@@ -72,6 +72,8 @@ Plans:
 
 **External gate (before verification):**
 > ⚠️ GRANT INSERT, UPDATE, DELETE ON TABLE produto_composto + GRANT USAGE, SELECT ON SEQUENCE produto_composto_idprodutocomposto_seq devem estar confirmados no banco Athos antes de iniciar a verificação desta fase. Todo endpoint de escrita retorna 500 sem este GRANT.
+>
+> **Status (2026-09-04):** GRANT ainda não confirmado pelo DBA. O caminho de erro (42501 → HTTP 500 acionável) está implementado e testado; o caminho feliz de escrita real contra o Athos de produção segue pendente de live-verification até o GRANT ser aplicado.
 
 **Requirements:** COMP-02, COMP-03, COMP-04, COMP-05, COMP-06
 
@@ -83,7 +85,13 @@ Plans:
   4. Operador pode remover um componente via DELETE físico; ao remover o último componente, usaprodutocomposto do master é automaticamente definido como false dentro da mesma transação — DELETE físico é correto aqui (produto_composto é tabela de composição, distinta da regra de soft-delete de produto)
   5. Erros Postgres mapeados corretamente para HTTP: 42501 → 500 com mensagem acionável apontando o GRANT ausente; 23505 → 409 (par duplicado); 23514 → 422 (violação de domínio); 23503 → 422 (FK); master/detail inexistente → 422; testes Jest unitários cobrem todos esses cenários incluindo validarFkExiste chamado para ambos master e detail
 
-**Plans:** TBD
+**Plans:** 1/1 plans complete (retroativo)
+
+Plans:
+
+- [x] 40-01-SUMMARY.md — COMP-02..06: código já implementado e commitado em `5d5270d` (#46, 2026-07-01) antes deste diretório de fase existir; verificado retroativamente em 2026-09-04 via `/gsd-autonomous` (leitura de código + suite de testes, 223/223 passando) — ver `40-VERIFICATION.md`
+
+**Status (2026-09-04):** Complete (retroactive) ✓ — descoberto e verificado durante `/gsd-autonomous`, sem reimplementação. GRANT de escrita no Athos de produção ainda pendente de confirmação do DBA (não bloqueia a fase; bloqueia apenas o caminho feliz em produção real).
 
 ---
 
@@ -92,7 +100,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 39. Scaffold, Leitura e Spikes | 3/3 | Complete   | 2026-06-30 |
-| 40. Write CRUD | 0/TBD | Not started | - |
+| 40. Write CRUD | 1/1 | Complete (retroactive) | 2026-09-04 |
 
 ---
 
@@ -116,13 +124,41 @@ Plans:
 **✓ Segurança:** `999.1-SECURITY.md` — `threats_open: 0` (T-AUTH mitigado com rate-limit; T-SANDBOX `--no-sandbox` aceito como risco para deploy interno; dívida do code review registrada).
 **⚠ Ação obrigatória pré-deploy (CR-01):** o gate de senha do painel é *fail-open* — definir `ADMIN_API_KEY`, `CONFIG_PANEL_PASSWORD` e `CONFIG_PANEL_SESSION_SECRET` (e adicioná-los ao `deploy/stack.env.example`) antes de subir, senão o painel admin sobe sem proteção. Ver `999.1-REVIEW.md`.
 
+### Phase 41: Contas a Pagar: Layout, Painéis Fiscais e Fix EFI
+
+**Goal:** Redesenhar o dashboard de Contas a Receber (`/contas-receber`) com layout mais organizado (ordenação por nome/vencido/pago), painel consolidado de boletos a receber no topo, reconciliação automática de pagamento EFI via job agendado (hoje só webhook + botão manual), e indicadores fiscais de organização (aging de inadimplência, NFS-e emitida vs pendente, próximos vencimentos).
+
+**Nota:** título da fase mantém "Contas a Pagar" por conveniência de numeração, mas o escopo real é **Contas a Receber** — termo esclarecido em discuss-phase (ver `41-CONTEXT.md`).
+
+**Depends on:** Módulo `cobranca` (Fases 27-31) já existente
+**Plans:** 4/4 plans executed
+
+Plans:
+
+- [x] 41-01-PLAN.md — Wave 1 · Tracer: painel consolidado de boletos ponta a ponta + indicador NFS-e por boleto (D-06, D-08)
+- [x] 41-02-PLAN.md — Wave 1 · Reconciliação automática EFI: `@nestjs/schedule` + `CobrancaReconciliationJob` (D-03, D-04, D-05)
+- [x] 41-03-PLAN.md — Wave 2 · Indicadores fiscais: recebido no mês, taxa de inadimplência, aging 30/60/90+ e a vencer 7/15/30 (D-02, D-07, D-09)
+- [x] 41-04-PLAN.md — Wave 3 · Ordenação multi-critério da lista de clientes + destaque de inadimplência antiga (D-01, D-10)
+
+### Phase 42: Impressão automática de orçamento ao confirmar pagamento no caixa
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 41
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 42 to break down)
+
 ---
 
 ## Estado atual
 
-**Milestone v2.5 (API de Produtos Compostos / Kits) em andamento.** Roadmap definido em 2026-06-29.
+**Milestone v2.5 (API de Produtos Compostos / Kits) completo** — Fases 39-40 verificadas, audit de milestone passou 8/8 requisitos (`.planning/v2.5-MILESTONE-AUDIT.md`). Fechamento formal (`/gsd-complete-milestone v2.5`) pausado aguardando decisão sobre dívida de UAT/verificação da v2.2 (ver abaixo) — não bloqueia início de nova fase.
 
-Próximo passo: `/gsd-plan-phase 39`
+**Fase 41 planejada** (Contas a Pagar: Layout, Painéis Fiscais e Fix EFI) — discuss, research, patterns, UI-spec e validation concluídos; 4 planos em 3 waves (`/gsd-execute-phase 41`).
+
+Próximo passo: `/gsd-discuss-phase 41`
 
 ### Dívida diferida (não bloqueia)
 
