@@ -131,7 +131,7 @@ Plans:
 **Nota:** título da fase mantém "Contas a Pagar" por conveniência de numeração, mas o escopo real é **Contas a Receber** — termo esclarecido em discuss-phase (ver `41-CONTEXT.md`).
 
 **Depends on:** Módulo `cobranca` (Fases 27-31) já existente
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
@@ -140,9 +140,9 @@ Plans:
 - [x] 41-03-PLAN.md — Wave 2 · Indicadores fiscais: recebido no mês, taxa de inadimplência, aging 30/60/90+ e a vencer 7/15/30 (D-02, D-07, D-09)
 - [x] 41-04-PLAN.md — Wave 3 · Ordenação multi-critério da lista de clientes + destaque de inadimplência antiga (D-01, D-10)
 
-### Phase 42: Impressão automática de orçamento ao confirmar pagamento no caixa
+### Phase 42: E-mail de boleto com destinatários em cópia (CC)
 
-**Goal:** [To be planned]
+**Goal:** No envio de boleto por e-mail, o operador pode adicionar um ou mais e-mails extras como destinatários em cópia (CC), além do e-mail do cliente. (Escopo detalhado a definir no discuss-phase.)
 **Requirements**: TBD
 **Depends on:** Phase 41
 **Plans:** 0 plans
