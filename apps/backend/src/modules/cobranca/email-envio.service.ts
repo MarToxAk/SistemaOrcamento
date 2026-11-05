@@ -14,17 +14,49 @@ import { AthosService } from "../integrations/athos/athos.service";
 import { DanfePdfService } from "../integrations/nfse/danfe-pdf.service";
 import { PrismaService } from "../database/prisma.service";
 import { CobrancaService } from "./cobranca.service";
+import { EMAIL_CC_MAX } from "./dto/enviar-email-cobranca.dto";
 
 // GIF89a transparente 1x1 canonico = 43 bytes (o acceptance do PLAN espera size_download=43).
 // A string do PLAN (...AAIBRAA7) decodifica para 42 bytes; usamos a variante de 43 bytes.
 const GIF_1X1_BASE64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Normaliza a lista de CC (D-02): trim, descarta vazios, valida formato (EMAIL_RE),
+ * remove duplicados case-insensitive (mantem a grafia da 1a ocorrencia), remove o
+ * destinatario principal (case-insensitive) e aplica o limite EMAIL_CC_MAX.
+ * Lanca BadRequestException para item invalido ou lista acima do limite.
+ */
+export function normalizarListaCc(
+  lista: readonly string[] | undefined,
+  destinatarioPrincipal?: string,
+): string[] {
+  const principal = destinatarioPrincipal?.trim().toLowerCase();
+  const vistos = new Set<string>();
+  const out: string[] = [];
+  for (const bruto of lista ?? []) {
+    const email = typeof bruto === "string" ? bruto.trim() : "";
+    if (!email) continue;
+    if (!EMAIL_RE.test(email)) {
+      throw new BadRequestException(`E-mail em cópia (CC) inválido: ${email}`);
+    }
+    const chave = email.toLowerCase();
+    if (chave === principal || vistos.has(chave)) continue;
+    vistos.add(chave);
+    out.push(email);
+  }
+  if (out.length > EMAIL_CC_MAX) {
+    throw new BadRequestException(`Máximo de ${EMAIL_CC_MAX} e-mails em cópia (CC).`);
+  }
+  return out;
+}
+
 interface EnviarInput {
   idclienteAthos: number;
   cobrancaBoletoId?: number;
   nfseEmitidaIds?: number[];
   destinatario?: string;
+  cc?: string[];
 }
 
 interface Anexo {
@@ -73,6 +105,7 @@ export class EmailEnvioService {
     id: number;
     token: string;
     destinatario: string;
+    cc: string[];
     status: string;
     anexos: string[];
   }> {
@@ -90,6 +123,8 @@ export class EmailEnvioService {
     if (!destinatario || !EMAIL_RE.test(destinatario)) {
       throw new BadRequestException("Cliente sem e-mail cadastrado; informe o destinatario.");
     }
+    // Falha rapido (antes de baixar anexos) se algum CC for invalido ou exceder o limite.
+    const cc = normalizarListaCc(input.cc, destinatario);
 
     const attachments: Anexo[] = [];
     // Um item por documento (nao por arquivo) — usado so para montar a lista legivel no corpo do e-mail.
@@ -211,6 +246,7 @@ export class EmailEnvioService {
       await transport.sendMail({
         from: this.config.get<string>("SMTP_FROM"),
         to: destinatario,
+        ...(cc.length > 0 ? { cc } : {}),
         subject: assunto,
         html,
         text,
@@ -218,7 +254,7 @@ export class EmailEnvioService {
       });
     } catch (err) {
       this.logger.error(
-        `Falha ao enviar e-mail para ${destinatario}: ${err instanceof Error ? err.message : String(err)}`,
+        `Falha ao enviar e-mail para ${destinatario}${cc.length > 0 ? ` (+${cc.length} em cópia)` : ""}: ${err instanceof Error ? err.message : String(err)}`,
       );
       throw new InternalServerErrorException("Falha ao enviar o e-mail.");
     }
@@ -228,6 +264,7 @@ export class EmailEnvioService {
         token,
         idclienteAthos: input.idclienteAthos,
         destinatario,
+        cc,
         assunto,
         status: "enviado",
         cobrancaBoletoId: input.cobrancaBoletoId ?? null,
@@ -236,7 +273,7 @@ export class EmailEnvioService {
       },
     });
 
-    return { id: row.id, token, destinatario, status: row.status, anexos };
+    return { id: row.id, token, destinatario, cc, status: row.status, anexos };
   }
 
   /**

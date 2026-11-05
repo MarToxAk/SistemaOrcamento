@@ -1,6 +1,9 @@
-import { BadRequestException } from "@nestjs/common";
+import "reflect-metadata";
+
+import { BadRequestException, ValidationPipe } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
 
+import { EnviarEmailCobrancaDto } from "./dto/enviar-email-cobranca.dto";
 import { EmailEnvioService } from "./email-envio.service";
 
 jest.mock("nodemailer");
@@ -184,6 +187,135 @@ describe("EmailEnvioService.enviarBoletoENotas", () => {
     expect(sendMail.mock.calls[0][0].attachments).toHaveLength(3);
     const createArg = (service as any).prisma.cobrancaEmailEnvio.create.mock.calls[0][0].data;
     expect(createArg.nfeNumeros).toEqual([]);
+  });
+});
+
+describe("EmailEnvioService.enviarBoletoENotas - CC (Fase 42)", () => {
+  it("8. cc com 2 e-mails validos -> sendMail recebe cc na ordem informada e o retorno inclui cc", async () => {
+    const { service, sendMail } = makeService();
+    const out = await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 10,
+      destinatario: "cli@x.com",
+      cc: ["a@x.com", "b@x.com"],
+    });
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.to).toBe("cli@x.com");
+    expect(mail.cc).toEqual(["a@x.com", "b@x.com"]);
+    expect(out.cc).toEqual(["a@x.com", "b@x.com"]);
+  });
+
+  it("9. remove duplicados case-insensitive e o principal, mantendo a grafia da 1a ocorrencia", async () => {
+    const { service, sendMail } = makeService();
+    await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 10,
+      destinatario: "cli@x.com",
+      cc: ["A@x.com", "a@x.com", " CLI@X.COM ", "b@x.com"],
+    });
+    expect(sendMail.mock.calls[0][0].cc).toEqual(["A@x.com", "b@x.com"]);
+  });
+
+  it("10. sem destinatario no input, remove do cc o principal resolvido do Athos", async () => {
+    const { service, sendMail } = makeService();
+    await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 10,
+      cc: ["COB@x.com", "z@x.com"],
+    });
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.to).toBe("cob@x.com");
+    expect(mail.cc).toEqual(["z@x.com"]);
+  });
+
+  it("11. sem cc -> sem cabecalho Cc nem Bcc, mesmo com EMPRESA_EMAIL configurado (D-04)", async () => {
+    const { service, sendMail } = makeService();
+    (service as any).config = {
+      get: (k: string) => ({ ...CONFIG, EMPRESA_EMAIL: "financeiro@empresa.com" })[k],
+    };
+    const out = await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 10,
+      destinatario: "cli@x.com",
+    });
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.cc).toBeUndefined();
+    expect(mail.bcc).toBeUndefined();
+    expect(out.cc).toEqual([]);
+  });
+
+  it("12. cc com item invalido -> BadRequestException e sendMail nao chamado", async () => {
+    const { service, sendMail } = makeService();
+    await expect(
+      service.enviarBoletoENotas({
+        idclienteAthos: 1,
+        cobrancaBoletoId: 10,
+        destinatario: "cli@x.com",
+        cc: ["ok@x.com", "invalido"],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(sendMail).not.toHaveBeenCalled();
+    expect((service as any).cobrancaService.downloadBoletoPdf).not.toHaveBeenCalled();
+  });
+
+  it("13. mais de 10 e-mails distintos apos normalizacao -> BadRequestException e sendMail nao chamado", async () => {
+    const { service, sendMail } = makeService();
+    const cc = Array.from({ length: 11 }, (_, i) => `u${i}@x.com`);
+    await expect(
+      service.enviarBoletoENotas({
+        idclienteAthos: 1,
+        cobrancaBoletoId: 10,
+        destinatario: "cli@x.com",
+        cc,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("14. contrato HTTP (tracer): ValidationPipe aceita cc valido e o DTO chega ao sendMail com cc", async () => {
+    const { service, sendMail } = makeService();
+    const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true });
+    const dto = (await pipe.transform(
+      { idclienteAthos: 1, cobrancaBoletoId: 10, destinatario: "cli@x.com", cc: ["a@x.com"] },
+      { type: "body", metatype: EnviarEmailCobrancaDto, data: "" },
+    )) as EnviarEmailCobrancaDto;
+    await service.enviarBoletoENotas(dto);
+    expect(sendMail.mock.calls[0][0].cc).toEqual(["a@x.com"]);
+  });
+
+  it("15. contrato HTTP: ValidationPipe rejeita cc com item invalido e cc com 11 itens", async () => {
+    const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true });
+    const meta = { type: "body" as const, metatype: EnviarEmailCobrancaDto, data: "" };
+    await expect(
+      pipe.transform({ idclienteAthos: 1, cobrancaBoletoId: 10, cc: ["ok@x.com", "invalido"] }, meta),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    const onze = Array.from({ length: 11 }, (_, i) => `u${i}@x.com`);
+    await expect(
+      pipe.transform({ idclienteAthos: 1, cobrancaBoletoId: 10, cc: onze }, meta),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("16. grava em CobrancaEmailEnvio o cc normalizado", async () => {
+    const { service } = makeService();
+    await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 10,
+      destinatario: "cli@x.com",
+      cc: ["a@x.com", "A@x.com", "cli@x.com"],
+    });
+    const data = (service as any).prisma.cobrancaEmailEnvio.create.mock.calls[0][0].data;
+    expect(data.cc).toEqual(["a@x.com"]);
+  });
+
+  it("17. sem cc grava cc como lista vazia", async () => {
+    const { service } = makeService();
+    await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 10,
+      destinatario: "cli@x.com",
+    });
+    const data = (service as any).prisma.cobrancaEmailEnvio.create.mock.calls[0][0].data;
+    expect(data.cc).toEqual([]);
   });
 });
 
