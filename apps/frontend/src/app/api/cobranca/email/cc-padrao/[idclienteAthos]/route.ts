@@ -11,7 +11,8 @@ type Ctx = { params: Promise<{ idclienteAthos: string }> };
 async function lerIdCliente(params: Ctx["params"]): Promise<number | null> {
   const { idclienteAthos } = await params;
   const numId = Number(idclienteAthos);
-  return Number.isInteger(numId) && numId > 0 ? numId : null;
+  // idclienteAthos e Int (32 bits) no banco: acima disso o Prisma estoura (500).
+  return Number.isInteger(numId) && numId > 0 && numId <= 2_147_483_647 ? numId : null;
 }
 
 export async function GET(req: NextRequest, { params }: Ctx): Promise<NextResponse> {

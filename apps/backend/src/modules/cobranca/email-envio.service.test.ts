@@ -377,10 +377,10 @@ describe("EmailEnvioService lista fixa de CC por cliente (D-06)", () => {
     expect(out).toEqual({ idclienteAthos: 7, emails: [] });
   });
 
-  it("20. id 0 ou negativo -> BadRequestException e Prisma nao chamado", async () => {
+  it("20. id 0, negativo ou acima de 2^31-1 -> BadRequestException (400, nao 500) e Prisma nao chamado", async () => {
     const { service } = makeService();
     const p = (service as any).prisma.cobrancaEmailCcPadrao;
-    for (const id of [0, -3, 1.5, Number.NaN]) {
+    for (const id of [0, -3, 1.5, Number.NaN, 2_147_483_648, 99_999_999_999]) {
       await expect(service.buscarCcPadrao(id)).rejects.toBeInstanceOf(BadRequestException);
       await expect(service.salvarCcPadrao(id, ["a@x.com"])).rejects.toBeInstanceOf(
         BadRequestException,
@@ -388,6 +388,12 @@ describe("EmailEnvioService lista fixa de CC por cliente (D-06)", () => {
     }
     expect(p.findUnique).not.toHaveBeenCalled();
     expect(p.upsert).not.toHaveBeenCalled();
+  });
+
+  it("20b. id exatamente 2147483647 (limite do Int) e aceito (WR-05)", async () => {
+    const { service } = makeService();
+    const out = await service.buscarCcPadrao(2_147_483_647);
+    expect(out.idclienteAthos).toBe(2_147_483_647);
   });
 
   it("21. salvarCcPadrao normaliza e faz upsert por idclienteAthos", async () => {

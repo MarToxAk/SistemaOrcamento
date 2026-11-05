@@ -19,6 +19,7 @@ import { EMAIL_CC_MAX } from "./dto/enviar-email-cobranca.dto";
 // GIF89a transparente 1x1 canonico = 43 bytes (o acceptance do PLAN espera size_download=43).
 // A string do PLAN (...AAIBRAA7) decodifica para 42 bytes; usamos a variante de 43 bytes.
 const GIF_1X1_BASE64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
+const INT32_MAX = 2_147_483_647;
 // Rejeita espacos/CR/LF e demais caracteres de controle, '<' '>' ',' ';' aspas, parenteses,
 // colchetes e barra invertida: nada que permita injetar cabecalho ou virar 2 destinatarios.
 const EMAIL_RE =
@@ -307,7 +308,8 @@ export class EmailEnvioService {
   }
 
   private assertIdCliente(idclienteAthos: number): void {
-    if (!Number.isInteger(idclienteAthos) || idclienteAthos <= 0) {
+    // A coluna idclienteAthos e Int (32 bits): acima disso o Prisma estoura e vira 500.
+    if (!Number.isInteger(idclienteAthos) || idclienteAthos <= 0 || idclienteAthos > INT32_MAX) {
       throw new BadRequestException("idclienteAthos inválido.");
     }
   }
