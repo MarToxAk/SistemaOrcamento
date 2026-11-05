@@ -143,12 +143,13 @@ Plans:
 ### Phase 42: E-mail de boleto com destinatários em cópia (CC)
 
 **Goal:** No envio de boleto por e-mail, o operador pode adicionar um ou mais e-mails extras como destinatários em cópia (CC), além do e-mail do cliente. (Escopo detalhado a definir no discuss-phase.)
-**Requirements**: TBD
+**Requirements**: CC-01, CC-02, CC-03, CC-04, CC-05 (IDs locais da fase — definidos em 42-01-PLAN.md)
 **Depends on:** Phase 41
-**Plans:** 0 plans
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 42 to break down)
+- [ ] 42-01-PLAN.md — Wave 1 · Tracer: CC ponta a ponta (chips no modal -> proxy -> DTO -> normalização -> sendMail cc) + CC no histórico CobrancaEmailEnvio (D-01..D-05, D-07)
+- [ ] 42-02-PLAN.md — Wave 2 · Lista fixa de CC por cliente: tabela CobrancaEmailCcPadrao + GET/PUT + pré-preenchimento + checkbox "Salvar como padrão deste cliente" (D-01, D-02, D-06, D-07)
 
 ---
 

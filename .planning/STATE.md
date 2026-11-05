@@ -2,26 +2,26 @@
 gsd_state_version: "1.0"
 milestone: v2.5
 milestone_name: API de Produtos Compostos (Kits) no Athos
-current_phase: 41
-current_phase_name: "Contas a Pagar: Layout, Painéis Fiscais e Fix EFI"
-status: executing
-stopped_at: Completed quick task 260913-ivr - validacao Athos (COO>=R$50) + WhatsApp best-effort no microsite promo/ (human-check de producao pendente)
-last_updated: "2026-09-13T16:19:32.170Z"
-last_activity: 2026-09-06
-last_activity_desc: Completed quick task 260906-i7c - corrigir emissao de NFS-e de servico no orcamento (diagnostico do pre-preenchimento + endereco editavel + busca de cliente Athos)
-state_head: 2dbacc78d333b9bfed41fa022a06d8b970423f91
+current_phase: 42 — Impressão automática de orçamento ao confirmar pagamento no caixa
+current_phase_name: Impressão automática de orçamento ao confirmar pagamento no caixa
+status: planning
+stopped_at: Phase 41 complete, ready to plan Phase 42
+last_updated: "2026-11-05T12:41:51.914Z"
+last_activity: 2026-11-05
+last_activity_desc: Phase 41 complete, transitioned to Phase 42
+state_head: c7c2fdb3d81876d565f9d5e16d493cd58a70676e
 progress:
-  total_phases: 3
-  completed_phases: 1
+  total_phases: 4
+  completed_phases: 3
   total_plans: 7
   completed_plans: 7
-  percent: 33
+  percent: 75
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-09-04 — Fase 40 verificada retroativamente (código já implementado em commit 5d5270d); milestone v2.5 completo
-Current phase: 41
+Current phase: 42 — Impressão automática de orçamento ao confirmar pagamento no caixa
 Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
@@ -29,11 +29,11 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 ## Current Position
 
 Phase: 41 (Contas a Pagar: Layout, Painéis Fiscais e Fix EFI) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 41
-Last activity: 2026-09-06 - Completed quick task 260906-iz0: Corrigir 404 real na emissao de NFS-e no orcamento (NfseService so buscava quote por UUID, nao por internalNumber/externalQuoteId)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-05 — Phase 41 complete, transitioned to Phase 42
 
-Progress: [███░░░░░░░] 33% (2/2 phases complete)
+Progress: [████████░░] 75% (2/2 phases complete)
 
 ## Project Status
 
@@ -310,7 +310,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 ## Session
 
 **Last session:** 2026-09-13T16:19:31.542Z
-**Stopped at:** Completed quick task 260913-ivr - validacao Athos (COO>=R$50) + WhatsApp best-effort no microsite promo/ (human-check de producao pendente)
+**Stopped at:** Phase 41 complete, ready to plan Phase 42
 **Resume file:** None
 
 ## Decisions
