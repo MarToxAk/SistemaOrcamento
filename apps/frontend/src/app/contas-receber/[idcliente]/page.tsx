@@ -863,6 +863,7 @@ export default function ClienteDetalhePage({
       if (seq !== emailCcCargaSeq.current) return;
       if (!res.ok) {
         setEmailCcPadraoAviso("Não foi possível carregar a lista de cópia padrão deste cliente.");
+        setEmailCcSalvarPadrao(false);
         return;
       }
       const data = await res.json().catch(() => ({}));
@@ -874,6 +875,7 @@ export default function ClienteDetalhePage({
     } catch {
       if (seq !== emailCcCargaSeq.current) return;
       setEmailCcPadraoAviso("Não foi possível carregar a lista de cópia padrão deste cliente.");
+      setEmailCcSalvarPadrao(false);
     } finally {
       clearTimeout(timer);
       if (seq === emailCcCargaSeq.current) setEmailCcCarregando(false);
@@ -925,7 +927,7 @@ export default function ClienteDetalhePage({
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         // D-06: so grava o padrao com opt-in explicito e envio ok; falha aqui nunca desfaz o envio.
-        if (emailCcSalvarPadrao) {
+        if (emailCcSalvarPadrao && !emailCcPadraoAviso) {
           const listaEnviada: string[] = Array.isArray(data?.cc) ? data.cc : ccFinal;
           try {
             const resPadrao = await fetch(`/api/cobranca/email/cc-padrao/${idcliente}`, {
@@ -2537,12 +2539,18 @@ export default function ClienteDetalhePage({
                       type="checkbox"
                       className="form-check-input"
                       checked={emailCcSalvarPadrao}
+                      disabled={emailCcCarregando || !!emailCcPadraoAviso}
                       onChange={(e) => setEmailCcSalvarPadrao(e.target.checked)}
                     />
                     <label className="form-check-label small" htmlFor="email-cc-salvar-padrao">
                       Salvar como padrão deste cliente
                     </label>
                   </div>
+                  {emailCcPadraoAviso && (
+                    <small className="text-muted d-block">
+                      Salvar como padrão indisponível: a lista atual não foi carregada e seria sobrescrita.
+                    </small>
+                  )}
                   {emailCcSalvarPadrao && emailCc.length === 0 && (
                     <small className="text-muted d-block">
                       Com a lista vazia, o padrão salvo deste cliente será removido.
