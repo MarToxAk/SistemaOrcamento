@@ -97,6 +97,7 @@ function formatDate(iso: string): string {
 }
 
 const EMAIL_CC_MAX = 10; // espelha EMAIL_CC_MAX de apps/backend/src/modules/cobranca/dto/enviar-email-cobranca.dto.ts
+const EMAIL_CC_PADRAO_TIMEOUT_MS = 8000; // limite do GET do padrao de CC (nao pode travar o Enviar)
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // mesma regex do backend (email-envio.service.ts)
 
 /** Funde o texto digitado (separado por virgula, ponto e virgula ou espaco) na lista de CC atual. */
@@ -851,8 +852,14 @@ export default function ClienteDetalhePage({
   async function carregarCcPadrao(principal: string) {
     const seq = ++emailCcCargaSeq.current;
     setEmailCcCarregando(true);
+    // O padrao e um dado opcional: se o GET pendurar, aborta por timeout para nao bloquear o Enviar.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), EMAIL_CC_PADRAO_TIMEOUT_MS);
     try {
-      const res = await fetch(`/api/cobranca/email/cc-padrao/${idcliente}`, { cache: "no-store" });
+      const res = await fetch(`/api/cobranca/email/cc-padrao/${idcliente}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       if (seq !== emailCcCargaSeq.current) return;
       if (!res.ok) {
         setEmailCcPadraoAviso("Não foi possível carregar a lista de cópia padrão deste cliente.");
@@ -868,6 +875,7 @@ export default function ClienteDetalhePage({
       if (seq !== emailCcCargaSeq.current) return;
       setEmailCcPadraoAviso("Não foi possível carregar a lista de cópia padrão deste cliente.");
     } finally {
+      clearTimeout(timer);
       if (seq === emailCcCargaSeq.current) setEmailCcCarregando(false);
     }
   }
