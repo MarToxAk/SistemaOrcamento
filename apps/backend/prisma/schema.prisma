@@ -249,6 +249,7 @@ model CobrancaEmailEnvio {
   token            String          @unique
   idclienteAthos   Int
   destinatario     String
+  cc               String[]        @default([]) // destinatarios em copia (CC) ja normalizados — Fase 42 (D-05)
   assunto          String?
   status           String          @default("enviado") // enviado | aberto | confirmado
   cobrancaBoletoId Int?

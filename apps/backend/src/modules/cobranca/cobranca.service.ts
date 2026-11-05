@@ -630,6 +630,7 @@ export class CobrancaService {
     ultimoEmail: {
       status: string;
       destinatario: string;
+      cc: string[];
       enviadoEm: Date;
       abertoEm: Date | null;
       confirmadoEm: Date | null;
@@ -653,7 +654,7 @@ export class CobrancaService {
             emailEnvios: {
               orderBy: { enviadoEm: "desc" },
               take: 1,
-              select: { status: true, destinatario: true, enviadoEm: true, abertoEm: true, confirmadoEm: true },
+              select: { status: true, destinatario: true, cc: true, enviadoEm: true, abertoEm: true, confirmadoEm: true },
             },
           },
         },
@@ -671,6 +672,7 @@ export class CobrancaService {
           ? {
               status: ultimo.status,
               destinatario: ultimo.destinatario,
+              cc: ultimo.cc,
               enviadoEm: ultimo.enviadoEm,
               abertoEm: ultimo.abertoEm,
               confirmadoEm: ultimo.confirmadoEm,

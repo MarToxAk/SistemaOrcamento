@@ -51,6 +51,7 @@ interface TituloReceber {
     ultimoEmail?: {
       status: string;
       destinatario: string;
+      cc?: string[];
       enviadoEm: string;
       abertoEm: string | null;
       confirmadoEm: string | null;
@@ -144,7 +145,9 @@ function StatusEmailBadge({ ultimoEmail }: { ultimoEmail: NonNullable<TituloRece
   return (
     <span
       className={`badge ${config.classe}`}
-      title={`E-mail para ${ultimoEmail.destinatario} — enviado em ${formatDateHora(ultimoEmail.enviadoEm)}${
+      title={`E-mail para ${ultimoEmail.destinatario}${
+        ultimoEmail.cc && ultimoEmail.cc.length > 0 ? ` (cópia: ${ultimoEmail.cc.join(", ")})` : ""
+      } — enviado em ${formatDateHora(ultimoEmail.enviadoEm)}${
         ultimoEmail.abertoEm ? ` · aberto em ${formatDateHora(ultimoEmail.abertoEm)}` : ""
       }${ultimoEmail.confirmadoEm ? ` · confirmado em ${formatDateHora(ultimoEmail.confirmadoEm)}` : ""}`}
     >

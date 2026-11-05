@@ -264,6 +264,7 @@ export class EmailEnvioService {
         token,
         idclienteAthos: input.idclienteAthos,
         destinatario,
+        cc,
         assunto,
         status: "enviado",
         cobrancaBoletoId: input.cobrancaBoletoId ?? null,
