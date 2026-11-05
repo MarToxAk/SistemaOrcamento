@@ -95,6 +95,39 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
+const EMAIL_CC_MAX = 10; // espelha EMAIL_CC_MAX de apps/backend/src/modules/cobranca/dto/enviar-email-cobranca.dto.ts
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // mesma regex do backend (email-envio.service.ts)
+
+/** Funde o texto digitado (separado por virgula, ponto e virgula ou espaco) na lista de CC atual. */
+function mesclarEmailsCc(
+  atual: string[],
+  texto: string,
+  principal: string,
+): { lista: string[]; invalidos: string[]; excedentes: number } {
+  const principalLc = principal.trim().toLowerCase();
+  const lista = atual.filter((e) => e.toLowerCase() !== principalLc);
+  const invalidos: string[] = [];
+  let excedentes = 0;
+  const tokens = texto
+    .split(/[,;\s]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  for (const token of tokens) {
+    if (!EMAIL_RE.test(token)) {
+      invalidos.push(token);
+      continue;
+    }
+    const lc = token.toLowerCase();
+    if (lc === principalLc || lista.some((e) => e.toLowerCase() === lc)) continue;
+    if (lista.length >= EMAIL_CC_MAX) {
+      excedentes += 1;
+      continue;
+    }
+    lista.push(token);
+  }
+  return { lista, invalidos, excedentes };
+}
+
 function formatDateHora(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
@@ -227,8 +260,12 @@ export default function ClienteDetalhePage({
     nfeCount: number;
   } | null>(null);
   const [emailDestinatario, setEmailDestinatario] = useState("");
+  const [emailCc, setEmailCc] = useState<string[]>([]);
+  const [emailCcInput, setEmailCcInput] = useState("");
+  const [emailCcErro, setEmailCcErro] = useState("");
   const [emailResult, setEmailResult] = useState<{
     destinatario: string;
+    cc?: string[];
     status: string;
     anexos?: string[];
   } | null>(null);
@@ -787,13 +824,43 @@ export default function ClienteDetalhePage({
     setEmailDestinatario(
       dadosCliente?.emailcobrancacliente ?? dadosCliente?.emailcliente ?? "",
     );
+    setEmailCc([]);
+    setEmailCcInput("");
+    setEmailCcErro("");
     setEmailErro("");
     setEmailResult(null);
     setEmailModalState("confirm");
   }
 
+  /** Aplica a mescla de CC no estado e devolve a lista final + se houve problema (invalidos/excedentes). */
+  function aplicarMesclaCc(): { lista: string[]; ok: boolean } {
+    const { lista, invalidos, excedentes } = mesclarEmailsCc(emailCc, emailCcInput, emailDestinatario);
+    setEmailCc(lista);
+    setEmailCcInput(invalidos.join(", "));
+    if (invalidos.length > 0) {
+      setEmailCcErro(`E-mail inválido: ${invalidos.join(", ")}`);
+    } else if (excedentes > 0) {
+      setEmailCcErro(`Limite de ${EMAIL_CC_MAX} e-mails em cópia.`);
+    } else {
+      setEmailCcErro("");
+    }
+    return { lista, ok: invalidos.length === 0 && excedentes === 0 };
+  }
+
+  function adicionarEmailCc() {
+    aplicarMesclaCc();
+  }
+
+  function removerEmailCc(email: string) {
+    setEmailCc((atual) => atual.filter((e) => e !== email));
+    setEmailCcErro("");
+  }
+
   async function confirmarEnviarEmail() {
     if (!emailCtx) return;
+    // Incorpora texto digitado e ainda nao adicionado; aborta se houver problema.
+    const { lista: ccFinal, ok } = aplicarMesclaCc();
+    if (!ok) return;
     setEmailModalState("loading");
     try {
       const res = await fetch("/api/cobranca/email/enviar", {
@@ -804,6 +871,7 @@ export default function ClienteDetalhePage({
           cobrancaBoletoId: emailCtx.cobrancaId,
           nfseEmitidaIds: emailCtx.nfseEmitidaIds,
           destinatario: emailDestinatario.trim() || undefined,
+          cc: ccFinal,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -811,7 +879,8 @@ export default function ClienteDetalhePage({
         setEmailResult(data);
         setEmailModalState("success");
       } else {
-        setEmailErro(data.message ?? data.error ?? "Falha ao enviar.");
+        const msg = Array.isArray(data.message) ? data.message.join(" ") : data.message;
+        setEmailErro(msg ?? data.error ?? "Falha ao enviar.");
         setEmailModalState("error");
       }
     } catch {
@@ -2340,7 +2409,57 @@ export default function ClienteDetalhePage({
                     onChange={(e) => setEmailDestinatario(e.target.value)}
                     placeholder="cliente@exemplo.com"
                   />
-                  <small className="text-muted d-block">
+                  <label className="form-label small fw-semibold" htmlFor="email-cc-input">
+                    Cópia (CC)
+                  </label>
+                  <div className="input-group">
+                    <input
+                      id="email-cc-input"
+                      type="text"
+                      className="form-control"
+                      value={emailCcInput}
+                      onChange={(e) => setEmailCcInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === ",") {
+                          e.preventDefault();
+                          adicionarEmailCc();
+                        }
+                      }}
+                      placeholder="outro@exemplo.com"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      disabled={!emailCcInput.trim()}
+                      onClick={adicionarEmailCc}
+                    >
+                      <i className="bi bi-plus-lg me-1" />Adicionar
+                    </button>
+                  </div>
+                  {emailCcErro && <div className="small text-danger mt-1">{emailCcErro}</div>}
+                  <small className="text-muted d-block mt-1">
+                    Opcional — até {EMAIL_CC_MAX} e-mails. Enter ou vírgula para adicionar. ({emailCc.length}/{EMAIL_CC_MAX})
+                  </small>
+                  {emailCc.length > 0 && (
+                    <div className="d-flex flex-wrap gap-1 mt-2">
+                      {emailCc.map((email) => (
+                        <span
+                          key={email}
+                          className="badge rounded-pill text-bg-light border fw-normal d-inline-flex align-items-center gap-1"
+                        >
+                          {email}
+                          <button
+                            type="button"
+                            className="btn-close"
+                            style={{ fontSize: "0.5rem" }}
+                            aria-label={`Remover ${email}`}
+                            onClick={() => removerEmailCc(email)}
+                          />
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <small className="text-muted d-block mt-3">
                     Serão anexados: boleto (PDF) + {emailCtx.nfseEmitidaIds.length} NFS-e (PDF + XML) +{" "}
                     {emailCtx.nfeCount} NF-e (PDF + XML)
                   </small>
@@ -2381,6 +2500,9 @@ export default function ClienteDetalhePage({
                     <i className="bi bi-check-circle-fill flex-shrink-0" />
                     <div>E-mail enviado para {emailResult.destinatario}</div>
                   </div>
+                  {emailResult.cc && emailResult.cc.length > 0 && (
+                    <div className="small mb-2">Cópia (CC): {emailResult.cc.join(", ")}</div>
+                  )}
                   {emailResult.anexos && emailResult.anexos.length > 0 && (
                     <ul className="small mb-2">
                       {emailResult.anexos.map((a, i) => (
@@ -2391,6 +2513,9 @@ export default function ClienteDetalhePage({
                   <small className="text-muted d-block">
                     A confirmação de leitura depende do cliente abrir a imagem ou clicar no link de
                     confirmação — o pixel pode não registrar em alguns provedores.
+                    {emailResult.cc && emailResult.cc.length > 0
+                      ? " Com cópia, a abertura/confirmação pode ter vindo de qualquer destinatário."
+                      : ""}
                   </small>
                 </div>
                 <div className="boleto-modal-footer">
