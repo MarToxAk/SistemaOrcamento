@@ -294,6 +294,29 @@ describe("EmailEnvioService.enviarBoletoENotas - CC (Fase 42)", () => {
       pipe.transform({ idclienteAthos: 1, cobrancaBoletoId: 10, cc: onze }, meta),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it("16. grava em CobrancaEmailEnvio o cc normalizado", async () => {
+    const { service } = makeService();
+    await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 10,
+      destinatario: "cli@x.com",
+      cc: ["a@x.com", "A@x.com", "cli@x.com"],
+    });
+    const data = (service as any).prisma.cobrancaEmailEnvio.create.mock.calls[0][0].data;
+    expect(data.cc).toEqual(["a@x.com"]);
+  });
+
+  it("17. sem cc grava cc como lista vazia", async () => {
+    const { service } = makeService();
+    await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 10,
+      destinatario: "cli@x.com",
+    });
+    const data = (service as any).prisma.cobrancaEmailEnvio.create.mock.calls[0][0].data;
+    expect(data.cc).toEqual([]);
+  });
 });
 
 describe("EmailEnvioService.registrarAbertura", () => {
