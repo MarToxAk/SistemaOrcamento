@@ -4,6 +4,7 @@ import { BadRequestException, ValidationPipe } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
 
 import { EnviarEmailCobrancaDto } from "./dto/enviar-email-cobranca.dto";
+import { SalvarCcPadraoDto } from "./dto/salvar-cc-padrao.dto";
 import { EmailEnvioService } from "./email-envio.service";
 
 jest.mock("nodemailer");
@@ -38,6 +39,10 @@ function makeService() {
       create: jest.fn(async ({ data }: any) => ({ id: 1, ...data })),
       findUnique: jest.fn(),
       update: jest.fn(async (a: any) => a),
+    },
+    cobrancaEmailCcPadrao: {
+      findUnique: jest.fn(),
+      upsert: jest.fn(async ({ create }: any) => ({ ...create })),
     },
   };
   (service as any).cobrancaService = {
@@ -316,6 +321,95 @@ describe("EmailEnvioService.enviarBoletoENotas - CC (Fase 42)", () => {
     });
     const data = (service as any).prisma.cobrancaEmailEnvio.create.mock.calls[0][0].data;
     expect(data.cc).toEqual([]);
+  });
+});
+
+describe("EmailEnvioService lista fixa de CC por cliente (D-06)", () => {
+  it("18. buscarCcPadrao com registro -> devolve os e-mails salvos", async () => {
+    const { service } = makeService();
+    const findUnique = (service as any).prisma.cobrancaEmailCcPadrao.findUnique as jest.Mock;
+    findUnique.mockResolvedValueOnce({ idclienteAthos: 7, emails: ["a@x.com"] });
+    const out = await service.buscarCcPadrao(7);
+    expect(out).toEqual({ idclienteAthos: 7, emails: ["a@x.com"] });
+    expect(findUnique).toHaveBeenCalledWith({ where: { idclienteAthos: 7 } });
+  });
+
+  it("19. buscarCcPadrao sem registro -> emails vazio", async () => {
+    const { service } = makeService();
+    (service as any).prisma.cobrancaEmailCcPadrao.findUnique.mockResolvedValueOnce(null);
+    const out = await service.buscarCcPadrao(7);
+    expect(out).toEqual({ idclienteAthos: 7, emails: [] });
+  });
+
+  it("20. id 0 ou negativo -> BadRequestException e Prisma nao chamado", async () => {
+    const { service } = makeService();
+    const p = (service as any).prisma.cobrancaEmailCcPadrao;
+    for (const id of [0, -3, 1.5, Number.NaN]) {
+      await expect(service.buscarCcPadrao(id)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.salvarCcPadrao(id, ["a@x.com"])).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    }
+    expect(p.findUnique).not.toHaveBeenCalled();
+    expect(p.upsert).not.toHaveBeenCalled();
+  });
+
+  it("21. salvarCcPadrao normaliza e faz upsert por idclienteAthos", async () => {
+    const { service } = makeService();
+    const upsert = (service as any).prisma.cobrancaEmailCcPadrao.upsert as jest.Mock;
+    const out = await service.salvarCcPadrao(7, [" a@x.com ", "A@x.com", "b@x.com"]);
+    const arg = upsert.mock.calls[0][0];
+    expect(arg.where).toEqual({ idclienteAthos: 7 });
+    expect(arg.create.emails).toEqual(["a@x.com", "b@x.com"]);
+    expect(arg.update.emails).toEqual(["a@x.com", "b@x.com"]);
+    expect(out).toEqual({ idclienteAthos: 7, emails: ["a@x.com", "b@x.com"] });
+  });
+
+  it("22. salvarCcPadrao com lista vazia -> upsert com emails [] (remove o padrao)", async () => {
+    const { service } = makeService();
+    const upsert = (service as any).prisma.cobrancaEmailCcPadrao.upsert as jest.Mock;
+    const out = await service.salvarCcPadrao(7, []);
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(upsert.mock.calls[0][0].create.emails).toEqual([]);
+    expect(upsert.mock.calls[0][0].update.emails).toEqual([]);
+    expect(out).toEqual({ idclienteAthos: 7, emails: [] });
+  });
+
+  it("23. salvarCcPadrao com item invalido -> BadRequestException sem upsert", async () => {
+    const { service } = makeService();
+    const upsert = (service as any).prisma.cobrancaEmailCcPadrao.upsert as jest.Mock;
+    await expect(service.salvarCcPadrao(7, ["a@x.com", "invalido"])).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("24. salvarCcPadrao com 11 e-mails distintos -> BadRequestException sem upsert", async () => {
+    const { service } = makeService();
+    const upsert = (service as any).prisma.cobrancaEmailCcPadrao.upsert as jest.Mock;
+    const onze = Array.from({ length: 11 }, (_, i) => `u${i}@x.com`);
+    await expect(service.salvarCcPadrao(7, onze)).rejects.toBeInstanceOf(BadRequestException);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("25. contrato HTTP: ValidationPipe com SalvarCcPadraoDto aceita/rejeita corretamente", async () => {
+    const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true });
+    const meta = { type: "body" as const, metatype: SalvarCcPadraoDto, data: "" };
+    await expect(pipe.transform({ emails: ["a@x.com"] }, meta)).resolves.toMatchObject({
+      emails: ["a@x.com"],
+    });
+    await expect(pipe.transform({ emails: [] }, meta)).resolves.toMatchObject({ emails: [] });
+    await expect(pipe.transform({}, meta)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(pipe.transform({ emails: ["ok@x.com", "invalido"] }, meta)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    const onze = Array.from({ length: 11 }, (_, i) => `u${i}@x.com`);
+    await expect(pipe.transform({ emails: onze }, meta)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(pipe.transform({ emails: ["a@x.com"], extra: 1 }, meta)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });
 
