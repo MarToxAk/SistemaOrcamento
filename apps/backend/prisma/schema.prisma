@@ -266,6 +266,14 @@ model CobrancaEmailEnvio {
   @@index([cobrancaBoletoId])
 }
 
+/// Lista fixa de e-mails em copia (CC) por cliente do Athos — Fase 42 (D-06). Pre-preenche o modal de envio.
+model CobrancaEmailCcPadrao {
+  idclienteAthos Int      @id
+  emails         String[] @default([])
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
+}
+
 model CobrancaBoletoTitulo {
   id               Int            @id @default(autoincrement())
   cobrancaBoletoId Int

@@ -276,6 +276,39 @@ export class EmailEnvioService {
     return { id: row.id, token, destinatario, cc, status: row.status, anexos };
   }
 
+  /** Lista fixa de CC do cliente (D-06). Sem registro -> lista vazia. */
+  async buscarCcPadrao(
+    idclienteAthos: number,
+  ): Promise<{ idclienteAthos: number; emails: string[] }> {
+    this.assertIdCliente(idclienteAthos);
+    const row = await this.prisma.cobrancaEmailCcPadrao.findUnique({ where: { idclienteAthos } });
+    return { idclienteAthos, emails: row?.emails ?? [] };
+  }
+
+  /**
+   * Grava a lista fixa de CC do cliente (D-06), normalizada (D-02). Lista vazia grava []
+   * (equivale a remover o padrao) — um unico caminho de escrita.
+   */
+  async salvarCcPadrao(
+    idclienteAthos: number,
+    emails: readonly string[],
+  ): Promise<{ idclienteAthos: number; emails: string[] }> {
+    this.assertIdCliente(idclienteAthos);
+    const lista = normalizarListaCc(emails);
+    const row = await this.prisma.cobrancaEmailCcPadrao.upsert({
+      where: { idclienteAthos },
+      create: { idclienteAthos, emails: lista },
+      update: { emails: lista },
+    });
+    return { idclienteAthos, emails: row.emails };
+  }
+
+  private assertIdCliente(idclienteAthos: number): void {
+    if (!Number.isInteger(idclienteAthos) || idclienteAthos <= 0) {
+      throw new BadRequestException("idclienteAthos inválido.");
+    }
+  }
+
   /**
    * Debug: renderiza o DANFE (PDF) de uma NF-e por tras de um boleto, sem
    * disparar e-mail. Reaproveita exatamente o caminho do envio

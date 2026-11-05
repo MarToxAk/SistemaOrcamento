@@ -266,6 +266,13 @@ export default function ClienteDetalhePage({
   const [emailCc, setEmailCc] = useState<string[]>([]);
   const [emailCcInput, setEmailCcInput] = useState("");
   const [emailCcErro, setEmailCcErro] = useState("");
+  const [emailCcCarregando, setEmailCcCarregando] = useState(false); // GET do padrao em andamento
+  const [emailCcPadraoAviso, setEmailCcPadraoAviso] = useState(""); // falha ao carregar o padrao
+  const [emailCcSalvarPadrao, setEmailCcSalvarPadrao] = useState(false); // checkbox opt-in (D-06)
+  const [emailCcPadraoResultado, setEmailCcPadraoResultado] = useState<"salvo" | "falhou" | null>(
+    null,
+  ); // resultado do PUT pos-envio
+  const emailCcCargaSeq = useRef(0); // descarta resposta do GET de uma abertura anterior do modal
   const [emailResult, setEmailResult] = useState<{
     destinatario: string;
     cc?: string[];
@@ -827,12 +834,42 @@ export default function ClienteDetalhePage({
     setEmailDestinatario(
       dadosCliente?.emailcobrancacliente ?? dadosCliente?.emailcliente ?? "",
     );
+    const principal = dadosCliente?.emailcobrancacliente ?? dadosCliente?.emailcliente ?? "";
     setEmailCc([]);
     setEmailCcInput("");
     setEmailCcErro("");
+    setEmailCcSalvarPadrao(false);
+    setEmailCcPadraoAviso("");
+    setEmailCcPadraoResultado(null);
     setEmailErro("");
     setEmailResult(null);
     setEmailModalState("confirm");
+    void carregarCcPadrao(principal);
+  }
+
+  /** Pre-preenche o CC com a lista fixa do cliente (D-01). Falha vira aviso e segue com a lista vazia. */
+  async function carregarCcPadrao(principal: string) {
+    const seq = ++emailCcCargaSeq.current;
+    setEmailCcCarregando(true);
+    try {
+      const res = await fetch(`/api/cobranca/email/cc-padrao/${idcliente}`, { cache: "no-store" });
+      if (seq !== emailCcCargaSeq.current) return;
+      if (!res.ok) {
+        setEmailCcPadraoAviso("Não foi possível carregar a lista de cópia padrão deste cliente.");
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      const emails: string[] = Array.isArray(data?.emails)
+        ? data.emails.filter((e: unknown): e is string => typeof e === "string")
+        : [];
+      const { lista } = mesclarEmailsCc([], emails.join(","), principal);
+      setEmailCc(lista);
+    } catch {
+      if (seq !== emailCcCargaSeq.current) return;
+      setEmailCcPadraoAviso("Não foi possível carregar a lista de cópia padrão deste cliente.");
+    } finally {
+      if (seq === emailCcCargaSeq.current) setEmailCcCarregando(false);
+    }
   }
 
   /** Aplica a mescla de CC no estado e devolve a lista final + se houve problema (invalidos/excedentes). */
@@ -879,6 +916,20 @@ export default function ClienteDetalhePage({
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        // D-06: so grava o padrao com opt-in explicito e envio ok; falha aqui nunca desfaz o envio.
+        if (emailCcSalvarPadrao) {
+          const listaEnviada: string[] = Array.isArray(data?.cc) ? data.cc : ccFinal;
+          try {
+            const resPadrao = await fetch(`/api/cobranca/email/cc-padrao/${idcliente}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ emails: listaEnviada }),
+            });
+            setEmailCcPadraoResultado(resPadrao.ok ? "salvo" : "falhou");
+          } catch {
+            setEmailCcPadraoResultado("falhou");
+          }
+        }
         setEmailResult(data);
         setEmailModalState("success");
       } else {
@@ -2421,6 +2472,7 @@ export default function ClienteDetalhePage({
                       type="text"
                       className="form-control"
                       value={emailCcInput}
+                      disabled={emailCcCarregando}
                       onChange={(e) => setEmailCcInput(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === ",") {
@@ -2433,12 +2485,21 @@ export default function ClienteDetalhePage({
                     <button
                       type="button"
                       className="btn btn-outline-secondary"
-                      disabled={!emailCcInput.trim()}
+                      disabled={emailCcCarregando || !emailCcInput.trim()}
                       onClick={adicionarEmailCc}
                     >
                       <i className="bi bi-plus-lg me-1" />Adicionar
                     </button>
                   </div>
+                  {emailCcCarregando && (
+                    <div className="d-flex align-items-center gap-2 mt-1">
+                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                      <span className="small text-muted">Carregando lista padrão…</span>
+                    </div>
+                  )}
+                  {emailCcPadraoAviso && (
+                    <div className="small text-warning-emphasis mt-1">{emailCcPadraoAviso}</div>
+                  )}
                   {emailCcErro && <div className="small text-danger mt-1">{emailCcErro}</div>}
                   <small className="text-muted d-block mt-1">
                     Opcional — até {EMAIL_CC_MAX} e-mails. Enter ou vírgula para adicionar. ({emailCc.length}/{EMAIL_CC_MAX})
@@ -2462,6 +2523,23 @@ export default function ClienteDetalhePage({
                       ))}
                     </div>
                   )}
+                  <div className="form-check mt-2">
+                    <input
+                      id="email-cc-salvar-padrao"
+                      type="checkbox"
+                      className="form-check-input"
+                      checked={emailCcSalvarPadrao}
+                      onChange={(e) => setEmailCcSalvarPadrao(e.target.checked)}
+                    />
+                    <label className="form-check-label small" htmlFor="email-cc-salvar-padrao">
+                      Salvar como padrão deste cliente
+                    </label>
+                  </div>
+                  {emailCcSalvarPadrao && emailCc.length === 0 && (
+                    <small className="text-muted d-block">
+                      Com a lista vazia, o padrão salvo deste cliente será removido.
+                    </small>
+                  )}
                   <small className="text-muted d-block mt-3">
                     Serão anexados: boleto (PDF) + {emailCtx.nfseEmitidaIds.length} NFS-e (PDF + XML) +{" "}
                     {emailCtx.nfeCount} NF-e (PDF + XML)
@@ -2478,7 +2556,7 @@ export default function ClienteDetalhePage({
                   <button
                     type="button"
                     className="btn btn-success"
-                    disabled={!emailDestinatario.trim()}
+                    disabled={!emailDestinatario.trim() || emailCcCarregando}
                     onClick={confirmarEnviarEmail}
                   >
                     <i className="bi bi-send me-1" />Enviar e-mail
@@ -2505,6 +2583,16 @@ export default function ClienteDetalhePage({
                   </div>
                   {emailResult.cc && emailResult.cc.length > 0 && (
                     <div className="small mb-2">Cópia (CC): {emailResult.cc.join(", ")}</div>
+                  )}
+                  {emailCcPadraoResultado === "salvo" && (
+                    <div className="small text-success mb-2">
+                      Lista de cópia salva como padrão deste cliente.
+                    </div>
+                  )}
+                  {emailCcPadraoResultado === "falhou" && (
+                    <div className="alert alert-warning">
+                      E-mail enviado, mas não foi possível salvar a lista de cópia como padrão deste cliente.
+                    </div>
                   )}
                   {emailResult.anexos && emailResult.anexos.length > 0 && (
                     <ul className="small mb-2">

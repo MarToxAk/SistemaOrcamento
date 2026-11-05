@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Query, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Put, Query, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
@@ -11,6 +11,7 @@ import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
 import { EnviarEmailCobrancaDto } from "./dto/enviar-email-cobranca.dto";
+import { SalvarCcPadraoDto } from "./dto/salvar-cc-padrao.dto";
 
 const NFSE_XML_MAX_SIZE_BYTES = 2 * 1024 * 1024;
 const NFSE_XML_MIME_PATTERN = /^(application\/xml|text\/xml)$/;
@@ -42,6 +43,21 @@ export class CobrancaController {
   @Post("email/enviar")
   async enviarEmail(@Body() dto: EnviarEmailCobrancaDto) {
     return this.emailEnvioService.enviarBoletoENotas(dto);
+  }
+
+  /** Lista fixa de CC do cliente (pre-preenche o modal de e-mail). AUTHED via guard global. */
+  @Get("email/cc-padrao/:idclienteAthos")
+  async buscarCcPadrao(@Param("idclienteAthos", ParseIntPipe) idclienteAthos: number) {
+    return this.emailEnvioService.buscarCcPadrao(idclienteAthos);
+  }
+
+  /** Grava a lista fixa de CC do cliente (opt-in "Salvar como padrao" no modal). AUTHED via guard global. */
+  @Put("email/cc-padrao/:idclienteAthos")
+  async salvarCcPadrao(
+    @Param("idclienteAthos", ParseIntPipe) idclienteAthos: number,
+    @Body() dto: SalvarCcPadraoDto,
+  ) {
+    return this.emailEnvioService.salvarCcPadrao(idclienteAthos, dto.emails);
   }
 
   /** Pixel 1x1 (@Public) — grava abertoEm na 1a carga. Sempre responde o gif. */
