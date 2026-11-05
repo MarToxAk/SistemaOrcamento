@@ -5,7 +5,7 @@ import * as nodemailer from "nodemailer";
 
 import { EnviarEmailCobrancaDto } from "./dto/enviar-email-cobranca.dto";
 import { SalvarCcPadraoDto } from "./dto/salvar-cc-padrao.dto";
-import { EmailEnvioService } from "./email-envio.service";
+import { EmailEnvioService, normalizarListaCc } from "./email-envio.service";
 
 jest.mock("nodemailer");
 
@@ -261,6 +261,42 @@ describe("EmailEnvioService.enviarBoletoENotas - CC (Fase 42)", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(sendMail).not.toHaveBeenCalled();
     expect((service as any).cobrancaService.downloadBoletoPdf).not.toHaveBeenCalled();
+  });
+
+  it("12b. cc com CRLF, virgula, <> ou aspas -> BadRequestException e sendMail nao chamado (WR-04)", async () => {
+    const perigosos = [
+      "x@y.com\r\nBcc: a@b.com",
+      "\"a\r\nBcc: x\"@y.com",
+      "a@y.com\nBcc: b@c.com",
+      "a,b@x.com",
+      "a@x.com,b@x.com",
+      "<a@b.com>",
+      "\"a,b\"@x.com",
+      "a b@x.com",
+      "a\u0000b@x.com",
+    ];
+    for (const ruim of perigosos) {
+      const { service, sendMail } = makeService();
+      await expect(
+        service.enviarBoletoENotas({
+          idclienteAthos: 1,
+          cobrancaBoletoId: 10,
+          destinatario: "cli@x.com",
+          cc: [ruim],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(sendMail).not.toHaveBeenCalled();
+    }
+  });
+
+  it("12c. normalizarListaCc isolada (sem DTO) rejeita CRLF, virgula e <> mas aceita enderecos comuns (WR-04)", () => {
+    for (const ruim of ["x@y.com\r\nBcc: a@b.com", "a,b@x.com", "<a@b.com>", "\"a b\"@x.com"]) {
+      expect(() => normalizarListaCc([ruim])).toThrow(BadRequestException);
+    }
+    expect(normalizarListaCc(["nome.sobrenome+tag@sub.dominio.com.br", "o'brien@x.com"])).toEqual([
+      "nome.sobrenome+tag@sub.dominio.com.br",
+      "o'brien@x.com",
+    ]);
   });
 
   it("13. mais de 10 e-mails distintos apos normalizacao -> BadRequestException e sendMail nao chamado", async () => {

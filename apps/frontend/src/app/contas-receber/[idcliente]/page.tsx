@@ -98,7 +98,9 @@ function formatDate(iso: string): string {
 
 const EMAIL_CC_MAX = 10; // espelha EMAIL_CC_MAX de apps/backend/src/modules/cobranca/dto/enviar-email-cobranca.dto.ts
 const EMAIL_CC_PADRAO_TIMEOUT_MS = 8000; // limite do GET do padrao de CC (nao pode travar o Enviar)
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // mesma regex do backend (email-envio.service.ts)
+// mesma regex do backend (email-envio.service.ts)
+const EMAIL_RE =
+  /^[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+@[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+\.[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+$/;
 
 /** Funde o texto digitado (separado por virgula, ponto e virgula ou espaco) na lista de CC atual. */
 function mesclarEmailsCc(

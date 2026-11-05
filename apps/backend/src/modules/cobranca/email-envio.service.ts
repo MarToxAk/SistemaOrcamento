@@ -19,7 +19,10 @@ import { EMAIL_CC_MAX } from "./dto/enviar-email-cobranca.dto";
 // GIF89a transparente 1x1 canonico = 43 bytes (o acceptance do PLAN espera size_download=43).
 // A string do PLAN (...AAIBRAA7) decodifica para 42 bytes; usamos a variante de 43 bytes.
 const GIF_1X1_BASE64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Rejeita espacos/CR/LF e demais caracteres de controle, '<' '>' ',' ';' aspas, parenteses,
+// colchetes e barra invertida: nada que permita injetar cabecalho ou virar 2 destinatarios.
+const EMAIL_RE =
+  /^[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+@[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+\.[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+$/;
 
 /**
  * Normaliza a lista de CC (D-02): trim, descarta vazios, valida formato (EMAIL_RE),
