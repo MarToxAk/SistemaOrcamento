@@ -5,16 +5,16 @@ milestone_name: API de Produtos Compostos (Kits) no Athos
 current_phase: 42 — Impressão automática de orçamento ao confirmar pagamento no caixa
 current_phase_name: Impressão automática de orçamento ao confirmar pagamento no caixa
 status: planning
-stopped_at: Completed 43-03-PLAN.md
-last_updated: "2026-11-06T15:25:50.559Z"
+stopped_at: Completed 43-04-PLAN.md
+last_updated: "2026-11-06T15:37:13.525Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 41 complete, transitioned to Phase 42
-state_head: 54f0c9e84a656b3cc235c6144b93c0d645aa114e
+state_head: 5df47bd4bf4640d2eeb1bd26014e113cf36bab44
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
   percent: 60
 ---
 
@@ -309,11 +309,12 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 43 P01 | 35min | 3 tasks | 13 files |
 | Phase 43 P02 | 40min | 3 tasks | 11 files |
 | Phase 43 P03 | ~40min | 3 tasks | 13 files |
+| Phase 43 P04 | ~40min | 3 tasks | 11 files |
 
 ## Session
 
-**Last session:** 2026-11-06T15:25:50.367Z
-**Stopped at:** Completed 43-03-PLAN.md
+**Last session:** 2026-11-06T15:37:13.352Z
+**Stopped at:** Completed 43-04-PLAN.md
 **Resume file:** None
 
 ## Decisions
@@ -340,3 +341,4 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase 43]: 43-01: titulo em atraso e rejeitado com ATRASO_REQUER_ENCARGOS ate 43-02 calcular encargos; falha da baixa nunca desfaz o pago
 - [Phase 43]: 43-02: formula de juros (taxa diaria 3 casas, meio para cima) reproduz so 2 casos; multa por ATHOS_BAIXA_MULTA_PERCENTUAL; validacao real pendente
 - [Phase 43]: 43-03: data/valor da EFI persistidos antes do Athos e reutilizados nas retentativas; flag ATHOS_BAIXA_AUTO=false deixa o boleto pendente; mensagem de erro persistida so de BaixaAthosError (300 chars)
+- [Phase 43]: 43-04: estorno apaga somente pares (idcontareceber, idcontarecebida) da trilha de baixa; cartao preferencial por regex com fronteira numerica
