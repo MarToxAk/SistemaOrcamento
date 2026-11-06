@@ -5,16 +5,16 @@ milestone_name: API de Produtos Compostos (Kits) no Athos
 current_phase: 42 — Impressão automática de orçamento ao confirmar pagamento no caixa
 current_phase_name: Impressão automática de orçamento ao confirmar pagamento no caixa
 status: planning
-stopped_at: Completed 43-01-PLAN.md
-last_updated: "2026-11-06T14:58:10.423Z"
+stopped_at: Completed 43-02-PLAN.md
+last_updated: "2026-11-06T15:15:13.805Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 41 complete, transitioned to Phase 42
-state_head: 92ccd2fc1c5783831b415086d0633bf1bd0ff267
+state_head: 911414de3d722226888fa40a510e385ce1eddb9d
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 60
 ---
 
@@ -307,11 +307,12 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 |------|----------|-------|-------|
 | Phase quick-260913-hhi P01 | 11min | 4 tasks | 35 files |
 | Phase 43 P01 | 35min | 3 tasks | 13 files |
+| Phase 43 P02 | 40min | 3 tasks | 11 files |
 
 ## Session
 
-**Last session:** 2026-11-06T14:58:10.244Z
-**Stopped at:** Completed 43-01-PLAN.md
+**Last session:** 2026-11-06T15:15:13.640Z
+**Stopped at:** Completed 43-02-PLAN.md
 **Resume file:** None
 
 ## Decisions
@@ -336,3 +337,4 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase 41]: 260913-hhi: promo/ fica fora dos workspaces npm da raiz (apps/*, packages/*) para nao alterar package-lock.json nem quebrar npm ci dos Dockerfiles existentes (D-01)
 - [Phase 41]: 260913-hhi: git.allow_default_branch_commits:true adicionado em .planning/config.json — projeto usa branching_strategy:none com historico de commits diretos em main; guard #2924/#3819 bloquearia todo commit sem o override
 - [Phase 43]: 43-01: titulo em atraso e rejeitado com ATRASO_REQUER_ENCARGOS ate 43-02 calcular encargos; falha da baixa nunca desfaz o pago
+- [Phase 43]: 43-02: formula de juros (taxa diaria 3 casas, meio para cima) reproduz so 2 casos; multa por ATHOS_BAIXA_MULTA_PERCENTUAL; validacao real pendente
