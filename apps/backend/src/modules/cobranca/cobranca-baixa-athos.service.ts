@@ -13,6 +13,7 @@ import {
   BaixaAthosError,
   BaixaConstantes,
   BaixarTitulosResultado,
+  EstornarBaixaResultado,
   hojeSaoPaulo,
 } from "../integrations/athos/athos-conta-receber-baixa.service";
 import { PERCENTUAL_MULTA_PADRAO } from "../integrations/athos/athos-baixa-encargos.util";
@@ -173,6 +174,17 @@ export interface BaixarManualResultado {
   simulado: boolean;
   status: "baixado" | "ja_baixado";
   detalhe: BaixarTitulosResultado;
+}
+
+export interface EstornarManualInput {
+  confirmar?: boolean;
+  simular?: boolean;
+}
+
+export interface EstornarManualResultado {
+  simulado: boolean;
+  status: "estornado";
+  detalhe: EstornarBaixaResultado;
 }
 
 export interface StatusBaixaAthos {
@@ -401,6 +413,148 @@ export class CobrancaBaixaAthosService {
       status: resultado.status === "ja_baixado" ? "ja_baixado" : "baixado",
       detalhe: resultado.detalhe as BaixarTitulosResultado,
     };
+  }
+
+  /**
+   * Estorno acionado por operador (AdminOnly) - D-06. So estorna o que o Sistema baixou: os pares
+   * (idcontareceber, idcontarecebida) vem da ultima baixa "baixado" da trilha; titulos ja_baixado nunca entram.
+   * `simular` e somente leitura e dispensa `confirmar`. CobrancaBoleto.status (pago) nunca e alterado.
+   */
+  async estornarBaixa(cobrancaBoletoId: number, input: EstornarManualInput): Promise<EstornarManualResultado> {
+    const boleto = (await this.prisma.cobrancaBoleto.findUnique({
+      where: { id: cobrancaBoletoId },
+    })) as BoletoComTitulos | null;
+    if (!boleto) throw new BadRequestException(`Cobranca ${cobrancaBoletoId} nao encontrada.`);
+    if (boleto.athosBaixaStatus !== "baixado") {
+      throw new ConflictException(
+        `Cobranca ${cobrancaBoletoId} nao esta com baixa feita pelo Sistema; so baixas feitas pelo Sistema podem ser estornadas.`,
+      );
+    }
+    const simular = input.simular === true;
+    if (!simular && input.confirmar !== true) {
+      throw new BadRequestException("Estorno exige confirmar=true (ou simular=true para somente conferir).");
+    }
+
+    const linhaBaixa = await this.prisma.cobrancaBaixaAthosLog.findFirst({
+      where: { cobrancaBoletoId, operacao: "baixa", resultado: "baixado" },
+      orderBy: { id: "desc" },
+    });
+    const pares = this.extrairParesEstorno(linhaBaixa?.titulos);
+    if (pares.length === 0) {
+      throw new BadRequestException(
+        `Cobranca ${cobrancaBoletoId} sem registro de recebimento gravado pelo Sistema; nada a estornar.`,
+      );
+    }
+
+    let cfg: ConfigBaixaAthos;
+    try {
+      cfg = resolverConfigBaixaAthos((chave) => this.config.get<string>(chave));
+    } catch (err) {
+      const { codigo, mensagem } = descreverErro(err);
+      throw this.paraExcecaoHttp(codigo, mensagem);
+    }
+
+    try {
+      const detalhe = await this.baixaService.estornarBaixa({
+        idclienteAthos: boleto.idclienteAthos,
+        titulos: pares,
+        idFuncionario: cfg.constantes.idFuncionario,
+        simular,
+      });
+      if (simular) return { simulado: true, status: "estornado", detalhe };
+
+      this.logger.log(
+        `Estorno Athos concluido cobrancaId=${cobrancaBoletoId} titulos=${pares.map((p) => p.idcontareceber).join(",")}.`,
+      );
+      await this.registrarEstorno({ cobrancaBoletoId, resultado: "estornado", detalhe });
+      return { simulado: false, status: "estornado", detalhe };
+    } catch (err) {
+      const { codigo, mensagem } = descreverErro(err);
+      this.logger.error(
+        `Estorno Athos FALHOU cobrancaId=${cobrancaBoletoId} simulado=${simular} codigo=${codigo} ` +
+          `idcontareceber=${pares.map((p) => p.idcontareceber).join(",")}.`,
+      );
+      if (!simular) await this.registrarEstorno({ cobrancaBoletoId, resultado: "falha", codigo, mensagem });
+      throw this.paraExcecaoHttp(codigo, mensagem);
+    }
+  }
+
+  /** So entradas com idcontarecebida numerico (as ja_baixado gravam null e nao foram criadas pelo Sistema). */
+  private extrairParesEstorno(titulos: unknown): Array<{ idcontareceber: number; idcontarecebida: number }> {
+    if (!Array.isArray(titulos)) return [];
+    const pares: Array<{ idcontareceber: number; idcontarecebida: number }> = [];
+    for (const t of titulos) {
+      const item = t as { idcontareceber?: unknown; idcontarecebida?: unknown } | null;
+      const conta = item?.idcontareceber;
+      const recebida = item?.idcontarecebida;
+      if (
+        typeof conta === "number" &&
+        Number.isInteger(conta) &&
+        typeof recebida === "number" &&
+        Number.isInteger(recebida)
+      ) {
+        pares.push({ idcontareceber: conta, idcontarecebida: recebida });
+      }
+    }
+    return pares;
+  }
+
+  /**
+   * Estorno real: sucesso grava athosBaixaStatus "estornado"; falha NAO altera o status (a transacao do Athos
+   * fez ROLLBACK, o boleto continua baixado). Nunca toca em CobrancaBoleto.status. Falha de persistencia so loga.
+   */
+  private async registrarEstorno(p: {
+    cobrancaBoletoId: number;
+    resultado: "estornado" | "falha";
+    detalhe?: EstornarBaixaResultado;
+    codigo?: string;
+    mensagem?: string;
+  }): Promise<void> {
+    if (p.resultado === "estornado") {
+      try {
+        await this.prisma.cobrancaBoleto.update({
+          where: { id: p.cobrancaBoletoId },
+          data: {
+            athosBaixaStatus: "estornado",
+            athosBaixaErroCodigo: null,
+            athosBaixaErroMensagem: null,
+            athosBaixaUltimaEm: new Date(),
+          },
+        });
+      } catch (err) {
+        this.logger.error(
+          `Estorno Athos: falha ao gravar status cobrancaId=${p.cobrancaBoletoId}: ${err instanceof Error ? err.name : "erro"}.`,
+        );
+      }
+    }
+
+    try {
+      await this.prisma.cobrancaBaixaAthosLog.create({
+        data: {
+          cobrancaBoletoId: p.cobrancaBoletoId,
+          operacao: "estorno",
+          origem: "manual",
+          resultado: p.resultado,
+          codigoErro: p.codigo ?? null,
+          mensagem: p.mensagem ? truncar(p.mensagem) : null,
+          dataPagamento: null,
+          valorTotal: p.detalhe ? p.detalhe.valorTotal : null,
+          titulos: p.detalhe
+            ? p.detalhe.titulos.map((t) => ({
+                idcontareceber: t.idcontareceber,
+                idcontarecebida: t.idcontarecebida,
+                principal: t.principal,
+                valorPago: t.valorPago,
+                statusFinal: t.statusFinal,
+              }))
+            : undefined,
+        },
+      });
+    } catch (err) {
+      this.logger.error(
+        `Estorno Athos: falha ao gravar log cobrancaId=${p.cobrancaBoletoId}: ${err instanceof Error ? err.name : "erro"}.`,
+      );
+    }
   }
 
   /** Status persistido da baixa e ate 20 tentativas mais recentes (mais recente primeiro). */

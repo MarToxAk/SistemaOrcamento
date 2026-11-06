@@ -34,6 +34,7 @@ function montar(env: Record<string, string | undefined> = {}, boleto?: unknown) 
     cobrancaBaixaAthosLog: {
       create: jest.fn().mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
   };
   const baixaService = {
@@ -44,6 +45,11 @@ function montar(env: Record<string, string | undefined> = {}, boleto?: unknown) 
       dataPagamento: "2026-11-06",
       titulos: [],
       valorTotal: 39.5,
+    }),
+    estornarBaixa: jest.fn().mockResolvedValue({
+      simulado: false,
+      titulos: [{ idcontareceber: 1363, idcontarecebida: 501, principal: 29, valorPago: 29, statusFinal: "AVC" }],
+      valorTotal: 29,
     }),
   };
   const config = { get: jest.fn((k: string) => env[k]) };
@@ -641,5 +647,192 @@ describe("CobrancaBaixaAthosService.baixarManual (BX-08)", () => {
 
     prisma.cobrancaBoleto.findUnique.mockResolvedValue(null);
     await expect(service.consultarStatus(99)).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe("CobrancaBaixaAthosService.estornarBaixa (plano 43-04)", () => {
+  const boletoBaixado = {
+    id: 7,
+    status: "pago",
+    idclienteAthos: 2641,
+    athosBaixaStatus: "baixado",
+    titulos: [],
+  };
+
+  function montarEstorno(
+    env: Record<string, string | undefined> = {},
+    opcoes: { boleto?: unknown; trilha?: unknown } = {},
+  ) {
+    const m = montar(env, opcoes.boleto === undefined ? boletoBaixado : opcoes.boleto);
+    const trilha =
+      opcoes.trilha === undefined
+        ? {
+            id: 31,
+            titulos: [
+              { idcontareceber: 1363, idcontarecebida: 501, principal: 29 },
+              { idcontareceber: 1364, idcontarecebida: null, principal: 0 }, // ja_baixado
+              { idcontareceber: 1365, idcontarecebida: 503, principal: 10.5 },
+            ],
+          }
+        : opcoes.trilha;
+    m.prisma.cobrancaBaixaAthosLog.findFirst.mockResolvedValue(trilha as never);
+    return m;
+  }
+
+  it("X1. boleto inexistente -> BadRequest; status diferente de baixado -> Conflict; Athos nao chamado", async () => {
+    const a = montarEstorno({}, { boleto: null });
+    await expect(a.service.estornarBaixa(7, { confirmar: true })).rejects.toBeInstanceOf(BadRequestException);
+    expect(a.baixaService.estornarBaixa).not.toHaveBeenCalled();
+
+    for (const status of [null, "falha", "pendente", "ja_baixado", "estornado"]) {
+      const m = montarEstorno({}, { boleto: { ...boletoBaixado, athosBaixaStatus: status } });
+      await expect(m.service.estornarBaixa(7, { confirmar: true })).rejects.toBeInstanceOf(ConflictException);
+      expect(m.baixaService.estornarBaixa).not.toHaveBeenCalled();
+    }
+  });
+
+  it("X2. sem confirmar=true e sem simular -> BadRequest e Athos nao chamado", async () => {
+    for (const input of [{}, { confirmar: false }, { simular: false }]) {
+      const { service, baixaService, prisma } = montarEstorno();
+      await expect(service.estornarBaixa(7, input)).rejects.toBeInstanceOf(BadRequestException);
+      expect(baixaService.estornarBaixa).not.toHaveBeenCalled();
+      expect(prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+    }
+  });
+
+  it("X3. sem linha de baixa na trilha ou sem idcontarecebida numerico -> BadRequest", async () => {
+    const a = montarEstorno({}, { trilha: null });
+    await expect(a.service.estornarBaixa(7, { confirmar: true })).rejects.toBeInstanceOf(BadRequestException);
+
+    const b = montarEstorno({}, { trilha: { id: 1, titulos: [{ idcontareceber: 1, idcontarecebida: null }] } });
+    await expect(b.service.estornarBaixa(7, { confirmar: true })).rejects.toBeInstanceOf(BadRequestException);
+
+    const c = montarEstorno({}, { trilha: { id: 1, titulos: null } });
+    await expect(c.service.estornarBaixa(7, { confirmar: true })).rejects.toBeInstanceOf(BadRequestException);
+    for (const m of [a, b, c]) expect(m.baixaService.estornarBaixa).not.toHaveBeenCalled();
+  });
+
+  it("X4. so os pares com idcontarecebida numerico da ultima baixa 'baixado' vao ao servico Athos", async () => {
+    const { service, baixaService, prisma } = montarEstorno({ ATHOS_BAIXA_ID_FUNCIONARIO: "3" });
+    await service.estornarBaixa(7, { confirmar: true });
+    expect(prisma.cobrancaBaixaAthosLog.findFirst).toHaveBeenCalledWith({
+      where: { cobrancaBoletoId: 7, operacao: "baixa", resultado: "baixado" },
+      orderBy: { id: "desc" },
+    });
+    expect(baixaService.estornarBaixa).toHaveBeenCalledTimes(1);
+    expect(baixaService.estornarBaixa).toHaveBeenCalledWith({
+      idclienteAthos: 2641,
+      titulos: [
+        { idcontareceber: 1363, idcontarecebida: 501 },
+        { idcontareceber: 1365, idcontarecebida: 503 },
+      ],
+      idFuncionario: 3,
+      simular: false,
+    });
+  });
+
+  it("X5. simular=true dispensa confirmar e nao persiste nada", async () => {
+    const { service, baixaService, prisma } = montarEstorno();
+    baixaService.estornarBaixa.mockResolvedValue({ simulado: true, titulos: [], valorTotal: 39.5 });
+    const r = await service.estornarBaixa(7, { simular: true });
+    expect(r).toMatchObject({ simulado: true, status: "estornado" });
+    expect(baixaService.estornarBaixa.mock.calls[0][0]).toMatchObject({ simular: true });
+    expect(prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+    expect(prisma.cobrancaBaixaAthosLog.create).not.toHaveBeenCalled();
+  });
+
+  it("X5b. simulacao que falha tambem nao persiste e vira excecao HTTP", async () => {
+    const { service, baixaService, prisma } = montarEstorno();
+    baixaService.estornarBaixa.mockRejectedValue(new BaixaAthosError("RECEBIMENTO_DIVERGENTE", "divergente"));
+    await expect(service.estornarBaixa(7, { simular: true })).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+    expect(prisma.cobrancaBaixaAthosLog.create).not.toHaveBeenCalled();
+  });
+
+  it("X6. sucesso real: status estornado, trilha 'estorno', CobrancaBoleto.status intacto", async () => {
+    const { service, baixaService, prisma } = montarEstorno();
+    baixaService.estornarBaixa.mockResolvedValue({
+      simulado: false,
+      titulos: [
+        { idcontareceber: 1363, idcontarecebida: 501, principal: 29, valorPago: 29, statusFinal: "VEN" },
+        { idcontareceber: 1365, idcontarecebida: 503, principal: 10.5, valorPago: 10.5, statusFinal: "AVC" },
+      ],
+      valorTotal: 39.5,
+    });
+    const r = await service.estornarBaixa(7, { confirmar: true });
+    expect(r.status).toBe("estornado");
+    expect(r.simulado).toBe(false);
+
+    expect(prisma.cobrancaBoleto.update).toHaveBeenCalledTimes(1);
+    const upd = prisma.cobrancaBoleto.update.mock.calls[0][0];
+    expect(upd.where).toEqual({ id: 7 });
+    expect(upd.data).toMatchObject({
+      athosBaixaStatus: "estornado",
+      athosBaixaErroCodigo: null,
+      athosBaixaErroMensagem: null,
+    });
+    expect(upd.data.athosBaixaUltimaEm).toBeInstanceOf(Date);
+    expect(Object.keys(upd.data)).not.toContain("status");
+
+    expect(prisma.cobrancaBaixaAthosLog.create).toHaveBeenCalledTimes(1);
+    const log = prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data;
+    expect(log).toMatchObject({
+      cobrancaBoletoId: 7,
+      operacao: "estorno",
+      origem: "manual",
+      resultado: "estornado",
+      valorTotal: 39.5,
+    });
+    expect(log.titulos).toEqual([
+      { idcontareceber: 1363, idcontarecebida: 501, principal: 29, valorPago: 29, statusFinal: "VEN" },
+      { idcontareceber: 1365, idcontarecebida: 503, principal: 10.5, valorPago: 10.5, statusFinal: "AVC" },
+    ]);
+  });
+
+  it("X7. falha real: status continua baixado, trilha 'falha', 422 para negocio e 500 para infra", async () => {
+    const negocio = montarEstorno();
+    negocio.baixaService.estornarBaixa.mockRejectedValue(new BaixaAthosError("RECEBIMENTO_DIVERGENTE", "divergente"));
+    await expect(negocio.service.estornarBaixa(7, { confirmar: true })).rejects.toBeInstanceOf(
+      UnprocessableEntityException,
+    );
+    expect(negocio.prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+    const log = negocio.prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data;
+    expect(log).toMatchObject({ operacao: "estorno", resultado: "falha", codigoErro: "RECEBIMENTO_DIVERGENTE" });
+
+    const infra = montarEstorno();
+    infra.baixaService.estornarBaixa.mockRejectedValue(new BaixaAthosError("PERMISSAO_NEGADA", "sem GRANT DELETE"));
+    await expect(infra.service.estornarBaixa(7, { confirmar: true })).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+    expect(infra.prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+    expect(infra.prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data).toMatchObject({
+      resultado: "falha",
+      codigoErro: "PERMISSAO_NEGADA",
+    });
+
+    const inesperado = montarEstorno();
+    inesperado.baixaService.estornarBaixa.mockRejectedValue(new Error("detalhe interno com SQL"));
+    await expect(inesperado.service.estornarBaixa(7, { confirmar: true })).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+    const dados = inesperado.prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data;
+    expect(dados.codigoErro).toBe("ERRO_INESPERADO");
+    expect(String(dados.mensagem)).not.toContain("SQL");
+  });
+
+  it("X7b. falha ao persistir apos estorno bem-sucedido so gera log e o resultado e devolvido", async () => {
+    const { service, prisma, logger } = montarEstorno();
+    prisma.cobrancaBoleto.update.mockRejectedValue(new Error("banco fora"));
+    prisma.cobrancaBaixaAthosLog.create.mockRejectedValue(new Error("banco fora"));
+    const r = await service.estornarBaixa(7, { confirmar: true });
+    expect(r.status).toBe("estornado");
+    expect(logger.error).toHaveBeenCalledTimes(2);
+  });
+
+  it("X8. depois de estornado, baixarManual volta a aceitar o boleto", async () => {
+    const { service, baixaService } = montarEstorno({}, { boleto: { ...boletoBaixado, athosBaixaStatus: "estornado", titulos: [{ idcontareceber: 1363, valor: "29.00" }] } });
+    const r = await service.baixarManual(7, {});
+    expect(r.status).toBe("baixado");
+    expect(baixaService.baixarTitulos).toHaveBeenCalledTimes(1);
   });
 });

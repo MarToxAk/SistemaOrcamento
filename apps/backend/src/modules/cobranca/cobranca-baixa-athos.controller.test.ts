@@ -4,6 +4,7 @@ import type { ArgumentMetadata } from "@nestjs/common";
 import { AdminAuthGuard } from "../security/admin-auth.guard";
 import { CobrancaController } from "./cobranca.controller";
 import { BaixarAthosDto } from "./dto/baixar-athos.dto";
+import { EstornarBaixaAthosDto } from "./dto/estornar-baixa-athos.dto";
 
 // Controller instanciado com colaboradores falsos: nenhum Nest app, nenhuma rede, nenhum Athos (D-07).
 
@@ -11,6 +12,7 @@ function montar() {
   const baixaAthos = {
     baixarManual: jest.fn().mockResolvedValue({ simulado: false, status: "baixado" }),
     consultarStatus: jest.fn().mockResolvedValue({ athosBaixaStatus: "baixado", historico: [] }),
+    estornarBaixa: jest.fn().mockResolvedValue({ simulado: false, status: "estornado" }),
   };
   const controller = new CobrancaController({} as any, {} as any, baixaAthos as any);
   return { controller, baixaAthos };
@@ -67,5 +69,32 @@ describe("CobrancaController - baixa Athos (plano 43-03)", () => {
 
     await controller.statusBaixaAthos(7);
     expect(baixaAthos.consultarStatus).toHaveBeenCalledWith(7);
+  });
+
+  it("C4. estornarBaixaAthos esta protegido por AdminAuthGuard e nao e @Public", () => {
+    const guards: unknown[] = Reflect.getMetadata("__guards__", CobrancaController.prototype.estornarBaixaAthos) ?? [];
+    expect(guards).toContain(AdminAuthGuard);
+    const handler = CobrancaController.prototype.estornarBaixaAthos;
+    const valores = Reflect.getMetadataKeys(handler).map((k) => Reflect.getMetadata(k, handler));
+    expect(valores).not.toContain(true);
+  });
+
+  it("C5. ValidationPipe aceita {} e {confirmar:true}; rejeita {confirmar:'sim'} e campos desconhecidos", async () => {
+    const pipe = pipeGlobal();
+    const meta: ArgumentMetadata = { type: "body", metatype: EstornarBaixaAthosDto, data: "" };
+    await expect(pipe.transform({}, meta)).resolves.toBeInstanceOf(EstornarBaixaAthosDto);
+    await expect(pipe.transform({ confirmar: true }, meta)).resolves.toMatchObject({ confirmar: true });
+    await expect(pipe.transform({ simular: true }, meta)).resolves.toMatchObject({ simular: true });
+    await expect(pipe.transform({ confirmar: "sim" }, meta)).rejects.toBeDefined();
+    await expect(pipe.transform({ simular: 1 }, meta)).rejects.toBeDefined();
+    await expect(pipe.transform({ dataPagamento: "2026-11-05" }, meta)).rejects.toBeDefined();
+  });
+
+  it("C6. o controller delega o estorno ao orquestrador com id numerico e o DTO", async () => {
+    const { controller, baixaAthos } = montar();
+    const meta: ArgumentMetadata = { type: "body", metatype: EstornarBaixaAthosDto, data: "" };
+    const dto = (await pipeGlobal().transform({ confirmar: true }, meta)) as EstornarBaixaAthosDto;
+    await controller.estornarBaixaAthos(7, dto);
+    expect(baixaAthos.estornarBaixa).toHaveBeenCalledWith(7, dto);
   });
 });

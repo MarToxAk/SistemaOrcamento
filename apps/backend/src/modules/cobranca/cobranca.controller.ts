@@ -10,6 +10,7 @@ import { CobrancaBaixaAthosService } from "./cobranca-baixa-athos.service";
 import { CobrancaService } from "./cobranca.service";
 import { EmailEnvioService } from "./email-envio.service";
 import { BaixarAthosDto } from "./dto/baixar-athos.dto";
+import { EstornarBaixaAthosDto } from "./dto/estornar-baixa-athos.dto";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
@@ -220,6 +221,16 @@ export class CobrancaController {
   @Post("boleto/:id/baixar-athos")
   async baixarAthos(@Param("id", ParseIntPipe) id: number, @Body() dto: BaixarAthosDto) {
     return this.baixaAthosService.baixarManual(id, dto);
+  }
+
+  /**
+   * Estorno ("Voltar Contas Recebidas") da baixa feita pelo Sistema - Fase 43 (D-06). AdminOnly. Exige
+   * confirmar=true (ou simular=true, somente leitura). So estorna o que a trilha de auditoria registrou.
+   */
+  @AdminOnly()
+  @Post("boleto/:id/estornar-baixa-athos")
+  async estornarBaixaAthos(@Param("id", ParseIntPipe) id: number, @Body() dto: EstornarBaixaAthosDto) {
+    return this.baixaAthosService.estornarBaixa(id, dto);
   }
 
   /** Status persistido da baixa no Athos e historico das ultimas tentativas. AUTHED via guard global. */
