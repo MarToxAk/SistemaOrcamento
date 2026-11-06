@@ -5,6 +5,7 @@ import {
   formatarValorAthos,
   hojeSaoPaulo,
   montarDescricaoLivro,
+  montarRegexCartaoPreferencial,
   sanitizarTextoAthos,
 } from "./athos-conta-receber-baixa.service";
 import { CONF_FINANCEIRO_COLUNAS } from "./athos-baixa-encargos.util";
@@ -542,5 +543,329 @@ describe("AthosContaReceberBaixaService", () => {
     expect(formatarValorAthos(0.1 + 0.2)).toBe("0.30");
     expect(formatarValorAthos(29)).toBe("29.00");
     expect(formatarValorAthos(457.5)).toBe("457.50");
+  });
+});
+
+// ===========================================================================
+// Estorno ("Voltar Contas Recebidas") - Fase 43-04. pg falso; nunca o Athos real (D-07).
+// ===========================================================================
+describe("AthosContaReceberBaixaService.estornarBaixa", () => {
+  const envOriginal = { ...process.env };
+  let service: AthosContaReceberBaixaService;
+
+  interface TitEst {
+    idcontareceber: number;
+    idcliente: number;
+    valor: string;
+    datavencimento: string;
+    statusconta: string;
+  }
+
+  function tit(id: number, extra: Partial<TitEst> = {}): TitEst {
+    return {
+      idcontareceber: id,
+      idcliente: 2641,
+      valor: "457.00",
+      datavencimento: "2026-10-27",
+      statusconta: "REC",
+      ...extra,
+    };
+  }
+
+  function rec(idcontareceber: number, idcontarecebida: number, valorpago = "457.00") {
+    return { idcontareceber, idcontarecebida, valorpago };
+  }
+
+  function tipoE(sql: string): string {
+    const s = sql.replace(/\s+/g, " ").trim();
+    if (/^BEGIN/i.test(s)) return "BEGIN";
+    if (/^COMMIT/i.test(s)) return "COMMIT";
+    if (/^ROLLBACK/i.test(s)) return "ROLLBACK";
+    if (/^SET TRANSACTION/i.test(s)) return "SET";
+    if (/^SELECT .* FROM conta_recebida /i.test(s)) return "LER_REC";
+    if (/^SELECT .* FROM conta_receber /i.test(s)) return "LER_TIT";
+    if (/^DELETE FROM livro_registro_io/i.test(s)) return "DEL_LIVRO";
+    if (/^DELETE FROM caixa_entrada/i.test(s)) return "DEL_CAIXA_ENTRADA";
+    if (/^DELETE FROM caixa_movimento_recebimento/i.test(s)) return "DEL_CAIXA_MOV";
+    if (/^DELETE FROM conta_recebida/i.test(s)) return "DEL_RECEBIDA";
+    if (/^DELETE FROM cliente_cartao_preferencial/i.test(s)) return "DEL_CARTAO";
+    if (/^UPDATE conta_receber/i.test(s)) return "UPD_CONTA";
+    if (/^INSERT INTO log/i.test(s)) return "INS_LOG";
+    return `OUTRO:${s}`;
+  }
+
+  const tiposE = () => mClient.query.mock.calls.map((c: unknown[]) => tipoE(c[0] as string));
+  const chamadasE = (t: string) => mClient.query.mock.calls.filter((c: unknown[]) => tipoE(c[0] as string) === t);
+
+  function prepararEst(
+    titulos: TitEst[],
+    recebidas: Array<{ idcontareceber: number; idcontarecebida: number; valorpago: string }>,
+    opts: { falharEm?: string; codigo?: string } = {},
+  ) {
+    mClient.query.mockReset();
+    mClient.release.mockReset();
+    mClient.query.mockImplementation(async (sql: string) => {
+      const t = tipoE(sql);
+      if (opts.falharEm === t) {
+        const err = new Error("erro simulado") as Error & { code: string };
+        err.code = opts.codigo ?? "XX000";
+        throw err;
+      }
+      if (t === "LER_TIT") return { rows: titulos };
+      if (t === "LER_REC") return { rows: recebidas };
+      return { rows: [] };
+    });
+  }
+
+  const entradaEst = (pares: Array<[number, number]>, extra: Record<string, unknown> = {}) => ({
+    idclienteAthos: 2641,
+    titulos: pares.map(([idcontareceber, idcontarecebida]) => ({ idcontareceber, idcontarecebida })),
+    idFuncionario: 1,
+    hoje: HOJE,
+    ...extra,
+  });
+
+  function nenhumDelete() {
+    const dels = mClient.query.mock.calls.filter((c: unknown[]) => /^\s*DELETE\b/i.test(c[0] as string));
+    expect(dels).toHaveLength(0);
+  }
+
+  beforeEach(() => {
+    process.env.NODE_ENV = "test";
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos_mock";
+    process.env.ATHOS_PG_USER = "usuario_mock";
+    process.env.ATHOS_PG_PASS = "senha_mock";
+    process.env.ATHOS_PG_PORT = "5432";
+    mPool.connect.mockClear();
+    mPool.connect.mockResolvedValue(mClient);
+    service = new AthosContaReceberBaixaService();
+    (service as any).logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+  });
+
+  afterAll(() => {
+    process.env = envOriginal;
+  });
+
+  it("E1. estorno de 1 titulo: sequencia exata e commit", async () => {
+    prepararEst([tit(1302)], [rec(1302, 1294)]);
+    const r = await service.estornarBaixa(entradaEst([[1302, 1294]]));
+    expect(tiposE()).toEqual([
+      "BEGIN",
+      "LER_TIT",
+      "LER_REC",
+      "DEL_LIVRO",
+      "DEL_CAIXA_ENTRADA",
+      "DEL_CAIXA_MOV",
+      "DEL_RECEBIDA",
+      "DEL_CARTAO",
+      "UPD_CONTA",
+      "INS_LOG",
+      "COMMIT",
+    ]);
+    expect(tiposE()).not.toContain("ROLLBACK");
+    expect(mClient.release).toHaveBeenCalledTimes(1);
+    expect(r).toMatchObject({ simulado: false, valorTotal: 457 });
+    expect(r.titulos[0]).toMatchObject({ idcontareceber: 1302, idcontarecebida: 1294, statusFinal: "VEN" });
+    // ids exatos nos DELETE por id
+    expect(chamadasE("DEL_LIVRO")[0][1]).toEqual([1294]);
+    expect(chamadasE("DEL_CAIXA_ENTRADA")[0][1]).toEqual([1294]);
+    expect(chamadasE("DEL_CAIXA_MOV")[0][1]).toEqual([1302]);
+    expect(chamadasE("DEL_RECEBIDA")[0][1]).toEqual([1302]);
+    // nao toca em boleto nem cliente
+    const todos = mClient.query.mock.calls.map((c: unknown[]) => c[0] as string).join("\n");
+    expect(todos).not.toMatch(/boleto\s+SET/i);
+    expect(todos).not.toMatch(/UPDATE\s+cliente\b/i);
+  });
+
+  it("E2. status final: vencido -> VEN; vencimento hoje ou futuro -> AVC", async () => {
+    prepararEst([tit(1, { datavencimento: "2026-11-05" })], [rec(1, 11)]);
+    await service.estornarBaixa(entradaEst([[1, 11]]));
+    expect(chamadasE("UPD_CONTA")[0][1]).toEqual([1, "VEN"]);
+
+    prepararEst([tit(2, { datavencimento: HOJE })], [rec(2, 12)]);
+    await service.estornarBaixa(entradaEst([[2, 12]]));
+    expect(chamadasE("UPD_CONTA")[0][1]).toEqual([2, "AVC"]);
+
+    prepararEst([tit(3, { datavencimento: "2026-12-01" })], [rec(3, 13)]);
+    await service.estornarBaixa(entradaEst([[3, 13]]));
+    expect(chamadasE("UPD_CONTA")[0][1]).toEqual([3, "AVC"]);
+  });
+
+  it("E3. multi-titulo: uma transacao, DELETE/UPDATE por id proprio, 3 logs, total em centavos", async () => {
+    prepararEst(
+      [tit(10, { valor: "0.10" }), tit(11, { valor: "0.20" }), tit(12, { valor: "29.00" })],
+      [rec(10, 100, "0.10"), rec(11, 101, "0.20"), rec(12, 102, "29.00")],
+    );
+    const r = await service.estornarBaixa(
+      entradaEst([
+        [10, 100],
+        [11, 101],
+        [12, 102],
+      ]),
+    );
+    expect(tiposE().filter((t) => t === "BEGIN")).toHaveLength(1);
+    expect(tiposE().filter((t) => t === "COMMIT")).toHaveLength(1);
+    expect(chamadasE("INS_LOG")).toHaveLength(3);
+    expect(chamadasE("DEL_LIVRO").map((c) => c[1])).toEqual([[100], [101], [102]]);
+    expect(chamadasE("DEL_CAIXA_MOV").map((c) => c[1])).toEqual([[10], [11], [12]]);
+    expect(chamadasE("UPD_CONTA").map((c) => (c[1] as unknown[])[0])).toEqual([10, 11, 12]);
+    expect(r.valorTotal).toBe(29.3);
+  });
+
+  it("E4. mensagem do log com virgula decimal e somente ASCII", async () => {
+    prepararEst([tit(1302)], [rec(1302, 1294)]);
+    await service.estornarBaixa(entradaEst([[1302, 1294]]));
+    const [params] = [chamadasE("INS_LOG")[0][1] as unknown[]];
+    expect(params[0]).toBe(1);
+    expect(params[1]).toBe("Voltou a conta recebida: 1302 Valor: R$ 457,00 Valor Pago: R$ 457,00");
+    // eslint-disable-next-line no-control-regex
+    expect(/^[\x20-\x7E]+$/.test(params[1] as string)).toBe(true);
+  });
+
+  it("E4b. valor pago diferente do principal aparece no log (com encargos)", async () => {
+    prepararEst([tit(7, { valor: "457.00" })], [rec(7, 70, "467.65")]);
+    await service.estornarBaixa(entradaEst([[7, 70]]));
+    expect((chamadasE("INS_LOG")[0][1] as unknown[])[1]).toBe(
+      "Voltou a conta recebida: 7 Valor: R$ 457,00 Valor Pago: R$ 467,65",
+    );
+  });
+
+  it("E5. regex do cartao preferencial tem fronteira numerica", async () => {
+    prepararEst([tit(13)], [rec(13, 130)]);
+    await service.estornarBaixa(entradaEst([[13, 130]]));
+    const regex = (chamadasE("DEL_CARTAO")[0][1] as string[])[0];
+    expect(regex).toBe("BAIXA CONTA RECEBER(.*[^0-9])?13([^0-9]|$)");
+    expect(montarRegexCartaoPreferencial(13)).toBe(regex);
+    const re = new RegExp(regex);
+    expect(re.test("BAIXA CONTA RECEBER 1302")).toBe(false);
+    expect(re.test("BAIXA CONTA RECEBER 913")).toBe(false);
+    expect(re.test("BAIXA CONTA RECEBER 13")).toBe(true);
+    expect(re.test("BAIXA CONTA RECEBER TIT 13 CLIENTE")).toBe(true);
+    expect(() => montarRegexCartaoPreferencial(0)).toThrow(BaixaAthosError);
+    expect(() => montarRegexCartaoPreferencial(1.5)).toThrow(BaixaAthosError);
+  });
+
+  it("E6. titulo nao REC -> STATUS_INVALIDO, nenhum DELETE, ROLLBACK", async () => {
+    prepararEst([tit(1, { statusconta: "AVC" })], [rec(1, 11)]);
+    expect(await codigoDoErro(service.estornarBaixa(entradaEst([[1, 11]])))).toBe("STATUS_INVALIDO");
+    nenhumDelete();
+    expect(tiposE()).toContain("ROLLBACK");
+    expect(tiposE()).not.toContain("COMMIT");
+  });
+
+  it("E7. inexistente, outro cliente, lista vazia e id repetido", async () => {
+    prepararEst([], []);
+    expect(await codigoDoErro(service.estornarBaixa(entradaEst([[1, 11]])))).toBe("TITULO_NAO_ENCONTRADO");
+    nenhumDelete();
+
+    prepararEst([tit(1, { idcliente: 999 })], [rec(1, 11)]);
+    expect(await codigoDoErro(service.estornarBaixa(entradaEst([[1, 11]])))).toBe("CLIENTE_DIVERGENTE");
+    nenhumDelete();
+
+    mPool.connect.mockClear();
+    expect(await codigoDoErro(service.estornarBaixa(entradaEst([])))).toBe("TITULO_NAO_ENCONTRADO");
+    expect(
+      await codigoDoErro(
+        service.estornarBaixa(
+          entradaEst([
+            [1, 11],
+            [1, 12],
+          ]),
+        ),
+      ),
+    ).toBe("TITULO_NAO_ENCONTRADO");
+    expect(mPool.connect).not.toHaveBeenCalled();
+  });
+
+  it("E8. zero, dois ou outro recebimento -> nada e apagado", async () => {
+    prepararEst([tit(1)], []);
+    expect(await codigoDoErro(service.estornarBaixa(entradaEst([[1, 11]])))).toBe("RECEBIMENTO_NAO_ENCONTRADO");
+    nenhumDelete();
+
+    prepararEst([tit(1)], [rec(1, 11), rec(1, 12)]);
+    expect(await codigoDoErro(service.estornarBaixa(entradaEst([[1, 11]])))).toBe("RECEBIMENTO_DIVERGENTE");
+    nenhumDelete();
+
+    prepararEst([tit(1)], [rec(1, 99)]);
+    expect(await codigoDoErro(service.estornarBaixa(entradaEst([[1, 11]])))).toBe("RECEBIMENTO_DIVERGENTE");
+    nenhumDelete();
+    expect(tiposE()).toContain("ROLLBACK");
+  });
+
+  it("E9. validacao antes de apagar: 3o titulo invalido nao deixa DELETE nos dois primeiros", async () => {
+    prepararEst([tit(1), tit(2), tit(3, { statusconta: "AVC" })], [rec(1, 11), rec(2, 12), rec(3, 13)]);
+    const cod = await codigoDoErro(
+      service.estornarBaixa(
+        entradaEst([
+          [1, 11],
+          [2, 12],
+          [3, 13],
+        ]),
+      ),
+    );
+    expect(cod).toBe("STATUS_INVALIDO");
+    nenhumDelete();
+    expect(chamadasE("UPD_CONTA")).toHaveLength(0);
+    expect(chamadasE("INS_LOG")).toHaveLength(0);
+  });
+
+  it("E10. simulacao: READ ONLY, sem FOR UPDATE, sem escrita, ROLLBACK", async () => {
+    prepararEst([tit(1302)], [rec(1302, 1294)]);
+    const r = await service.estornarBaixa(entradaEst([[1302, 1294]], { simular: true }));
+    expect(tiposE()).toEqual(["BEGIN", "SET", "LER_TIT", "LER_REC", "ROLLBACK"]);
+    const textos = mClient.query.mock.calls.map((c: unknown[]) => c[0] as string);
+    expect(textos.some((t) => /FOR UPDATE/i.test(t))).toBe(false);
+    expect(textos.some((t) => /\b(DELETE|UPDATE|INSERT)\b/i.test(t))).toBe(false);
+    expect(r.simulado).toBe(true);
+    expect(r.titulos[0]).toMatchObject({ statusFinal: "VEN", principal: 457, valorPago: 457 });
+    expect(r.valorTotal).toBe(457);
+  });
+
+  it("E10b. fora da simulacao a leitura de conta_receber trava com FOR UPDATE", async () => {
+    prepararEst([tit(1)], [rec(1, 11)]);
+    await service.estornarBaixa(entradaEst([[1, 11]]));
+    const lerTit = chamadasE("LER_TIT")[0][0] as string;
+    expect(lerTit).toMatch(/FOR UPDATE/i);
+  });
+
+  it("E11. erro 42501 no DELETE de conta_recebida: ROLLBACK, PERMISSAO_NEGADA com GRANT DELETE", async () => {
+    prepararEst([tit(1)], [rec(1, 11)], { falharEm: "DEL_RECEBIDA", codigo: "42501" });
+    let erro: BaixaAthosError | null = null;
+    try {
+      await service.estornarBaixa(entradaEst([[1, 11]]));
+    } catch (e) {
+      erro = e as BaixaAthosError;
+    }
+    expect(erro?.codigo).toBe("PERMISSAO_NEGADA");
+    expect(erro?.message).toMatch(/GRANT DELETE/);
+    expect(tiposE()).toContain("ROLLBACK");
+    expect(tiposE()).not.toContain("COMMIT");
+    expect(tiposE()).not.toContain("UPD_CONTA");
+    expect(mClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("E12. trava de ambiente: host real em teste -> AMBIENTE_TESTE_HOST_REAL sem conectar", async () => {
+    process.env.ATHOS_PG_HOST = "athos.exemplo.invalid";
+    mPool.connect.mockClear();
+    expect(await codigoDoErro(service.estornarBaixa(entradaEst([[1, 11]])))).toBe("AMBIENTE_TESTE_HOST_REAL");
+    expect(mPool.connect).not.toHaveBeenCalled();
+  });
+
+  it("E13. todo DELETE tem WHERE com parametro $1", async () => {
+    prepararEst([tit(1), tit(2)], [rec(1, 11), rec(2, 12)]);
+    await service.estornarBaixa(
+      entradaEst([
+        [1, 11],
+        [2, 12],
+      ]),
+    );
+    const dels = mClient.query.mock.calls.filter((c: unknown[]) => /^\s*DELETE\b/i.test(c[0] as string));
+    expect(dels).toHaveLength(10);
+    for (const c of dels) {
+      expect(c[0] as string).toMatch(/\bWHERE\b[^;]*\$1/i);
+      expect(Array.isArray(c[1])).toBe(true);
+      expect((c[1] as unknown[]).length).toBeGreaterThanOrEqual(1);
+    }
   });
 });

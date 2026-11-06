@@ -37,6 +37,9 @@ export type BaixaAthosCodigo =
   | "PERMISSAO_NEGADA"
   | "TEXTO_LONGO"
   | "AMBIENTE_TESTE_HOST_REAL"
+  // Fase 43-04 (estorno): recebimento ausente ou diferente do que o Sistema registrou na baixa.
+  | "RECEBIMENTO_NAO_ENCONTRADO"
+  | "RECEBIMENTO_DIVERGENTE"
   | "ERRO_BANCO";
 
 export class BaixaAthosError extends Error {
@@ -85,6 +88,32 @@ export interface BaixaTituloResultado {
   multa: number;
   atraso: number;
   valorPago: number;
+}
+
+export interface EstornarBaixaInput {
+  idclienteAthos: number;
+  /** pares gravados pelo Sistema na baixa (trilha CobrancaBaixaAthosLog); nada alem disso e apagado */
+  titulos: Array<{ idcontareceber: number; idcontarecebida: number }>;
+  idFuncionario: number;
+  /** YYYY-MM-DD, injetavel nos testes; padrao hojeSaoPaulo() */
+  hoje?: string;
+  /** true = BEGIN + SET TRANSACTION READ ONLY, sem FOR UPDATE, sem escrita */
+  simular?: boolean;
+}
+
+export interface EstornarBaixaTituloResultado {
+  idcontareceber: number;
+  idcontarecebida: number;
+  principal: number;
+  valorPago: number;
+  statusFinal: "AVC" | "VEN";
+}
+
+export interface EstornarBaixaResultado {
+  simulado: boolean;
+  titulos: EstornarBaixaTituloResultado[];
+  /** soma dos valorPago estornados */
+  valorTotal: number;
 }
 
 export interface BaixarTitulosResultado {
@@ -217,6 +246,43 @@ const SQL_INS_LOG =
   `INSERT INTO log (idfuncionariousuario, data, hora, mensagem)
    VALUES ($1, current_date, cast(current_time(0) as time), $2)`;
 
+// ---- Estorno (Voltar Contas Recebidas), 43-REFERENCIA-SQL-ATHOS.md secao Estorno ----------------
+const SQL_EST_LER_TITULOS =
+  `SELECT cr.idcontareceber, cr.idcliente, cr.valor,
+          to_char(cr.datavencimento, 'YYYY-MM-DD') AS datavencimento, TRIM(cr.statusconta) AS statusconta
+     FROM conta_receber cr
+    WHERE cr.idcontareceber = ANY($1::int[])
+    ORDER BY cr.idcontareceber`;
+
+const SQL_EST_LER_RECEBIDAS =
+  `SELECT rec.idcontarecebida, rec.idcontareceber, rec.valorpago
+     FROM conta_recebida rec
+    WHERE rec.idcontareceber = ANY($1::int[])
+    ORDER BY rec.idcontareceber, rec.idcontarecebida`;
+
+// Todos os DELETE sao por id exato, exceto cliente_cartao_preferencial (regex com fronteira numerica).
+const SQL_EST_DEL_LIVRO = `DELETE FROM livro_registro_io WHERE idcontarecebida = $1`;
+const SQL_EST_DEL_CAIXA_ENTRADA = `DELETE FROM caixa_entrada WHERE idcontarecebida = $1`;
+const SQL_EST_DEL_CAIXA_MOV = `DELETE FROM caixa_movimento_recebimento WHERE idcontareceber = $1`;
+const SQL_EST_DEL_RECEBIDA = `DELETE FROM conta_recebida WHERE idcontareceber = $1`;
+const SQL_EST_DEL_CARTAO_PREF = `DELETE FROM cliente_cartao_preferencial WHERE descricaolancamento ~ $1`;
+const SQL_EST_UPD_STATUS = `UPDATE conta_receber SET statusconta = $2 WHERE idcontareceber = $1`;
+
+/**
+ * Regex do cartao preferencial para o titulo: mais estrita que o LIKE '%BAIXA CONTA RECEBER%<id>%' do Athos,
+ * que casaria o titulo 13 com a descricao do titulo 1302. O id e inteiro validado (nunca texto livre).
+ */
+export function montarRegexCartaoPreferencial(idcontareceber: number): string {
+  if (!Number.isInteger(idcontareceber) || idcontareceber <= 0) {
+    throw new BaixaAthosError("TITULO_NAO_ENCONTRADO", "idcontareceber invalido.");
+  }
+  return `BAIXA CONTA RECEBER(.*[^0-9])?${idcontareceber}([^0-9]|$)`;
+}
+
+function valorBr(centavos: number): string {
+  return centavosParaTexto(centavos).replace(".", ",");
+}
+
 interface LinhaTitulo {
   idcontareceber: number;
   idcliente: number;
@@ -297,7 +363,9 @@ export class AthosContaReceberBaixaService {
           "PERMISSAO_NEGADA",
           "Permissao de escrita ausente no Athos para a baixa. Solicite ao DBA o GRANT: " +
             "GRANT INSERT, UPDATE ON TABLE conta_recebida, livro_registro_io, conta_receber, boleto, cliente, log TO <usuario>; " +
-            "GRANT USAGE, SELECT nas sequences de conta_recebida, livro_registro_io e log para <usuario>.",
+            "GRANT USAGE, SELECT nas sequences de conta_recebida, livro_registro_io e log para <usuario>. " +
+            "Para o estorno tambem e necessario GRANT DELETE ON TABLE conta_recebida, livro_registro_io, caixa_entrada, " +
+            "caixa_movimento_recebimento, cliente_cartao_preferencial TO <usuario>.",
         );
       case "22001":
         return new BaixaAthosError("TEXTO_LONGO", "Texto excede o tamanho da coluna no Athos.");
@@ -546,6 +614,176 @@ export class AthosContaReceberBaixaService {
       }
       const mapeado = this.mapearErroPg(err);
       this.logger.error(`Baixa Athos falhou: codigo=${mapeado.codigo} titulos=${ids.join(",")}`);
+      throw mapeado;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Estorno ("Voltar Contas Recebidas") em UMA transacao. Apaga somente o que o Sistema baixou: os pares
+   * (idcontareceber, idcontarecebida) vem da trilha de auditoria e sao conferidos contra o Athos antes de
+   * qualquer DELETE. Nao altera boleto.statusboleto nem cliente.aviso1-3 (conforme o SQL de referencia).
+   */
+  async estornarBaixa(input: EstornarBaixaInput): Promise<EstornarBaixaResultado> {
+    const simular = input.simular === true;
+    const hoje = input.hoje ?? hojeSaoPaulo();
+
+    // ---- validacao de entrada pura (nenhuma conexao aberta) -----------------
+    if (!inteiroPositivo(input.idFuncionario)) {
+      throw new BaixaAthosError("CONFIG_INVALIDA", "idFuncionario deve ser inteiro positivo.");
+    }
+    if (!dataValida(hoje)) {
+      throw new BaixaAthosError("DATA_PAGAMENTO_INVALIDA", "Data de referencia do estorno invalida.");
+    }
+    if (!inteiroPositivo(input.idclienteAthos) || !Array.isArray(input.titulos) || input.titulos.length === 0) {
+      throw new BaixaAthosError("TITULO_NAO_ENCONTRADO", "Nenhum titulo informado para o estorno.");
+    }
+    const registrados = new Map<number, number>();
+    for (const t of input.titulos) {
+      if (!inteiroPositivo(t?.idcontareceber) || !inteiroPositivo(t?.idcontarecebida)) {
+        throw new BaixaAthosError(
+          "TITULO_NAO_ENCONTRADO",
+          "idcontareceber e idcontarecebida devem ser inteiros positivos.",
+        );
+      }
+      if (registrados.has(t.idcontareceber)) {
+        throw new BaixaAthosError("TITULO_NAO_ENCONTRADO", "Titulo repetido na lista de estorno.");
+      }
+      registrados.set(t.idcontareceber, t.idcontarecebida);
+    }
+    const ids = [...registrados.keys()].sort((a, b) => a - b);
+
+    this.assertHostPermitido();
+
+    const pool = this.getPool();
+    let client: PoolClient;
+    try {
+      client = await pool.connect();
+    } catch (err) {
+      this.logger.error(`Estorno Athos: falha ao conectar (${(err as { code?: string })?.code ?? "sem_codigo"}).`);
+      throw new BaixaAthosError("ERRO_BANCO", "Nao foi possivel conectar ao Athos.");
+    }
+
+    try {
+      await client.query("BEGIN");
+      if (simular) await client.query("SET TRANSACTION READ ONLY");
+
+      // ---- leitura (e trava, fora da simulacao) ------------------------------
+      const lidos = await client.query<LinhaTitulo>(
+        simular ? SQL_EST_LER_TITULOS : `${SQL_EST_LER_TITULOS} FOR UPDATE`,
+        [ids],
+      );
+      const porId = new Map<number, LinhaTitulo>();
+      for (const l of lidos.rows) porId.set(Number(l.idcontareceber), l);
+
+      const recebidas = await client.query<{
+        idcontarecebida: number;
+        idcontareceber: number;
+        valorpago: string | number;
+      }>(SQL_EST_LER_RECEBIDAS, [ids]);
+      const recPorTitulo = new Map<number, Array<{ idcontarecebida: number; valorpago: string | number }>>();
+      for (const r of recebidas.rows) {
+        const chave = Number(r.idcontareceber);
+        const lista = recPorTitulo.get(chave) ?? [];
+        lista.push({ idcontarecebida: Number(r.idcontarecebida), valorpago: r.valorpago });
+        recPorTitulo.set(chave, lista);
+      }
+
+      // ---- validacao de TODOS os titulos antes do primeiro DELETE -------------
+      const faltando = ids.filter((id) => !porId.has(id));
+      if (faltando.length > 0) {
+        throw new BaixaAthosError(
+          "TITULO_NAO_ENCONTRADO",
+          `Titulo(s) nao encontrado(s) no Athos: ${faltando.join(", ")}.`,
+        );
+      }
+
+      const plano: Array<
+        EstornarBaixaTituloResultado & { principalCentavos: number; valorPagoCentavos: number }
+      > = [];
+      for (const id of ids) {
+        const linha = porId.get(id) as LinhaTitulo;
+        if (Number(linha.idcliente) !== input.idclienteAthos) {
+          throw new BaixaAthosError("CLIENTE_DIVERGENTE", `Titulo ${id} pertence a outro cliente no Athos.`);
+        }
+        const status = (linha.statusconta ?? "").trim();
+        if (status !== "REC") {
+          throw new BaixaAthosError(
+            "STATUS_INVALIDO",
+            `Titulo ${id} com status ${status || "vazio"} nao pode ser estornado.`,
+          );
+        }
+        const recs = recPorTitulo.get(id) ?? [];
+        if (recs.length === 0) {
+          throw new BaixaAthosError("RECEBIMENTO_NAO_ENCONTRADO", `Titulo ${id} sem recebimento no Athos.`);
+        }
+        if (recs.length > 1) {
+          throw new BaixaAthosError(
+            "RECEBIMENTO_DIVERGENTE",
+            `Titulo ${id} com mais de um recebimento no Athos; estorno recusado.`,
+          );
+        }
+        const idContaRecebida = registrados.get(id) as number;
+        if (recs[0].idcontarecebida !== idContaRecebida) {
+          throw new BaixaAthosError(
+            "RECEBIMENTO_DIVERGENTE",
+            `Titulo ${id} com recebimento diferente do registrado pelo Sistema; estorno recusado.`,
+          );
+        }
+        const principalCentavos = paraCentavos(linha.valor);
+        const valorPagoCentavos = paraCentavos(recs[0].valorpago);
+        const vencimento = linha.datavencimento || hoje;
+        plano.push({
+          idcontareceber: id,
+          idcontarecebida: idContaRecebida,
+          principal: principalCentavos / 100,
+          valorPago: valorPagoCentavos / 100,
+          statusFinal: vencimento < hoje ? "VEN" : "AVC",
+          principalCentavos,
+          valorPagoCentavos,
+        });
+      }
+
+      // ---- escrita na ordem do Athos (a simulacao nunca alcanca este bloco) ---
+      let totalCentavos = 0;
+      for (const p of plano) {
+        if (!simular) {
+          await client.query(SQL_EST_DEL_LIVRO, [p.idcontarecebida]);
+          await client.query(SQL_EST_DEL_CAIXA_ENTRADA, [p.idcontarecebida]);
+          await client.query(SQL_EST_DEL_CAIXA_MOV, [p.idcontareceber]);
+          await client.query(SQL_EST_DEL_RECEBIDA, [p.idcontareceber]);
+          await client.query(SQL_EST_DEL_CARTAO_PREF, [montarRegexCartaoPreferencial(p.idcontareceber)]);
+          await client.query(SQL_EST_UPD_STATUS, [p.idcontareceber, p.statusFinal]);
+          await client.query(SQL_INS_LOG, [
+            input.idFuncionario,
+            `Voltou a conta recebida: ${p.idcontareceber} Valor: R$ ${valorBr(p.principalCentavos)} Valor Pago: R$ ${valorBr(p.valorPagoCentavos)}`,
+          ]);
+        }
+        totalCentavos += p.valorPagoCentavos;
+      }
+
+      await client.query(simular ? "ROLLBACK" : "COMMIT");
+
+      return {
+        simulado: simular,
+        titulos: plano.map(({ idcontareceber, idcontarecebida, principal, valorPago, statusFinal }) => ({
+          idcontareceber,
+          idcontarecebida,
+          principal,
+          valorPago,
+          statusFinal,
+        })),
+        valorTotal: totalCentavos / 100,
+      };
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rbErr) {
+        this.logger.error(`Estorno Athos: erro no ROLLBACK (${(rbErr as { code?: string })?.code ?? "sem_codigo"}).`);
+      }
+      const mapeado = this.mapearErroPg(err);
+      this.logger.error(`Estorno Athos falhou: codigo=${mapeado.codigo} titulos=${ids.join(",")}`);
       throw mapeado;
     } finally {
       client.release();
