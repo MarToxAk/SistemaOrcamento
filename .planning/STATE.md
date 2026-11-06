@@ -1,38 +1,39 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: "1.0"
 milestone: v2.5
-milestone_name: — API de Produtos Compostos
-current_phase: 39
-current_phase_name: scaffold-leitura-e-spikes-de-introspec-o
+milestone_name: API de Produtos Compostos (Kits) no Athos
+current_phase: 41
+current_phase_name: "Contas a Pagar: Layout, Painéis Fiscais e Fix EFI"
 status: executing
-stopped_at: Phase 39 context gathered
-last_updated: "2026-06-30T12:04:46.651Z"
-last_activity: 2026-06-30
-last_activity_desc: Phase 39 execution started
+stopped_at: Completed quick task 260913-ivr - validacao Athos (COO>=R$50) + WhatsApp best-effort no microsite promo/ (human-check de producao pendente)
+last_updated: "2026-09-13T16:19:32.170Z"
+last_activity: 2026-09-06
+last_activity_desc: Completed quick task 260906-i7c - corrigir emissao de NFS-e de servico no orcamento (diagnostico do pre-preenchimento + endereco editavel + busca de cliente Athos)
+state_head: 2dbacc78d333b9bfed41fa022a06d8b970423f91
 progress:
-  total_phases: 2
-  completed_phases: 0
-  total_plans: 3
-  completed_plans: 0
-  percent: 0
+  total_phases: 3
+  completed_phases: 1
+  total_plans: 7
+  completed_plans: 7
+  percent: 33
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
-Last updated: 2026-06-29 — Roadmap v2.5 definido (API de Produtos Compostos / Kits no Athos)
-Current phase: 39
+Last updated: 2026-09-04 — Fase 40 verificada retroativamente (código já implementado em commit 5d5270d); milestone v2.5 completo
+Current phase: 41
 Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
 
 ## Current Position
 
-Phase: 39 (scaffold-leitura-e-spikes-de-introspec-o) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 39
-Last activity: 2026-09-02 - Completed quick task 260902-hal: apos emitir NFS-e automaticamente pelo orcamento, DANFSe gerado e entregue ao cliente via Chatwoot (anexo)
+Phase: 41 (Contas a Pagar: Layout, Painéis Fiscais e Fix EFI) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 41
+Last activity: 2026-09-06 - Completed quick task 260906-iz0: Corrigir 404 real na emissao de NFS-e no orcamento (NfseService so buscava quote por UUID, nao por internalNumber/externalQuoteId)
 
-Progress: [░░░░░░░░░░] 0% (0/2 phases complete)
+Progress: [███░░░░░░░] 33% (2/2 phases complete)
 
 ## Project Status
 
@@ -77,8 +78,9 @@ Progress: [░░░░░░░░░░] 0% (0/2 phases complete)
 | 999.1 | Gerenciamento de layout do PDF pela interface | complete (v2.3) |
 | 37 | Motor de Defaults (Descoberta por Moda) | complete (v2.4) |
 | 38 | Aplicacao de Defaults na Criacao de Produto | complete (v2.4) |
-| 39 | Scaffold, Leitura e Spikes de Introspecao | not started (v2.5) |
-| 40 | Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto) | not started (v2.5) |
+| 39 | Scaffold, Leitura e Spikes de Introspecao | complete (v2.5) |
+| 40 | Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto) | complete (v2.5, retroactive) |
+| 41 | Contas a Pagar: Layout, Paineis Fiscais e Fix EFI | not started |
 
 ## Milestones Archived
 
@@ -171,6 +173,8 @@ Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 | 2026-06-29 | PK serial via INSERT ... RETURNING — nunca MAX+1 — para idprodutocomposto | Padrao serial; MAX+1 causou bug de race condition em conta_pagar em producao |
 | 2026-06-29 | validarFkExiste extraido para athos-fk.util.ts (COMP-08) antes de qualquer codigo de escrita | Elimina duplicacao entre AthosProdutoService e AthosProdutoCompostoService; testavel em isolamento |
 | 2026-06-29 | Spikes de introspecao (COMP-07) executados antes de escrever DTO/INSERT | Tipo do dominio quantidade e triggers desconhecidos podem causar mismatch DTO/DB e rollbacks inesperados |
+| 2026-09-06 | resolverTomadorQuote deriva o lookup no Athos SOMENTE de externalQuoteId, removendo o fallback para internalNumber (quick-260906-i7c) | internalNumber e autoincrement local; usa-lo como numero de orcamento Athos podia casar com orcamento alheio e pre-preencher tomador errado num documento fiscal (T-i7c-03) |
+| 2026-09-06 | Endereco do tomador no formulario de orcamento: precedencia manual>Athos (D-i7c-01) — candidato manual so vence com logradouro+CEP+codigoMunicipio completos | Cadastro Athos ja provou nao ser confiavel para codigoMunicipio (260804-g0t); deixar o operador sobrescrever corrige o mesmo risco no fluxo de orcamento |
 
 ## Notes
 
@@ -214,6 +218,13 @@ Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 | 260901-mrr | Anexo Athos dava ETIMEDOUT: deploy/docker-compose.vps.yml nao repassava SMB_HOST ao container (task 260820 ficava inerte em producao) + IP configurado estava errado (192.168.3.203 em vez de 192.168.33.203, confirmado com Test-NetConnection). Corrigido repasse no compose, teste novo (getSmbDebugInfo().share), SMB_HOST documentado em .env.example e IP correto aplicado em .env/deploy/stack.env (nao versionados). 8/8 testes verdes | 2026-09-01 | 1b84ccc, d3620b3 | [260901-mrr-corrigir-bug-de-anexo-athos-ip-do-share-](./quick/260901-mrr-corrigir-bug-de-anexo-athos-ip-do-share-/) |
 | 260902-gi9 | Emissao de NFS-e dentro do orcamento (/orcamento/[id]) estava incompleta e sem enviar endereco do tomador ao SEFIN (mesmo bug fiscal ja corrigido no fluxo de contas a receber em 260804-g0t). Adicionado NfseService.resolverTomadorQuote() (externalQuoteId -> orcamento -> cliente Athos), endereco agora enviado na DPS, descricaoServico e IBS/CBS no formulario, endpoint GET /quotes/[id]/nfse/tomador com proxy no frontend para auto-preenchimento quando ha cliente associado. cobranca/** e contas-receber/** intocados (D-00). 5/5 testes novos verdes, build/tsc limpos. Verificacao E2E humana (Athos+SEFIN reais) pendente | 2026-09-02 | 8fbac9c, 3990402, 8e3e9cf | [260902-gi9-ajuste-na-emissao-de-nota-fiscal-de-serv](./quick/260902-gi9-ajuste-na-emissao-de-nota-fiscal-de-serv/) |
 | 260902-hal | Apos emitir NFS-e automaticamente pelo orcamento (/orcamento/[id]), o DANFSe nacional (mesmo renderizador de 260828-g45) agora e gerado e entregue ao cliente automaticamente via Chatwoot (NfseService.enviarDanfseParaCliente -> DanfseNacionalPdfService.gerar + ChatwootService.sendAttachment), destino resolvido so por quote.conversationId (nunca busca por nome/documento, T-HAL-01). Envio sincrono (aguardado); resposta ganha campo envioChatwoot{enviado,motivo?}; falha de entrega e best-effort (nunca derruba a emissao ja concluida) e aparece na mensagem de sucesso da tela. cobranca/** e contas-receber/** intocados (D-06). Divergencia aceita: download manual (GET /nfse/pdf) continua no renderizador legado, layout diferente do DANFSe enviado (D-07). 4/4 testes novos verdes, suite completa 36/36 (433 testes), build backend+frontend limpos. Verificacao E2E humana (SEFIN+Chatwoot reais) pendente | 2026-09-02 | c3fbaf5, 3b07645, e1e2f8e | [260902-hal-ap-s-emitir-a-nfs-e-automaticamente-pelo](./quick/260902-hal-ap-s-emitir-a-nfs-e-automaticamente-pelo/) |
+| 260905-dzi | Pagina de detalhe do cliente (/contas-receber/[idcliente]) ganhou: contas ja pagas (historico via conta_recebida), itens mais comprados (top-10 por valor e por quantidade) e mes de maior gasto + cards de resumo. DB Athos inacessivel desta maquina (sem Tailscale) — logica validada via suite mockada (12/12 + 53/53 regressao), tsc limpo. Human-check contra Athos real em /contas-receber/2829 pendente (registrado em WINDOWS.md) | 2026-09-05 | f823003, 30492e2, 23c7438 | [260905-dzi-atualizar-p-gina-de-detalhes-do-cliente-](./quick/260905-dzi-atualizar-p-gina-de-detalhes-do-cliente-/) |
+| 260905-ena | Layout da pagina de detalhe do cliente (/contas-receber/[idcliente]) migrado para o mesmo AdminShell/PlainAdmin (sidebar/topbar) da pagina principal contas-receber: as ~42 regras CSS pa-* (antes so no page.tsx da lista) foram movidas para admin-shell.tsx como fonte unica, `.pa-pill-danger` adicionado, header/hook Bootstrap antigos removidos. Re-skin puro — todos os dados/logica/copy preservados (dados cadastrais, titulos, contas pagas, itens mais comprados, gasto por mes, NFS-e/notas fiscais, barra de acoes). tsc/build limpos e loops de verificacao (CSS, simbolos, copy, gate de escopo) passaram. Human-check visual (7 pontos) contra Athos real pendente — sem Tailscale nesta maquina (registrado em WINDOWS.md) | 2026-09-05 | 1c87919, 2e781da, c03470c | [260905-ena-atualizar-layout-da-pagina-de-detalhes-d](./quick/260905-ena-atualizar-layout-da-pagina-de-detalhes-d/) |
+| 260905-gxv | Pagina principal contas-receber ganhou 2 novos widgets PlainAdmin: "Item Mais Vendido (Historico)" — top produto e top servico separados por valor total desde o inicio (via produto.tipoproduto), novo endpoint AthosService.buscarIndicadoresContasReceber + rota GET /athos/contas-receber/dashboard/indicadores + proxy Next protegido por requireAdminSession — e "Clientes Inativos" — clientes com pelo menos 1 venda historica sem pedido novo ha mais de 180 dias (venda.data). SQL compativel com Postgres 9.0.5 (sem FILTER/LATERAL/GROUPING SETS). 14/14 testes novos + 76/76 regressao do modulo, tsc/build limpos, escopo isolado (so os 5 arquivos declarados). Human-check contra Athos real pendente — sem Tailscale nesta maquina | 2026-09-05 | 9a56ed9, 8ac1f99 | [260905-gxv-adicionar-na-pagina-principal-de-contas-](./quick/260905-gxv-adicionar-na-pagina-principal-de-contas-/) |
+| 260906-i7c | Corrigir emissao de NFS-e de servico no orcamento (/orcamento/[id]): resolverTomadorQuote() agora devolve `motivo` diagnosticavel em vez de falhar em silencio (sem-vinculo-athos/orcamento-nao-encontrado/cliente-nao-vinculado/cliente-sem-cadastro/athos-indisponivel) e remove o fallback perigoso para internalNumber (podia casar com orcamento alheio no Athos, T-i7c-03); EmitirNfseNacionalDto ganha 5 campos opcionais de endereco com precedencia manual>Athos (D-i7c-01, so vence quando logradouro+CEP+codigoMunicipio completos); novo componente TomadorAthosSearch (busca remota debounced em GET /api/athos/clientes) integrado ao formulario, que agora tem os 5 campos de endereco editaveis e alerta de motivo em portugues. cobranca/** e contas-receber/** intocados (D-00/D-06). 7 testes novos + 32/32 modulo nfse + 492/492 regressao completa do backend, tsc/build limpos. Human-check (prefill com/sem Athos, busca real, XML assinado com endereco manual) pendente — sem Tailscale nesta maquina (registrado em WINDOWS.md) | 2026-09-06 | af38f1b, e3046a9, 0d12648 | [260906-i7c-corrigir-emissao-de-nfs-e-de-servico-no-](./quick/260906-i7c-corrigir-emissao-de-nfs-e-de-servico-no-/) |
+| 260906-iz0 | Corrigido 404 "Orcamento nao encontrado" real (reportado pelo usuario com dev server rodando) ao emitir NFS-e no orcamento: NfseService buscava o Quote so por UUID (`findUnique({ where: { id } })`), mas a URL/frontend usam `internalNumber` (ex: /orcamento/22764) ou `externalQuoteId`. Novo util compartilhado `quote-identifier.util.ts` (`findQuoteByIdentifierBasic`) com a ordem externalQuoteId->internalNumber->id, usado nos 5 pontos do NfseService e no `QuotesService.findQuoteByIdentifier` (elimina duplicacao de um bloco `include` 3x repetido). Corrigido tambem bug de precisao (T-iz0-02): candidato externalQuoteId agora vem de `BigInt(string)` direto, nunca via `Number()`, evitando casar orcamento errado num documento fiscal acima de MAX_SAFE_INTEGER. Merge com 260906-i7c exigiu resolver conflito manual em nfse.service.ts (precedencia de endereco manual>Athos preservada, usando quote.id ja resolvido) e atualizar mocks de teste (findUnique->findFirst). 502/502 testes backend + tsc limpos apos o merge | 2026-09-06 | a7cfdb6, cdff771, d25e892 | [260906-iz0-corrigir-404-orcamento-nao-encontrado-ao](./quick/260906-iz0-corrigir-404-orcamento-nao-encontrado-ao/) |
+| 260913-hhi | Microsite standalone promo/ (Vite+React+node:http/node:sqlite) portando o mock aprovado de sorteio Dia das Criancas: cadastro de cupom (nome/telefone/NFC-e) vinculado a ?id=NNNN persistido em SQLite dedicado, cupom unico (UNIQUE + pre-check + catch), guarda de id invalido, rate limit 10/10min, export CSV protegido por token com fail-closed (503 sem PROMO_ADMIN_TOKEN), e empacotamento Docker (2 estagios, runtime sem dependencias) + compose/nginx dedicados para promocao.bomcustoilhabela.com.br, sem tocar no app de orcamento (D-01) nem no Athos (D-02). 30/30 testes verdes, check.mjs tracer/hardening/deploy passam. Human-check de producao (deploy real na VPS com DNS/TLS) pendente de ambiente | 2026-09-13 | 2dbacc7 | [260913-hhi-criar-pagina-de-sorteio-baseada-em-d-dow](./quick/260913-hhi-criar-pagina-de-sorteio-baseada-em-d-dow/) |
+| 260913-ivr | Microsite de sorteio ganhou validacao do cupom fiscal (COO) contra o Athos: novo endpoint GET /api/athos/venda/verificar-cupom no backend NestJS (autenticado por x-api-token + x-internal-api-key, valor minimo R$50 sempre no servidor, avaliacao em JS dos booleanos/valor nao confiaveis do Athos), consumido por promo/server/athos.js (fetch nativo, zero dependencia) com fail-closed simetrico (422 cupom_fiscal_invalido, 503 validacao_indisponivel, nunca grava linha parcial). Cadastro aceito agora dispara WhatsApp best-effort via Evolution API (promo/server/whatsapp.js) com texto do sorteio + link do Instagram, numero normalizado para 55+DDD+numero; falha no envio nunca desfaz o cadastro. Segredos (apikey, tokens, nome da instancia) apenas em deploy/promo.env, gate de forma-de-segredo (UUID/hex longo) no check.mjs. apps/frontend e deploy do app de orcamento sem diff (D-01/D-02 preservados). 285/285 testes backend + 67/67 testes promo verdes. Human-check contra Athos real e instancia WhatsApp real pendente de ambiente (sem Tailscale/VPS nesta maquina) | 2026-09-13 | 6852837, 4e16112, 4421d24 | [260913-ivr-adicionar-ao-microsite-de-sorteio-promo-](./quick/260913-ivr-adicionar-ao-microsite-de-sorteio-promo-/) |
 
 ---
 
@@ -265,8 +276,14 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Operator Next Steps
 
-- Executar `/gsd-plan-phase 39` (com flag --research-phase para os spikes de introspecao)
-- Obter GRANT de escrita em produto_composto do DBA antes da verificacao da Phase 40
+- Obter GRANT de escrita em produto_composto do DBA (INSERT/UPDATE/DELETE + USAGE/SELECT na sequence) — Fase 40 esta implementada e testada, mas o caminho feliz real de escrita contra o Athos de producao so pode ser live-verified apos o GRANT
+- Fechamento formal do milestone v2.5 (`/gsd-complete-milestone v2.5`) pausado aguardando decisao sobre a divida de UAT/verificacao da v2.2 (Fases 32/33) apontada pelo pre-close artifact audit — nao bloqueia trabalho novo
+- Fase 41 (Contas a Pagar: Layout, Paineis Fiscais e Fix EFI) aberta no Backlog do ROADMAP.md — rodar `/gsd-discuss-phase 41`
+
+### Roadmap Evolution
+
+- Phase 41 added (2026-09-04): Contas a Pagar: Layout, Paineis Fiscais e Fix EFI — bug do EFI que nao atualiza pagamento sozinho + painel de monitoramento de pagamento + painel de boletos a receber + funcionalidades fiscais para clientes a prazo. Escopo ainda a discutir (`/gsd-discuss-phase 41`).
+- Phase 42 added (2026-10-05): Impressao automatica de orcamento ao confirmar pagamento no caixa — imprimir o orcamento na impressora toda vez que um cliente pagar/confirmar um orcamento no caixa. Escopo ainda a discutir (`/gsd-discuss-phase 42`).
 
 ## Performance Metrics
 
@@ -284,15 +301,21 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 999.1 P06 | ~45min | 2 tasks | 12 files |
 | Phase 37 P01 | 378 | 3 tasks | 5 files |
 | Phase 38 P01 | 7min | 3 tasks | 3 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase quick-260913-hhi P01 | 11min | 4 tasks | 35 files |
 
 ## Session
 
-**Last session:** 2026-06-29T15:46:28.138Z
-**Stopped at:** Phase 39 context gathered
-**Resume file:** .planning/phases/39-scaffold-leitura-e-spikes-de-introspec-o/39-CONTEXT.md
+**Last session:** 2026-09-13T16:19:31.542Z
+**Stopped at:** Completed quick task 260913-ivr - validacao Athos (COO>=R$50) + WhatsApp best-effort no microsite promo/ (human-check de producao pendente)
+**Resume file:** None
 
 ## Decisions
 
+- [Phase 40]: Fase verificada retroativamente em vez de replanejada — codigo (POST/PATCH/DELETE de produto_composto) ja existia commitado em 5d5270d (#46, 2026-07-01), descoberto pelo scout de codebase do /gsd-autonomous antes do discuss. Evitou reimplementacao duplicada/conflitante; 223/223 testes do modulo athos passando confirmam paridade com COMP-02..06.
 - [Phase 36]: Módulo empresa.ts usa nullish coalescing com fallbacks concretos — zero risco de undefined chegando ao JSX
 - [Phase 36]: CSS custom property --cor-primaria injetada no <head> via <style> inline — Server Component lê env var antes do HTML ser enviado ao cliente
 - [Phase ?]: storage banco vs MinIO
@@ -309,3 +332,5 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase ?]: [Phase 999.1]: adminBackendFetch injeta x-admin-api-key apenas server-side — segredo nunca chega ao browser (T-999.1-18)
 - [Phase ?]: [Phase 999.1]: gate de senha opcional em /configuracoes/* (Rule 4) — cookie httpOnly HMAC; falha fechada sem CONFIG_PANEL_PASSWORD (preserva D-03)
 - [Phase ?]: [Phase 999.1]: preview por templateId no backend (Rule 2) — galeria nao tinha como pre-visualizar template salvo sem o source
+- [Phase 41]: 260913-hhi: promo/ fica fora dos workspaces npm da raiz (apps/*, packages/*) para nao alterar package-lock.json nem quebrar npm ci dos Dockerfiles existentes (D-01)
+- [Phase 41]: 260913-hhi: git.allow_default_branch_commits:true adicionado em .planning/config.json — projeto usa branching_strategy:none com historico de commits diretos em main; guard #2924/#3819 bloquearia todo commit sem o override
