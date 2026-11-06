@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { AthosModule } from "../integrations/athos/athos.module";
 import { EfiModule } from "../integrations/efi/efi.module";
 import { NfseModule } from "../integrations/nfse/nfse.module";
+import { CobrancaBaixaAthosRetryJob } from "./cobranca-baixa-athos-retry.job";
 import { CobrancaBaixaAthosService } from "./cobranca-baixa-athos.service";
 import { CobrancaReconciliationJob } from "./cobranca-reconciliation.job";
 import { CobrancaController } from "./cobranca.controller";
@@ -12,7 +13,7 @@ import { EmailEnvioService } from "./email-envio.service";
 @Module({
   imports: [EfiModule, AthosModule, NfseModule],
   controllers: [CobrancaController],
-  providers: [CobrancaService, EmailEnvioService, CobrancaReconciliationJob, CobrancaBaixaAthosService],
+  providers: [CobrancaService, EmailEnvioService, CobrancaReconciliationJob, CobrancaBaixaAthosService, CobrancaBaixaAthosRetryJob],
 })
 export class CobrancaModule {}
 
