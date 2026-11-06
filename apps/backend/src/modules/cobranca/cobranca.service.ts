@@ -14,6 +14,7 @@ import { NfseNacionalDistribuicaoService } from "../integrations/nfse/nfse-nacio
 import { NfseNacionalService } from "../integrations/nfse/nfse-nacional.service";
 import { NfseService, UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { PrismaService } from "../database/prisma.service";
+import { CobrancaBaixaAthosService, OrigemBaixa } from "./cobranca-baixa-athos.service";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
@@ -43,7 +44,27 @@ export class CobrancaService {
     private readonly danfsePdfService: DanfsePdfService,
     private readonly danfseNacionalPdfService: DanfseNacionalPdfService,
     private readonly nfseNacionalDistribuicaoService: NfseNacionalDistribuicaoService,
+    private readonly baixaAthos: CobrancaBaixaAthosService,
   ) {}
+
+  /**
+   * Gancho da baixa automatica no Athos (Fase 43). Chamado SOMENTE na transicao para "pago".
+   * Defesa em profundidade: o orquestrador ja nao lanca, mas aqui nada pode escapar para
+   * o webhook (que responde 200 sempre) nem para o job de reconciliacao.
+   */
+  private async dispararBaixaAthos(
+    cobrancaBoletoId: number,
+    origem: OrigemBaixa,
+    payloadEfi?: unknown,
+  ): Promise<void> {
+    try {
+      await this.baixaAthos.executarAposPagamento(cobrancaBoletoId, { origem, payloadEfi });
+    } catch (err) {
+      this.logger.error(
+        `Baixa Athos: excecao inesperada no gancho cobrancaId=${cobrancaBoletoId} origem=${origem}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 
   async criarBoleto(dto: CriarBoletoDto): Promise<CriarBoletoResponseDto> {
     // Passo 1: Buscar todos os títulos do cliente e filtrar pelos IDs solicitados
@@ -614,6 +635,7 @@ export class CobrancaService {
         data: { status: "pago" },
       });
       this.logger.log(`Webhook EFI: boleto ${boleto.id} (chargeId=${chargeId}) marcado como pago.`);
+      await this.dispararBaixaAthos(boleto.id, "webhook");
     } else {
       this.logger.log(
         `Webhook EFI: notificação recebida com status='${status}' para chargeId=${chargeId} — sem ação.`,
