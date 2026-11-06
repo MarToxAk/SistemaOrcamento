@@ -33,6 +33,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 
 - [x] **Phase 39: Scaffold, Leitura e Spikes de Introspecão** - Spikes de introspecção no DB de referência (192.168.3.198), extração de validarFkExiste para util reutilizável, e endpoint GET de listagem enriquecida de componentes — tudo que não depende do write GRANT (completed 2026-06-30)
 - [x] **Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)** - Quatro endpoints de escrita com validação dual de FK, gerenciamento transacional do flag, PK serial via RETURNING e mapeamento completo de erros Postgres; cobertura de testes Jest (completed 2026-09-04, verificação retroativa)
+- [ ] **Phase 43: Baixa automática de contas a receber no Athos**
 
 ### Phase Details
 
@@ -150,6 +151,16 @@ Plans:
 Plans:
 - [ ] 42-01-PLAN.md — Wave 1 · Tracer: CC ponta a ponta (chips no modal -> proxy -> DTO -> normalização -> sendMail cc) + CC no histórico CobrancaEmailEnvio (D-01..D-05, D-07)
 - [ ] 42-02-PLAN.md — Wave 2 · Lista fixa de CC por cliente: tabela CobrancaEmailCcPadrao + GET/PUT + pré-preenchimento + checkbox "Salvar como padrão deste cliente" (D-01, D-02, D-06, D-07)
+
+### Phase 43: Baixa automática de contas a receber no Athos
+
+**Goal:** Quando o pagamento de um boleto EFI é confirmado (webhook ou job de reconciliação da Fase 41), o Sistema dá baixa no título no Athos, reproduzindo o que a tela "Baixar Contas" faz: `conta_recebida`, `livro_registro_io`, `conta_receber.statusconta='REC'`, `boleto.statusBoleto='REC'`, `cliente.aviso1-3=false` e `log`, tudo em uma única transação, idempotente. SQL de referência capturado em `43-REFERENCIA-SQL-ATHOS.md`.
+**Requirements**: TBD
+**Depends on:** Phase 42
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 43 to break down)
 
 ---
 
