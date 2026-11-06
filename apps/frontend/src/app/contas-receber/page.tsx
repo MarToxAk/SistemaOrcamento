@@ -39,6 +39,24 @@ interface BoletoDashboardItem {
   criadoEm: string;
   titulos: number[];
   nfseStatus: NfseStatusBoleto;
+  athosBaixaStatus: string | null;
+  athosBaixaErroCodigo: string | null;
+  athosBaixaErroMensagem: string | null;
+}
+
+interface ResultadoBaixaEstornoAthos {
+  simulado?: boolean;
+  status?: string;
+  detalhe?: {
+    titulos?: unknown[];
+    valorTotal?: number;
+    modo?: string;
+  };
+}
+
+interface ErroBackendAthos {
+  error?: string;
+  message?: string | { message?: string };
 }
 
 interface ClienteDevedor {
@@ -135,6 +153,42 @@ function getNfseBadge(nfseStatus: NfseStatusBoleto, totalTitulos: number): { cls
   return { cls: "badge bg-secondary", label: "NFS-e pendente", title: `0 de ${totalTitulos} título(s) com NFS-e` };
 }
 
+type AthosPillVariant = "success" | "warning" | "secondary" | "danger";
+
+/** Situacao da baixa do boleto no Athos (Fase 43) para a coluna "Athos" do painel. */
+function getAthosBaixaPill(boleto: BoletoDashboardItem): { variant: AthosPillVariant; label: string; title: string } | null {
+  if (boleto.status !== "pago") return null;
+  switch (boleto.athosBaixaStatus) {
+    case "baixado":
+      return { variant: "success", label: "Baixado", title: "Baixa registrada no contas a receber do Athos" };
+    case "ja_baixado":
+      return { variant: "secondary", label: "Já baixado", title: "O título já estava baixado no Athos" };
+    case "pendente":
+      return { variant: "warning", label: "Baixa pendente", title: "Pago, aguardando baixa no Athos" };
+    case "falha": {
+      const detalhe = [boleto.athosBaixaErroCodigo, boleto.athosBaixaErroMensagem].filter(Boolean).join(": ");
+      return { variant: "danger", label: "Falha na baixa", title: detalhe || "Falha na baixa no Athos" };
+    }
+    case "estornado":
+      return { variant: "secondary", label: "Estornado", title: "Baixa estornada no Athos" };
+    default:
+      return {
+        variant: "secondary",
+        label: "Não processado",
+        title: "Pago antes da baixa automática ou ainda não processado",
+      };
+  }
+}
+
+function mensagemErroAthos(status: number, corpo: ErroBackendAthos | null): string {
+  if (status === 401) return "Sessão de administrador necessária.";
+  const msg = corpo?.message;
+  if (typeof msg === "string" && msg) return msg;
+  if (msg && typeof msg === "object" && typeof msg.message === "string" && msg.message) return msg.message;
+  if (corpo?.error) return corpo.error;
+  return `Erro ao processar (HTTP ${status}).`;
+}
+
 /** Traduz a classe de cor de um badge Bootstrap (bg-success/bg-warning/...) para a variante de pill --pa-*. */
 function paPillVariant(badgeClass: string): "success" | "warning" | "secondary" {
   if (badgeClass.includes("bg-success")) return "success";
@@ -146,6 +200,7 @@ function BoletosConsolidadosPanel() {
   const [boletos, setBoletos] = useState<BoletoDashboardItem[]>([]);
   const [boletosLoading, setBoletosLoading] = useState(true);
   const [boletosErro, setBoletosErro] = useState("");
+  const [acaoEmAndamento, setAcaoEmAndamento] = useState<string | null>(null);
 
   async function fetchBoletosDashboard() {
     setBoletosLoading(true);
@@ -167,6 +222,65 @@ function BoletosConsolidadosPanel() {
   useEffect(() => {
     void fetchBoletosDashboard();
   }, []);
+
+  type AcaoAthos = "simular" | "baixar" | "estornar";
+
+  /** Baixa manual / simulacao / estorno no Athos (Fase 43). Um clique por vez por boleto. */
+  async function executarAcaoAthos(boleto: BoletoDashboardItem, acao: AcaoAthos) {
+    if (acaoEmAndamento !== null) return;
+
+    let url = "";
+    let corpo: Record<string, boolean> = {};
+    if (acao === "simular") {
+      url = `/api/cobranca/boleto/${boleto.id}/baixar-athos`;
+      corpo = { simular: true };
+    } else if (acao === "baixar") {
+      url = `/api/cobranca/boleto/${boleto.id}/baixar-athos`;
+      const ok = confirm(
+        `Dar baixa no Athos?\n\nBoleto #${boleto.id} - ${boleto.nomeCliente} - ${formatBRL(boleto.valor)}.\n` +
+          "Isso grava o recebimento no contas a receber e no livro do banco do Athos.",
+      );
+      if (!ok) return;
+    } else {
+      const digitado = window.prompt(
+        `Estornar a baixa do boleto #${boleto.id} (${boleto.nomeCliente})?\n\n` +
+          "Isso apaga do Athos o recebimento gravado pelo Sistema e devolve o título a aberto.\n" +
+          "Digite ESTORNAR para confirmar:",
+      );
+      if (digitado !== "ESTORNAR") return;
+      url = `/api/cobranca/boleto/${boleto.id}/estornar-baixa-athos`;
+      corpo = { confirmar: true };
+    }
+
+    setAcaoEmAndamento(`${boleto.id}:${acao}`);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
+      const dados = (await res.json().catch(() => null)) as (ResultadoBaixaEstornoAthos & ErroBackendAthos) | null;
+      if (!res.ok) {
+        alert(mensagemErroAthos(res.status, dados));
+        void fetchBoletosDashboard();
+        return;
+      }
+      const qtd = dados?.detalhe?.titulos?.length ?? 0;
+      const total = typeof dados?.detalhe?.valorTotal === "number" ? formatBRL(dados.detalhe.valorTotal) : "-";
+      if (acao === "simular") {
+        alert(`Simulação: nada foi gravado.\nTítulos: ${qtd}\nValor total: ${total}`);
+      } else if (acao === "baixar") {
+        alert(`Baixa concluída no Athos.\nTítulos: ${qtd}\nValor total: ${total}`);
+      } else {
+        alert(`Estorno concluído no Athos.\nTítulos: ${qtd}\nValor estornado: ${total}`);
+      }
+      await fetchBoletosDashboard();
+    } catch {
+      alert("Falha na conexão.");
+    } finally {
+      setAcaoEmAndamento(null);
+    }
+  }
 
   return (
     <div className="pa-card">
@@ -219,12 +333,22 @@ function BoletosConsolidadosPanel() {
                 <th>Vencimento</th>
                 <th>Status</th>
                 <th>NFS-e</th>
+                <th>Athos</th>
                 <th>Ação</th>
               </tr>
             </thead>
             <tbody>
               {boletos.map((boleto) => {
                 const nfseBadge = getNfseBadge(boleto.nfseStatus, boleto.titulos.length);
+                const athosPill = getAthosBaixaPill(boleto);
+                const podeBaixar =
+                  boleto.status === "pago" &&
+                  (boleto.athosBaixaStatus == null ||
+                    boleto.athosBaixaStatus === "pendente" ||
+                    boleto.athosBaixaStatus === "falha" ||
+                    boleto.athosBaixaStatus === "estornado");
+                const podeEstornar = boleto.status === "pago" && boleto.athosBaixaStatus === "baixado";
+                const ocupado = acaoEmAndamento !== null;
                 const vencimentoSuffix = getVencimentoSuffix(boleto.diasParaVencer);
                 return (
                   <tr key={boleto.id}>
@@ -253,9 +377,53 @@ function BoletosConsolidadosPanel() {
                       </span>
                     </td>
                     <td>
-                      <a href={`/contas-receber/${boleto.idclienteAthos}`} className="pa-link-btn text-nowrap">
-                        Ver Cliente
-                      </a>
+                      {athosPill ? (
+                        <span className={`pa-pill pa-pill-${athosPill.variant}`} title={athosPill.title}>
+                          {athosPill.label}
+                        </span>
+                      ) : (
+                        <span className="text-muted">-</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="d-flex flex-wrap gap-1">
+                        <a href={`/contas-receber/${boleto.idclienteAthos}`} className="pa-link-btn text-nowrap">
+                          Ver Cliente
+                        </a>
+                        {podeBaixar && (
+                          <>
+                            <button
+                              type="button"
+                              className="pa-link-btn bg-transparent text-nowrap"
+                              disabled={ocupado}
+                              onClick={() => void executarAcaoAthos(boleto, "simular")}
+                              title="Confere o que seria baixado, sem gravar nada"
+                            >
+                              {acaoEmAndamento === `${boleto.id}:simular` ? "Simulando..." : "Simular"}
+                            </button>
+                            <button
+                              type="button"
+                              className="pa-link-btn bg-transparent text-nowrap"
+                              disabled={ocupado}
+                              onClick={() => void executarAcaoAthos(boleto, "baixar")}
+                              title="Grava a baixa no contas a receber do Athos"
+                            >
+                              {acaoEmAndamento === `${boleto.id}:baixar` ? "Baixando..." : "Baixar no Athos"}
+                            </button>
+                          </>
+                        )}
+                        {podeEstornar && (
+                          <button
+                            type="button"
+                            className="pa-link-btn bg-transparent text-nowrap"
+                            disabled={ocupado}
+                            onClick={() => void executarAcaoAthos(boleto, "estornar")}
+                            title="Desfaz a baixa gravada pelo Sistema no Athos"
+                          >
+                            {acaoEmAndamento === `${boleto.id}:estornar` ? "Estornando..." : "Estornar baixa"}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
