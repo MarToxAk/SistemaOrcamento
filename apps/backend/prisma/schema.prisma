@@ -242,6 +242,34 @@ model CobrancaBoleto {
   atualizadoEm   DateTime               @updatedAt
   titulos        CobrancaBoletoTitulo[]
   emailEnvios    CobrancaEmailEnvio[]
+
+  // Fase 43 (BX-07): resultado duravel da baixa no Athos
+  athosBaixaStatus        String?   // null = nunca processado (inclui tudo que ficou pago antes da Fase 43); pendente | baixado | ja_baixado | falha | estornado
+  athosBaixaErroCodigo    String?
+  athosBaixaErroMensagem  String?   // ate 300 caracteres, sem dados de cliente
+  athosBaixaTentativas    Int       @default(0)
+  athosBaixaUltimaEm      DateTime?
+  athosBaixaDataPagamento String?   // YYYY-MM-DD resolvida na 1a tentativa (America/Sao_Paulo)
+  athosBaixaValorPagoEfi  Decimal?  @db.Decimal(12, 2)
+
+  @@index([athosBaixaStatus])
+}
+
+/// Trilha append-only das tentativas de baixa e estorno no Athos - Fase 43. Sem FK: preserva a auditoria se o boleto local for removido.
+model CobrancaBaixaAthosLog {
+  id               Int      @id @default(autoincrement())
+  cobrancaBoletoId Int
+  operacao         String   // baixa | estorno
+  origem           String   // webhook | reconciliacao | manual | retentativa
+  resultado        String   // baixado | ja_baixado | pendente | falha | estornado
+  codigoErro       String?
+  mensagem         String?
+  dataPagamento    String?
+  valorTotal       Decimal? @db.Decimal(12, 2)
+  titulos          Json?    // [{ idcontareceber, idcontarecebida, principal, juros, multa, atraso, valorPago }]
+  criadoEm         DateTime @default(now())
+
+  @@index([cobrancaBoletoId])
 }
 
 model CobrancaEmailEnvio {

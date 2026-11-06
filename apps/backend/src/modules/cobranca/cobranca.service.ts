@@ -66,6 +66,18 @@ export class CobrancaService {
     }
   }
 
+  /**
+   * Fase 43 (T-43-20): boleto ja baixado no Athos nao pode ser cancelado nem removido; a ligacao
+   * com a baixa (rastreabilidade para o estorno) precisa ser preservada.
+   */
+  private garantirNaoBaixadoNoAthos(cobranca: { id: number; athosBaixaStatus?: string | null }, acao: "cancelar" | "remover"): void {
+    if (cobranca.athosBaixaStatus === "baixado") {
+      throw new BadRequestException(
+        `Cobrança ${cobranca.id} já foi baixada no Athos: estorne a baixa no Athos antes de ${acao} o boleto.`,
+      );
+    }
+  }
+
   async criarBoleto(dto: CriarBoletoDto): Promise<CriarBoletoResponseDto> {
     // Passo 1: Buscar todos os títulos do cliente e filtrar pelos IDs solicitados
     const todosTitulos = await this.athosService.buscarTitulosClienteContasReceber(dto.idclienteAthos);
@@ -746,6 +758,7 @@ export class CobrancaService {
       include: { titulos: true },
     });
     if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
+    this.garantirNaoBaixadoNoAthos(cobranca, "cancelar");
     if (cobranca.status === "cancelado") return { ok: true, mensagem: "Boleto já estava cancelado." };
 
     // Cancelar na EFI via PUT /v1/charge/:chargeId/cancel
@@ -828,6 +841,7 @@ export class CobrancaService {
   async removerBoletoBanco(cobrancaId: number): Promise<{ ok: boolean }> {
     const cobranca = await this.prisma.cobrancaBoleto.findUnique({ where: { id: cobrancaId } });
     if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
+    this.garantirNaoBaixadoNoAthos(cobranca, "remover");
     await this.prisma.cobrancaBoletoTitulo.deleteMany({ where: { cobrancaBoletoId: cobrancaId } });
     await this.prisma.cobrancaBoleto.delete({ where: { id: cobrancaId } });
     this.logger.log(`CobrancaBoleto ${cobrancaId} removido do banco (cleanup).`);
@@ -866,6 +880,9 @@ export class CobrancaService {
     criadoEm: Date;
     titulos: number[];
     nfseStatus: NfseStatusBoleto;
+    athosBaixaStatus: string | null;
+    athosBaixaErroCodigo: string | null;
+    athosBaixaErroMensagem: string | null;
   }>> {
     const boletos = await this.prisma.cobrancaBoleto.findMany({
       where: { status: { not: "cancelado" } },
@@ -915,6 +932,9 @@ export class CobrancaService {
         criadoEm: b.criadoEm,
         titulos: idsTitulos,
         nfseStatus,
+        athosBaixaStatus: b.athosBaixaStatus ?? null,
+        athosBaixaErroCodigo: b.athosBaixaErroCodigo ?? null,
+        athosBaixaErroMensagem: b.athosBaixaErroMensagem ?? null,
       };
     });
 

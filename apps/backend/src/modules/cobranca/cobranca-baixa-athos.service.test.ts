@@ -1,3 +1,9 @@
+import {
+  BadRequestException,
+  ConflictException,
+  InternalServerErrorException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { BaixaAthosError } from "../integrations/athos/athos-conta-receber-baixa.service";
 import {
   CobrancaBaixaAthosService,
@@ -20,7 +26,16 @@ function montar(env: Record<string, string | undefined> = {}, boleto?: unknown) 
           ],
         }
       : boleto;
-  const prisma = { cobrancaBoleto: { findUnique: jest.fn().mockResolvedValue(boletoPadrao) } };
+  const prisma = {
+    cobrancaBoleto: {
+      findUnique: jest.fn().mockResolvedValue(boletoPadrao),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    cobrancaBaixaAthosLog: {
+      create: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+  };
   const baixaService = {
     baixarTitulos: jest.fn().mockResolvedValue({
       simulado: false,
@@ -39,12 +54,11 @@ function montar(env: Record<string, string | undefined> = {}, boleto?: unknown) 
 }
 
 describe("CobrancaBaixaAthosService.executarAposPagamento", () => {
-  it("1. ATHOS_BAIXA_AUTO=false -> desligado e baixarTitulos nunca chamado", async () => {
-    const { service, baixaService, prisma } = montar({ ATHOS_BAIXA_AUTO: "false" });
+  it("1. ATHOS_BAIXA_AUTO=false -> desligado e baixarTitulos nunca chamado (boleto fica pendente, ver R4)", async () => {
+    const { service, baixaService } = montar({ ATHOS_BAIXA_AUTO: "false" });
     const r = await service.executarAposPagamento(7, { origem: "webhook" });
     expect(r.status).toBe("desligado");
     expect(baixaService.baixarTitulos).not.toHaveBeenCalled();
-    expect(prisma.cobrancaBoleto.findUnique).not.toHaveBeenCalled();
   });
 
   it("2. qualquer outro valor de ATHOS_BAIXA_AUTO (vazio, true, ausente) -> ligado", async () => {
@@ -267,5 +281,365 @@ describe("extrairDadosPagamentoEfi", () => {
       expect(r.valorPago).toBeNull();
       expect(r.fonteValor).toBe("nao_informado");
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plano 43-03 - registro duravel (R), baixa manual (M) e status
+// ---------------------------------------------------------------------------
+
+const DETALHE_OK = {
+  simulado: false,
+  resultado: "baixado" as const,
+  modo: "nominal",
+  retroativa: false,
+  dataPagamento: "2026-11-05",
+  valorTotal: 39.5,
+  titulos: [
+    { idcontareceber: 1363, acao: "baixado", idcontarecebida: 9001, principal: 29, juros: 0, multa: 0, atraso: 0, valorPago: 29 },
+    { idcontareceber: 1364, acao: "baixado", idcontarecebida: 9002, principal: 10.5, juros: 0, multa: 0, atraso: 0, valorPago: 10.5 },
+  ],
+};
+
+function boletoPago(extra: Record<string, unknown> = {}) {
+  return {
+    id: 7,
+    status: "pago",
+    idclienteAthos: 2641,
+    athosBaixaStatus: null,
+    athosBaixaDataPagamento: null,
+    athosBaixaValorPagoEfi: null,
+    titulos: [
+      { idcontareceber: 1363, valor: "29.00" },
+      { idcontareceber: 1364, valor: "10.50" },
+    ],
+    ...extra,
+  };
+}
+
+function chamadasUpdate(prisma: any) {
+  return prisma.cobrancaBoleto.update.mock.calls.map((c: any[]) => c[0].data);
+}
+
+describe("CobrancaBaixaAthosService - registro duravel (BX-07)", () => {
+  it("R1. sucesso: status baixado, tentativa +1, erro limpo, log com titulos e idcontarecebida", async () => {
+    const { service, prisma, baixaService } = montar({}, boletoPago());
+    baixaService.baixarTitulos.mockResolvedValue(DETALHE_OK);
+    const r = await service.executarAposPagamento(7, {
+      origem: "webhook",
+      payloadEfi: { payment: { paid_at: "2026-11-05", paid_value: 3950 } },
+    });
+    expect(r.status).toBe("baixado");
+
+    const datas = chamadasUpdate(prisma);
+    const final = datas[datas.length - 1];
+    expect(final).toMatchObject({
+      athosBaixaStatus: "baixado",
+      athosBaixaErroCodigo: null,
+      athosBaixaErroMensagem: null,
+      athosBaixaTentativas: { increment: 1 },
+    });
+    expect(final.athosBaixaUltimaEm).toBeInstanceOf(Date);
+
+    expect(prisma.cobrancaBaixaAthosLog.create).toHaveBeenCalledTimes(1);
+    const log = prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data;
+    expect(log).toMatchObject({
+      cobrancaBoletoId: 7,
+      operacao: "baixa",
+      origem: "webhook",
+      resultado: "baixado",
+      dataPagamento: "2026-11-05",
+      valorTotal: 39.5,
+      codigoErro: null,
+    });
+    expect(log.titulos).toEqual([
+      { idcontareceber: 1363, idcontarecebida: 9001, principal: 29, juros: 0, multa: 0, atraso: 0, valorPago: 29 },
+      { idcontareceber: 1364, idcontarecebida: 9002, principal: 10.5, juros: 0, multa: 0, atraso: 0, valorPago: 10.5 },
+    ]);
+  });
+
+  it("R2. todos ja REC: status e log ja_baixado", async () => {
+    const { service, prisma, baixaService } = montar({}, boletoPago());
+    baixaService.baixarTitulos.mockResolvedValue({ ...DETALHE_OK, resultado: "ja_baixado" });
+    const r = await service.executarAposPagamento(7, { origem: "reconciliacao" });
+    expect(r.status).toBe("ja_baixado");
+    const datas = chamadasUpdate(prisma);
+    expect(datas[datas.length - 1].athosBaixaStatus).toBe("ja_baixado");
+    expect(prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data.resultado).toBe("ja_baixado");
+  });
+
+  it("R3. VALOR_DIVERGENTE: status falha com codigo, mensagem truncada em 300, sem excecao", async () => {
+    const { service, prisma, baixaService } = montar({}, boletoPago());
+    const longa = "x".repeat(500);
+    baixaService.baixarTitulos.mockRejectedValue(new BaixaAthosError("VALOR_DIVERGENTE", longa));
+    const r = await service.executarAposPagamento(7, { origem: "webhook" });
+    expect(r.status).toBe("falha");
+    expect(r.codigo).toBe("VALOR_DIVERGENTE");
+    const datas = chamadasUpdate(prisma);
+    const final = datas[datas.length - 1];
+    expect(final.athosBaixaStatus).toBe("falha");
+    expect(final.athosBaixaErroCodigo).toBe("VALOR_DIVERGENTE");
+    expect(final.athosBaixaErroMensagem).toHaveLength(300);
+    expect(final.athosBaixaTentativas).toEqual({ increment: 1 });
+    const log = prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data;
+    expect(log).toMatchObject({ resultado: "falha", codigoErro: "VALOR_DIVERGENTE" });
+    expect(log.mensagem).toHaveLength(300);
+  });
+
+  it("R4. ATHOS_BAIXA_AUTO=false: pendente com data/valor guardados, Athos nao chamado, tentativa nao incrementada", async () => {
+    const { service, prisma, baixaService } = montar({ ATHOS_BAIXA_AUTO: "false" }, boletoPago());
+    const r = await service.executarAposPagamento(7, {
+      origem: "webhook",
+      payloadEfi: { payment: { paid_at: "2026-11-04", paid_value: 3950 } },
+    });
+    expect(r.status).toBe("desligado");
+    expect(baixaService.baixarTitulos).not.toHaveBeenCalled();
+    const datas = chamadasUpdate(prisma);
+    expect(datas[0]).toEqual({ athosBaixaDataPagamento: "2026-11-04", athosBaixaValorPagoEfi: 39.5 });
+    const final = datas[datas.length - 1];
+    expect(final.athosBaixaStatus).toBe("pendente");
+    expect(final.athosBaixaTentativas).toBeUndefined();
+    expect(prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data.resultado).toBe("pendente");
+  });
+
+  it("R5. 1a tentativa grava data/valor ANTES do Athos; 2a reutiliza os guardados ignorando outro payload", async () => {
+    const a = montar({}, boletoPago());
+    const ordem: string[] = [];
+    a.prisma.cobrancaBoleto.update.mockImplementation(async (arg: any) => {
+      if ("athosBaixaDataPagamento" in arg.data) ordem.push("persistiu-dados");
+      return {};
+    });
+    a.baixaService.baixarTitulos.mockImplementation(async () => {
+      ordem.push("athos");
+      return DETALHE_OK;
+    });
+    await a.service.executarAposPagamento(7, {
+      origem: "webhook",
+      payloadEfi: { payment: { paid_at: "2026-11-03", paid_value: 3950 } },
+    });
+    expect(ordem).toEqual(["persistiu-dados", "athos"]);
+
+    const b = montar(
+      {},
+      boletoPago({ athosBaixaStatus: "falha", athosBaixaDataPagamento: "2026-11-03", athosBaixaValorPagoEfi: "39.50" }),
+    );
+    await b.service.executarAposPagamento(7, {
+      origem: "retentativa",
+      payloadEfi: { payment: { paid_at: "2026-11-30", paid_value: 99900 } },
+    });
+    const entrada = b.baixaService.baixarTitulos.mock.calls[0][0];
+    expect(entrada.dataPagamento).toBe("2026-11-03");
+    expect(entrada.valorPagoEfi).toBe(39.5);
+    expect(chamadasUpdate(b.prisma).some((d: any) => "athosBaixaDataPagamento" in d)).toBe(false);
+  });
+
+  it("R6. athosBaixaStatus baixado ou ja_baixado: ignorado JA_REGISTRADO, Athos nao chamado", async () => {
+    for (const st of ["baixado", "ja_baixado"]) {
+      const { service, baixaService, prisma } = montar({}, boletoPago({ athosBaixaStatus: st }));
+      const r = await service.executarAposPagamento(7, { origem: "retentativa" });
+      expect(r).toEqual({ status: "ignorado", codigo: "JA_REGISTRADO" });
+      expect(baixaService.baixarTitulos).not.toHaveBeenCalled();
+      expect(prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+    }
+  });
+
+  it("R7. falha ao persistir (update rejeita): resolve sem lancar e registra logger.error", async () => {
+    const { service, prisma, baixaService, logger } = montar({}, boletoPago());
+    baixaService.baixarTitulos.mockResolvedValue(DETALHE_OK);
+    prisma.cobrancaBoleto.update.mockRejectedValue(new Error("db fora"));
+    prisma.cobrancaBaixaAthosLog.create.mockRejectedValue(new Error("db fora"));
+    await expect(service.executarAposPagamento(7, { origem: "webhook" })).resolves.toMatchObject({
+      status: "baixado",
+    });
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  it("R8. erro nao tipado: falha ERRO_INESPERADO com mensagem generica (sem o texto original)", async () => {
+    const { service, prisma, baixaService } = montar({}, boletoPago());
+    baixaService.baixarTitulos.mockRejectedValue(new Error("senha=abc123 host=10.0.0.1"));
+    const r = await service.executarAposPagamento(7, { origem: "webhook" });
+    expect(r.codigo).toBe("ERRO_INESPERADO");
+    const datas = chamadasUpdate(prisma);
+    const final = datas[datas.length - 1];
+    expect(final.athosBaixaErroCodigo).toBe("ERRO_INESPERADO");
+    expect(final.athosBaixaErroMensagem).not.toContain("senha");
+    const log = prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data;
+    expect(JSON.stringify(log)).not.toContain("abc123");
+  });
+});
+
+describe("CobrancaBaixaAthosService.baixarManual (BX-08)", () => {
+  it("M1. boleto inexistente ou nao pago -> BadRequestException e nada chamado", async () => {
+    const a = montar({}, null);
+    await expect(a.service.baixarManual(7, {})).rejects.toBeInstanceOf(BadRequestException);
+    const b = montar({}, boletoPago({ status: "pendente" }));
+    await expect(b.service.baixarManual(7, {})).rejects.toBeInstanceOf(BadRequestException);
+    expect(a.baixaService.baixarTitulos).not.toHaveBeenCalled();
+    expect(b.baixaService.baixarTitulos).not.toHaveBeenCalled();
+    expect(b.prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+  });
+
+  it("M2. athosBaixaStatus baixado -> ConflictException", async () => {
+    const { service, baixaService } = montar({}, boletoPago({ athosBaixaStatus: "baixado" }));
+    await expect(service.baixarManual(7, {})).rejects.toBeInstanceOf(ConflictException);
+    expect(baixaService.baixarTitulos).not.toHaveBeenCalled();
+  });
+
+  it("M3. simular=true: baixarTitulos com simular, nenhum update e nenhum log, retorna simulado", async () => {
+    const { service, prisma, baixaService } = montar({}, boletoPago());
+    baixaService.baixarTitulos.mockResolvedValue({ ...DETALHE_OK, simulado: true });
+    const r = await service.baixarManual(7, { simular: true });
+    expect(baixaService.baixarTitulos.mock.calls[0][0].simular).toBe(true);
+    expect(prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+    expect(prisma.cobrancaBaixaAthosLog.create).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ simulado: true, status: "baixado" });
+    expect(r.detalhe.valorTotal).toBe(39.5);
+  });
+
+  it("M3b. simulacao que falha tambem nao grava estado local", async () => {
+    const { service, prisma, baixaService } = montar({}, boletoPago());
+    baixaService.baixarTitulos.mockRejectedValue(new BaixaAthosError("VALOR_DIVERGENTE", "valor diverge"));
+    await expect(service.baixarManual(7, { simular: true })).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+    expect(prisma.cobrancaBaixaAthosLog.create).not.toHaveBeenCalled();
+  });
+
+  it("M4. baixa real: persiste como R1 com origem manual, mesmo com ATHOS_BAIXA_AUTO=false", async () => {
+    const { service, prisma, baixaService } = montar(
+      { ATHOS_BAIXA_AUTO: "false" },
+      boletoPago({ athosBaixaStatus: "pendente" }),
+    );
+    baixaService.baixarTitulos.mockResolvedValue(DETALHE_OK);
+    const r = await service.baixarManual(7, {});
+    expect(r).toMatchObject({ simulado: false, status: "baixado" });
+    expect(baixaService.baixarTitulos).toHaveBeenCalledTimes(1);
+    expect(baixaService.baixarTitulos.mock.calls[0][0].simular).toBeUndefined();
+    const datas = chamadasUpdate(prisma);
+    expect(datas[datas.length - 1]).toMatchObject({
+      athosBaixaStatus: "baixado",
+      athosBaixaTentativas: { increment: 1 },
+    });
+    expect(prisma.cobrancaBaixaAthosLog.create.mock.calls[0][0].data).toMatchObject({
+      origem: "manual",
+      resultado: "baixado",
+    });
+  });
+
+  it("M4b. baixa manual ignora o limite de tentativas (boleto com 9 tentativas)", async () => {
+    const { service, baixaService } = montar({}, boletoPago({ athosBaixaStatus: "falha", athosBaixaTentativas: 9 }));
+    baixaService.baixarTitulos.mockResolvedValue(DETALHE_OK);
+    await expect(service.baixarManual(7, {})).resolves.toMatchObject({ status: "baixado" });
+  });
+
+  it("M5. dataPagamento do body sobrepoe a guardada e passa a ser persistida; sem body usa guardada; sem guardada usa hoje", async () => {
+    const a = montar({}, boletoPago({ athosBaixaDataPagamento: "2026-11-01" }));
+    a.baixaService.baixarTitulos.mockResolvedValue(DETALHE_OK);
+    await a.service.baixarManual(7, { dataPagamento: "2026-11-04" });
+    expect(a.baixaService.baixarTitulos.mock.calls[0][0].dataPagamento).toBe("2026-11-04");
+    expect(chamadasUpdate(a.prisma)).toContainEqual({ athosBaixaDataPagamento: "2026-11-04" });
+
+    const b = montar({}, boletoPago({ athosBaixaDataPagamento: "2026-11-01" }));
+    b.baixaService.baixarTitulos.mockResolvedValue(DETALHE_OK);
+    await b.service.baixarManual(7, {});
+    expect(b.baixaService.baixarTitulos.mock.calls[0][0].dataPagamento).toBe("2026-11-01");
+
+    const c = montar({}, boletoPago());
+    c.baixaService.baixarTitulos.mockResolvedValue(DETALHE_OK);
+    await c.service.baixarManual(7, {});
+    expect(c.baixaService.baixarTitulos.mock.calls[0][0].dataPagamento).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("M5b. data recusada pelo Athos (futura) nao e persistida como guardada", async () => {
+    const { service, prisma, baixaService } = montar({}, boletoPago());
+    baixaService.baixarTitulos.mockRejectedValue(new BaixaAthosError("DATA_PAGAMENTO_FUTURA", "data futura"));
+    await expect(service.baixarManual(7, { dataPagamento: "2099-01-01" })).rejects.toBeInstanceOf(
+      UnprocessableEntityException,
+    );
+    expect(chamadasUpdate(prisma).some((d: any) => "athosBaixaDataPagamento" in d)).toBe(false);
+  });
+
+  it("M6. ignorarValorEfi=true -> baixarTitulos recebe valorPagoEfi null", async () => {
+    const { service, baixaService } = montar({}, boletoPago({ athosBaixaValorPagoEfi: "39.50" }));
+    baixaService.baixarTitulos.mockResolvedValue(DETALHE_OK);
+    await service.baixarManual(7, { ignorarValorEfi: true });
+    expect(baixaService.baixarTitulos.mock.calls[0][0].valorPagoEfi).toBeNull();
+
+    const b = montar({}, boletoPago({ athosBaixaValorPagoEfi: "39.50" }));
+    b.baixaService.baixarTitulos.mockResolvedValue(DETALHE_OK);
+    await b.service.baixarManual(7, {});
+    expect(b.baixaService.baixarTitulos.mock.calls[0][0].valorPagoEfi).toBe(39.5);
+  });
+
+  it("M7. negocio -> 422 com codigo; infra -> 500; em baixa real a falha e persistida, em simulacao nao", async () => {
+    for (const codigo of ["VALOR_DIVERGENTE", "VALOR_INCOMPATIVEL", "STATUS_INVALIDO"] as const) {
+      const { service, prisma, baixaService } = montar({}, boletoPago());
+      baixaService.baixarTitulos.mockRejectedValue(new BaixaAthosError(codigo, "regra de negocio"));
+      const erro: any = await service.baixarManual(7, {}).catch((e) => e);
+      expect(erro).toBeInstanceOf(UnprocessableEntityException);
+      expect(erro.getResponse()).toMatchObject({ codigo, message: "regra de negocio" });
+      const datas = chamadasUpdate(prisma);
+      expect(datas[datas.length - 1]).toMatchObject({ athosBaixaStatus: "falha", athosBaixaErroCodigo: codigo });
+    }
+    for (const codigo of ["PERMISSAO_NEGADA", "ERRO_BANCO", "CONFIG_INVALIDA", "CONFIG_ATHOS_INCOMPLETA"] as const) {
+      const { service, prisma, baixaService } = montar({}, boletoPago());
+      baixaService.baixarTitulos.mockRejectedValue(new BaixaAthosError(codigo, "detalhe tecnico interno"));
+      const erro: any = await service.baixarManual(7, {}).catch((e) => e);
+      expect(erro).toBeInstanceOf(InternalServerErrorException);
+      expect(JSON.stringify(erro.getResponse())).not.toContain("detalhe tecnico interno");
+      const datas = chamadasUpdate(prisma);
+      expect(datas[datas.length - 1]).toMatchObject({ athosBaixaStatus: "falha", athosBaixaErroCodigo: codigo });
+    }
+    const s = montar({}, boletoPago());
+    s.baixaService.baixarTitulos.mockRejectedValue(new BaixaAthosError("PERMISSAO_NEGADA", "x"));
+    await expect(s.service.baixarManual(7, { simular: true })).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(s.prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+  });
+
+  it("M7b. config invalida em baixa real -> 500 e falha persistida; sem chamar o Athos", async () => {
+    const { service, prisma, baixaService } = montar({ ATHOS_BAIXA_ID_FUNCIONARIO: "abc" }, boletoPago());
+    await expect(service.baixarManual(7, {})).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(baixaService.baixarTitulos).not.toHaveBeenCalled();
+    expect(chamadasUpdate(prisma)[0]).toMatchObject({
+      athosBaixaStatus: "falha",
+      athosBaixaErroCodigo: "CONFIG_INVALIDA",
+    });
+  });
+
+  it("M8. consultarStatus devolve campos do boleto e historico (max 20, mais recente primeiro); inexistente -> BadRequest", async () => {
+    const { service, prisma } = montar();
+    const criadoEm = new Date("2026-11-06T10:00:00Z");
+    prisma.cobrancaBoleto.findUnique.mockResolvedValue({
+      athosBaixaStatus: "falha",
+      athosBaixaErroCodigo: "ERRO_BANCO",
+      athosBaixaErroMensagem: "msg",
+      athosBaixaTentativas: 2,
+      athosBaixaUltimaEm: criadoEm,
+    });
+    prisma.cobrancaBaixaAthosLog.findMany.mockResolvedValue([
+      {
+        id: 5,
+        operacao: "baixa",
+        origem: "retentativa",
+        resultado: "falha",
+        codigoErro: "ERRO_BANCO",
+        mensagem: "msg",
+        criadoEm,
+      },
+    ]);
+    const r = await service.consultarStatus(7);
+    expect(r).toMatchObject({
+      athosBaixaStatus: "falha",
+      athosBaixaErroCodigo: "ERRO_BANCO",
+      athosBaixaTentativas: 2,
+      athosBaixaUltimaEm: criadoEm,
+    });
+    expect(r.historico).toHaveLength(1);
+    const args = prisma.cobrancaBaixaAthosLog.findMany.mock.calls[0][0];
+    expect(args.take).toBe(20);
+    expect(args.where).toEqual({ cobrancaBoletoId: 7 });
+    expect(args.orderBy).toEqual([{ criadoEm: "desc" }, { id: "desc" }]);
+
+    prisma.cobrancaBoleto.findUnique.mockResolvedValue(null);
+    await expect(service.consultarStatus(99)).rejects.toBeInstanceOf(BadRequestException);
   });
 });

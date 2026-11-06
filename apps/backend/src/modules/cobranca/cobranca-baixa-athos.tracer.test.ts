@@ -97,6 +97,7 @@ function montarCenario(opts?: { falharEm?: string }) {
         titulos: [{ idcontareceber: 1363, valor: "29.00" }],
       }),
     },
+    cobrancaBaixaAthosLog: { create: jest.fn().mockResolvedValue({}) },
   };
   const config = {
     get: jest.fn((chave: string) => {
@@ -135,7 +136,9 @@ describe("tracer: webhook EFI paid -> gancho -> servico Athos -> SQL de Baixar C
 
     await expect(service.processarNotificacaoEFI("tok-notificacao")).resolves.toBeUndefined();
 
-    expect(prisma.cobrancaBoleto.update).toHaveBeenCalledTimes(1);
+    // plano 43-03: alem do pago, o orquestrador grava data/valor da EFI e o resultado da baixa (athosBaixa*)
+    const gravacoesPago = prisma.cobrancaBoleto.update.mock.calls.filter((c: any[]) => c[0].data.status === "pago");
+    expect(gravacoesPago).toHaveLength(1);
     expect(prisma.cobrancaBoleto.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { status: "pago" } });
 
     // pago foi gravado ANTES de qualquer query ao pg
@@ -178,7 +181,9 @@ describe("tracer: webhook EFI paid -> gancho -> servico Athos -> SQL de Baixar C
 
     await expect(service.processarNotificacaoEFI("tok-notificacao")).resolves.toBeUndefined();
 
-    expect(prisma.cobrancaBoleto.update).toHaveBeenCalledTimes(1);
+    // plano 43-03: alem do pago, o orquestrador grava data/valor da EFI e o resultado da baixa (athosBaixa*)
+    const gravacoesPago = prisma.cobrancaBoleto.update.mock.calls.filter((c: any[]) => c[0].data.status === "pago");
+    expect(gravacoesPago).toHaveLength(1);
     expect(prisma.cobrancaBoleto.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { status: "pago" } });
 
     const tipos = mClient.query.mock.calls.map((c: unknown[]) => classificar(c[0] as string));
