@@ -7,6 +7,7 @@ import {
   montarDescricaoLivro,
   sanitizarTextoAthos,
 } from "./athos-conta-receber-baixa.service";
+import { CONF_FINANCEIRO_COLUNAS } from "./athos-baixa-encargos.util";
 
 // D-07: NUNCA conecta ao Athos real. pg e mockado por completo.
 jest.mock("pg", () => {
@@ -50,6 +51,7 @@ function tipo(sql: string): string {
   if (/^COMMIT/i.test(s)) return "COMMIT";
   if (/^ROLLBACK/i.test(s)) return "ROLLBACK";
   if (/^SET TRANSACTION/i.test(s)) return "SET";
+  if (/^SELECT .* FROM conf_financeiro/i.test(s)) return "LER_CONF";
   if (/^SELECT .* FROM conta_receber/i.test(s)) return "LER_TITULOS";
   if (/^SELECT .* FROM cliente /i.test(s)) return "LER_CLIENTE";
   if (/^INSERT INTO conta_recebida/i.test(s)) return "INS_CR";
@@ -73,7 +75,13 @@ function ehEscrita(sql: string): boolean {
   return /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql);
 }
 
-function prepararPg(linhas: LinhaFake[], opts: { falharEm?: string; codigo?: string; nome?: string } = {}) {
+// Configuracao ASSUMIDA (1% ao mes, sem carencia): dados reais de conf_financeiro nao foram coletados.
+const CONF_FAKE = { taxajurosmes: "1", carenciadias: "0" };
+
+function prepararPg(
+  linhas: LinhaFake[],
+  opts: { falharEm?: string; codigo?: string; nome?: string; conf?: Record<string, unknown> | null } = {},
+) {
   let seq = 5000;
   mClient.query.mockReset();
   mClient.release.mockReset();
@@ -87,6 +95,8 @@ function prepararPg(linhas: LinhaFake[], opts: { falharEm?: string; codigo?: str
     switch (t) {
       case "LER_TITULOS":
         return { rows: linhas };
+      case "LER_CONF":
+        return { rows: opts.conf === null ? [] : [opts.conf ?? CONF_FAKE] };
       case "LER_CLIENTE":
         return { rows: [{ nome_cliente: opts.nome ?? "COLEGIO OBJETIVO" }] };
       case "INS_CR":
@@ -270,10 +280,48 @@ describe("AthosContaReceberBaixaService", () => {
     expect(mClient.query).not.toHaveBeenCalled();
   });
 
-  it("12. atraso -> ATRASO_REQUER_ENCARGOS sem escrever", async () => {
-    prepararPg([linha(1, { datavencimento: "2026-11-01", statusconta: "VEN" })]);
-    expect(await codigoDoErro(service.baixarTitulos(entrada([1])))).toBe("ATRASO_REQUER_ENCARGOS");
-    nenhumaEscrita();
+  it("12. atraso: encargos do caso dourado (457,00, 10 dias -> 1,51 / 9,14 / 467,65) gravados em conta_recebida e livro", async () => {
+    // Origem: 43-REFERENCIA-SQL-ATHOS.md (captura do Athos real)
+    prepararPg([linha(1, { valor: "457.00", datavencimento: "2026-10-27", statusconta: "VEN" })]);
+    const r = await service.baixarTitulos({
+      ...entrada([1]),
+      titulos: [{ idcontareceber: 1, valorEsperado: 457 }],
+    });
+    const cr = chamadas("INS_CR")[0][1] as unknown[];
+    expect(cr[1]).toBe("467.65"); // valorpago
+    expect(cr[3]).toBe("1.51"); // juros
+    expect(cr[4]).toBe(10); // atraso
+    expect(cr[7]).toBe("9.14"); // multa
+    expect((chamadas("INS_LIVRO")[0][1] as unknown[])[4]).toBe("467.65");
+    expect(r.modo).toBe("com_encargos");
+    expect(r.valorTotal).toBe(467.65);
+    expect(r.titulos[0]).toMatchObject({ principal: 457, juros: 1.51, multa: 9.14, atraso: 10, valorPago: 467.65 });
+  });
+
+  it("12b. segundo caso dourado (252,93, 10 dias -> 0,83 / 5,06 / 258,82)", async () => {
+    prepararPg([linha(1, { valor: "252.93", datavencimento: "2026-10-27", statusconta: "VEN" })]);
+    await service.baixarTitulos({ ...entrada([1]), titulos: [{ idcontareceber: 1, valorEsperado: 252.93 }] });
+    const cr = chamadas("INS_CR")[0][1] as unknown[];
+    expect([cr[1], cr[3], cr[4], cr[7]]).toEqual(["258.82", "0.83", 10, "5.06"]);
+  });
+
+  it("12c. multa configuravel pelas constantes (percentualMulta)", async () => {
+    prepararPg([linha(1, { valor: "100.00", datavencimento: "2026-11-05", statusconta: "VEN" })]);
+    await service.baixarTitulos({
+      ...entrada([1]),
+      titulos: [{ idcontareceber: 1, valorEsperado: 100 }],
+      constantes: { ...CONSTANTES, percentualMulta: 10 },
+    });
+    expect((chamadas("INS_CR")[0][1] as unknown[])[7]).toBe("10.00");
+  });
+
+  it("12d. percentualMulta invalido -> CONFIG_INVALIDA sem conexao", async () => {
+    prepararPg([linha(1)]);
+    const codigo = await codigoDoErro(
+      service.baixarTitulos(entrada([1], { constantes: { ...CONSTANTES, percentualMulta: -1 } })),
+    );
+    expect(codigo).toBe("CONFIG_INVALIDA");
+    expect(mPool.connect).not.toHaveBeenCalled();
   });
 
   it("13. constantes (D-04) aparecem nos params de conta_recebida, livro e log", async () => {
@@ -391,6 +439,101 @@ describe("AthosContaReceberBaixaService", () => {
       expect(sql).not.toMatch(/ON CONFLICT|jsonb|WITH\s+\w+\s+AS/i);
       expect(sql).not.toMatch(/DROP TABLE|COLEGIO|T-1/);
     }
+  });
+
+  it("19. conf_financeiro lido uma vez, na mesma transacao e antes de qualquer escrita; titulos em dia nao disparam a leitura", async () => {
+    prepararPg([
+      linha(1, { datavencimento: "2026-10-27", statusconta: "VEN" }),
+      linha(2, { datavencimento: "2026-10-20", statusconta: "VEN" }),
+    ]);
+    await service.baixarTitulos(entrada([1, 2]));
+    const t = tipos();
+    expect(t.filter((x) => x === "LER_CONF")).toHaveLength(1);
+    expect(t.indexOf("LER_CONF")).toBeGreaterThan(t.indexOf("BEGIN"));
+    expect(t.indexOf("LER_CONF")).toBeGreaterThan(t.indexOf("LER_TITULOS"));
+    expect(t.indexOf("LER_CONF")).toBeLessThan(t.indexOf("INS_CR"));
+
+    prepararPg([linha(1), linha(2, { datavencimento: HOJE })]);
+    await service.baixarTitulos(entrada([1, 2]));
+    expect(tipos()).not.toContain("LER_CONF");
+  });
+
+  it("20. conf_financeiro sem linha ou com coluna nula/invalida -> CONFIG_ATHOS_INCOMPLETA, ROLLBACK, nenhuma escrita", async () => {
+    const atrasado = linha(1, { datavencimento: "2026-10-27", statusconta: "VEN" });
+    for (const conf of [null, { taxajurosmes: null, carenciadias: "0" }, { taxajurosmes: "1", carenciadias: null }, { taxajurosmes: "abc", carenciadias: "0" }, { taxajurosmes: "-1", carenciadias: "0" }]) {
+      prepararPg([atrasado], { conf });
+      expect(await codigoDoErro(service.baixarTitulos(entrada([1])))).toBe("CONFIG_ATHOS_INCOMPLETA");
+      nenhumaEscrita();
+      expect(tipos()).toContain("ROLLBACK");
+      expect(tipos()).not.toContain("COMMIT");
+    }
+  });
+
+  it("21. EFI informa valor nominal em atraso: modo nominal, juros e multa zero, atraso preservado", async () => {
+    prepararPg([linha(1, { valor: "457.00", datavencimento: "2026-10-27", statusconta: "VEN" })]);
+    const r = await service.baixarTitulos({
+      ...entrada([1]),
+      titulos: [{ idcontareceber: 1, valorEsperado: 457 }],
+      valorPagoEfi: 457,
+    });
+    expect(r.modo).toBe("nominal");
+    const cr = chamadas("INS_CR")[0][1] as unknown[];
+    expect([cr[1], cr[3], cr[4], cr[7]]).toEqual(["457.00", "0.00", 10, "0.00"]);
+    expect((chamadas("INS_LIVRO")[0][1] as unknown[])[4]).toBe("457.00");
+  });
+
+  it("22. EFI diferente de ambos -> VALOR_INCOMPATIVEL, nenhuma escrita, ROLLBACK", async () => {
+    prepararPg([linha(1, { valor: "457.00", datavencimento: "2026-10-27", statusconta: "VEN" })]);
+    const codigo = await codigoDoErro(
+      service.baixarTitulos({ ...entrada([1]), titulos: [{ idcontareceber: 1, valorEsperado: 457 }], valorPagoEfi: 300 }),
+    );
+    expect(codigo).toBe("VALOR_INCOMPATIVEL");
+    nenhumaEscrita();
+    expect(tipos()).toContain("ROLLBACK");
+    expect(tipos()).not.toContain("COMMIT");
+  });
+
+  it("22b. em dia com EFI divergente tambem falha antes de escrever", async () => {
+    prepararPg([linha(1)]);
+    expect(await codigoDoErro(service.baixarTitulos(entrada([1], { valorPagoEfi: 50 })))).toBe("VALOR_INCOMPATIVEL");
+    nenhumaEscrita();
+  });
+
+  it("23. titulo ja REC no lote: comparacao com a EFI ignorada (cobre titulos que o servico nao grava)", async () => {
+    prepararPg([linha(1, { statusconta: "REC" }), linha(2)]);
+    const r = await service.baixarTitulos(entrada([1, 2], { valorPagoEfi: 58 }));
+    expect(r.resultado).toBe("baixado");
+    expect(chamadas("INS_CR")).toHaveLength(1);
+  });
+
+  it("24. simulacao com atraso: calcula juros, multa e valorPago sem escrever e sem FOR UPDATE", async () => {
+    prepararPg([linha(1, { valor: "457.00", datavencimento: "2026-10-27", statusconta: "VEN" })]);
+    const r = await service.baixarTitulos({
+      ...entrada([1], { simular: true }),
+      titulos: [{ idcontareceber: 1, valorEsperado: 457 }],
+    });
+    nenhumaEscrita();
+    expect(mClient.query.mock.calls[2][0]).not.toMatch(/FOR UPDATE/);
+    expect(tipos()).toEqual(["BEGIN", "SET", "LER_TITULOS", "LER_CONF", "LER_CLIENTE", "ROLLBACK"]);
+    expect(r.titulos[0]).toMatchObject({ juros: 1.51, multa: 9.14, atraso: 10, valorPago: 467.65 });
+  });
+
+  it("25. identificadores de conf_financeiro vem so de CONF_FINANCEIRO_COLUNAS", async () => {
+    prepararPg([linha(1, { datavencimento: "2026-10-27", statusconta: "VEN" })]);
+    await service.baixarTitulos(entrada([1]));
+    const sql = (mClient.query.mock.calls.find((c: unknown[]) => tipo(c[0] as string) === "LER_CONF") as unknown[])[0] as string;
+    expect(sql).toContain(CONF_FINANCEIRO_COLUNAS.taxaJurosMes);
+    expect(sql).toContain(CONF_FINANCEIRO_COLUNAS.carenciaDias);
+    expect(sql.replace(/\s+/g, " ")).toMatch(/FROM conf_financeiro LIMIT 1$/);
+  });
+
+  it("26. atraso dentro da carencia (regiao nao validada) -> ATRASO_REQUER_ENCARGOS sem escrever", async () => {
+    prepararPg([linha(1, { datavencimento: "2026-11-01", statusconta: "VEN" })], {
+      conf: { taxajurosmes: "1", carenciadias: "10" },
+    });
+    expect(await codigoDoErro(service.baixarTitulos(entrada([1])))).toBe("ATRASO_REQUER_ENCARGOS");
+    nenhumaEscrita();
+    expect(tipos()).toContain("ROLLBACK");
   });
 
   it("18. helpers puros", () => {

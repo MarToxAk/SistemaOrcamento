@@ -1,6 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Pool, PoolClient } from "pg";
 
+import {
+  CONF_FINANCEIRO_COLUNAS,
+  ConfFinanceiroEncargos,
+  ModoValorBaixa,
+  PERCENTUAL_MULTA_PADRAO,
+  decidirValoresBaixa,
+} from "./athos-baixa-encargos.util";
+
 /**
  * Baixa de contas a receber no Athos (reproduz a tela "Baixar Contas").
  *
@@ -17,8 +25,11 @@ export type BaixaAthosCodigo =
   | "TITULO_NAO_ENCONTRADO"
   | "STATUS_INVALIDO"
   | "VALOR_DIVERGENTE"
+  | "VALOR_INCOMPATIVEL"
+  | "CONFIG_ATHOS_INCOMPLETA"
   | "TITULO_NAO_POSITIVO"
   | "CLIENTE_DIVERGENTE"
+  // Fase 43-02: so para atraso dentro da carencia (regiao de encargos nao validada); baixa manual.
   | "ATRASO_REQUER_ENCARGOS"
   | "DATA_PAGAMENTO_INVALIDA"
   | "DATA_PAGAMENTO_FUTURA"
@@ -42,6 +53,8 @@ export interface BaixaConstantes {
   idFormaPagamento: number;
   idLivroRegistro: number;
   idFuncionario: number;
+  /** % de multa sobre o principal; coluna em conf_financeiro desconhecida (padrao 2). */
+  percentualMulta?: number;
 }
 
 export interface BaixarTitulosInput {
@@ -55,6 +68,11 @@ export interface BaixarTitulosInput {
   constantes: BaixaConstantes;
   /** true = so leitura; nenhuma instrucao de escrita */
   simular?: boolean;
+  /**
+   * Valor efetivamente pago segundo a EFI, em reais (null/ausente = desconhecido). So e comparado
+   * quando TODOS os titulos da chamada serao baixados.
+   */
+  valorPagoEfi?: number | null;
 }
 
 export interface BaixaTituloResultado {
@@ -73,6 +91,8 @@ export interface BaixarTitulosResultado {
   simulado: boolean;
   /** ja_baixado = nenhum titulo precisou de escrita */
   resultado: "baixado" | "ja_baixado";
+  /** com_encargos = principal + juros + multa; nominal = EFI recebeu so o principal */
+  modo: ModoValorBaixa;
   retroativa: boolean;
   dataPagamento: string;
   titulos: BaixaTituloResultado[];
@@ -174,6 +194,11 @@ const SQL_LER_CLIENTE =
      LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
     WHERE c.idcliente = $1`;
 
+// Identificadores vindos SOMENTE de CONF_FINANCEIRO_COLUNAS (constantes fixas, nunca de entrada externa).
+const SQL_LER_CONF_FINANCEIRO =
+  `SELECT ${CONF_FINANCEIRO_COLUNAS.taxaJurosMes} AS taxajurosmes, ${CONF_FINANCEIRO_COLUNAS.carenciaDias} AS carenciadias
+     FROM conf_financeiro LIMIT 1`;
+
 const SQL_INS_CONTA_RECEBIDA =
   `INSERT INTO conta_recebida (idcontareceber, valorpago, valortroco, datapagamento, horapagamento, juros, desconto,
                                atraso, idfuncionariousuario, idformapagamento, multa, idcondicaopagamento)
@@ -199,6 +224,17 @@ interface LinhaTitulo {
   valor: string | number;
   datavencimento: string | null;
   statusconta: string | null;
+}
+
+interface LinhaConf {
+  taxajurosmes: string | number | null;
+  carenciadias: string | number | null;
+}
+
+function numeroConf(v: unknown): number | null {
+  if (v === null || v === undefined || (typeof v === "string" && v.trim() === "")) return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 interface TituloValidado {
@@ -289,6 +325,10 @@ export class AthosContaReceberBaixaService {
     ) {
       throw new BaixaAthosError("CONFIG_INVALIDA", "Constantes da baixa devem ser inteiros positivos.");
     }
+    const multaPct = constantes.percentualMulta ?? PERCENTUAL_MULTA_PADRAO;
+    if (typeof multaPct !== "number" || !Number.isFinite(multaPct) || multaPct < 0 || multaPct > 100) {
+      throw new BaixaAthosError("CONFIG_INVALIDA", "percentualMulta deve estar entre 0 e 100.");
+    }
     if (!inteiroPositivo(input.idclienteAthos) || !Array.isArray(input.titulos) || input.titulos.length === 0) {
       throw new BaixaAthosError("TITULO_NAO_ENCONTRADO", "Nenhum titulo informado para a baixa.");
     }
@@ -356,19 +396,55 @@ export class AthosContaReceberBaixaService {
         if (Math.abs(principalCentavos - (esperados.get(id) as number)) > 1) {
           throw new BaixaAthosError("VALOR_DIVERGENTE", `Titulo ${id} com valor diferente do boleto emitido.`);
         }
-        const vencimento = linha.datavencimento ?? "";
-        if (vencimento && vencimento < input.dataPagamento) {
-          throw new BaixaAthosError(
-            "ATRASO_REQUER_ENCARGOS",
-            `Titulo ${id} vencido antes da data de pagamento: encargos (BX-06) ainda nao calculados.`,
-          );
-        }
         validados.push({ linha, principalCentavos, jaBaixado: false });
       }
 
       const pendentes = validados.filter((v) => !v.jaBaixado);
       const resultados: BaixaTituloResultado[] = [];
       let totalCentavos = 0;
+
+      // ---- fase 2b: encargos e valor (D-02, D-08): conf_financeiro lido na MESMA transacao, antes de escrever
+      const vencimentoDe = (v: TituloValidado): string => v.linha.datavencimento || input.dataPagamento;
+      let confEncargos: ConfFinanceiroEncargos = {
+        taxaJurosMes: 0,
+        carenciaDias: 0,
+        percentualMulta: multaPct,
+      };
+      if (pendentes.some((v) => vencimentoDe(v) < input.dataPagamento)) {
+        const confLida = await client.query<LinhaConf>(SQL_LER_CONF_FINANCEIRO);
+        const taxa = numeroConf(confLida.rows[0]?.taxajurosmes);
+        const carencia = numeroConf(confLida.rows[0]?.carenciadias);
+        if (taxa === null || carencia === null || taxa < 0 || taxa > 100 || carencia < 0) {
+          throw new BaixaAthosError(
+            "CONFIG_ATHOS_INCOMPLETA",
+            "conf_financeiro ausente ou sem taxa de juros / carencia validas; baixa de titulo em atraso nao executada.",
+          );
+        }
+        confEncargos = { taxaJurosMes: taxa, carenciaDias: carencia, percentualMulta: multaPct };
+      }
+
+      let decisaoOk: Extract<ReturnType<typeof decidirValoresBaixa>, { ok: true }> | null = null;
+      if (pendentes.length > 0) {
+        let decisao: ReturnType<typeof decidirValoresBaixa>;
+        try {
+          decisao = decidirValoresBaixa({
+            titulos: pendentes.map((v) => ({
+              idcontareceber: Number(v.linha.idcontareceber),
+              principal: v.principalCentavos / 100,
+              vencimento: vencimentoDe(v),
+            })),
+            dataPagamento: input.dataPagamento,
+            conf: confEncargos,
+            // a EFI cobre todos os titulos do boleto: so compara se nenhum ja estava REC
+            valorPagoEfi: pendentes.length === validados.length ? (input.valorPagoEfi ?? null) : null,
+          });
+        } catch {
+          throw new BaixaAthosError("CONFIG_ATHOS_INCOMPLETA", "Configuracao de encargos invalida para a baixa.");
+        }
+        if (!decisao.ok) throw new BaixaAthosError(decisao.codigo, decisao.mensagem);
+        decisaoOk = decisao;
+      }
+      const valoresPorId = new Map((decisaoOk?.titulos ?? []).map((t) => [t.idcontareceber, t]));
 
       // ---- fase 3: escrita (a simulacao nunca alcanca este bloco) -----------
       let nomeCliente = "";
@@ -394,19 +470,21 @@ export class AthosContaReceberBaixaService {
         }
 
         const principal = v.principalCentavos / 100;
+        const valores = valoresPorId.get(id);
+        if (!valores) throw new BaixaAthosError("ERRO_BANCO", "Valores da baixa nao calculados para o titulo.");
         let idcontarecebida: number | null = null;
 
         if (!simular) {
-          const valorTexto = centavosParaTexto(v.principalCentavos);
+          const valorTexto = formatarValorAthos(valores.valorPago);
           const ins = await client.query<{ idcontarecebida: number }>(SQL_INS_CONTA_RECEBIDA, [
             id,
             valorTexto,
             `${input.dataPagamento} 00:00:00`,
-            "0.00", // juros (encargos: plano 43-02)
-            0, // atraso em dias
+            formatarValorAthos(valores.juros),
+            valores.atraso, // dias de atraso
             constantes.idFuncionario,
             constantes.idFormaPagamento,
-            "0.00", // multa
+            formatarValorAthos(valores.multa),
           ]);
           idcontarecebida = Number(ins.rows[0]?.idcontarecebida);
           if (!Number.isInteger(idcontarecebida)) {
@@ -431,16 +509,16 @@ export class AthosContaReceberBaixaService {
           }
         }
 
-        totalCentavos += v.principalCentavos;
+        totalCentavos += paraCentavos(valores.valorPago);
         resultados.push({
           idcontareceber: id,
           acao: "baixado",
           idcontarecebida,
           principal,
-          juros: 0,
-          multa: 0,
-          atraso: 0,
-          valorPago: principal,
+          juros: valores.juros,
+          multa: valores.multa,
+          atraso: valores.atraso,
+          valorPago: valores.valorPago,
         });
       }
 
@@ -454,6 +532,7 @@ export class AthosContaReceberBaixaService {
       return {
         simulado: simular,
         resultado: pendentes.length > 0 ? "baixado" : "ja_baixado",
+        modo: decisaoOk?.modo ?? "com_encargos",
         retroativa,
         dataPagamento: input.dataPagamento,
         titulos: resultados,

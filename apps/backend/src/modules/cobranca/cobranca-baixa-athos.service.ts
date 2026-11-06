@@ -8,6 +8,7 @@ import {
   BaixarTitulosResultado,
   hojeSaoPaulo,
 } from "../integrations/athos/athos-conta-receber-baixa.service";
+import { PERCENTUAL_MULTA_PADRAO } from "../integrations/athos/athos-baixa-encargos.util";
 import { PrismaService } from "../database/prisma.service";
 
 /**
@@ -39,7 +40,21 @@ function lerInteiroPositivo(
   return n;
 }
 
-/** Padroes: auto=true, forma=10, livro=2, funcionario=1. So o texto exato "false" desliga o auto. */
+function lerPercentualMulta(get: (chave: string) => string | undefined): number {
+  const bruto = get("ATHOS_BAIXA_MULTA_PERCENTUAL");
+  if (bruto === undefined || bruto === null || String(bruto).trim() === "") return PERCENTUAL_MULTA_PADRAO;
+  const texto = String(bruto).trim().replace(",", ".");
+  const n = Number(texto);
+  if (!/^\d+(\.\d+)?$/.test(texto) || !Number.isFinite(n) || n > 100) {
+    throw new BaixaAthosError("CONFIG_INVALIDA", "ATHOS_BAIXA_MULTA_PERCENTUAL deve ser um numero entre 0 e 100.");
+  }
+  return n;
+}
+
+/**
+ * Padroes: auto=true, forma=10, livro=2, funcionario=1, multa=2 (%). So o texto exato "false" desliga o auto.
+ * ATHOS_BAIXA_MULTA_PERCENTUAL: a coluna do percentual de multa em conf_financeiro e desconhecida (Fase 43-02).
+ */
 export function resolverConfigBaixaAthos(get: (chave: string) => string | undefined): ConfigBaixaAthos {
   const auto = String(get("ATHOS_BAIXA_AUTO") ?? "").trim() !== "false";
   return {
@@ -48,6 +63,7 @@ export function resolverConfigBaixaAthos(get: (chave: string) => string | undefi
       idFormaPagamento: lerInteiroPositivo(get, "ATHOS_BAIXA_ID_FORMA_PAGAMENTO", PADROES.forma),
       idLivroRegistro: lerInteiroPositivo(get, "ATHOS_BAIXA_ID_LIVRO_REGISTRO", PADROES.livro),
       idFuncionario: lerInteiroPositivo(get, "ATHOS_BAIXA_ID_FUNCIONARIO", PADROES.funcionario),
+      percentualMulta: lerPercentualMulta(get),
     },
   };
 }
@@ -58,6 +74,21 @@ export interface DadosPagamentoEfi {
   dataPagamento: string | null;
   /** 'payment.paid_at' | 'payment.received_by_bank_at' | 'paid_at' | 'fallback_hoje' */
   fonteData: string;
+  /** Valor pago informado pela EFI, em reais; null quando ausente ou invalido. */
+  valorPago: number | null;
+  /** 'payment.paid_value' | 'nao_informado' */
+  fonteValor: string;
+}
+
+/**
+ * payment.paid_value da EFI: centavos inteiros (mesma convencao dos itens enviados em criarBoleto),
+ * logo reais = paid_value / 100. Ausente, nao numerico (inclui texto), nao inteiro (unidade duvidosa)
+ * ou <= 0 devolve null: a baixa usa entao principal + encargos calculados.
+ */
+function extrairValorPagoEfi(item: Record<string, any>): number | null {
+  const bruto = item?.payment?.paid_value;
+  if (typeof bruto !== "number" || !Number.isInteger(bruto) || bruto <= 0) return null;
+  return bruto / 100;
 }
 
 function dataIsoValida(texto: string): boolean {
@@ -83,14 +114,20 @@ function paraDataSaoPaulo(valor: unknown): string | null {
   return dia; // sem fuso: usa a parte de data como esta
 }
 
+function infoValor(valorPago: number | null): { valorPago: number | null; fonteValor: string } {
+  return { valorPago, fonteValor: valorPago === null ? "nao_informado" : "payment.paid_value" };
+}
+
 /**
  * Extrai a data real do pagamento do payload bruto da cobranca EFI (objeto ou array; usa o primeiro item).
  * Ordem: payment.paid_at, payment.received_by_bank_at, paid_at. Nunca lanca. Data futura vira hoje.
  */
 export function extrairDadosPagamentoEfi(payload: unknown, hoje: string = hojeSaoPaulo()): DadosPagamentoEfi {
+  let valorPago: number | null = null;
   try {
     const item = (Array.isArray(payload) ? payload[0] : payload) as Record<string, any> | null | undefined;
     if (item && typeof item === "object") {
+      valorPago = extrairValorPagoEfi(item);
       const candidatos: Array<[unknown, string]> = [
         [item.payment?.paid_at, "payment.paid_at"],
         [item.payment?.received_by_bank_at, "payment.received_by_bank_at"],
@@ -98,13 +135,15 @@ export function extrairDadosPagamentoEfi(payload: unknown, hoje: string = hojeSa
       ];
       for (const [valor, fonte] of candidatos) {
         const data = paraDataSaoPaulo(valor);
-        if (data) return { dataPagamento: data > hoje ? hoje : data, fonteData: fonte };
+        if (data) {
+          return { dataPagamento: data > hoje ? hoje : data, fonteData: fonte, ...infoValor(valorPago) };
+        }
       }
     }
   } catch {
     // cai no fallback abaixo
   }
-  return { dataPagamento: null, fonteData: "fallback_hoje" };
+  return { dataPagamento: null, fonteData: "fallback_hoje", ...infoValor(valorPago) };
 }
 
 export type StatusExecucaoBaixa = "baixado" | "ja_baixado" | "desligado" | "falha" | "ignorado";
@@ -166,11 +205,13 @@ export class CobrancaBaixaAthosService {
         titulos,
         dataPagamento,
         constantes: cfg.constantes,
+        valorPagoEfi: dados.valorPago,
       });
 
       this.logger.log(
         `Baixa Athos ${detalhe.resultado} cobrancaId=${cobrancaBoletoId} origem=${ctx.origem} ` +
-          `titulos=${idsTitulos.join(",")} data=${dataPagamento} fonteData=${dados.fonteData} retroativa=${detalhe.retroativa}.`,
+          `titulos=${idsTitulos.join(",")} data=${dataPagamento} fonteData=${dados.fonteData} fonteValor=${dados.fonteValor} ` +
+          `modo=${detalhe.modo} retroativa=${detalhe.retroativa}.`,
       );
       return { status: detalhe.resultado, detalhe };
     } catch (err) {

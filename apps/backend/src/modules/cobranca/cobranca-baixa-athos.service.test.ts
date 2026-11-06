@@ -128,6 +128,7 @@ describe("CobrancaBaixaAthosService.executarAposPagamento", () => {
       idFormaPagamento: 10,
       idLivroRegistro: 2,
       idFuncionario: 1,
+      percentualMulta: 2,
     });
     const b = montar({
       ATHOS_BAIXA_ID_FORMA_PAGAMENTO: "12",
@@ -139,7 +140,42 @@ describe("CobrancaBaixaAthosService.executarAposPagamento", () => {
       idFormaPagamento: 12,
       idLivroRegistro: 1,
       idFuncionario: 3,
+      percentualMulta: 2,
     });
+  });
+
+  it("7c. ATHOS_BAIXA_MULTA_PERCENTUAL configura a multa; invalida -> CONFIG_INVALIDA", async () => {
+    const a = montar({ ATHOS_BAIXA_MULTA_PERCENTUAL: "3,5" });
+    await a.service.executarAposPagamento(7, { origem: "webhook" });
+    expect(a.baixaService.baixarTitulos.mock.calls[0][0].constantes.percentualMulta).toBe(3.5);
+    for (const v of ["abc", "-1", "101", "2%"]) {
+      const b = montar({ ATHOS_BAIXA_MULTA_PERCENTUAL: v });
+      const r = await b.service.executarAposPagamento(7, { origem: "webhook" });
+      expect(r.codigo).toBe("CONFIG_INVALIDA");
+      expect(b.baixaService.baixarTitulos).not.toHaveBeenCalled();
+    }
+  });
+
+  it("10. executarAposPagamento repassa valorPagoEfi (centavos -> reais) ao baixarTitulos; sem payload repassa null", async () => {
+    const a = montar();
+    await a.service.executarAposPagamento(7, { origem: "webhook", payloadEfi: { payment: { paid_value: 46765 } } });
+    expect(a.baixaService.baixarTitulos.mock.calls[0][0].valorPagoEfi).toBe(467.65);
+
+    const b = montar();
+    await b.service.executarAposPagamento(7, { origem: "reconciliacao" });
+    expect(b.baixaService.baixarTitulos.mock.calls[0][0].valorPagoEfi).toBeNull();
+  });
+
+  it("11. log de sucesso contem fonteData e fonteValor e nao contem nome de cliente", async () => {
+    const { service, logger } = montar();
+    await service.executarAposPagamento(7, {
+      origem: "webhook",
+      payloadEfi: { payment: { paid_at: "2026-11-05", paid_value: 3950 }, customer: { name: "FULANO DE TAL" } },
+    });
+    const msg = logger.log.mock.calls.map((c: unknown[]) => c[0] as string).join(" ");
+    expect(msg).toContain("fonteData=payment.paid_at");
+    expect(msg).toContain("fonteValor=payment.paid_value");
+    expect(msg).not.toContain("FULANO");
   });
 });
 
@@ -155,11 +191,13 @@ describe("resolverConfigBaixaAthos", () => {
 
 describe("extrairDadosPagamentoEfi", () => {
   const HOJE = "2026-11-06";
+  const SEM_VALOR = { valorPago: null, fonteValor: "nao_informado" };
 
   it("8a. payment.paid_at ISO com Z converte para America/Sao_Paulo", () => {
     expect(extrairDadosPagamentoEfi({ payment: { paid_at: "2026-11-05T02:30:00.000Z" } }, HOJE)).toEqual({
       dataPagamento: "2026-11-04",
       fonteData: "payment.paid_at",
+      ...SEM_VALOR,
     });
   });
 
@@ -167,6 +205,7 @@ describe("extrairDadosPagamentoEfi", () => {
     expect(extrairDadosPagamentoEfi({ payment: { received_by_bank_at: "2026-11-05 20:24:20" } }, HOJE)).toEqual({
       dataPagamento: "2026-11-05",
       fonteData: "payment.received_by_bank_at",
+      ...SEM_VALOR,
     });
   });
 
@@ -174,15 +213,17 @@ describe("extrairDadosPagamentoEfi", () => {
     expect(extrairDadosPagamentoEfi({ paid_at: "2026-11-03" }, HOJE)).toEqual({
       dataPagamento: "2026-11-03",
       fonteData: "paid_at",
+      ...SEM_VALOR,
     });
     expect(extrairDadosPagamentoEfi([{ payment: { paid_at: "2026-11-02T15:00:00-03:00" } }], HOJE)).toEqual({
       dataPagamento: "2026-11-02",
       fonteData: "payment.paid_at",
+      ...SEM_VALOR,
     });
   });
 
   it("8d. ausente, lixo ou null -> fallback_hoje", () => {
-    const fallback = { dataPagamento: null, fonteData: "fallback_hoje" };
+    const fallback = { dataPagamento: null, fonteData: "fallback_hoje", ...SEM_VALOR };
     expect(extrairDadosPagamentoEfi(undefined, HOJE)).toEqual(fallback);
     expect(extrairDadosPagamentoEfi(null, HOJE)).toEqual(fallback);
     expect(extrairDadosPagamentoEfi("texto", HOJE)).toEqual(fallback);
@@ -196,12 +237,35 @@ describe("extrairDadosPagamentoEfi", () => {
     expect(extrairDadosPagamentoEfi({ payment: { paid_at: "2026-12-25" } }, HOJE)).toEqual({
       dataPagamento: HOJE,
       fonteData: "payment.paid_at",
+      ...SEM_VALOR,
     });
   });
 
   it("8f. paid_at invalido cai para a proxima fonte valida", () => {
     expect(
       extrairDadosPagamentoEfi({ payment: { paid_at: "lixo", received_by_bank_at: "2026-11-04 10:00:00" } }, HOJE),
-    ).toEqual({ dataPagamento: "2026-11-04", fonteData: "payment.received_by_bank_at" });
+    ).toEqual({ dataPagamento: "2026-11-04", fonteData: "payment.received_by_bank_at", ...SEM_VALOR });
+  });
+
+  it("9. payment.paid_value em centavos -> reais; ausente, zero, negativo, texto ou nao inteiro -> null", () => {
+    const com = extrairDadosPagamentoEfi({ payment: { paid_at: "2026-11-05", paid_value: 45700 } }, HOJE);
+    expect(com).toEqual({
+      dataPagamento: "2026-11-05",
+      fonteData: "payment.paid_at",
+      valorPago: 457,
+      fonteValor: "payment.paid_value",
+    });
+    // valor sem data ainda e extraido
+    expect(extrairDadosPagamentoEfi({ payment: { paid_value: 25882 } }, HOJE)).toEqual({
+      dataPagamento: null,
+      fonteData: "fallback_hoje",
+      valorPago: 258.82,
+      fonteValor: "payment.paid_value",
+    });
+    for (const ruim of [undefined, 0, -100, "45700", "abc", 457.5, Number.NaN, null]) {
+      const r = extrairDadosPagamentoEfi({ payment: { paid_at: "2026-11-05", paid_value: ruim } }, HOJE);
+      expect(r.valorPago).toBeNull();
+      expect(r.fonteValor).toBe("nao_informado");
+    }
   });
 });
