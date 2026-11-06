@@ -635,7 +635,22 @@ export class CobrancaService {
         data: { status: "pago" },
       });
       this.logger.log(`Webhook EFI: boleto ${boleto.id} (chargeId=${chargeId}) marcado como pago.`);
-      await this.dispararBaixaAthos(boleto.id, "webhook");
+
+      // D-03: busca a cobranca para obter a data real do pagamento (campo do payload EFI).
+      // Falha aqui so deixa a data indefinida (a baixa usa hoje em America/Sao_Paulo).
+      let payloadCobranca: unknown;
+      try {
+        const cobrancaResp = await cobrancaClient.get(`/v1/charge/${chargeId}`, {
+          headers: { Authorization: `Bearer ${efiToken}` },
+        });
+        const dadosCobranca = cobrancaResp?.data?.data;
+        payloadCobranca = Array.isArray(dadosCobranca) ? dadosCobranca[0] : dadosCobranca;
+      } catch (e: unknown) {
+        this.logger.warn(
+          `Webhook EFI: nao foi possivel consultar a cobranca chargeId=${chargeId} para obter a data do pagamento: ${(e as { message?: string })?.message ?? String(e)}`,
+        );
+      }
+      await this.dispararBaixaAthos(boleto.id, "webhook", payloadCobranca);
     } else {
       this.logger.log(
         `Webhook EFI: notificação recebida com status='${status}' para chargeId=${chargeId} — sem ação.`,
@@ -792,6 +807,14 @@ export class CobrancaService {
 
       if (novoStatus !== cobranca.status) {
         await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: novoStatus } });
+        if (novoStatus === "pago") {
+          const dadosCobranca = resp.data?.data;
+          await this.dispararBaixaAthos(
+            cobrancaId,
+            "reconciliacao",
+            Array.isArray(dadosCobranca) ? dadosCobranca[0] : dadosCobranca,
+          );
+        }
         return { status: novoStatus, atualizado: true };
       }
       return { status: novoStatus, atualizado: false };
