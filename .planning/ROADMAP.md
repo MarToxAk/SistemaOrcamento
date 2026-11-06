@@ -157,10 +157,10 @@ Plans:
 **Goal:** Quando o pagamento de um boleto EFI é confirmado (webhook ou job de reconciliação da Fase 41), o Sistema dá baixa no título no Athos, reproduzindo o que a tela "Baixar Contas" faz: `conta_recebida`, `livro_registro_io`, `conta_receber.statusconta='REC'`, `boleto.statusBoleto='REC'`, `cliente.aviso1-3=false` e `log`, tudo em uma única transação, idempotente. SQL de referência capturado em `43-REFERENCIA-SQL-ATHOS.md`.
 **Requirements**: BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-09, BX-10, BX-11 (IDs locais da fase — definidos em 43-01-PLAN.md)
 **Depends on:** Phase 42
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 Plans:
-- [ ] 43-01-PLAN.md — Wave 1 · Tracer: baixa ponta a ponta (webhook paid -> gancho -> serviço transacional -> SQL de "Baixar Contas") + núcleo (idempotência, validações, multi-título, retroativa com log, simulação somente leitura, constantes por env) + gancho da reconciliação e flag ATHOS_BAIXA_AUTO; tudo com pg falso (D-01, D-03, D-04, D-05, D-07, D-08, D-09)
+- [x] 43-01-PLAN.md — Wave 1 · Tracer: baixa ponta a ponta (webhook paid -> gancho -> serviço transacional -> SQL de "Baixar Contas") + núcleo (idempotência, validações, multi-título, retroativa com log, simulação somente leitura, constantes por env) + gancho da reconciliação e flag ATHOS_BAIXA_AUTO; tudo com pg falso (D-01, D-03, D-04, D-05, D-07, D-08, D-09)
 - [ ] 43-02-PLAN.md — Wave 2 · Encargos e valor pago: checkpoint humano de introspecção somente leitura do Athos + fórmula de juros/multa/atraso validada contra casos reais (TDD) + decisão do valor efetivamente pago (D-02)
 - [ ] 43-03-PLAN.md — Wave 3 · Registro durável e retentativa: migration (athosBaixa* + CobrancaBaixaAthosLog), baixa manual protegida com simulação, job de retentativa, guardas de cancelamento (D-01, D-08)
 - [ ] 43-04-PLAN.md — Wave 4 · Estorno ("Voltar Contas Recebidas") transacional + endpoint protegido + controles no painel de boletos + roteiro de verificação guiada pelo usuário (D-06, D-07)
