@@ -1,16 +1,21 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Query, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Put, Query, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
 
+import { AdminOnly } from "../security/admin.decorator";
 import { Public } from "../security/public.decorator";
 import { UploadedXmlFile } from "../integrations/nfse/nfse.service";
+import { CobrancaBaixaAthosService } from "./cobranca-baixa-athos.service";
 import { CobrancaService } from "./cobranca.service";
 import { EmailEnvioService } from "./email-envio.service";
+import { BaixarAthosDto } from "./dto/baixar-athos.dto";
+import { EstornarBaixaAthosDto } from "./dto/estornar-baixa-athos.dto";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
 import { EnviarEmailCobrancaDto } from "./dto/enviar-email-cobranca.dto";
+import { SalvarCcPadraoDto } from "./dto/salvar-cc-padrao.dto";
 
 const NFSE_XML_MAX_SIZE_BYTES = 2 * 1024 * 1024;
 const NFSE_XML_MIME_PATTERN = /^(application\/xml|text\/xml)$/;
@@ -22,6 +27,7 @@ export class CobrancaController {
   constructor(
     private readonly cobrancaService: CobrancaService,
     private readonly emailEnvioService: EmailEnvioService,
+    private readonly baixaAthosService: CobrancaBaixaAthosService,
   ) {}
 
   /**
@@ -42,6 +48,21 @@ export class CobrancaController {
   @Post("email/enviar")
   async enviarEmail(@Body() dto: EnviarEmailCobrancaDto) {
     return this.emailEnvioService.enviarBoletoENotas(dto);
+  }
+
+  /** Lista fixa de CC do cliente (pre-preenche o modal de e-mail). AUTHED via guard global. */
+  @Get("email/cc-padrao/:idclienteAthos")
+  async buscarCcPadrao(@Param("idclienteAthos", ParseIntPipe) idclienteAthos: number) {
+    return this.emailEnvioService.buscarCcPadrao(idclienteAthos);
+  }
+
+  /** Grava a lista fixa de CC do cliente (opt-in "Salvar como padrao" no modal). AUTHED via guard global. */
+  @Put("email/cc-padrao/:idclienteAthos")
+  async salvarCcPadrao(
+    @Param("idclienteAthos", ParseIntPipe) idclienteAthos: number,
+    @Body() dto: SalvarCcPadraoDto,
+  ) {
+    return this.emailEnvioService.salvarCcPadrao(idclienteAthos, dto.emails);
   }
 
   /** Pixel 1x1 (@Public) — grava abertoEm na 1a carga. Sempre responde o gif. */
@@ -189,6 +210,33 @@ export class CobrancaController {
   @Post("boleto/:id/verificar-pagamento")
   async verificarPagamento(@Param("id", ParseIntPipe) id: number) {
     return this.cobrancaService.verificarPagamentoBoleto(id);
+  }
+
+  /**
+   * Baixa manual (ou simulada) do boleto pago no Athos - Fase 43 (BX-08). Exige x-admin-api-key (AdminOnly)
+   * alem da chave interna do guard global. Funciona mesmo com ATHOS_BAIXA_AUTO=false e ignora o limite de
+   * tentativas automaticas. Declarada antes de DELETE boleto/:id; sem colisao com boleto/dashboard|preview.
+   */
+  @AdminOnly()
+  @Post("boleto/:id/baixar-athos")
+  async baixarAthos(@Param("id", ParseIntPipe) id: number, @Body() dto: BaixarAthosDto) {
+    return this.baixaAthosService.baixarManual(id, dto);
+  }
+
+  /**
+   * Estorno ("Voltar Contas Recebidas") da baixa feita pelo Sistema - Fase 43 (D-06). AdminOnly. Exige
+   * confirmar=true (ou simular=true, somente leitura). So estorna o que a trilha de auditoria registrou.
+   */
+  @AdminOnly()
+  @Post("boleto/:id/estornar-baixa-athos")
+  async estornarBaixaAthos(@Param("id", ParseIntPipe) id: number, @Body() dto: EstornarBaixaAthosDto) {
+    return this.baixaAthosService.estornarBaixa(id, dto);
+  }
+
+  /** Status persistido da baixa no Athos e historico das ultimas tentativas. AUTHED via guard global. */
+  @Get("boleto/:id/baixa-athos")
+  async statusBaixaAthos(@Param("id", ParseIntPipe) id: number) {
+    return this.baixaAthosService.consultarStatus(id);
   }
 
   /** Remove boleto do banco (cleanup — libera títulos) */

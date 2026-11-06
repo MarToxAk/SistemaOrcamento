@@ -14,17 +14,53 @@ import { AthosService } from "../integrations/athos/athos.service";
 import { DanfePdfService } from "../integrations/nfse/danfe-pdf.service";
 import { PrismaService } from "../database/prisma.service";
 import { CobrancaService } from "./cobranca.service";
+import { EMAIL_CC_MAX } from "./dto/enviar-email-cobranca.dto";
 
 // GIF89a transparente 1x1 canonico = 43 bytes (o acceptance do PLAN espera size_download=43).
 // A string do PLAN (...AAIBRAA7) decodifica para 42 bytes; usamos a variante de 43 bytes.
 const GIF_1X1_BASE64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const INT32_MAX = 2_147_483_647;
+// Rejeita espacos/CR/LF e demais caracteres de controle, '<' '>' ',' ';' aspas, parenteses,
+// colchetes e barra invertida: nada que permita injetar cabecalho ou virar 2 destinatarios.
+const EMAIL_RE =
+  /^[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+@[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+\.[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+$/;
+
+/**
+ * Normaliza a lista de CC (D-02): trim, descarta vazios, valida formato (EMAIL_RE),
+ * remove duplicados case-insensitive (mantem a grafia da 1a ocorrencia), remove o
+ * destinatario principal (case-insensitive) e aplica o limite EMAIL_CC_MAX.
+ * Lanca BadRequestException para item invalido ou lista acima do limite.
+ */
+export function normalizarListaCc(
+  lista: readonly string[] | undefined,
+  destinatarioPrincipal?: string,
+): string[] {
+  const principal = destinatarioPrincipal?.trim().toLowerCase();
+  const vistos = new Set<string>();
+  const out: string[] = [];
+  for (const bruto of lista ?? []) {
+    const email = typeof bruto === "string" ? bruto.trim() : "";
+    if (!email) continue;
+    if (!EMAIL_RE.test(email)) {
+      throw new BadRequestException(`E-mail em cópia (CC) inválido: ${email}`);
+    }
+    const chave = email.toLowerCase();
+    if (chave === principal || vistos.has(chave)) continue;
+    vistos.add(chave);
+    out.push(email);
+  }
+  if (out.length > EMAIL_CC_MAX) {
+    throw new BadRequestException(`Máximo de ${EMAIL_CC_MAX} e-mails em cópia (CC).`);
+  }
+  return out;
+}
 
 interface EnviarInput {
   idclienteAthos: number;
   cobrancaBoletoId?: number;
   nfseEmitidaIds?: number[];
   destinatario?: string;
+  cc?: string[];
 }
 
 interface Anexo {
@@ -73,6 +109,7 @@ export class EmailEnvioService {
     id: number;
     token: string;
     destinatario: string;
+    cc: string[];
     status: string;
     anexos: string[];
   }> {
@@ -90,6 +127,8 @@ export class EmailEnvioService {
     if (!destinatario || !EMAIL_RE.test(destinatario)) {
       throw new BadRequestException("Cliente sem e-mail cadastrado; informe o destinatario.");
     }
+    // Falha rapido (antes de baixar anexos) se algum CC for invalido ou exceder o limite.
+    const cc = normalizarListaCc(input.cc, destinatario);
 
     const attachments: Anexo[] = [];
     // Um item por documento (nao por arquivo) — usado so para montar a lista legivel no corpo do e-mail.
@@ -211,6 +250,7 @@ export class EmailEnvioService {
       await transport.sendMail({
         from: this.config.get<string>("SMTP_FROM"),
         to: destinatario,
+        ...(cc.length > 0 ? { cc } : {}),
         subject: assunto,
         html,
         text,
@@ -218,7 +258,7 @@ export class EmailEnvioService {
       });
     } catch (err) {
       this.logger.error(
-        `Falha ao enviar e-mail para ${destinatario}: ${err instanceof Error ? err.message : String(err)}`,
+        `Falha ao enviar e-mail para ${destinatario}${cc.length > 0 ? ` (+${cc.length} em cópia)` : ""}: ${err instanceof Error ? err.message : String(err)}`,
       );
       throw new InternalServerErrorException("Falha ao enviar o e-mail.");
     }
@@ -228,6 +268,7 @@ export class EmailEnvioService {
         token,
         idclienteAthos: input.idclienteAthos,
         destinatario,
+        cc,
         assunto,
         status: "enviado",
         cobrancaBoletoId: input.cobrancaBoletoId ?? null,
@@ -236,7 +277,41 @@ export class EmailEnvioService {
       },
     });
 
-    return { id: row.id, token, destinatario, status: row.status, anexos };
+    return { id: row.id, token, destinatario, cc, status: row.status, anexos };
+  }
+
+  /** Lista fixa de CC do cliente (D-06). Sem registro -> lista vazia. */
+  async buscarCcPadrao(
+    idclienteAthos: number,
+  ): Promise<{ idclienteAthos: number; emails: string[] }> {
+    this.assertIdCliente(idclienteAthos);
+    const row = await this.prisma.cobrancaEmailCcPadrao.findUnique({ where: { idclienteAthos } });
+    return { idclienteAthos, emails: row?.emails ?? [] };
+  }
+
+  /**
+   * Grava a lista fixa de CC do cliente (D-06), normalizada (D-02). Lista vazia grava []
+   * (equivale a remover o padrao) — um unico caminho de escrita.
+   */
+  async salvarCcPadrao(
+    idclienteAthos: number,
+    emails: readonly string[],
+  ): Promise<{ idclienteAthos: number; emails: string[] }> {
+    this.assertIdCliente(idclienteAthos);
+    const lista = normalizarListaCc(emails);
+    const row = await this.prisma.cobrancaEmailCcPadrao.upsert({
+      where: { idclienteAthos },
+      create: { idclienteAthos, emails: lista },
+      update: { emails: lista },
+    });
+    return { idclienteAthos, emails: row.emails };
+  }
+
+  private assertIdCliente(idclienteAthos: number): void {
+    // A coluna idclienteAthos e Int (32 bits): acima disso o Prisma estoura e vira 500.
+    if (!Number.isInteger(idclienteAthos) || idclienteAthos <= 0 || idclienteAthos > INT32_MAX) {
+      throw new BadRequestException("idclienteAthos inválido.");
+    }
   }
 
   /**

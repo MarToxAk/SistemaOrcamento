@@ -51,6 +51,7 @@ interface TituloReceber {
     ultimoEmail?: {
       status: string;
       destinatario: string;
+      cc?: string[];
       enviadoEm: string;
       abertoEm: string | null;
       confirmadoEm: string | null;
@@ -95,6 +96,42 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
+const EMAIL_CC_MAX = 10; // espelha EMAIL_CC_MAX de apps/backend/src/modules/cobranca/dto/enviar-email-cobranca.dto.ts
+const EMAIL_CC_PADRAO_TIMEOUT_MS = 8000; // limite do GET do padrao de CC (nao pode travar o Enviar)
+// mesma regex do backend (email-envio.service.ts)
+const EMAIL_RE =
+  /^[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+@[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+\.[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+$/;
+
+/** Funde o texto digitado (separado por virgula, ponto e virgula ou espaco) na lista de CC atual. */
+function mesclarEmailsCc(
+  atual: string[],
+  texto: string,
+  principal: string,
+): { lista: string[]; invalidos: string[]; excedentes: number } {
+  const principalLc = principal.trim().toLowerCase();
+  const lista = atual.filter((e) => e.toLowerCase() !== principalLc);
+  const invalidos: string[] = [];
+  let excedentes = 0;
+  const tokens = texto
+    .split(/[,;\s]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  for (const token of tokens) {
+    if (!EMAIL_RE.test(token)) {
+      invalidos.push(token);
+      continue;
+    }
+    const lc = token.toLowerCase();
+    if (lc === principalLc || lista.some((e) => e.toLowerCase() === lc)) continue;
+    if (lista.length >= EMAIL_CC_MAX) {
+      excedentes += 1;
+      continue;
+    }
+    lista.push(token);
+  }
+  return { lista, invalidos, excedentes };
+}
+
 function formatDateHora(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
@@ -111,7 +148,9 @@ function StatusEmailBadge({ ultimoEmail }: { ultimoEmail: NonNullable<TituloRece
   return (
     <span
       className={`badge ${config.classe}`}
-      title={`E-mail para ${ultimoEmail.destinatario} — enviado em ${formatDateHora(ultimoEmail.enviadoEm)}${
+      title={`E-mail para ${ultimoEmail.destinatario}${
+        ultimoEmail.cc && ultimoEmail.cc.length > 0 ? ` (cópia: ${ultimoEmail.cc.join(", ")})` : ""
+      } — enviado em ${formatDateHora(ultimoEmail.enviadoEm)}${
         ultimoEmail.abertoEm ? ` · aberto em ${formatDateHora(ultimoEmail.abertoEm)}` : ""
       }${ultimoEmail.confirmadoEm ? ` · confirmado em ${formatDateHora(ultimoEmail.confirmadoEm)}` : ""}`}
     >
@@ -227,8 +266,19 @@ export default function ClienteDetalhePage({
     nfeCount: number;
   } | null>(null);
   const [emailDestinatario, setEmailDestinatario] = useState("");
+  const [emailCc, setEmailCc] = useState<string[]>([]);
+  const [emailCcInput, setEmailCcInput] = useState("");
+  const [emailCcErro, setEmailCcErro] = useState("");
+  const [emailCcCarregando, setEmailCcCarregando] = useState(false); // GET do padrao em andamento
+  const [emailCcPadraoAviso, setEmailCcPadraoAviso] = useState(""); // falha ao carregar o padrao
+  const [emailCcSalvarPadrao, setEmailCcSalvarPadrao] = useState(false); // checkbox opt-in (D-06)
+  const [emailCcPadraoResultado, setEmailCcPadraoResultado] = useState<"salvo" | "falhou" | null>(
+    null,
+  ); // resultado do PUT pos-envio
+  const emailCcCargaSeq = useRef(0); // descarta resposta do GET de uma abertura anterior do modal
   const [emailResult, setEmailResult] = useState<{
     destinatario: string;
+    cc?: string[];
     status: string;
     anexos?: string[];
   } | null>(null);
@@ -787,13 +837,82 @@ export default function ClienteDetalhePage({
     setEmailDestinatario(
       dadosCliente?.emailcobrancacliente ?? dadosCliente?.emailcliente ?? "",
     );
+    const principal = dadosCliente?.emailcobrancacliente ?? dadosCliente?.emailcliente ?? "";
+    setEmailCc([]);
+    setEmailCcInput("");
+    setEmailCcErro("");
+    setEmailCcSalvarPadrao(false);
+    setEmailCcPadraoAviso("");
+    setEmailCcPadraoResultado(null);
     setEmailErro("");
     setEmailResult(null);
     setEmailModalState("confirm");
+    void carregarCcPadrao(principal);
+  }
+
+  /** Pre-preenche o CC com a lista fixa do cliente (D-01). Falha vira aviso e segue com a lista vazia. */
+  async function carregarCcPadrao(principal: string) {
+    const seq = ++emailCcCargaSeq.current;
+    setEmailCcCarregando(true);
+    // O padrao e um dado opcional: se o GET pendurar, aborta por timeout para nao bloquear o Enviar.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), EMAIL_CC_PADRAO_TIMEOUT_MS);
+    try {
+      const res = await fetch(`/api/cobranca/email/cc-padrao/${idcliente}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (seq !== emailCcCargaSeq.current) return;
+      if (!res.ok) {
+        setEmailCcPadraoAviso("Não foi possível carregar a lista de cópia padrão deste cliente.");
+        setEmailCcSalvarPadrao(false);
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      const emails: string[] = Array.isArray(data?.emails)
+        ? data.emails.filter((e: unknown): e is string => typeof e === "string")
+        : [];
+      const { lista } = mesclarEmailsCc([], emails.join(","), principal);
+      setEmailCc(lista);
+    } catch {
+      if (seq !== emailCcCargaSeq.current) return;
+      setEmailCcPadraoAviso("Não foi possível carregar a lista de cópia padrão deste cliente.");
+      setEmailCcSalvarPadrao(false);
+    } finally {
+      clearTimeout(timer);
+      if (seq === emailCcCargaSeq.current) setEmailCcCarregando(false);
+    }
+  }
+
+  /** Aplica a mescla de CC no estado e devolve a lista final + se houve problema (invalidos/excedentes). */
+  function aplicarMesclaCc(): { lista: string[]; ok: boolean } {
+    const { lista, invalidos, excedentes } = mesclarEmailsCc(emailCc, emailCcInput, emailDestinatario);
+    setEmailCc(lista);
+    setEmailCcInput(invalidos.join(", "));
+    if (invalidos.length > 0) {
+      setEmailCcErro(`E-mail inválido: ${invalidos.join(", ")}`);
+    } else if (excedentes > 0) {
+      setEmailCcErro(`Limite de ${EMAIL_CC_MAX} e-mails em cópia.`);
+    } else {
+      setEmailCcErro("");
+    }
+    return { lista, ok: invalidos.length === 0 && excedentes === 0 };
+  }
+
+  function adicionarEmailCc() {
+    aplicarMesclaCc();
+  }
+
+  function removerEmailCc(email: string) {
+    setEmailCc((atual) => atual.filter((e) => e !== email));
+    setEmailCcErro("");
   }
 
   async function confirmarEnviarEmail() {
     if (!emailCtx) return;
+    // Incorpora texto digitado e ainda nao adicionado; aborta se houver problema.
+    const { lista: ccFinal, ok } = aplicarMesclaCc();
+    if (!ok) return;
     setEmailModalState("loading");
     try {
       const res = await fetch("/api/cobranca/email/enviar", {
@@ -804,14 +923,30 @@ export default function ClienteDetalhePage({
           cobrancaBoletoId: emailCtx.cobrancaId,
           nfseEmitidaIds: emailCtx.nfseEmitidaIds,
           destinatario: emailDestinatario.trim() || undefined,
+          cc: ccFinal,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        // D-06: so grava o padrao com opt-in explicito e envio ok; falha aqui nunca desfaz o envio.
+        if (emailCcSalvarPadrao && !emailCcPadraoAviso) {
+          const listaEnviada: string[] = Array.isArray(data?.cc) ? data.cc : ccFinal;
+          try {
+            const resPadrao = await fetch(`/api/cobranca/email/cc-padrao/${idcliente}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ emails: listaEnviada }),
+            });
+            setEmailCcPadraoResultado(resPadrao.ok ? "salvo" : "falhou");
+          } catch {
+            setEmailCcPadraoResultado("falhou");
+          }
+        }
         setEmailResult(data);
         setEmailModalState("success");
       } else {
-        setEmailErro(data.message ?? data.error ?? "Falha ao enviar.");
+        const msg = Array.isArray(data.message) ? data.message.join(" ") : data.message;
+        setEmailErro(msg ?? data.error ?? "Falha ao enviar.");
         setEmailModalState("error");
       }
     } catch {
@@ -2340,7 +2475,90 @@ export default function ClienteDetalhePage({
                     onChange={(e) => setEmailDestinatario(e.target.value)}
                     placeholder="cliente@exemplo.com"
                   />
-                  <small className="text-muted d-block">
+                  <label className="form-label small fw-semibold" htmlFor="email-cc-input">
+                    Cópia (CC)
+                  </label>
+                  <div className="input-group">
+                    <input
+                      id="email-cc-input"
+                      type="text"
+                      className="form-control"
+                      value={emailCcInput}
+                      disabled={emailCcCarregando}
+                      onChange={(e) => setEmailCcInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === ",") {
+                          e.preventDefault();
+                          adicionarEmailCc();
+                        }
+                      }}
+                      placeholder="outro@exemplo.com"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      disabled={emailCcCarregando || !emailCcInput.trim()}
+                      onClick={adicionarEmailCc}
+                    >
+                      <i className="bi bi-plus-lg me-1" />Adicionar
+                    </button>
+                  </div>
+                  {emailCcCarregando && (
+                    <div className="d-flex align-items-center gap-2 mt-1">
+                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                      <span className="small text-muted">Carregando lista padrão…</span>
+                    </div>
+                  )}
+                  {emailCcPadraoAviso && (
+                    <div className="small text-warning-emphasis mt-1">{emailCcPadraoAviso}</div>
+                  )}
+                  {emailCcErro && <div className="small text-danger mt-1">{emailCcErro}</div>}
+                  <small className="text-muted d-block mt-1">
+                    Opcional — até {EMAIL_CC_MAX} e-mails. Enter ou vírgula para adicionar. ({emailCc.length}/{EMAIL_CC_MAX})
+                  </small>
+                  {emailCc.length > 0 && (
+                    <div className="d-flex flex-wrap gap-1 mt-2">
+                      {emailCc.map((email) => (
+                        <span
+                          key={email}
+                          className="badge rounded-pill text-bg-light border fw-normal d-inline-flex align-items-center gap-1"
+                        >
+                          {email}
+                          <button
+                            type="button"
+                            className="btn-close"
+                            style={{ fontSize: "0.5rem" }}
+                            aria-label={`Remover ${email}`}
+                            onClick={() => removerEmailCc(email)}
+                          />
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="form-check mt-2">
+                    <input
+                      id="email-cc-salvar-padrao"
+                      type="checkbox"
+                      className="form-check-input"
+                      checked={emailCcSalvarPadrao}
+                      disabled={emailCcCarregando || !!emailCcPadraoAviso}
+                      onChange={(e) => setEmailCcSalvarPadrao(e.target.checked)}
+                    />
+                    <label className="form-check-label small" htmlFor="email-cc-salvar-padrao">
+                      Salvar como padrão deste cliente
+                    </label>
+                  </div>
+                  {emailCcPadraoAviso && (
+                    <small className="text-muted d-block">
+                      Salvar como padrão indisponível: a lista atual não foi carregada e seria sobrescrita.
+                    </small>
+                  )}
+                  {emailCcSalvarPadrao && emailCc.length === 0 && (
+                    <small className="text-muted d-block">
+                      Com a lista vazia, o padrão salvo deste cliente será removido.
+                    </small>
+                  )}
+                  <small className="text-muted d-block mt-3">
                     Serão anexados: boleto (PDF) + {emailCtx.nfseEmitidaIds.length} NFS-e (PDF + XML) +{" "}
                     {emailCtx.nfeCount} NF-e (PDF + XML)
                   </small>
@@ -2356,7 +2574,7 @@ export default function ClienteDetalhePage({
                   <button
                     type="button"
                     className="btn btn-success"
-                    disabled={!emailDestinatario.trim()}
+                    disabled={!emailDestinatario.trim() || emailCcCarregando}
                     onClick={confirmarEnviarEmail}
                   >
                     <i className="bi bi-send me-1" />Enviar e-mail
@@ -2381,6 +2599,19 @@ export default function ClienteDetalhePage({
                     <i className="bi bi-check-circle-fill flex-shrink-0" />
                     <div>E-mail enviado para {emailResult.destinatario}</div>
                   </div>
+                  {emailResult.cc && emailResult.cc.length > 0 && (
+                    <div className="small mb-2">Cópia (CC): {emailResult.cc.join(", ")}</div>
+                  )}
+                  {emailCcPadraoResultado === "salvo" && (
+                    <div className="small text-success mb-2">
+                      Lista de cópia salva como padrão deste cliente.
+                    </div>
+                  )}
+                  {emailCcPadraoResultado === "falhou" && (
+                    <div className="alert alert-warning">
+                      E-mail enviado, mas não foi possível salvar a lista de cópia como padrão deste cliente.
+                    </div>
+                  )}
                   {emailResult.anexos && emailResult.anexos.length > 0 && (
                     <ul className="small mb-2">
                       {emailResult.anexos.map((a, i) => (
@@ -2391,6 +2622,9 @@ export default function ClienteDetalhePage({
                   <small className="text-muted d-block">
                     A confirmação de leitura depende do cliente abrir a imagem ou clicar no link de
                     confirmação — o pixel pode não registrar em alguns provedores.
+                    {emailResult.cc && emailResult.cc.length > 0
+                      ? " Com cópia, a abertura/confirmação pode ter vindo de qualquer destinatário."
+                      : ""}
                   </small>
                 </div>
                 <div className="boleto-modal-footer">

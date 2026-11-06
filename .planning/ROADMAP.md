@@ -33,6 +33,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 
 - [x] **Phase 39: Scaffold, Leitura e Spikes de Introspecão** - Spikes de introspecção no DB de referência (192.168.3.198), extração de validarFkExiste para util reutilizável, e endpoint GET de listagem enriquecida de componentes — tudo que não depende do write GRANT (completed 2026-06-30)
 - [x] **Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)** - Quatro endpoints de escrita com validação dual de FK, gerenciamento transacional do flag, PK serial via RETURNING e mapeamento completo de erros Postgres; cobertura de testes Jest (completed 2026-09-04, verificação retroativa)
+- [ ] **Phase 43: Baixa automática de contas a receber no Athos**
 
 ### Phase Details
 
@@ -131,7 +132,7 @@ Plans:
 **Nota:** título da fase mantém "Contas a Pagar" por conveniência de numeração, mas o escopo real é **Contas a Receber** — termo esclarecido em discuss-phase (ver `41-CONTEXT.md`).
 
 **Depends on:** Módulo `cobranca` (Fases 27-31) já existente
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
@@ -140,15 +141,29 @@ Plans:
 - [x] 41-03-PLAN.md — Wave 2 · Indicadores fiscais: recebido no mês, taxa de inadimplência, aging 30/60/90+ e a vencer 7/15/30 (D-02, D-07, D-09)
 - [x] 41-04-PLAN.md — Wave 3 · Ordenação multi-critério da lista de clientes + destaque de inadimplência antiga (D-01, D-10)
 
-### Phase 42: Impressão automática de orçamento ao confirmar pagamento no caixa
+### Phase 42: E-mail de boleto com destinatários em cópia (CC)
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** No envio de boleto por e-mail, o operador pode adicionar um ou mais e-mails extras como destinatários em cópia (CC), além do e-mail do cliente. (Escopo detalhado a definir no discuss-phase.)
+**Requirements**: CC-01, CC-02, CC-03, CC-04, CC-05 (IDs locais da fase — definidos em 42-01-PLAN.md)
 **Depends on:** Phase 41
-**Plans:** 0 plans
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 42 to break down)
+- [ ] 42-01-PLAN.md — Wave 1 · Tracer: CC ponta a ponta (chips no modal -> proxy -> DTO -> normalização -> sendMail cc) + CC no histórico CobrancaEmailEnvio (D-01..D-05, D-07)
+- [ ] 42-02-PLAN.md — Wave 2 · Lista fixa de CC por cliente: tabela CobrancaEmailCcPadrao + GET/PUT + pré-preenchimento + checkbox "Salvar como padrão deste cliente" (D-01, D-02, D-06, D-07)
+
+### Phase 43: Baixa automática de contas a receber no Athos
+
+**Goal:** Quando o pagamento de um boleto EFI é confirmado (webhook ou job de reconciliação da Fase 41), o Sistema dá baixa no título no Athos, reproduzindo o que a tela "Baixar Contas" faz: `conta_recebida`, `livro_registro_io`, `conta_receber.statusconta='REC'`, `boleto.statusBoleto='REC'`, `cliente.aviso1-3=false` e `log`, tudo em uma única transação, idempotente. SQL de referência capturado em `43-REFERENCIA-SQL-ATHOS.md`.
+**Requirements**: BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-09, BX-10, BX-11 (IDs locais da fase — definidos em 43-01-PLAN.md)
+**Depends on:** Phase 42
+**Plans:** 4/4 plans executed
+
+Plans:
+- [x] 43-01-PLAN.md — Wave 1 · Tracer: baixa ponta a ponta (webhook paid -> gancho -> serviço transacional -> SQL de "Baixar Contas") + núcleo (idempotência, validações, multi-título, retroativa com log, simulação somente leitura, constantes por env) + gancho da reconciliação e flag ATHOS_BAIXA_AUTO; tudo com pg falso (D-01, D-03, D-04, D-05, D-07, D-08, D-09)
+- [x] 43-02-PLAN.md — Wave 2 · Encargos e valor pago: checkpoint humano de introspecção somente leitura do Athos + fórmula de juros/multa/atraso validada contra casos reais (TDD) + decisão do valor efetivamente pago (D-02)
+- [x] 43-03-PLAN.md — Wave 3 · Registro durável e retentativa: migration (athosBaixa* + CobrancaBaixaAthosLog), baixa manual protegida com simulação, job de retentativa, guardas de cancelamento (D-01, D-08)
+- [x] 43-04-PLAN.md — Wave 4 · Estorno ("Voltar Contas Recebidas") transacional + endpoint protegido + controles no painel de boletos + roteiro de verificação guiada pelo usuário (D-06, D-07)
 
 ---
 

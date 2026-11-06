@@ -14,6 +14,7 @@ import { NfseNacionalDistribuicaoService } from "../integrations/nfse/nfse-nacio
 import { NfseNacionalService } from "../integrations/nfse/nfse-nacional.service";
 import { NfseService, UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { PrismaService } from "../database/prisma.service";
+import { CobrancaBaixaAthosService, OrigemBaixa } from "./cobranca-baixa-athos.service";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
@@ -43,7 +44,39 @@ export class CobrancaService {
     private readonly danfsePdfService: DanfsePdfService,
     private readonly danfseNacionalPdfService: DanfseNacionalPdfService,
     private readonly nfseNacionalDistribuicaoService: NfseNacionalDistribuicaoService,
+    private readonly baixaAthos: CobrancaBaixaAthosService,
   ) {}
+
+  /**
+   * Gancho da baixa automatica no Athos (Fase 43). Chamado SOMENTE na transicao para "pago".
+   * Defesa em profundidade: o orquestrador ja nao lanca, mas aqui nada pode escapar para
+   * o webhook (que responde 200 sempre) nem para o job de reconciliacao.
+   */
+  private async dispararBaixaAthos(
+    cobrancaBoletoId: number,
+    origem: OrigemBaixa,
+    payloadEfi?: unknown,
+  ): Promise<void> {
+    try {
+      await this.baixaAthos.executarAposPagamento(cobrancaBoletoId, { origem, payloadEfi });
+    } catch (err) {
+      this.logger.error(
+        `Baixa Athos: excecao inesperada no gancho cobrancaId=${cobrancaBoletoId} origem=${origem}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Fase 43 (T-43-20): boleto ja baixado no Athos nao pode ser cancelado nem removido; a ligacao
+   * com a baixa (rastreabilidade para o estorno) precisa ser preservada.
+   */
+  private garantirNaoBaixadoNoAthos(cobranca: { id: number; athosBaixaStatus?: string | null }, acao: "cancelar" | "remover"): void {
+    if (cobranca.athosBaixaStatus === "baixado") {
+      throw new BadRequestException(
+        `Cobrança ${cobranca.id} já foi baixada no Athos: estorne a baixa no Athos antes de ${acao} o boleto.`,
+      );
+    }
+  }
 
   async criarBoleto(dto: CriarBoletoDto): Promise<CriarBoletoResponseDto> {
     // Passo 1: Buscar todos os títulos do cliente e filtrar pelos IDs solicitados
@@ -614,6 +647,22 @@ export class CobrancaService {
         data: { status: "pago" },
       });
       this.logger.log(`Webhook EFI: boleto ${boleto.id} (chargeId=${chargeId}) marcado como pago.`);
+
+      // D-03: busca a cobranca para obter a data real do pagamento (campo do payload EFI).
+      // Falha aqui so deixa a data indefinida (a baixa usa hoje em America/Sao_Paulo).
+      let payloadCobranca: unknown;
+      try {
+        const cobrancaResp = await cobrancaClient.get(`/v1/charge/${chargeId}`, {
+          headers: { Authorization: `Bearer ${efiToken}` },
+        });
+        const dadosCobranca = cobrancaResp?.data?.data;
+        payloadCobranca = Array.isArray(dadosCobranca) ? dadosCobranca[0] : dadosCobranca;
+      } catch (e: unknown) {
+        this.logger.warn(
+          `Webhook EFI: nao foi possivel consultar a cobranca chargeId=${chargeId} para obter a data do pagamento: ${(e as { message?: string })?.message ?? String(e)}`,
+        );
+      }
+      await this.dispararBaixaAthos(boleto.id, "webhook", payloadCobranca);
     } else {
       this.logger.log(
         `Webhook EFI: notificação recebida com status='${status}' para chargeId=${chargeId} — sem ação.`,
@@ -630,6 +679,7 @@ export class CobrancaService {
     ultimoEmail: {
       status: string;
       destinatario: string;
+      cc: string[];
       enviadoEm: Date;
       abertoEm: Date | null;
       confirmadoEm: Date | null;
@@ -653,7 +703,7 @@ export class CobrancaService {
             emailEnvios: {
               orderBy: { enviadoEm: "desc" },
               take: 1,
-              select: { status: true, destinatario: true, enviadoEm: true, abertoEm: true, confirmadoEm: true },
+              select: { status: true, destinatario: true, cc: true, enviadoEm: true, abertoEm: true, confirmadoEm: true },
             },
           },
         },
@@ -671,6 +721,7 @@ export class CobrancaService {
           ? {
               status: ultimo.status,
               destinatario: ultimo.destinatario,
+              cc: ultimo.cc,
               enviadoEm: ultimo.enviadoEm,
               abertoEm: ultimo.abertoEm,
               confirmadoEm: ultimo.confirmadoEm,
@@ -707,6 +758,7 @@ export class CobrancaService {
       include: { titulos: true },
     });
     if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
+    this.garantirNaoBaixadoNoAthos(cobranca, "cancelar");
     if (cobranca.status === "cancelado") return { ok: true, mensagem: "Boleto já estava cancelado." };
 
     // Cancelar na EFI via PUT /v1/charge/:chargeId/cancel
@@ -768,6 +820,14 @@ export class CobrancaService {
 
       if (novoStatus !== cobranca.status) {
         await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: novoStatus } });
+        if (novoStatus === "pago") {
+          const dadosCobranca = resp.data?.data;
+          await this.dispararBaixaAthos(
+            cobrancaId,
+            "reconciliacao",
+            Array.isArray(dadosCobranca) ? dadosCobranca[0] : dadosCobranca,
+          );
+        }
         return { status: novoStatus, atualizado: true };
       }
       return { status: novoStatus, atualizado: false };
@@ -781,6 +841,7 @@ export class CobrancaService {
   async removerBoletoBanco(cobrancaId: number): Promise<{ ok: boolean }> {
     const cobranca = await this.prisma.cobrancaBoleto.findUnique({ where: { id: cobrancaId } });
     if (!cobranca) throw new BadRequestException(`Cobrança ${cobrancaId} não encontrada.`);
+    this.garantirNaoBaixadoNoAthos(cobranca, "remover");
     await this.prisma.cobrancaBoletoTitulo.deleteMany({ where: { cobrancaBoletoId: cobrancaId } });
     await this.prisma.cobrancaBoleto.delete({ where: { id: cobrancaId } });
     this.logger.log(`CobrancaBoleto ${cobrancaId} removido do banco (cleanup).`);
@@ -819,6 +880,9 @@ export class CobrancaService {
     criadoEm: Date;
     titulos: number[];
     nfseStatus: NfseStatusBoleto;
+    athosBaixaStatus: string | null;
+    athosBaixaErroCodigo: string | null;
+    athosBaixaErroMensagem: string | null;
   }>> {
     const boletos = await this.prisma.cobrancaBoleto.findMany({
       where: { status: { not: "cancelado" } },
@@ -868,6 +932,9 @@ export class CobrancaService {
         criadoEm: b.criadoEm,
         titulos: idsTitulos,
         nfseStatus,
+        athosBaixaStatus: b.athosBaixaStatus ?? null,
+        athosBaixaErroCodigo: b.athosBaixaErroCodigo ?? null,
+        athosBaixaErroMensagem: b.athosBaixaErroMensagem ?? null,
       };
     });
 

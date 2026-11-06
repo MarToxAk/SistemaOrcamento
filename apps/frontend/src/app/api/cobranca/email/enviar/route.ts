@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Body inválido ou ausente." }, { status: 400 });
   }
-  const { idclienteAthos, cobrancaBoletoId, nfseEmitidaIds, destinatario } = body as Record<
+  const { idclienteAthos, cobrancaBoletoId, nfseEmitidaIds, destinatario, cc } = body as Record<
     string,
     unknown
   >;
@@ -24,6 +24,14 @@ export async function POST(req: NextRequest) {
     payload.nfseEmitidaIds = nfseEmitidaIds;
   }
   if (typeof destinatario === "string" && destinatario.trim()) payload.destinatario = destinatario.trim();
+  if (Array.isArray(cc)) {
+    const lista = cc
+      .filter((e): e is string => typeof e === "string")
+      .map((e) => e.trim())
+      .filter(Boolean);
+    // So repassa quando ha CC: backend antigo (forbidNonWhitelisted) continua aceitando envio sem CC.
+    if (lista.length > 0) payload.cc = lista;
+  }
   try {
     const res = await backendFetch("/cobranca/email/enviar", {
       method: "POST",

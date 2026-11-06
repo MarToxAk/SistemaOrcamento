@@ -2,26 +2,26 @@
 gsd_state_version: "1.0"
 milestone: v2.5
 milestone_name: API de Produtos Compostos (Kits) no Athos
-current_phase: 41
-current_phase_name: "Contas a Pagar: Layout, Painéis Fiscais e Fix EFI"
-status: executing
-stopped_at: Completed quick task 260913-ivr - validacao Athos (COO>=R$50) + WhatsApp best-effort no microsite promo/ (human-check de producao pendente)
-last_updated: "2026-09-13T16:19:32.170Z"
-last_activity: 2026-09-06
-last_activity_desc: Completed quick task 260906-i7c - corrigir emissao de NFS-e de servico no orcamento (diagnostico do pre-preenchimento + endereco editavel + busca de cliente Athos)
-state_head: 2dbacc78d333b9bfed41fa022a06d8b970423f91
+current_phase: 42 — Impressão automática de orçamento ao confirmar pagamento no caixa
+current_phase_name: Impressão automática de orçamento ao confirmar pagamento no caixa
+status: planning
+stopped_at: Completed 43-04-PLAN.md
+last_updated: "2026-11-06T15:37:13.525Z"
+last_activity: 2026-11-05
+last_activity_desc: Phase 41 complete, transitioned to Phase 42
+state_head: 5df47bd4bf4640d2eeb1bd26014e113cf36bab44
 progress:
-  total_phases: 3
-  completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
-  percent: 33
+  total_phases: 5
+  completed_phases: 3
+  total_plans: 13
+  completed_plans: 13
+  percent: 60
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-09-04 — Fase 40 verificada retroativamente (código já implementado em commit 5d5270d); milestone v2.5 completo
-Current phase: 41
+Current phase: 42 — Impressão automática de orçamento ao confirmar pagamento no caixa
 Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
@@ -29,11 +29,11 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 ## Current Position
 
 Phase: 41 (Contas a Pagar: Layout, Painéis Fiscais e Fix EFI) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 41
-Last activity: 2026-09-06 - Completed quick task 260906-iz0: Corrigir 404 real na emissao de NFS-e no orcamento (NfseService so buscava quote por UUID, nao por internalNumber/externalQuoteId)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-05 — Phase 41 complete, transitioned to Phase 42
 
-Progress: [███░░░░░░░] 33% (2/2 phases complete)
+Progress: [██████░░░░] 60% (2/2 phases complete)
 
 ## Project Status
 
@@ -306,11 +306,15 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase quick-260913-hhi P01 | 11min | 4 tasks | 35 files |
+| Phase 43 P01 | 35min | 3 tasks | 13 files |
+| Phase 43 P02 | 40min | 3 tasks | 11 files |
+| Phase 43 P03 | ~40min | 3 tasks | 13 files |
+| Phase 43 P04 | ~40min | 3 tasks | 11 files |
 
 ## Session
 
-**Last session:** 2026-09-13T16:19:31.542Z
-**Stopped at:** Completed quick task 260913-ivr - validacao Athos (COO>=R$50) + WhatsApp best-effort no microsite promo/ (human-check de producao pendente)
+**Last session:** 2026-11-06T15:37:13.352Z
+**Stopped at:** Completed 43-04-PLAN.md
 **Resume file:** None
 
 ## Decisions
@@ -334,3 +338,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase ?]: [Phase 999.1]: preview por templateId no backend (Rule 2) — galeria nao tinha como pre-visualizar template salvo sem o source
 - [Phase 41]: 260913-hhi: promo/ fica fora dos workspaces npm da raiz (apps/*, packages/*) para nao alterar package-lock.json nem quebrar npm ci dos Dockerfiles existentes (D-01)
 - [Phase 41]: 260913-hhi: git.allow_default_branch_commits:true adicionado em .planning/config.json — projeto usa branching_strategy:none com historico de commits diretos em main; guard #2924/#3819 bloquearia todo commit sem o override
+- [Phase 43]: 43-01: titulo em atraso e rejeitado com ATRASO_REQUER_ENCARGOS ate 43-02 calcular encargos; falha da baixa nunca desfaz o pago
+- [Phase 43]: 43-02: formula de juros (taxa diaria 3 casas, meio para cima) reproduz so 2 casos; multa por ATHOS_BAIXA_MULTA_PERCENTUAL; validacao real pendente
+- [Phase 43]: 43-03: data/valor da EFI persistidos antes do Athos e reutilizados nas retentativas; flag ATHOS_BAIXA_AUTO=false deixa o boleto pendente; mensagem de erro persistida so de BaixaAthosError (300 chars)
+- [Phase 43]: 43-04: estorno apaga somente pares (idcontareceber, idcontarecebida) da trilha de baixa; cartao preferencial por regex com fronteira numerica
