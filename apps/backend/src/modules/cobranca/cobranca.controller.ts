@@ -3,10 +3,13 @@ import { FileInterceptor } from "@nestjs/platform-express";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
 
+import { AdminOnly } from "../security/admin.decorator";
 import { Public } from "../security/public.decorator";
 import { UploadedXmlFile } from "../integrations/nfse/nfse.service";
+import { CobrancaBaixaAthosService } from "./cobranca-baixa-athos.service";
 import { CobrancaService } from "./cobranca.service";
 import { EmailEnvioService } from "./email-envio.service";
+import { BaixarAthosDto } from "./dto/baixar-athos.dto";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
@@ -23,6 +26,7 @@ export class CobrancaController {
   constructor(
     private readonly cobrancaService: CobrancaService,
     private readonly emailEnvioService: EmailEnvioService,
+    private readonly baixaAthosService: CobrancaBaixaAthosService,
   ) {}
 
   /**
@@ -205,6 +209,23 @@ export class CobrancaController {
   @Post("boleto/:id/verificar-pagamento")
   async verificarPagamento(@Param("id", ParseIntPipe) id: number) {
     return this.cobrancaService.verificarPagamentoBoleto(id);
+  }
+
+  /**
+   * Baixa manual (ou simulada) do boleto pago no Athos - Fase 43 (BX-08). Exige x-admin-api-key (AdminOnly)
+   * alem da chave interna do guard global. Funciona mesmo com ATHOS_BAIXA_AUTO=false e ignora o limite de
+   * tentativas automaticas. Declarada antes de DELETE boleto/:id; sem colisao com boleto/dashboard|preview.
+   */
+  @AdminOnly()
+  @Post("boleto/:id/baixar-athos")
+  async baixarAthos(@Param("id", ParseIntPipe) id: number, @Body() dto: BaixarAthosDto) {
+    return this.baixaAthosService.baixarManual(id, dto);
+  }
+
+  /** Status persistido da baixa no Athos e historico das ultimas tentativas. AUTHED via guard global. */
+  @Get("boleto/:id/baixa-athos")
+  async statusBaixaAthos(@Param("id", ParseIntPipe) id: number) {
+    return this.baixaAthosService.consultarStatus(id);
   }
 
   /** Remove boleto do banco (cleanup — libera títulos) */
