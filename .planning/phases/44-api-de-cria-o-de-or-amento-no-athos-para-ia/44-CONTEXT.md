@@ -67,6 +67,25 @@ achados de introspecção no clone). Backend-only (sem UI).
   idempotencyKey único, idorcamento, payload hash, criadoEm) — mesma chave devolve o orçamento existente.
 - Log de auditoria: registrar no nosso banco cada orçamento criado pela IA (mesma tabela).
 
+### D-04 Decisões pós-pesquisa (usuário, 2026-11-09) — PREVALECEM sobre D-01/D-02 onde conflitarem
+- **Desconto deve funcionar** (por item em R$ — `descontoRS` — e global `descontoTotalRS`). Como ~99% dos
+  produtos têm `descontomaximo` NULL/0/0,01, `descontomaximo` NÃO bloqueia desconto (só informativo na busca).
+  Limites: desconto da linha ≤ total da linha; desconto global ≤ Σ líquido; desconto total (%) ≤
+  `conf_vendas.permitedescontode` (hoje 100). `valorUnitario` abaixo do preço é tratado como desconto
+  (mesmo limite), não como erro de preço mínimo. Erro `DESCONTO_ACIMA_LIMITE`.
+- **Pagamento: sempre PIX** para orçamentos da IA. A IA NÃO escolhe forma de pagamento: sempre uma linha
+  em `orcamento_forma_pagamento` com `idformapagamento = ATHOS_ORCAMENTO_ID_FORMA_PAGAMENTO` (default 5 = PIX
+  nesta instalação), `idcondicaopagamento = 0`, valor = valorrecebido = líquido. Remover `idformapagamento`
+  do payload; o endpoint `GET formas-pagamento` sai do escopo (deferred).
+- `idcliente` continua opcional (PIX não exige cliente).
+- Arredondamento conforme RESEARCH: cada linha arredondada a centavos (half-up), `valor` = Σ linhas
+  arredondadas; invariantes `descontors = Σ orcamentodesconto`, `desconto = round(descontors/valor*100,3)`,
+  `valor − descontors = Σ orcamentovalorfinalitem` = pagamento. Aritmética em inteiros.
+- Produto sem preço (NULL/0) → `PRECO_INDISPONIVEL`. Estoque não bloqueia (só informado).
+- Autor (funcionário/vendedor/terminal): via env obrigatórias e validadas; usuário ainda não escolheu os
+  ids de produção — testes no clone usam 1/1/1; roteiro de verificação manual pede ao usuário definir.
+- Incluir roteiro de verificação manual em produção (estilo Fase 43): aparece no Balcão, GRANTs, PG 9.0.5.
+
 ### Claude's Discretion
 - Organização dos arquivos (service/controller/dto/util), nomes exatos de códigos de erro, formato da
   resposta (desde que inclua idorcamento, senhabalcao, totais e itens).
@@ -105,6 +124,7 @@ achados de introspecção no clone). Backend-only (sem UI).
 <deferred>
 ## Deferred Ideas
 
+- Escolha de forma de pagamento pela IA / endpoint de formas de pagamento (v1 = sempre PIX).
 - Converter orçamento em venda, editar, cancelar, reimprimir.
 - Endereço de entrega, transportadora, validade.
 - Comissão do vendedor (`valorcomissao`).
