@@ -39,6 +39,30 @@ export class ItemOrcamentoDto {
   @Min(0.001)
   @Max(10000)
   quantidade!: number;
+
+  @ApiPropertyOptional({
+    example: 9,
+    description:
+      "Preco unitario negociado (ate 3 casas). Abaixo do preco do Athos vira desconto da linha; acima substitui o preco. " +
+      "Omitido = preco de venda do Athos.",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
+  @Max(999999.999)
+  valorUnitario?: number;
+
+  @ApiPropertyOptional({
+    example: 5,
+    description: "Desconto em R$ da LINHA inteira (nao por unidade), ate 2 casas. Nao pode exceder o total da linha.",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999999.99)
+  descontoRS?: number;
 }
 
 export class CreateAthosOrcamentoDto {
@@ -73,6 +97,19 @@ export class CreateAthosOrcamentoDto {
   @Min(1)
   @Max(2147483647)
   idcliente?: number;
+
+  @ApiPropertyOptional({
+    example: 2.98,
+    description:
+      "Desconto global em R$ (ate 2 casas), rateado entre as linhas proporcionalmente ao valor liquido. " +
+      "Nao pode exceder a soma dos liquidos nem o limite percentual de conf_vendas.permitedescontode do Athos.",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999999.99)
+  descontoTotalRS?: number;
 
   @ApiPropertyOptional({
     example: false,
