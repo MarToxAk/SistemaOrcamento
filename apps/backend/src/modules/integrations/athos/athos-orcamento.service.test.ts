@@ -1,4 +1,8 @@
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
+
 import { AthosOrcamentoService, CriarOrcamentoInput, OrcamentoAthosError } from "./athos-orcamento.service";
+import { CreateAthosOrcamentoDto } from "./dto/create-athos-orcamento.dto";
 
 // Seguranca (Fase 44): NUNCA conecta ao Athos real. pg e mockado por completo e o host de teste e localhost.
 jest.mock("pg", () => {
@@ -490,5 +494,196 @@ describe("AthosOrcamentoService.criarOrcamento - criacao", () => {
         expect({ sql, re: String(re), casou: re.test(sql) }).toMatchObject({ casou: false });
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Descontos (D-02, D-04). Valores esperados sao literais em texto, nunca recalculados com float.
+// ---------------------------------------------------------------------------
+
+describe("AthosOrcamentoService.criarOrcamento - descontos", () => {
+  const ORC_25378: CriarOrcamentoInput = {
+    itens: [
+      { idproduto: 201, quantidade: 1 },
+      { idproduto: 202, quantidade: 1 },
+    ],
+    descontoTotalRS: 2.98,
+  };
+  const PRODUTOS_25378 = [produto(201, { preco: "6.500" }), produto(202, { preco: "2.000" })];
+
+  it("D1: desconto global do orcamento 25378 e rateado entre as linhas", async () => {
+    prepararPg({ produtos: PRODUTOS_25378 });
+    const r = await service.criarOrcamento(ORC_25378);
+
+    const orc = params("INS_ORC");
+    expect(orc[0]).toBe("2.98"); // descontors
+    expect(orc[5]).toBe("8.50"); // valor
+    expect(orc[6]).toBe("35.059"); // desconto
+
+    expect(params("INS_ITEM", 0)[6]).toBe("2.28");
+    expect(params("INS_ITEM", 1)[6]).toBe("0.70");
+    expect(params("INS_ITEM", 0)[7]).toBe("4.22");
+    expect(params("INS_ITEM", 1)[7]).toBe("1.30");
+    expect(params("INS_PAG")).toEqual([25866, 5, "5.52", "5.52"]);
+
+    expect(r.valorBruto).toBe("8.50");
+    expect(r.descontoRS).toBe("2.98");
+    expect(r.valorLiquido).toBe("5.52");
+    expect(r.descontoPercentual).toBe("35.059");
+    expect(r.itens.map((i) => i.desconto)).toEqual(["2.28", "0.70"]);
+    expect(r.itens.map((i) => i.valorFinal)).toEqual(["4.22", "1.30"]);
+  });
+
+  it("D2: descontoRS por item e o desconto da linha inteira", async () => {
+    prepararPg({ produtos: [produto(201, { preco: "8.390" })] });
+    await service.criarOrcamento({ itens: [{ idproduto: 201, quantidade: 6, descontoRS: 0.01 }] });
+
+    const item = params("INS_ITEM");
+    expect(item[4]).toBe("8.390");
+    expect(item[6]).toBe("0.01");
+    expect(item[7]).toBe("50.33");
+    const orc = params("INS_ORC");
+    expect(orc[5]).toBe("50.34");
+    expect(orc[0]).toBe("0.01");
+  });
+
+  it("D3: valorUnitario abaixo do preco vira desconto; acima substitui o preco", async () => {
+    prepararPg({ produtos: [produto(201, { preco: "10.000" })] });
+    await service.criarOrcamento({ itens: [{ idproduto: 201, quantidade: 3, valorUnitario: 9 }] });
+    let item = params("INS_ITEM");
+    expect(item[4]).toBe("10.000");
+    expect(item[6]).toBe("3.00");
+    expect(item[7]).toBe("27.00");
+
+    prepararPg({ produtos: [produto(201, { preco: "10.000" })] });
+    await service.criarOrcamento({ itens: [{ idproduto: 201, quantidade: 3, valorUnitario: 12 }] });
+    item = params("INS_ITEM");
+    expect(item[4]).toBe("12.000");
+    expect(item[6]).toBe("0.00");
+    expect(item[7]).toBe("36.00");
+  });
+
+  describe("D4: limites de desconto", () => {
+    it("descontoRS maior que o total da linha -> DESCONTO_ACIMA_LIMITE com sequenciaitem", async () => {
+      prepararPg({ produtos: [produto(201, { preco: "5.000" })] });
+      const e = await falha(service.criarOrcamento({ itens: [{ idproduto: 201, quantidade: 2, descontoRS: 10.01 }] }));
+      expect(e.codigo).toBe("DESCONTO_ACIMA_LIMITE");
+      expect(e.getStatus()).toBe(422);
+      expect((e.getResponse() as { detalhes: { sequenciaitem: number } }).detalhes.sequenciaitem).toBe(1);
+      expect(tipos()).toContain("ROLLBACK");
+      semEscritaNemCommit();
+    });
+
+    it("descontoTotalRS maior que a soma dos liquidos -> DESCONTO_ACIMA_LIMITE", async () => {
+      prepararPg({ produtos: PRODUTOS_25378 });
+      const e = await falha(service.criarOrcamento({ ...ORC_25378, descontoTotalRS: 8.51 }));
+      expect(e.codigo).toBe("DESCONTO_ACIMA_LIMITE");
+      expect(tipos()).toContain("ROLLBACK");
+      semEscritaNemCommit();
+    });
+
+    it("limite de conf_vendas.permitedescontode: 10,01% recusa e exatamente 10% grava", async () => {
+      const cem = [produto(201, { preco: "100.000" })];
+      const input = (desc: number): CriarOrcamentoInput => ({ itens: [{ idproduto: 201, quantidade: 1 }], descontoTotalRS: desc });
+
+      prepararPg({ produtos: cem, config: { permitedescontode: "10.000" } });
+      const e = await falha(service.criarOrcamento(input(10.01)));
+      expect(e.codigo).toBe("DESCONTO_ACIMA_LIMITE");
+      expect(tipos()).toContain("ROLLBACK");
+      semEscritaNemCommit();
+
+      prepararPg({ produtos: cem, config: { permitedescontode: "10.000" } });
+      const r = await service.criarOrcamento(input(10));
+      expect(r.descontoPercentual).toBe("10.000");
+      expect(tipos()).toContain("COMMIT");
+    });
+
+    it("permitedescontode null equivale a 100%", async () => {
+      prepararPg({ produtos: [produto(201, { preco: "100.000" })], config: { permitedescontode: null } });
+      const r = await service.criarOrcamento({ itens: [{ idproduto: 201, quantidade: 1 }], descontoTotalRS: 99 });
+      expect(r.valorLiquido).toBe("1.00");
+      expect(r.descontoPercentual).toBe("99.000");
+    });
+  });
+
+  it("D5: descontomaximo do produto nao bloqueia (D-04)", async () => {
+    prepararPg({ produtos: [produto(201, { preco: "10.000", descontomaximo: "0.01" })] });
+    const r = await service.criarOrcamento({ itens: [{ idproduto: 201, quantidade: 1, descontoRS: 5 }] });
+    expect(r.valorLiquido).toBe("5.00");
+    expect(tipos()).toContain("COMMIT");
+    expect(textosSql().some((x) => /descontomaximo/i.test(x))).toBe(false);
+  });
+
+  it("D6: quantidade fracionada; o valor do orcamento e a soma das linhas arredondadas", async () => {
+    prepararPg({ produtos: [produto(201, { preco: "41.740" })] });
+    const um = await service.criarOrcamento({ itens: [{ idproduto: 201, quantidade: 1.162 }] });
+    expect(params("INS_ITEM")[3]).toBe("1.162");
+    expect(um.valorBruto).toBe("48.50");
+    expect(params("INS_ORC")[5]).toBe("48.50");
+    expect(params("INS_ITEM")[7]).toBe("48.50");
+
+    prepararPg({ produtos: [produto(201, { preco: "41.740" }), produto(202, { preco: "41.740" }), produto(203, { preco: "41.740" })] });
+    const tres = await service.criarOrcamento({
+      itens: [
+        { idproduto: 201, quantidade: 1.162 },
+        { idproduto: 202, quantidade: 1.35 },
+        { idproduto: 203, quantidade: 2.34 },
+      ],
+    });
+    expect(tres.itens.map((i) => i.valorTotal)).toEqual(["48.50", "56.35", "97.67"]);
+    expect(params("INS_ORC")[5]).toBe("202.52");
+    expect(tres.valorBruto).toBe("202.52");
+  });
+
+  it("D7: simulacao com descontos devolve os mesmos totais e itens de D1, sem INSERT", async () => {
+    prepararPg({ produtos: PRODUTOS_25378 });
+    const criado = await service.criarOrcamento(ORC_25378);
+
+    prepararPg({ produtos: PRODUTOS_25378 });
+    const sim = await service.criarOrcamento({ ...ORC_25378, simular: true });
+    expect(sim.simulado).toBe(true);
+    expect(sim.idorcamento).toBeNull();
+    expect(sim.valorBruto).toBe(criado.valorBruto);
+    expect(sim.descontoRS).toBe(criado.descontoRS);
+    expect(sim.valorLiquido).toBe("5.52");
+    expect(sim.descontoPercentual).toBe("35.059");
+    expect(sim.itens).toEqual(criado.itens);
+    expect(textosSql().filter(ehEscrita)).toEqual([]);
+    expect(tipos()).toEqual(["BEGIN", "SET_RO", "SET_TIMEOUT", "LER_CONFIG", "LER_PRODUTOS", "ROLLBACK"]);
+  });
+
+  describe("D8: contrato do DTO", () => {
+    const opcoes = { whitelist: true, forbidNonWhitelisted: true };
+    const base = { itens: [{ idproduto: 1, quantidade: 1 }] };
+
+    it("aceita os campos de desconto, cliente e simulacao validos", async () => {
+      const dto = plainToInstance(CreateAthosOrcamentoDto, {
+        itens: [{ idproduto: 1, quantidade: 1, valorUnitario: 9.995, descontoRS: 0.5 }],
+        descontoTotalRS: 2.98,
+        idcliente: 77,
+        simular: true,
+      });
+      expect(await validate(dto, opcoes)).toEqual([]);
+    });
+
+    it("recusa valorUnitario com 4 casas", async () => {
+      const dto = plainToInstance(CreateAthosOrcamentoDto, { itens: [{ idproduto: 1, quantidade: 1, valorUnitario: 1.2345 }] });
+      expect((await validate(dto, opcoes)).length).toBeGreaterThan(0);
+    });
+
+    it("recusa descontoRS com 3 casas", async () => {
+      const dto = plainToInstance(CreateAthosOrcamentoDto, { itens: [{ idproduto: 1, quantidade: 1, descontoRS: 1.005 }] });
+      expect((await validate(dto, opcoes)).length).toBeGreaterThan(0);
+    });
+
+    it("recusa descontoTotalRS com 3 casas ou negativo", async () => {
+      expect((await validate(plainToInstance(CreateAthosOrcamentoDto, { ...base, descontoTotalRS: 1.005 }), opcoes)).length).toBeGreaterThan(0);
+      expect((await validate(plainToInstance(CreateAthosOrcamentoDto, { ...base, descontoTotalRS: -1 }), opcoes)).length).toBeGreaterThan(0);
+    });
+
+    it("recusa idformapagamento no corpo (D-04: a IA nao escolhe forma de pagamento)", async () => {
+      const dto = plainToInstance(CreateAthosOrcamentoDto, { ...base, idformapagamento: 5 });
+      expect((await validate(dto, opcoes)).length).toBeGreaterThan(0);
+    });
   });
 });
