@@ -37,6 +37,8 @@ describe("AthosOrcamentoController (HTTP)", () => {
   let envAnterior: string | undefined;
   const criarOrcamento = jest.fn();
   const executar = jest.fn();
+  const buscarProdutos = jest.fn();
+  const buscarOrcamento = jest.fn();
 
   async function postar(corpo: unknown, headers: Record<string, string> = {}, chaveInterna: string | null = CHAVE_INTERNA) {
     const h: Record<string, string> = { "content-type": "application/json", ...headers };
@@ -54,7 +56,7 @@ describe("AthosOrcamentoController (HTTP)", () => {
     const modulo = await Test.createTestingModule({
       controllers: [AthosOrcamentoController],
       providers: [
-        { provide: AthosOrcamentoService, useValue: { criarOrcamento } },
+        { provide: AthosOrcamentoService, useValue: { criarOrcamento, buscarProdutos, buscarOrcamento } },
         { provide: AthosOrcamentoIdempotenciaService, useValue: { executar } },
         { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
         { provide: APP_GUARD, useClass: InternalAuthGuard },
@@ -76,6 +78,8 @@ describe("AthosOrcamentoController (HTTP)", () => {
   beforeEach(() => {
     criarOrcamento.mockReset().mockResolvedValue(resultado());
     executar.mockReset().mockImplementation((_chave, _dto, criar) => criar({ ref: "r1" }));
+    buscarProdutos.mockReset();
+    buscarOrcamento.mockReset();
   });
 
   it("C1 sem x-internal-api-key -> 401 e nenhum servico chamado", async () => {
@@ -135,6 +139,61 @@ describe("AthosOrcamentoController (HTTP)", () => {
     expect(json.codigo).toBe("PRODUTO_INEXISTENTE");
     expect(json.mensagem).toBe("Produto 9 nao existe");
     expect(json.detalhes.idsInexistentes).toEqual([9]);
+  });
+
+  describe("leituras (44-04)", () => {
+    async function ler(caminho: string, chaveInterna: string | null = CHAVE_INTERNA) {
+      const h: Record<string, string> = {};
+      if (chaveInterna) h["x-internal-api-key"] = chaveInterna;
+      const res = await fetch(`${base}/api/athos/orcamentos${caminho}`, { headers: h });
+      const json = (await res.json()) as Record<string, any>;
+      return { status: res.status, json };
+    }
+
+    it("C9 rota estatica produtos antes de :id; limit 60, q ausente e query desconhecida -> 400", async () => {
+      buscarProdutos.mockResolvedValue([{ idproduto: 1 }]);
+      const ok = await ler("/produtos?q=caneta");
+      expect(ok.status).toBe(200);
+      expect(ok.json).toEqual([{ idproduto: 1 }]);
+      expect(buscarProdutos).toHaveBeenCalledWith("caneta", undefined);
+      expect(buscarOrcamento).not.toHaveBeenCalled();
+
+      buscarProdutos.mockClear();
+      const comLimite = await ler("/produtos?q=caneta&limit=20");
+      expect(comLimite.status).toBe(200);
+      expect(buscarProdutos).toHaveBeenCalledWith("caneta", 20);
+
+      buscarProdutos.mockClear();
+      expect((await ler("/produtos?q=caneta&limit=60")).status).toBe(400);
+      expect((await ler("/produtos?q=caneta&limit=0")).status).toBe(400);
+      expect((await ler("/produtos")).status).toBe(400);
+      expect((await ler("/produtos?q=a&x=1")).status).toBe(400);
+      expect(buscarProdutos).not.toHaveBeenCalled();
+    });
+
+    it("C10 :id numerico chama buscarOrcamento; texto -> 400; inexistente -> 404 com codigo", async () => {
+      buscarOrcamento.mockResolvedValue({ idorcamento: 123 });
+      const ok = await ler("/123");
+      expect(ok.status).toBe(200);
+      expect(ok.json).toEqual({ idorcamento: 123 });
+      expect(buscarOrcamento).toHaveBeenCalledWith(123);
+
+      buscarOrcamento.mockClear();
+      expect((await ler("/abc")).status).toBe(400);
+      expect(buscarOrcamento).not.toHaveBeenCalled();
+
+      buscarOrcamento.mockRejectedValue(new OrcamentoAthosError("ORCAMENTO_INEXISTENTE", "Orcamento 9 nao existe", 404));
+      const nf = await ler("/9");
+      expect(nf.status).toBe(404);
+      expect(nf.json.codigo).toBe("ORCAMENTO_INEXISTENTE");
+    });
+
+    it("C11 guard: GETs sem x-internal-api-key -> 401", async () => {
+      expect((await ler("/produtos?q=caneta", null)).status).toBe(401);
+      expect((await ler("/123", null)).status).toBe(401);
+      expect(buscarProdutos).not.toHaveBeenCalled();
+      expect(buscarOrcamento).not.toHaveBeenCalled();
+    });
   });
 
   it("C8 conflito de chave -> 409 com codigo", async () => {
