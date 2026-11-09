@@ -111,6 +111,61 @@ export interface CriarOrcamentoResultado {
   pagamento: { idformapagamento: number; idcondicaopagamento: number; valor: string };
 }
 
+/** Produto devolvido pela busca da IA (44-04, D-01). Sem campos de custo. numeric como texto. */
+export interface ProdutoOrcamentoResultado {
+  idproduto: number;
+  descricao: string;
+  marca: string | null;
+  referencia: string | null;
+  codigoBarra: string | null;
+  /** Texto de precovendaproduto ("68.000"); null quando o Athos nao tem preco. */
+  preco: string | null;
+  emPromocao: boolean;
+  estoqueLoja: string;
+  estoqueDeposito: string;
+  permiteFracionar: boolean;
+  /** Informativo (D-04): o limite aplicado na criacao e o global de conf_vendas. */
+  descontoMaximo: string;
+  unidade: string | null;
+}
+
+/** Orcamento lido do Athos (44-04). statusorcamento NULL = aberto, true = convertido, false = outro. */
+export interface OrcamentoAthosDetalhe {
+  idorcamento: number;
+  senhabalcao: number;
+  data: string;
+  hora: string;
+  status: "aberto" | "convertido" | "outro";
+  cancelado: boolean | null;
+  statusimpressao: boolean | null;
+  idcliente: number | null;
+  idvendedor: number | null;
+  idfuncionariousuario: number | null;
+  idterminal: number | null;
+  obs: string | null;
+  valorBruto: string;
+  descontoRS: string;
+  descontoPercentual: string;
+  /** valor - descontors em milesimos (inteiros, nunca ponto flutuante). */
+  valorLiquido: string;
+  itens: Array<{
+    sequenciaitem: number;
+    idproduto: number;
+    descricao: string;
+    quantidade: string;
+    valorUnitario: string;
+    desconto: string;
+    valorFinal: string;
+  }>;
+  pagamentos: Array<{
+    idformapagamento: number;
+    descricao: string | null;
+    valor: string;
+    valorRecebido: string;
+    idcondicaopagamento: number | null;
+  }>;
+}
+
 // ---------------------------------------------------------------------------
 // Constantes
 // ---------------------------------------------------------------------------
@@ -157,9 +212,53 @@ const SQL_LIMPAR_PAGAMENTO = "DELETE FROM orcamento_forma_pagamento WHERE idorca
 const SQL_INSERIR_PAGAMENTO = `INSERT INTO orcamento_forma_pagamento (idorcamento, idformapagamento, valor, valorrecebido, idcondicaopagamento)
 VALUES ($1, $2, $3, $4, 0)`;
 
+// Leituras (44-04). Todo texto do usuario entra como parametro; nenhuma clausula de escape literal
+// (no PG 9.0 standard_conforming_strings vem desligado: o escape padrao do LIKE e a barra invertida,
+// aplicada ao VALOR do parametro).
+const SQL_BUSCA_PRODUTOS_SELECT = `SELECT p.idproduto, p.descricaoproduto, pm.nome AS marca, p.referencia, p.codigobarra1,
+       precovendaproduto(p.idproduto) AS preco, estanapromocao(p.idproduto) AS empromocao,
+       COALESCE(p.estoqueloja, 0) AS estoqueloja, COALESCE(p.estoquedeposito, 0) AS estoquedeposito,
+       COALESCE(p.permitefracionar, true) AS permitefracionar, COALESCE(p.descontomaximo, 0) AS descontomaximo,
+       pu.sigla AS unidade
+  FROM produto p
+  LEFT JOIN produto_marca pm ON pm.idmarca = p.idmarca
+  LEFT JOIN produto_unidade pu ON pu.idunidade = p.idunidade
+ WHERE p.statusproduto = true AND COALESCE(p.vendeproduto, true) = true`;
+
+const SQL_LER_ORCAMENTO = `SELECT idorcamento, senhabalcao, idcliente, idvendedor, idfuncionariousuario, idterminal,
+       to_char(dataorcamento, 'YYYY-MM-DD') AS data, to_char(hora, 'HH24:MI:SS') AS hora,
+       valor, desconto, descontors, statusorcamento, statusimpressao, cancelado, obs
+  FROM orcamento WHERE idorcamento = $1`;
+
+const SQL_LER_ITENS = `SELECT i.sequenciaitem, i.idproduto, p.descricaoproduto, i.quantidadeitem, i.valoritem,
+       i.orcamentodesconto, i.orcamentovalorfinalitem
+  FROM orcamento_item i JOIN produto p ON p.idproduto = i.idproduto
+ WHERE i.idorcamento = $1 ORDER BY i.sequenciaitem`;
+
+const SQL_LER_PAGAMENTOS = `SELECT ofp.idformapagamento, f.descricao, ofp.valor, ofp.valorrecebido, ofp.idcondicaopagamento
+  FROM orcamento_forma_pagamento ofp LEFT JOIN forma_pagamento f ON f.idformapagamento = ofp.idformapagamento
+ WHERE ofp.idorcamento = $1 ORDER BY ofp.idformapagamentoorcamento`;
+
+const BUSCA_LIMITE_PADRAO = 20;
+const BUSCA_LIMITE_MAX = 50;
+const BUSCA_MAX_TOKENS = 5;
+
 // ---------------------------------------------------------------------------
 // Helpers puros
 // ---------------------------------------------------------------------------
+
+/** Escapa \, % e _ no VALOR do parametro (o escape padrao do LIKE/ILIKE e a barra invertida). */
+function escaparLike(token: string): string {
+  return token.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+function textoOuNull(valor: unknown): string | null {
+  return valor === null || valor === undefined ? null : String(valor);
+}
+
+function textoNumerico(valor: unknown, padrao: string): string {
+  return valor === null || valor === undefined ? padrao : String(valor);
+}
 
 function inteiroPositivoEnv(env: NodeJS.ProcessEnv, nome: string, padrao?: number): number {
   const bruto = env[nome];
@@ -556,6 +655,186 @@ export class AthosOrcamentoService implements OnModuleDestroy {
     } finally {
       client.release();
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Leituras para a IA (44-04). Nao dependem de ATHOS_ORCAMENTO_ESCRITA nem das envs de autor.
+  // -------------------------------------------------------------------------
+
+  private mapearErroLeitura(err: unknown): OrcamentoAthosError {
+    if (err instanceof OrcamentoAthosError) return err;
+    const code = (err as { code?: string })?.code;
+    if (code === "42501") {
+      return new OrcamentoAthosError(
+        "PERMISSAO_NEGADA",
+        "Permissao de leitura ausente no Athos para consultar produtos ou orcamentos. Solicite ao DBA o GRANT SELECT nas tabelas consultadas.",
+        500,
+      );
+    }
+    if (code === "57014") {
+      return new OrcamentoAthosError(
+        "ATHOS_INDISPONIVEL",
+        "O Athos demorou demais para responder (tempo limite). Tente novamente com uma busca mais especifica.",
+        503,
+      );
+    }
+    return new OrcamentoAthosError("ERRO_BANCO", "Erro de banco ao consultar o Athos.", 500);
+  }
+
+  /**
+   * Executa leituras numa transacao READ ONLY com statement_timeout (o proprio banco recusa qualquer escrita)
+   * e encerra com ROLLBACK. Trava de host antes de qualquer conexao.
+   */
+  private async lerSomenteLeitura<T>(leitura: (client: PoolClient) => Promise<T>): Promise<T> {
+    this.assertHostPermitido();
+    const pool = this.getPool();
+    let client: PoolClient;
+    try {
+      client = await pool.connect();
+    } catch (err) {
+      this.logger.error(`Athos leitura: falha ao conectar (${(err as { code?: string })?.code ?? "sem_codigo"}).`);
+      throw new OrcamentoAthosError("ATHOS_INDISPONIVEL", "Nao foi possivel conectar ao Athos.", 503);
+    }
+    try {
+      await client.query("BEGIN");
+      await client.query(SQL_SOMENTE_LEITURA);
+      await client.query(SQL_STATEMENT_TIMEOUT);
+      const resultado = await leitura(client);
+      await client.query("ROLLBACK");
+      return resultado;
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* conexao ja encerrada: nada a desfazer */
+      }
+      const erro = this.mapearErroLeitura(err);
+      if (erro.codigo !== "ORCAMENTO_INEXISTENTE") this.logger.warn(`Athos leitura falhou: codigo=${erro.codigo}`);
+      throw erro;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Busca produtos vendaveis por descricao/referencia/codigo de barras (e idproduto exato se q for numerico). */
+  async buscarProdutos(q: string, limit?: number): Promise<ProdutoOrcamentoResultado[]> {
+    const texto = String(q ?? "").trim();
+    const tokens = texto.split(/\s+/).filter((t) => t.length > 0).slice(0, BUSCA_MAX_TOKENS);
+    if (tokens.length === 0) {
+      throw new OrcamentoAthosError("VALOR_INVALIDO", "Informe o texto de busca (q).", 400);
+    }
+    const lim =
+      typeof limit === "number" && Number.isFinite(limit) && Math.floor(limit) >= 1
+        ? Math.min(Math.floor(limit), BUSCA_LIMITE_MAX)
+        : BUSCA_LIMITE_PADRAO;
+
+    const params: unknown[] = [];
+    const blocos = tokens.map((token) => {
+      params.push(`%${escaparLike(token)}%`);
+      const n = `$${params.length}::text`;
+      return `(p.descricaoproduto ILIKE ${n} OR p.referencia ILIKE ${n} OR p.codigobarra1 ILIKE ${n})`;
+    });
+
+    // idproduto exato: so quando q e inteiro e cabe em int4 (acima disso o pg falharia com "out of range").
+    let compIdProduto = "";
+    if (/^\d+$/.test(texto) && Number(texto) <= MAX_INT4) {
+      params.push(Number(texto));
+      compIdProduto = `p.idproduto = $${params.length}`;
+    }
+    params.push(texto);
+    const exato = `$${params.length}::text`;
+    params.push(lim);
+
+    const sql = `${SQL_BUSCA_PRODUTOS_SELECT}
+   AND ( (${blocos.join("\n         AND ")})${compIdProduto ? `\n         OR ${compIdProduto}` : ""} )
+ ORDER BY CASE WHEN (p.codigobarra1 = ${exato} OR p.referencia = ${exato}${compIdProduto ? ` OR ${compIdProduto}` : ""}) THEN 0 ELSE 1 END,
+          p.descricaoproduto
+ LIMIT $${params.length}`;
+
+    const linhas = await this.lerSomenteLeitura(async (client) => {
+      const r = await client.query<Record<string, unknown>>(sql, params);
+      return r.rows;
+    });
+
+    return linhas.map((l) => ({
+      idproduto: Number(l.idproduto),
+      descricao: String(l.descricaoproduto ?? ""),
+      marca: textoOuNull(l.marca),
+      referencia: textoOuNull(l.referencia),
+      codigoBarra: textoOuNull(l.codigobarra1),
+      preco: textoOuNull(l.preco),
+      emPromocao: l.empromocao === true,
+      estoqueLoja: textoNumerico(l.estoqueloja, "0"),
+      estoqueDeposito: textoNumerico(l.estoquedeposito, "0"),
+      permiteFracionar: l.permitefracionar !== false,
+      descontoMaximo: textoNumerico(l.descontomaximo, "0"),
+      unidade: textoOuNull(l.unidade),
+    }));
+  }
+
+  /** Le cabecalho, itens e pagamentos de um orcamento do Athos. Inexistente = 404 ORCAMENTO_INEXISTENTE. */
+  async buscarOrcamento(idorcamento: number): Promise<OrcamentoAthosDetalhe> {
+    const naoExiste = () =>
+      new OrcamentoAthosError("ORCAMENTO_INEXISTENTE", `Orcamento ${String(idorcamento)} nao existe no Athos.`, 404, {
+        idorcamento,
+      });
+    if (!Number.isSafeInteger(idorcamento) || idorcamento < 1 || idorcamento > MAX_INT4) throw naoExiste();
+
+    const { cab, itens, pags } = await this.lerSomenteLeitura(async (client) => {
+      const c = await client.query<Record<string, unknown>>(SQL_LER_ORCAMENTO, [idorcamento]);
+      if (c.rows.length === 0) throw naoExiste();
+      const i = await client.query<Record<string, unknown>>(SQL_LER_ITENS, [idorcamento]);
+      const p = await client.query<Record<string, unknown>>(SQL_LER_PAGAMENTOS, [idorcamento]);
+      return { cab: c.rows[0], itens: i.rows, pags: p.rows };
+    });
+
+    const valor = textoNumerico(cab.valor, "0.000");
+    const descontoRS = textoNumerico(cab.descontors, "0.000");
+    let valorLiquido: string;
+    try {
+      valorLiquido = milliParaTexto(paraMilli(valor) - paraMilli(descontoRS));
+    } catch {
+      // Valor legado fora do formato (mais de 3 casas/negativo): nao inventar numero.
+      valorLiquido = valor;
+    }
+    const status = cab.statusorcamento === null || cab.statusorcamento === undefined ? "aberto" : cab.statusorcamento === true ? "convertido" : "outro";
+    const idOuNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+    const boolOuNull = (v: unknown): boolean | null => (v === null || v === undefined ? null : v === true);
+
+    return {
+      idorcamento: Number(cab.idorcamento),
+      senhabalcao: Number(cab.senhabalcao),
+      data: String(cab.data ?? ""),
+      hora: String(cab.hora ?? ""),
+      status,
+      cancelado: boolOuNull(cab.cancelado),
+      statusimpressao: boolOuNull(cab.statusimpressao),
+      idcliente: idOuNull(cab.idcliente),
+      idvendedor: idOuNull(cab.idvendedor),
+      idfuncionariousuario: idOuNull(cab.idfuncionariousuario),
+      idterminal: idOuNull(cab.idterminal),
+      obs: textoOuNull(cab.obs),
+      valorBruto: valor,
+      descontoRS,
+      descontoPercentual: textoNumerico(cab.desconto, "0.000"),
+      valorLiquido,
+      itens: itens.map((i) => ({
+        sequenciaitem: Number(i.sequenciaitem),
+        idproduto: Number(i.idproduto),
+        descricao: String(i.descricaoproduto ?? ""),
+        quantidade: textoNumerico(i.quantidadeitem, "0"),
+        valorUnitario: textoNumerico(i.valoritem, "0"),
+        desconto: textoNumerico(i.orcamentodesconto, "0"),
+        valorFinal: textoNumerico(i.orcamentovalorfinalitem, "0"),
+      })),
+      pagamentos: pags.map((p) => ({
+        idformapagamento: Number(p.idformapagamento),
+        descricao: textoOuNull(p.descricao),
+        valor: textoNumerico(p.valor, "0"),
+        valorRecebido: textoNumerico(p.valorrecebido, "0"),
+        idcondicaopagamento: idOuNull(p.idcondicaopagamento),
+      })),
+    };
   }
 
   /** Desconto global em R$ (centavos). Ausente = 0; mais de 2 casas ou negativo = VALOR_INVALIDO. */
