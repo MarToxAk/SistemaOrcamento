@@ -17,6 +17,7 @@ import { AthosContaReceberBaixaService } from "./athos-conta-receber-baixa.servi
 // Phase 44 — criacao de orcamento no Athos para IA
 import { AthosOrcamentoService } from "./athos-orcamento.service";
 import { AthosOrcamentoController } from "./athos-orcamento.controller";
+import { AthosOrcamentoIdempotenciaService } from "./athos-orcamento-idempotencia.service";
 
 @Module({
   imports: [DatabaseModule, EventsModule, forwardRef(() => QuotesModule)],
@@ -28,6 +29,7 @@ import { AthosOrcamentoController } from "./athos-orcamento.controller";
     AthosProdutoCompostoService, // Phase 39
     AthosContaReceberBaixaService, // Phase 43
     AthosOrcamentoService, // Phase 44
+    AthosOrcamentoIdempotenciaService, // Phase 44 — idempotencia + auditoria (Prisma)
   ],
   controllers: [
     AthosController,

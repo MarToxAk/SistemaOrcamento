@@ -18,11 +18,47 @@ import { APP_GUARD } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import { Client } from "pg";
 
+import { randomBytes } from "crypto";
+
+import { PrismaService } from "../../database/prisma.service";
 import { InternalAuthGuard } from "../../security/internal-auth.guard";
 import { AthosOrcamentoController } from "./athos-orcamento.controller";
+import { AthosOrcamentoIdempotenciaService, refDoOrcamento } from "./athos-orcamento-idempotencia.service";
 import { AthosOrcamentoService } from "./athos-orcamento.service";
 
 const rodar = process.env.ATHOS_IT_CLONE === "1" ? describe : describe.skip;
+
+/** Prisma falso em memoria (por idempotencyKey): o IT nunca toca o banco do Sistema. */
+function criarPrismaFalso() {
+  const linhas = new Map<string, Record<string, any>>();
+  const auditoriaSemChave: Record<string, any>[] = [];
+  return {
+    linhas,
+    auditoriaSemChave,
+    athosOrcamentoIa: {
+      create: async ({ data }: { data: Record<string, any> }) => {
+        if (data.idempotencyKey == null) {
+          auditoriaSemChave.push({ ...data });
+          return data;
+        }
+        if (linhas.has(data.idempotencyKey)) throw Object.assign(new Error("Unique constraint"), { code: "P2002" });
+        linhas.set(data.idempotencyKey, { ...data });
+        return data;
+      },
+      findUnique: async ({ where }: { where: { idempotencyKey: string } }) => linhas.get(where.idempotencyKey) ?? null,
+      update: async ({ where, data }: { where: { idempotencyKey: string }; data: Record<string, any> }) => {
+        const atual = linhas.get(where.idempotencyKey);
+        if (!atual) throw new Error("registro inexistente");
+        Object.assign(atual, data);
+        return atual;
+      },
+      delete: async ({ where }: { where: { idempotencyKey: string } }) => {
+        linhas.delete(where.idempotencyKey);
+        return {};
+      },
+    },
+  };
+}
 
 rodar("IT clone athos-teste: POST /api/athos/orcamentos", () => {
   const CHAVE = "chave-it-local-44";
@@ -39,9 +75,10 @@ rodar("IT clone athos-teste: POST /api/athos/orcamentos", () => {
     process.env[chave] = valor;
   }
 
-  async function postar(corpo: unknown, chave: string | undefined = CHAVE) {
+  async function postar(corpo: unknown, chave: string | undefined = CHAVE, idempotencyKey?: string) {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (chave) headers["x-internal-api-key"] = chave;
+    if (idempotencyKey) headers["idempotency-key"] = idempotencyKey;
     const res = await fetch(`${base}/api/athos/orcamentos`, { method: "POST", headers, body: JSON.stringify(corpo) });
     const json = (await res.json()) as Record<string, any>;
     return { status: res.status, json };
@@ -83,6 +120,8 @@ rodar("IT clone athos-teste: POST /api/athos/orcamentos", () => {
       controllers: [AthosOrcamentoController],
       providers: [
         AthosOrcamentoService,
+        AthosOrcamentoIdempotenciaService,
+        { provide: PrismaService, useValue: criarPrismaFalso() },
         { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
         { provide: APP_GUARD, useClass: InternalAuthGuard },
       ],
@@ -197,5 +236,44 @@ rodar("IT clone athos-teste: POST /api/athos/orcamentos", () => {
     }
     const depois = await pg.query<{ n: string }>("SELECT count(*)::text AS n FROM orcamento");
     expect(depois.rows[0].n).toBe(antes.rows[0].n);
+  });
+
+  async function contarPorRef(ref: string): Promise<number> {
+    const r = await pg.query<{ n: string }>("SELECT count(*)::text AS n FROM orcamento WHERE obs LIKE $1", [
+      `[IA] ref:${ref}%`,
+    ]);
+    return Number(r.rows[0].n);
+  }
+
+  it("IT3 replay com a mesma Idempotency-Key nao duplica o orcamento", async () => {
+    const idem = randomBytes(16).toString("hex");
+    const corpo = { itens: [{ idproduto: produtoA, quantidade: 1 }], obs: "teste IT3 fase 44" };
+
+    const primeiro = await postar(corpo, CHAVE, idem);
+    expect(primeiro.status).toBe(201);
+    expect(primeiro.json.idorcamento).toBeGreaterThan(0);
+    expect(primeiro.json.replay).toBeUndefined();
+    idsCriados.push(primeiro.json.idorcamento);
+
+    const segundo = await postar(corpo, CHAVE, idem);
+    expect(segundo.status).toBe(201);
+    expect(segundo.json.idorcamento).toBe(primeiro.json.idorcamento);
+    expect(segundo.json.senhabalcao).toBe(primeiro.json.senhabalcao);
+    expect(segundo.json.replay).toBe(true);
+
+    expect(await contarPorRef(refDoOrcamento(idem))).toBe(1);
+  });
+
+  it("IT4 mesma chave com outro corpo -> 409 e nenhum orcamento novo", async () => {
+    const idem = randomBytes(16).toString("hex");
+    const primeiro = await postar({ itens: [{ idproduto: produtoA, quantidade: 1 }] }, CHAVE, idem);
+    expect(primeiro.status).toBe(201);
+    idsCriados.push(primeiro.json.idorcamento);
+
+    const outro = await postar({ itens: [{ idproduto: produtoA, quantidade: 2 }] }, CHAVE, idem);
+    expect(outro.status).toBe(409);
+    expect(outro.json.codigo).toBe("IDEMPOTENCY_KEY_REUTILIZADA");
+
+    expect(await contarPorRef(refDoOrcamento(idem))).toBe(1);
   });
 });
