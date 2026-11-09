@@ -29,7 +29,11 @@ function tipo(sql: string): string {
   if (/^SET TRANSACTION READ ONLY/i.test(s)) return "SET_RO";
   if (/^SET LOCAL statement_timeout/i.test(s)) return "SET_TIMEOUT";
   if (/^SELECT .*funcionario_usuario/i.test(s)) return "LER_CONFIG";
+  if (/^SELECT .* FROM produto p LEFT JOIN/i.test(s)) return "BUSCA_PRODUTOS";
   if (/^SELECT .* FROM produto p/i.test(s)) return "LER_PRODUTOS";
+  if (/^SELECT .* FROM orcamento_item i JOIN/i.test(s)) return "LER_ITENS";
+  if (/^SELECT .* FROM orcamento_forma_pagamento ofp/i.test(s)) return "LER_PAGS";
+  if (/^SELECT .* FROM orcamento WHERE/i.test(s)) return "LER_ORC";
   if (/^INSERT INTO orcamento \(/i.test(s)) return "INS_ORC";
   if (/^INSERT INTO orcamento_item/i.test(s)) return "INS_ITEM";
   if (/^DELETE FROM orcamento_forma_pagamento/i.test(s)) return "DEL_PAG";
@@ -95,6 +99,14 @@ interface OpcoesPg {
   codigo?: string;
   mensagem?: string;
   conexaoFalha?: boolean;
+  /** Linhas devolvidas pela busca de produtos (44-04). */
+  busca?: Array<Record<string, unknown>>;
+  /** Cabecalho, itens e pagamentos devolvidos pelas leituras de orcamento (44-04). */
+  orcamento?: {
+    cab?: Array<Record<string, unknown>>;
+    itens?: Array<Record<string, unknown>>;
+    pags?: Array<Record<string, unknown>>;
+  };
 }
 
 /** Dois produtos padrao: 101 a "2.000" e 102 a "3.300" (7.30 para 2 x 101 + 1 x 102). */
@@ -137,6 +149,10 @@ function prepararPg(opts: OpcoesPg = {}) {
       return { rows: produtos.filter((x) => ids.includes(x.idproduto)) };
     }
     if (t === "INS_ORC") return { rows: [{ idorcamento: 25866, senhabalcao: 25866 }] };
+    if (t === "BUSCA_PRODUTOS") return { rows: opts.busca ?? [] };
+    if (t === "LER_ORC") return { rows: opts.orcamento?.cab ?? [] };
+    if (t === "LER_ITENS") return { rows: opts.orcamento?.itens ?? [] };
+    if (t === "LER_PAGS") return { rows: opts.orcamento?.pags ?? [] };
     return { rows: [] };
   });
 }
@@ -157,6 +173,25 @@ function semEscritaNemCommit() {
 }
 
 const ENV_ORIGINAL = { ...process.env };
+
+/** Cabecalho de orcamento no formato devolvido pelo pg (numeric como texto). */
+const LINHA_CAB = {
+  idorcamento: 25866,
+  senhabalcao: 25866,
+  idcliente: null,
+  idvendedor: 1,
+  idfuncionariousuario: 1,
+  idterminal: 1,
+  data: "2026-11-09",
+  hora: "10:15:30",
+  valor: "12.500",
+  desconto: "10.000",
+  descontors: "1.250",
+  statusorcamento: null,
+  statusimpressao: false,
+  cancelado: false,
+  obs: "[IA] ref:abc123",
+};
 
 const ITENS_PADRAO: CriarOrcamentoInput = {
   itens: [
@@ -475,6 +510,17 @@ describe("AthosOrcamentoService.criarOrcamento - criacao", () => {
     await service.criarOrcamento({ ...ITENS_PADRAO, simular: true });
     emitidos.push(...textosSql());
 
+    // R8 (44-04): as leituras (busca por token, busca numerica e leitura do orcamento) tambem passam na varredura.
+    prepararPg();
+    await service.buscarProdutos("caneta bic");
+    emitidos.push(...textosSql());
+    prepararPg();
+    await service.buscarProdutos("29246");
+    emitidos.push(...textosSql());
+    prepararPg({ orcamento: { cab: [LINHA_CAB] } });
+    await service.buscarOrcamento(25866);
+    emitidos.push(...textosSql());
+
     expect(emitidos.length).toBeGreaterThanOrEqual(16);
     const proibidos = [
       /on\s+conflict/i,
@@ -485,6 +531,7 @@ describe("AthosOrcamentoService.criarOrcamento - criacao", () => {
       /generated/i,
       /lock_timeout/i,
       /unaccent/i,
+      /escape\s+'/i,
       /pg_sequence_last_value/i,
       /currval/i,
       /max\s*\(\s*idorcamento/i,
@@ -685,5 +732,219 @@ describe("AthosOrcamentoService.criarOrcamento - descontos", () => {
       const dto = plainToInstance(CreateAthosOrcamentoDto, { ...base, idformapagamento: 5 });
       expect((await validate(dto, opcoes)).length).toBeGreaterThan(0);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R1..R8 - leituras para a IA (44-04): busca de produtos e GET do orcamento
+// ---------------------------------------------------------------------------
+
+describe("AthosOrcamentoService.buscarProdutos", () => {
+  it("R1 tokens: um unico SELECT com um bloco ILIKE por token ligados por AND, limite 20", async () => {
+    await service.buscarProdutos("caneta  bic");
+
+    expect(tipos()).toEqual(["BEGIN", "SET_RO", "SET_TIMEOUT", "BUSCA_PRODUTOS", "ROLLBACK"]);
+    expect(chamadas("BUSCA_PRODUTOS")).toHaveLength(1);
+    const [sql, p] = chamadas("BUSCA_PRODUTOS")[0] as [string, unknown[]];
+    expect(p).toEqual(expect.arrayContaining(["%caneta%", "%bic%", 20]));
+    expect((sql.match(/ILIKE/g) ?? []).length).toBe(6);
+    expect(sql).toMatch(/\)\s+AND\s+\(/);
+    expect(sql).toContain("p.statusproduto = true");
+    expect(sql).toContain("COALESCE(p.vendeproduto, true)");
+    expect(sql).not.toMatch(/p\.idproduto\s*=/);
+    expect(textosSql().filter(ehEscrita)).toEqual([]);
+  });
+
+  it("R2 numerico: q numerico compara tambem o idproduto; acima de int4 nao compara e nao falha", async () => {
+    await service.buscarProdutos("29246");
+    const [sql, p] = chamadas("BUSCA_PRODUTOS")[0] as [string, unknown[]];
+    expect(p).toEqual(expect.arrayContaining([29246, "29246"]));
+    expect(sql).toMatch(/p\.idproduto\s*=/);
+
+    prepararPg();
+    await expect(service.buscarProdutos("99999999999")).resolves.toEqual([]);
+    const [sql2, p2] = chamadas("BUSCA_PRODUTOS")[0] as [string, unknown[]];
+    expect(sql2).not.toMatch(/p\.idproduto\s*=/);
+    expect(p2).not.toContain(99999999999);
+  });
+
+  it("R3 escape: barra, percentual e sublinhado escapados no VALOR; nenhum SQL contem ESCAPE", async () => {
+    await service.buscarProdutos("50%_off\\");
+    const [, p] = chamadas("BUSCA_PRODUTOS")[0] as [string, unknown[]];
+    expect(p).toContain("%50\\%\\_off\\\\%");
+    for (const sql of textosSql()) expect(sql).not.toMatch(/escape/i);
+  });
+
+  it("R4 limite: 100 vira 50; 0 ou ausente vira 20; no maximo 5 tokens", async () => {
+    await service.buscarProdutos("a", 100);
+    expect(params("BUSCA_PRODUTOS")).toContain(50);
+
+    prepararPg();
+    await service.buscarProdutos("a", 0);
+    expect(params("BUSCA_PRODUTOS")).toContain(20);
+
+    prepararPg();
+    await service.buscarProdutos("a");
+    expect(params("BUSCA_PRODUTOS")).toContain(20);
+
+    prepararPg();
+    await service.buscarProdutos("t1 t2 t3 t4 t5 t6 t7");
+    const p = params("BUSCA_PRODUTOS");
+    expect(p).toEqual(expect.arrayContaining(["%t1%", "%t2%", "%t3%", "%t4%", "%t5%"]));
+    expect(p).not.toContain("%t6%");
+  });
+
+  it("R5 mapeamento: preco como texto, promocao null vira false, sem campo de custo", async () => {
+    prepararPg({
+      busca: [
+        {
+          idproduto: 29246,
+          descricaoproduto: "CANETA BIC AZUL",
+          marca: "BIC",
+          referencia: "REF1",
+          codigobarra1: "789",
+          preco: "68.000",
+          empromocao: null,
+          estoqueloja: "0",
+          estoquedeposito: "12.500",
+          permitefracionar: false,
+          descontomaximo: "0.01",
+          unidade: "UN",
+        },
+        {
+          idproduto: 2,
+          descricaoproduto: "SEM PRECO",
+          marca: null,
+          referencia: null,
+          codigobarra1: null,
+          preco: null,
+          empromocao: true,
+          estoqueloja: "1",
+          estoquedeposito: "0",
+          permitefracionar: true,
+          descontomaximo: "0",
+          unidade: null,
+        },
+      ],
+    });
+    const r = await service.buscarProdutos("caneta");
+    expect(r[0]).toEqual({
+      idproduto: 29246,
+      descricao: "CANETA BIC AZUL",
+      marca: "BIC",
+      referencia: "REF1",
+      codigoBarra: "789",
+      preco: "68.000",
+      emPromocao: false,
+      estoqueLoja: "0",
+      estoqueDeposito: "12.500",
+      permiteFracionar: false,
+      descontoMaximo: "0.01",
+      unidade: "UN",
+    });
+    expect(r[1].preco).toBeNull();
+    expect(r[1].emPromocao).toBe(true);
+    expect(JSON.stringify(r)).not.toMatch(/custo/i);
+    expect(chamadas("BUSCA_PRODUTOS")[0][0]).not.toMatch(/valorcusto/i);
+  });
+});
+
+describe("AthosOrcamentoService.buscarOrcamento", () => {
+  it("R6 leitura: 3 SELECTs com o mesmo $1, status e valor liquido em milesimos", async () => {
+    prepararPg({
+      orcamento: {
+        cab: [LINHA_CAB],
+        itens: [
+          {
+            sequenciaitem: 1,
+            idproduto: 101,
+            descricaoproduto: "Produto 101",
+            quantidadeitem: "1.500",
+            valoritem: "8.333",
+            orcamentodesconto: "0.00",
+            orcamentovalorfinalitem: "12.50",
+          },
+        ],
+        pags: [{ idformapagamento: 5, descricao: "PIX", valor: "11.250", valorrecebido: "11.250", idcondicaopagamento: 0 }],
+      },
+    });
+    const r = await service.buscarOrcamento(25866);
+
+    expect(tipos()).toEqual(["BEGIN", "SET_RO", "SET_TIMEOUT", "LER_ORC", "LER_ITENS", "LER_PAGS", "ROLLBACK"]);
+    for (const t of ["LER_ORC", "LER_ITENS", "LER_PAGS"]) expect(params(t)).toEqual([25866]);
+    expect(r.status).toBe("aberto");
+    expect(r.valorBruto).toBe("12.500");
+    expect(r.descontoRS).toBe("1.250");
+    expect(r.descontoPercentual).toBe("10.000");
+    expect(r.valorLiquido).toBe("11.250");
+    expect(r.data).toBe("2026-11-09");
+    expect(r.itens).toEqual([
+      {
+        sequenciaitem: 1,
+        idproduto: 101,
+        descricao: "Produto 101",
+        quantidade: "1.500",
+        valorUnitario: "8.333",
+        desconto: "0.00",
+        valorFinal: "12.50",
+      },
+    ]);
+    expect(r.pagamentos).toEqual([
+      { idformapagamento: 5, descricao: "PIX", valor: "11.250", valorRecebido: "11.250", idcondicaopagamento: 0 },
+    ]);
+
+    prepararPg({ orcamento: { cab: [{ ...LINHA_CAB, statusorcamento: true }] } });
+    expect((await service.buscarOrcamento(25866)).status).toBe("convertido");
+    prepararPg({ orcamento: { cab: [{ ...LINHA_CAB, statusorcamento: false }] } });
+    expect((await service.buscarOrcamento(25866)).status).toBe("outro");
+  });
+
+  it("R6b inexistente: 404 ORCAMENTO_INEXISTENTE; id fora de int4 nao consulta o pg", async () => {
+    prepararPg({ orcamento: { cab: [] } });
+    const e = await falha(service.buscarOrcamento(25866));
+    expect(e.codigo).toBe("ORCAMENTO_INEXISTENTE");
+    expect(e.getStatus()).toBe(404);
+    expect(tipos()).not.toContain("COMMIT");
+
+    for (const id of [0, 2147483648, -1, 1.5]) {
+      prepararPg();
+      const err = await falha(service.buscarOrcamento(id));
+      expect(err.codigo).toBe("ORCAMENTO_INEXISTENTE");
+      expect(err.getStatus()).toBe(404);
+      expect(mClient.query).not.toHaveBeenCalled();
+      expect(mPool.connect).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe("AthosOrcamentoService - leituras sem flag e sem autor", () => {
+  it("R7: funcionam sem ATHOS_ORCAMENTO_ESCRITA e ATHOS_ORCAMENTO_ID_*; host real e bloqueado sem conexao", async () => {
+    delete process.env.ATHOS_ORCAMENTO_ESCRITA;
+    delete process.env.ATHOS_ORCAMENTO_ID_FUNCIONARIO;
+    delete process.env.ATHOS_ORCAMENTO_ID_VENDEDOR;
+    delete process.env.ATHOS_ORCAMENTO_ID_TERMINAL;
+    prepararPg({ orcamento: { cab: [LINHA_CAB] } });
+    await expect(service.buscarProdutos("caneta")).resolves.toEqual([]);
+    await expect(service.buscarOrcamento(25866)).resolves.toMatchObject({ idorcamento: 25866 });
+
+    process.env.ATHOS_PG_HOST = "db.empresa.exemplo";
+    prepararPg();
+    service = new AthosOrcamentoService();
+    expect((await falha(service.buscarProdutos("caneta"))).codigo).toBe("AMBIENTE_TESTE_HOST_REAL");
+    expect((await falha(service.buscarOrcamento(25866))).codigo).toBe("AMBIENTE_TESTE_HOST_REAL");
+    expect(mPool.connect).not.toHaveBeenCalled();
+  });
+
+  it("R7b: falha de conexao vira ATHOS_INDISPONIVEL 503 e o erro do pg nao vaza", async () => {
+    prepararPg({ conexaoFalha: true });
+    const e = await falha(service.buscarProdutos("caneta"));
+    expect(e.codigo).toBe("ATHOS_INDISPONIVEL");
+    expect(e.getStatus()).toBe(503);
+
+    prepararPg({ falharEm: "BUSCA_PRODUTOS", mensagem: "segredo interno de SQL" });
+    const e2 = await falha(service.buscarProdutos("caneta"));
+    expect(e2.codigo).toBe("ERRO_BANCO");
+    expect(JSON.stringify(e2.getResponse())).not.toContain("segredo");
+    expect(mClient.release).toHaveBeenCalled();
   });
 });
