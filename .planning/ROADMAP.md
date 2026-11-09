@@ -168,13 +168,16 @@ Plans:
 
 ### Phase 44: API de criação de orçamento no Athos para IA
 
-**Goal:** Uma IA (agente externo) consegue montar e gravar um orçamento real no Athos via API REST protegida por `x-internal-api-key`: (1) buscar produtos com preço (`precovendaproduto`) e custo, (2) listar formas de pagamento ativas, (3) criar o orçamento gravando `orcamento` + `orcamento_item` + `orcamento_forma_pagamento` em UMA transação com `RETURNING idorcamento`, reproduzindo o SQL capturado do `Balcao.exe` (ver `44-REFERENCIA-SQL-ATHOS.md`), e (4) consultar o orçamento criado (número para o cliente/PDV). SQL compatível com PostgreSQL 9.0.5. Escrita é nova exceção à regra read-only do Athos. Testes de integração somente no clone `athos-teste` (127.0.0.1:5440) — nunca contra o Athos original (192.168.33.198 / 100.102.146.44).
-**Requirements**: TBD
+**Goal:** Uma IA (agente externo) consegue montar e gravar um orçamento real no Athos via API REST protegida por `x-internal-api-key`: (1) buscar produtos com preço (`precovendaproduto`) e custo, (2) [removido por D-04: pagamento é sempre PIX via env; sem listagem de formas de pagamento], (3) criar o orçamento (com desconto por item e global) gravando `orcamento` + `orcamento_item` + `orcamento_forma_pagamento` em UMA transação com `RETURNING idorcamento`, reproduzindo o SQL capturado do `Balcao.exe` (ver `44-REFERENCIA-SQL-ATHOS.md`), e (4) consultar o orçamento criado (número para o cliente/PDV). SQL compatível com PostgreSQL 9.0.5. Escrita é nova exceção à regra read-only do Athos. Testes de integração somente no clone `athos-teste` (127.0.0.1:5440) — nunca contra o Athos original (192.168.33.198 / 100.102.146.44).
+**Requirements**: ORC-01, ORC-02, ORC-03, ORC-04, ORC-05, ORC-06, ORC-07, ORC-08, ORC-09, ORC-10 (IDs locais da fase — definidos em 44-01-PLAN.md; ORC-02 redefinido por D-04: pagamento sempre PIX via env, listagem de formas de pagamento adiada)
 **Depends on:** Phase 43
-**Plans:** 0 plans
+**Plans:** 4 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 44 to break down)
+- [ ] 44-01-PLAN.md — Wave 1 · Tracer: POST /api/athos/orcamentos ponta a ponta no clone (transação única em orcamento + orcamento_item + orcamento_forma_pagamento PIX, flag ATHOS_ORCAMENTO_ESCRITA, trava de host, IT HTTP gated) + motor de cálculo monetário em inteiros com casos-ouro (D-01, D-02, D-03, D-04)
+- [ ] 44-02-PLAN.md — Wave 2 · Simulação READ ONLY, cliente opcional, descontos (por item, preço abaixo do cadastro, global) com limites de conf_vendas, suíte unitária com pg falso e compatibilidade 9.0.5, envs ATHOS_ORCAMENTO_* no deploy (D-01, D-02, D-03, D-04)
+- [ ] 44-03-PLAN.md — Wave 2 · Idempotency-Key reserva-primeiro + auditoria AthosOrcamentoIa (model + migration aditiva), teste HTTP do controller e replay sem duplicata no clone (D-03)
+- [ ] 44-04-PLAN.md — Wave 3 · GET produtos e GET :id, ciclo completo provado no clone, roteiro de verificação manual em produção + checkpoint humano (D-01, D-03, D-04)
 
 ---
 
