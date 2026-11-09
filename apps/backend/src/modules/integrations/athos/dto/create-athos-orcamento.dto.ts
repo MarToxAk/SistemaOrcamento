@@ -1,0 +1,65 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from "class-validator";
+
+/**
+ * DTO da criacao de orcamento no Athos para IA (Fase 44, plano 44-01).
+ *
+ * O ValidationPipe global usa whitelist + forbidNonWhitelisted: campo sem decorator e recusado
+ * com 400. Por isso, nesta etapa, o DTO NAO declara desconto, cliente nem simulacao (entram em
+ * 44-02) e nao tem forma de pagamento (D-04: pagamento sempre PIX, definido por env).
+ */
+export class ItemOrcamentoDto {
+  @ApiProperty({ example: 29246, description: "ID do produto no Athos (idproduto). Preco vem sempre do Athos." })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  idproduto!: number;
+
+  @ApiProperty({
+    example: 2,
+    description:
+      "Quantidade (ate 3 casas decimais; fracao so para produtos que permitem fracionar). Minimo 0.001, maximo 10000.",
+  })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
+  @Max(10000)
+  quantidade!: number;
+}
+
+export class CreateAthosOrcamentoDto {
+  @ApiProperty({
+    type: [ItemOrcamentoDto],
+    description: "Itens do orcamento (minimo 1, maximo 200). O preco de cada item e o preco de venda atual do Athos.",
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => ItemOrcamentoDto)
+  itens!: ItemOrcamentoDto[];
+
+  @ApiPropertyOptional({
+    example: "Cliente pediu entrega na sexta",
+    description: "Observacao livre (acentos e simbolos sao removidos). Gravada com o prefixo [IA].",
+    maxLength: 1500,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1500)
+  obs?: string;
+}
