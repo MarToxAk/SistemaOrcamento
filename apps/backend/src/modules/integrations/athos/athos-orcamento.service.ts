@@ -3,11 +3,14 @@ import { Pool, PoolClient } from "pg";
 
 import {
   CalcOrcamentoError,
-  LIMITE_LINHA_CENTAVOS,
+  LinhaCalcEntrada,
+  TotaisOrcamento,
+  calcularOrcamento,
   centavosParaTexto,
-  linhaCentavos,
   milliParaTexto,
+  paraCentavos,
   paraMilli,
+  percentualTexto,
 } from "./athos-orcamento-calc.util";
 import { sanitizarTextoAthos } from "./athos-conta-receber-baixa.service";
 
@@ -216,9 +219,23 @@ interface ItemValidado {
   idproduto: number;
   descricao: string;
   qMilli: bigint;
+  /** Preco informado pelo chamador (milesimos), se houver. */
+  valorUnitarioMilli?: bigint;
+  /** Desconto explicito da linha (centavos). */
+  descontoItemC: bigint;
+  /** Preco de venda lido do Athos (milesimos). */
   precoMilli: bigint;
-  totalC: bigint;
   custo: string;
+}
+
+/** conf_vendas.permitedescontode em milesimos de percentual; ausente/NULL/ilegivel = 100% (sem limite). */
+function limitePercentualMilli(bruto: string | number | null | undefined): bigint {
+  if (bruto === null || bruto === undefined) return 100_000n;
+  try {
+    return paraMilli(typeof bruto === "number" ? bruto : String(bruto));
+  } catch {
+    return 100_000n;
+  }
 }
 
 @Injectable()
@@ -322,8 +339,8 @@ export class AthosOrcamentoService implements OnModuleDestroy {
     const cfg = resolverConfigOrcamentoAthos(process.env);
 
     // ---- (c) validacao pura da entrada (nenhuma conexao aberta) ---------------
-    this.rejeitarCamposNaoSuportados(input);
     const itens = this.validarEntrada(input);
+    const descontoTotalC = this.validarDescontoTotal(input.descontoTotalRS);
     const idsProdutos = [...new Set(itens.map((i) => i.idproduto))];
 
     // ---- (d)/(e) trava de host e conexao -------------------------------------
@@ -406,8 +423,7 @@ export class AthosOrcamentoService implements OnModuleDestroy {
         );
       }
 
-      // ---- (h) calculo em inteiros --------------------------------------------
-      let brutoC = 0n;
+      // ---- (h) validacao por produto e calculo em inteiros ----------------------
       for (const item of itens) {
         const p = porId.get(item.idproduto) as LinhaProduto;
         const det = { idproduto: item.idproduto, sequenciaitem: item.sequenciaitem };
@@ -441,44 +457,48 @@ export class AthosOrcamentoService implements OnModuleDestroy {
             det,
           );
         }
-        const totalC = linhaCentavos(item.qMilli, precoMilli);
-        if (totalC <= 0n || totalC >= LIMITE_LINHA_CENTAVOS) {
-          throw new OrcamentoAthosError(
-            "VALOR_FORA_DO_LIMITE",
-            `Total do item ${item.sequenciaitem} (${centavosParaTexto(totalC)}) fora do limite aceito (maior que zero e menor que 1000000.00).`,
-            422,
-            det,
-          );
-        }
         item.descricao = String(p.descricaoproduto ?? "");
         item.precoMilli = precoMilli;
-        item.totalC = totalC;
         item.custo = p.valorcustounitario === null || p.valorcustounitario === undefined ? "0" : String(p.valorcustounitario);
-        brutoC += totalC;
       }
 
-      // Sem desconto nesta etapa: liquido = bruto; descontors "0.00"; desconto "0.000".
-      const liquidoC = brutoC;
-      const brutoTxt = centavosParaTexto(brutoC);
-      const liquidoTxt = centavosParaTexto(liquidoC);
+      // descontomaximo do produto NAO e consultado (D-04): so o limite global de conf_vendas vale.
+      const entradaCalc: LinhaCalcEntrada[] = itens.map((i) => ({
+        qMilli: i.qMilli,
+        precoMilli: i.precoMilli,
+        valorUnitarioMilli: i.valorUnitarioMilli,
+        descontoItemC: i.descontoItemC,
+      }));
+      let totais: TotaisOrcamento;
+      try {
+        totais = calcularOrcamento(entradaCalc, descontoTotalC, limitePercentualMilli(c.permitedescontode));
+      } catch (err) {
+        if (err instanceof CalcOrcamentoError) throw converterErroCalc(err);
+        throw err;
+      }
+
+      const brutoTxt = centavosParaTexto(totais.brutoC);
+      const descontoTxt = centavosParaTexto(totais.descontoC);
+      const percentualTxt = percentualTexto(totais.percentualMilli);
+      const liquidoTxt = centavosParaTexto(totais.liquidoC);
 
       const montarResultado = (idorcamento: number | null, senhabalcao: number | null): CriarOrcamentoResultado => ({
         simulado: simular,
         idorcamento,
         senhabalcao,
         valorBruto: brutoTxt,
-        descontoRS: "0.00",
-        descontoPercentual: "0.000",
+        descontoRS: descontoTxt,
+        descontoPercentual: percentualTxt,
         valorLiquido: liquidoTxt,
-        itens: itens.map((i) => ({
+        itens: itens.map((i, k) => ({
           sequenciaitem: i.sequenciaitem,
           idproduto: i.idproduto,
           descricao: i.descricao,
           quantidade: milliParaTexto(i.qMilli),
-          valorUnitario: milliParaTexto(i.precoMilli),
-          valorTotal: centavosParaTexto(i.totalC),
-          desconto: "0.00",
-          valorFinal: centavosParaTexto(i.totalC),
+          valorUnitario: milliParaTexto(totais.linhas[k].valorItemMilli),
+          valorTotal: centavosParaTexto(totais.linhas[k].totalC),
+          desconto: centavosParaTexto(totais.linhas[k].descontoC),
+          valorFinal: centavosParaTexto(totais.linhas[k].finalC),
         })),
         pagamento: { idformapagamento: cfg.idFormaPagamento, idcondicaopagamento: 0, valor: liquidoTxt },
       });
@@ -491,28 +511,29 @@ export class AthosOrcamentoService implements OnModuleDestroy {
 
       // ---- (j) escritas na ordem exata -----------------------------------------
       const cab = await client.query<{ idorcamento: number; senhabalcao: number }>(SQL_INSERIR_ORCAMENTO, [
-        "0.00",
+        descontoTxt,
         cfg.idVendedor,
         input.idcliente ?? null,
         cfg.idFuncionario,
         cfg.idTerminal,
         brutoTxt,
-        "0.000",
+        percentualTxt,
         montarObsOrcamento(input.obs, opts?.ref),
       ]);
       const idorcamento = Number(cab.rows[0].idorcamento);
       const senhabalcao = Number(cab.rows[0].senhabalcao);
 
-      for (const item of itens) {
+      for (const [k, item] of itens.entries()) {
+        const linha = totais.linhas[k];
         await client.query(SQL_INSERIR_ITEM, [
           idorcamento,
           item.sequenciaitem,
           item.idproduto,
           milliParaTexto(item.qMilli),
-          milliParaTexto(item.precoMilli),
+          milliParaTexto(linha.valorItemMilli),
           item.custo,
-          "0.00",
-          centavosParaTexto(item.totalC),
+          centavosParaTexto(linha.descontoC),
+          centavosParaTexto(linha.finalC),
         ]);
       }
 
@@ -537,23 +558,16 @@ export class AthosOrcamentoService implements OnModuleDestroy {
     }
   }
 
-  /**
-   * Campos de desconto e preco informado ainda nao existem: o DTO ja os recusa com 400; aqui o servico tambem recusa, para nunca aceitar um campo que ignoraria.
-   */
-  private rejeitarCamposNaoSuportados(input: CriarOrcamentoInput): void {
-    const extras: string[] = [];
-    if (input.descontoTotalRS !== undefined) extras.push("descontoTotalRS");
-    for (const item of input.itens ?? []) {
-      if (item.valorUnitario !== undefined && !extras.includes("itens[].valorUnitario")) extras.push("itens[].valorUnitario");
-      if (item.descontoRS !== undefined && !extras.includes("itens[].descontoRS")) extras.push("itens[].descontoRS");
-    }
-    if (extras.length > 0) {
-      throw new OrcamentoAthosError(
-        "VALOR_INVALIDO",
-        `Campo(s) ainda nao suportado(s) nesta versao: ${extras.join(", ")}.`,
-        422,
-        { campos: extras },
-      );
+  /** Desconto global em R$ (centavos). Ausente = 0; mais de 2 casas ou negativo = VALOR_INVALIDO. */
+  private validarDescontoTotal(valor: number | undefined): bigint {
+    if (valor === undefined || valor === null) return 0n;
+    try {
+      return paraCentavos(valor);
+    } catch (err) {
+      if (err instanceof CalcOrcamentoError) {
+        throw new OrcamentoAthosError("VALOR_INVALIDO", "descontoTotalRS invalido: use valor nao negativo com ate 2 casas decimais.", 422);
+      }
+      throw err;
     }
   }
 
@@ -594,7 +608,26 @@ export class AthosOrcamentoService implements OnModuleDestroy {
           { ...det, idproduto: it.idproduto },
         );
       }
-      return { sequenciaitem, idproduto: it.idproduto, descricao: "", qMilli, precoMilli: 0n, totalC: 0n, custo: "0" };
+      let valorUnitarioMilli: bigint | undefined;
+      let descontoItemC = 0n;
+      try {
+        if (it.valorUnitario !== undefined && it.valorUnitario !== null) {
+          valorUnitarioMilli = paraMilli(it.valorUnitario);
+          if (valorUnitarioMilli < 1n) throw new CalcOrcamentoError("VALOR_INVALIDO", "valorUnitario zerado.");
+        }
+        if (it.descontoRS !== undefined && it.descontoRS !== null) descontoItemC = paraCentavos(it.descontoRS);
+      } catch (err) {
+        if (err instanceof CalcOrcamentoError) {
+          throw new OrcamentoAthosError(
+            "VALOR_INVALIDO",
+            `valorUnitario/descontoRS invalido no item ${sequenciaitem}: valorUnitario > 0 com ate 3 casas e descontoRS >= 0 com ate 2 casas.`,
+            422,
+            { ...det, idproduto: it.idproduto },
+          );
+        }
+        throw err;
+      }
+      return { sequenciaitem, idproduto: it.idproduto, descricao: "", qMilli, valorUnitarioMilli, descontoItemC, precoMilli: 0n, custo: "0" };
     });
   }
 }
