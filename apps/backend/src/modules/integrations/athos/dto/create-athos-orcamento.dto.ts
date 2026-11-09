@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsInt,
   IsNumber,
   IsOptional,
@@ -18,8 +19,7 @@ import {
  * DTO da criacao de orcamento no Athos para IA (Fase 44, plano 44-01).
  *
  * O ValidationPipe global usa whitelist + forbidNonWhitelisted: campo sem decorator e recusado
- * com 400. Por isso, nesta etapa, o DTO NAO declara desconto, cliente nem simulacao (entram em
- * 44-02) e nao tem forma de pagamento (D-04: pagamento sempre PIX, definido por env).
+ * com 400. O DTO nao tem forma de pagamento (D-04: pagamento sempre PIX, definido por env).
  */
 export class ItemOrcamentoDto {
   @ApiProperty({ example: 29246, description: "ID do produto no Athos (idproduto). Preco vem sempre do Athos." })
@@ -62,4 +62,25 @@ export class CreateAthosOrcamentoDto {
   @IsString()
   @MaxLength(1500)
   obs?: string;
+
+  @ApiPropertyOptional({
+    example: 2641,
+    description: "ID do cliente no Athos (idcliente). Opcional: o orcamento PIX nao exige cliente. Inexistente -> 422 CLIENTE_INEXISTENTE.",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  idcliente?: number;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      "Quando true, calcula e valida tudo como na criacao mas NAO grava nada e NAO consome numero do Balcao " +
+      "(transacao somente leitura). Funciona mesmo com a escrita desabilitada. idorcamento e senhabalcao voltam null.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  simular?: boolean;
 }
