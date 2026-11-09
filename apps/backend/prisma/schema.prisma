@@ -417,3 +417,21 @@ model ChatwootMensagemEnviada {
 
   @@index([conversationId, tipoEvento, enviadoEm])
 }
+
+/// Idempotencia e auditoria dos orcamentos criados pela IA no Athos - Fase 44. Sem FK: o Athos e externo.
+model AthosOrcamentoIa {
+  id             Int      @id @default(autoincrement())
+  idempotencyKey String?  @unique // NULL quando o chamador nao envia o header Idempotency-Key
+  payloadHash    String // sha256 do corpo canonico sem "simular"
+  status         String   @default("processando") // processando | criado
+  idorcamento    Int?
+  senhabalcao    Int?
+  valorBruto     Decimal? @db.Decimal(12, 2)
+  valorLiquido   Decimal? @db.Decimal(12, 2)
+  request        Json?
+  resposta       Json?
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
+
+  @@index([idorcamento])
+}
