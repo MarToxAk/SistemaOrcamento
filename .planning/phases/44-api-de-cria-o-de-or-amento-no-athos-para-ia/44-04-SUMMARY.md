@@ -34,7 +34,7 @@ key-decisions:
   - "Valor legado fora do formato (mais de 3 casas) em orcamento antigo: valorLiquido cai para o texto de valor em vez de inventar numero."
   - "Roteiro consulta funcionario_usuario so por idfuncionariousuario e usuario (a tabela tem coluna senha)."
 requirements-completed: [ORC-01, ORC-07, ORC-10]
-status: awaiting-human-checkpoint
+status: complete-approved-without-production-evidence
 duration: ~45min
 completed: 2026-11-09
 commits: 4
@@ -121,10 +121,23 @@ Nenhum.
 Nenhum. As duas rotas GET novas ficam atras do guard global (`x-internal-api-key`, C11/IT10), a busca e 100% parametrizada (T-44-21), limite 1..50 (T-44-22),
 sem custo na resposta (T-44-23).
 
-## Pendente (Task 3 - checkpoint humano)
+## Task 3 - checkpoint humano (2026-11-09)
 
-Roteiro `44-ROTEIRO-VERIFICACAO-MANUAL.md`, Passos 0 a 9 em producao. Registrar aqui, apos a resposta do usuario: `idorcamento`/`senhabalcao` do teste visto no Balcao e
-divergencias em A1 (GRANTs), A2 (exibicao com `statusimpressao` falso), A3 (visibilidade por terminal) e A4 (compatibilidade com o PostgreSQL 9.0.5).
+O usuario respondeu **"aprovado"** ao checkpoint, **sem informar o numero do orcamento de teste** visto no Balcao
+(o resume-signal pedia esse numero). Pouco antes, o usuario havia perguntado "vai ter que mexe no banco de dados?",
+o que indica que o roteiro de producao provavelmente ainda nao tinha sido executado.
+
+**Registro fiel:** a aprovacao e uma decisao do usuario; **nao ha evidencia de que o roteiro
+`44-ROTEIRO-VERIFICACAO-MANUAL.md` (Passos 0-9) tenha sido executado em producao.** Portanto, permanecem **NAO
+CONFIRMADAS** as premissas de 44-RESEARCH:
+
+- A1 - GRANTs do usuario de producao alem de INSERT em `orcamento` (INSERT em `orcamento_item` e `orcamento_forma_pagamento`, DELETE em `orcamento_forma_pagamento`, USAGE nas 4 sequences);
+- A2 - exibicao normal no Balcao com `statusimpressao=false` e sem linha em `monitoramento`;
+- A3 - visibilidade do orcamento conforme o terminal escolhido;
+- A4 - execucao do SQL no PostgreSQL 9.0.5 real (provado so no clone PG14 + varredura estatica de compatibilidade).
+
+Mitigacao existente: `ATHOS_ORCAMENTO_ESCRITA` nasce `false` (POST nao simulado responde 503), entao nada grava no Athos
+real ate o usuario ligar a flag; o roteiro (so SELECT ate o Passo 5) continua valido para quando for executado.
 
 ## Self-Check: PASSED
 
