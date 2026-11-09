@@ -282,6 +282,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ### Roadmap Evolution
 
+- Phase 44 added (2026-11-09): API de criação de orçamento no Athos para IA — endpoint para agente de IA criar orçamento real no Athos (orcamento/orcamento_item/orcamento_forma_pagamento) a partir da captura pktmon do Balcao.exe; testes só no clone athos-teste.
 - Phase 41 added (2026-09-04): Contas a Pagar: Layout, Paineis Fiscais e Fix EFI — bug do EFI que nao atualiza pagamento sozinho + painel de monitoramento de pagamento + painel de boletos a receber + funcionalidades fiscais para clientes a prazo. Escopo ainda a discutir (`/gsd-discuss-phase 41`).
 - Phase 42 added (2026-10-05): Impressao automatica de orcamento ao confirmar pagamento no caixa — imprimir o orcamento na impressora toda vez que um cliente pagar/confirmar um orcamento no caixa. Escopo ainda a discutir (`/gsd-discuss-phase 42`).
 
