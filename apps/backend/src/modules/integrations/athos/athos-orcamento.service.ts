@@ -121,11 +121,15 @@ const OBS_MAX_USUARIO = 1900;
 const ID_FORMA_PAGAMENTO_PADRAO = 5;
 
 const SQL_STATEMENT_TIMEOUT = "SET LOCAL statement_timeout = 15000";
+/** Simulacao (D-03): primeira instrucao da transacao; qualquer escrita passa a falhar no proprio banco. */
+const SQL_SOMENTE_LEITURA = "SET TRANSACTION READ ONLY";
 
 const SQL_LER_CONFIG = `SELECT EXISTS (SELECT 1 FROM funcionario_usuario WHERE idfuncionariousuario = $1) AS funcionario_ok,
        EXISTS (SELECT 1 FROM funcionario WHERE idfuncionario = $2) AS vendedor_ok,
        EXISTS (SELECT 1 FROM terminal WHERE idterminal = $3) AS terminal_ok,
-       EXISTS (SELECT 1 FROM forma_pagamento WHERE idformapagamento = $4 AND status = true AND tipodeforma IN (1, 4)) AS pix_ok`;
+       EXISTS (SELECT 1 FROM forma_pagamento WHERE idformapagamento = $4 AND status = true AND tipodeforma IN (1, 4)) AS pix_ok,
+       EXISTS (SELECT 1 FROM cliente WHERE idcliente = $5) AS cliente_ok,
+       (SELECT permitedescontode FROM conf_vendas LIMIT 1) AS permitedescontode`;
 
 const SQL_LER_PRODUTOS = `SELECT p.idproduto, p.descricaoproduto, p.statusproduto, COALESCE(p.vendeproduto, true) AS vende,
        precovendaproduto(p.idproduto) AS preco, COALESCE(p.permitefracionar, true) AS permitefracionar,
@@ -306,8 +310,9 @@ export class AthosOrcamentoService implements OnModuleDestroy {
   }
 
   async criarOrcamento(input: CriarOrcamentoInput, opts?: { ref?: string }): Promise<CriarOrcamentoResultado> {
-    // ---- (a)/(b) escrita habilitada? Antes de qualquer conexao (D-03) ---------
-    if (process.env.ATHOS_ORCAMENTO_ESCRITA !== "true") {
+    // ---- (a)/(b) escrita habilitada? Antes de qualquer conexao (D-03). Simulacao nao grava e dispensa a flag.
+    const simular = input?.simular === true;
+    if (!simular && process.env.ATHOS_ORCAMENTO_ESCRITA !== "true") {
       throw new OrcamentoAthosError(
         "ESCRITA_DESABILITADA",
         "A criacao de orcamentos no Athos esta desabilitada neste ambiente (ATHOS_ORCAMENTO_ESCRITA diferente de true). Nada foi gravado.",
@@ -335,6 +340,7 @@ export class AthosOrcamentoService implements OnModuleDestroy {
     try {
       // ---- (f) leituras (nenhuma escrita ate aqui) ----------------------------
       await client.query("BEGIN");
+      if (simular) await client.query(SQL_SOMENTE_LEITURA);
       await client.query(SQL_STATEMENT_TIMEOUT);
 
       const conf = await client.query<{
@@ -342,7 +348,9 @@ export class AthosOrcamentoService implements OnModuleDestroy {
         vendedor_ok: boolean;
         terminal_ok: boolean;
         pix_ok: boolean;
-      }>(SQL_LER_CONFIG, [cfg.idFuncionario, cfg.idVendedor, cfg.idTerminal, cfg.idFormaPagamento]);
+        cliente_ok: boolean;
+        permitedescontode: string | null;
+      }>(SQL_LER_CONFIG, [cfg.idFuncionario, cfg.idVendedor, cfg.idTerminal, cfg.idFormaPagamento, input.idcliente ?? null]);
       const prods = await client.query<LinhaProduto>(SQL_LER_PRODUTOS, [idsProdutos]);
 
       // ---- (g) validacoes, todas antes de qualquer escrita --------------------
@@ -373,6 +381,15 @@ export class AthosOrcamentoService implements OnModuleDestroy {
           "FORMA_PAGAMENTO_INVALIDA",
           `ATHOS_ORCAMENTO_ID_FORMA_PAGAMENTO (${cfg.idFormaPagamento}) nao e uma forma de pagamento ativa de tipo dinheiro/PIX no Athos.`,
           500,
+        );
+      }
+
+      if (input.idcliente !== undefined && input.idcliente !== null && !c.cliente_ok) {
+        throw new OrcamentoAthosError(
+          "CLIENTE_INEXISTENTE",
+          `Cliente ${input.idcliente} nao existe no Athos. Busque o idcliente correto ou crie o orcamento sem cliente.`,
+          422,
+          { idcliente: input.idcliente },
         );
       }
 
@@ -445,11 +462,38 @@ export class AthosOrcamentoService implements OnModuleDestroy {
       const brutoTxt = centavosParaTexto(brutoC);
       const liquidoTxt = centavosParaTexto(liquidoC);
 
-      // ---- (i) escritas na ordem exata -----------------------------------------
+      const montarResultado = (idorcamento: number | null, senhabalcao: number | null): CriarOrcamentoResultado => ({
+        simulado: simular,
+        idorcamento,
+        senhabalcao,
+        valorBruto: brutoTxt,
+        descontoRS: "0.00",
+        descontoPercentual: "0.000",
+        valorLiquido: liquidoTxt,
+        itens: itens.map((i) => ({
+          sequenciaitem: i.sequenciaitem,
+          idproduto: i.idproduto,
+          descricao: i.descricao,
+          quantidade: milliParaTexto(i.qMilli),
+          valorUnitario: milliParaTexto(i.precoMilli),
+          valorTotal: centavosParaTexto(i.totalC),
+          desconto: "0.00",
+          valorFinal: centavosParaTexto(i.totalC),
+        })),
+        pagamento: { idformapagamento: cfg.idFormaPagamento, idcondicaopagamento: 0, valor: liquidoTxt },
+      });
+
+      // ---- (i) PONTO UNICO DE DECISAO: a simulacao termina aqui, antes de qualquer INSERT ----
+      if (simular) {
+        await client.query("ROLLBACK");
+        return montarResultado(null, null);
+      }
+
+      // ---- (j) escritas na ordem exata -----------------------------------------
       const cab = await client.query<{ idorcamento: number; senhabalcao: number }>(SQL_INSERIR_ORCAMENTO, [
         "0.00",
         cfg.idVendedor,
-        null,
+        input.idcliente ?? null,
         cfg.idFuncionario,
         cfg.idTerminal,
         brutoTxt,
@@ -475,30 +519,10 @@ export class AthosOrcamentoService implements OnModuleDestroy {
       await client.query(SQL_LIMPAR_PAGAMENTO, [idorcamento]);
       await client.query(SQL_INSERIR_PAGAMENTO, [idorcamento, cfg.idFormaPagamento, liquidoTxt, liquidoTxt]);
 
-      // ---- (j) commit e resposta -----------------------------------------------
+      // ---- (k) commit e resposta -----------------------------------------------
       await client.query("COMMIT");
       this.logger.log(`Orcamento Athos criado: idorcamento=${idorcamento} itens=${itens.length}`);
-
-      return {
-        simulado: false,
-        idorcamento,
-        senhabalcao,
-        valorBruto: brutoTxt,
-        descontoRS: "0.00",
-        descontoPercentual: "0.000",
-        valorLiquido: liquidoTxt,
-        itens: itens.map((i) => ({
-          sequenciaitem: i.sequenciaitem,
-          idproduto: i.idproduto,
-          descricao: i.descricao,
-          quantidade: milliParaTexto(i.qMilli),
-          valorUnitario: milliParaTexto(i.precoMilli),
-          valorTotal: centavosParaTexto(i.totalC),
-          desconto: "0.00",
-          valorFinal: centavosParaTexto(i.totalC),
-        })),
-        pagamento: { idformapagamento: cfg.idFormaPagamento, idcondicaopagamento: 0, valor: liquidoTxt },
-      };
+      return montarResultado(idorcamento, senhabalcao);
     } catch (err) {
       try {
         await client.query("ROLLBACK");
@@ -514,14 +538,11 @@ export class AthosOrcamentoService implements OnModuleDestroy {
   }
 
   /**
-   * Campos de 44-02 (desconto, cliente, simulacao, preco informado) ainda nao existem: o DTO ja os
-   * recusa com 400; aqui o servico tambem recusa, para nunca aceitar um campo que ignoraria.
+   * Campos de desconto e preco informado ainda nao existem: o DTO ja os recusa com 400; aqui o servico tambem recusa, para nunca aceitar um campo que ignoraria.
    */
   private rejeitarCamposNaoSuportados(input: CriarOrcamentoInput): void {
     const extras: string[] = [];
-    if (input.idcliente !== undefined) extras.push("idcliente");
     if (input.descontoTotalRS !== undefined) extras.push("descontoTotalRS");
-    if (input.simular !== undefined) extras.push("simular");
     for (const item of input.itens ?? []) {
       if (item.valorUnitario !== undefined && !extras.includes("itens[].valorUnitario")) extras.push("itens[].valorUnitario");
       if (item.descontoRS !== undefined && !extras.includes("itens[].descontoRS")) extras.push("itens[].descontoRS");
