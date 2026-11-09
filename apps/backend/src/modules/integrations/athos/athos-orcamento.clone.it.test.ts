@@ -109,7 +109,7 @@ rodar("IT clone athos-teste: POST /api/athos/orcamentos", () => {
     const escolhidos = await pg.query<{ idproduto: number }>(
       `SELECT idproduto FROM produto
         WHERE statusproduto = true AND COALESCE(vendeproduto, true)
-          AND precovendaproduto(idproduto) > 0 AND COALESCE(permitefracionar, true)
+          AND precovendaproduto(idproduto) >= 10 AND COALESCE(permitefracionar, true)
         ORDER BY idproduto LIMIT 2`,
     );
     if (escolhidos.rows.length < 2) throw new Error("Clone sem 2 produtos elegiveis para o IT");
@@ -275,5 +275,134 @@ rodar("IT clone athos-teste: POST /api/athos/orcamentos", () => {
     expect(outro.json.codigo).toBe("IDEMPOTENCY_KEY_REUTILIZADA");
 
     expect(await contarPorRef(refDoOrcamento(idem))).toBe(1);
+  });
+
+  async function ler(caminho: string, chave: string | null = CHAVE) {
+    const headers: Record<string, string> = {};
+    if (chave) headers["x-internal-api-key"] = chave;
+    const res = await fetch(`${base}/api/athos/orcamentos${caminho}`, { headers });
+    const json = (await res.json()) as any;
+    return { status: res.status, json };
+  }
+
+  /** Orcamento criado no IT5, reaproveitado pelo IT8. */
+  let orcamentoIT5: { id: number; resposta: Record<string, any> } | null = null;
+
+  it("IT5 desconto e fracao: invariantes do Balcao nas 3 tabelas", async () => {
+    const { status, json } = await postar({
+      itens: [
+        { idproduto: produtoA, quantidade: 1.5, descontoRS: 0.1 },
+        { idproduto: produtoB, quantidade: 2 },
+      ],
+      descontoTotalRS: 0.37,
+      obs: "teste IT5 fase 44",
+    });
+    expect(status).toBe(201);
+    expect(json.simulado).toBe(false);
+    idsCriados.push(json.idorcamento);
+    orcamentoIT5 = { id: json.idorcamento, resposta: json };
+
+    const inv = await pg.query(
+      `SELECT o.valor::text AS valor, o.descontors::text AS descontors, o.desconto::text AS desconto,
+              (o.descontors = (SELECT sum(orcamentodesconto) FROM orcamento_item WHERE idorcamento = o.idorcamento)) AS desc_ok,
+              (o.desconto = round(o.descontors / o.valor * 100, 3)) AS pct_ok,
+              (o.valor = (SELECT sum(round(quantidadeitem * valoritem, 2)) FROM orcamento_item WHERE idorcamento = o.idorcamento)) AS valor_ok,
+              ((o.valor - o.descontors) = (SELECT sum(orcamentovalorfinalitem) FROM orcamento_item WHERE idorcamento = o.idorcamento)) AS final_ok,
+              ((o.valor - o.descontors) = (SELECT sum(valor) FROM orcamento_forma_pagamento WHERE idorcamento = o.idorcamento)) AS pag_ok,
+              ((o.valor - o.descontors) = (SELECT sum(valorrecebido) FROM orcamento_forma_pagamento WHERE idorcamento = o.idorcamento)) AS recebido_ok,
+              (SELECT count(*) FROM orcamento_forma_pagamento WHERE idorcamento = o.idorcamento)::int AS n_pag,
+              (SELECT quantidadeitem::text FROM orcamento_item WHERE idorcamento = o.idorcamento AND sequenciaitem = 1) AS q1,
+              (SELECT orcamentodesconto FROM orcamento_item WHERE idorcamento = o.idorcamento AND sequenciaitem = 1) >= 0.10 AS item1_desc_ok
+         FROM orcamento o WHERE o.idorcamento = $1`,
+      [json.idorcamento],
+    );
+    const o = inv.rows[0];
+    expect(Number(o.descontors)).toBeCloseTo(0.47, 2);
+    expect(o.desc_ok).toBe(true);
+    expect(o.pct_ok).toBe(true);
+    expect(o.valor_ok).toBe(true);
+    expect(o.final_ok).toBe(true);
+    expect(o.pag_ok).toBe(true);
+    expect(o.recebido_ok).toBe(true);
+    expect(o.n_pag).toBe(1);
+    expect(Number(o.q1)).toBeCloseTo(1.5, 3);
+    expect(o.item1_desc_ok).toBe(true);
+
+    // A resposta HTTP traz os mesmos numeros.
+    expect(Number(json.valorBruto)).toBeCloseTo(Number(o.valor), 2);
+    expect(Number(json.descontoRS)).toBeCloseTo(Number(o.descontors), 2);
+    expect(Number(json.descontoPercentual)).toBeCloseTo(Number(o.desconto), 3);
+    expect(Number(json.valorLiquido)).toBeCloseTo(Number(o.valor) - Number(o.descontors), 2);
+  });
+
+  it("IT6 simulacao nao grava (mesmo com a escrita desligada)", async () => {
+    const contar = async () =>
+      (await pg.query<{ n: string }>("SELECT count(*)::text AS n FROM orcamento")).rows[0].n;
+    const antes = await contar();
+    process.env.ATHOS_ORCAMENTO_ESCRITA = "false";
+    try {
+      const { status, json } = await postar({
+        itens: [{ idproduto: produtoA, quantidade: 1.5, descontoRS: 0.1 }],
+        descontoTotalRS: 0.37,
+        simular: true,
+      });
+      expect(status).toBe(201);
+      expect(json.simulado).toBe(true);
+      expect(json.idorcamento).toBeNull();
+      expect(json.senhabalcao).toBeNull();
+      expect(Number(json.descontoRS)).toBeCloseTo(0.47, 2);
+    } finally {
+      process.env.ATHOS_ORCAMENTO_ESCRITA = "true";
+    }
+    expect(await contar()).toBe(antes);
+  });
+
+  it("IT7 busca: o produto vem primeiro com o preco do Athos", async () => {
+    const esperado = await pg.query<{ preco: string }>("SELECT precovendaproduto($1)::text AS preco", [produtoA]);
+    const { status, json } = await ler(`/produtos?q=${produtoA}&limit=5`);
+    expect(status).toBe(200);
+    expect(Array.isArray(json)).toBe(true);
+    expect(json[0].idproduto).toBe(produtoA);
+    expect(json[0].preco).toBe(esperado.rows[0].preco);
+    expect(JSON.stringify(json)).not.toMatch(/custo/i);
+    for (const campo of ["descricao", "marca", "referencia", "codigoBarra", "emPromocao", "estoqueLoja", "estoqueDeposito", "permiteFracionar", "descontoMaximo", "unidade"]) {
+      expect(json[0]).toHaveProperty(campo);
+    }
+
+    // Busca textual com caracteres especiais do LIKE nao quebra e nao devolve tudo.
+    const curinga = await ler(`/produtos?q=${encodeURIComponent("%_\\")}&limit=3`);
+    expect(curinga.status).toBe(200);
+    expect(Array.isArray(curinga.json)).toBe(true);
+  });
+
+  it("IT8 leitura do orcamento criado no IT5", async () => {
+    expect(orcamentoIT5).not.toBeNull();
+    const { id, resposta } = orcamentoIT5 as { id: number; resposta: Record<string, any> };
+    const { status, json } = await ler(`/${id}`);
+    expect(status).toBe(200);
+    expect(json.idorcamento).toBe(id);
+    expect(json.senhabalcao).toBe(resposta.senhabalcao);
+    expect(json.status).toBe("aberto");
+    expect(Number(json.valorBruto)).toBeCloseTo(Number(resposta.valorBruto), 2);
+    expect(Number(json.descontoRS)).toBeCloseTo(Number(resposta.descontoRS), 2);
+    expect(Number(json.valorLiquido)).toBeCloseTo(Number(resposta.valorLiquido), 2);
+    expect(json.itens).toHaveLength(2);
+    expect(json.itens.map((i: any) => i.idproduto)).toEqual([produtoA, produtoB]);
+    expect(Number(json.itens[0].quantidade)).toBeCloseTo(1.5, 3);
+    expect(json.pagamentos).toHaveLength(1);
+    expect(json.pagamentos[0].idformapagamento).toBe(5);
+    expect(Number(json.pagamentos[0].valor)).toBeCloseTo(Number(resposta.valorLiquido), 2);
+  });
+
+  it("IT9 orcamento inexistente -> 404 ORCAMENTO_INEXISTENTE", async () => {
+    const m = await pg.query<{ n: string }>("SELECT (COALESCE(max(idorcamento), 0) + 1000000)::text AS n FROM orcamento");
+    const { status, json } = await ler(`/${m.rows[0].n}`);
+    expect(status).toBe(404);
+    expect(json.codigo).toBe("ORCAMENTO_INEXISTENTE");
+  });
+
+  it("IT10 GETs sem x-internal-api-key -> 401", async () => {
+    expect((await ler(`/produtos?q=${produtoA}`, null)).status).toBe(401);
+    expect((await ler(`/${orcamentoIT5?.id ?? 1}`, null)).status).toBe(401);
   });
 });
