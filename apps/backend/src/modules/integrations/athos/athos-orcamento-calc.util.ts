@@ -94,3 +94,163 @@ export function centavosParaTexto(c: bigint): string {
 export function linhaCentavos(qMilli: bigint, vMilli: bigint): bigint {
   return (qMilli * vMilli + 5000n) / 10000n;
 }
+
+// ---------------------------------------------------------------------------
+// Rateio, percentual e calculo completo do orcamento
+// ---------------------------------------------------------------------------
+
+/**
+ * Rateia `descontoC` (centavos) proporcionalmente aos liquidos das linhas, pelo metodo do maior resto.
+ * Cota base = piso(desconto x liquido / soma); os centavos que sobram vao, um a um, para as linhas de
+ * maior resto fracionario (restos comparados como inteiros). Em empate vence a linha de maior indice
+ * (ajuste de centavos nas linhas mais ao fim, D-02). Cada cota nunca excede o liquido da linha.
+ */
+export function ratear(descontoC: bigint, liquidosC: bigint[]): bigint[] {
+  if (descontoC < 0n) {
+    throw new CalcOrcamentoError("VALOR_INVALIDO", `Desconto negativo (${centavosParaTexto(descontoC)}) nao e aceito.`);
+  }
+  if (descontoC === 0n) return liquidosC.map(() => 0n);
+
+  const soma = liquidosC.reduce((acc, l) => acc + l, 0n);
+  if (soma <= 0n || descontoC > soma) {
+    throw new CalcOrcamentoError(
+      "DESCONTO_ACIMA_LIMITE",
+      `Desconto de ${centavosParaTexto(descontoC)} maior que o total liquido dos itens (${centavosParaTexto(soma)}).`,
+    );
+  }
+
+  const cotas = liquidosC.map((l) => (descontoC * l) / soma);
+  const restos = liquidosC.map((l) => (descontoC * l) % soma);
+  const sobra = descontoC - cotas.reduce((acc, c) => acc + c, 0n);
+
+  const ordem = liquidosC
+    .map((_, i) => i)
+    .sort((a, b) => {
+      if (restos[a] !== restos[b]) return restos[a] > restos[b] ? -1 : 1;
+      return b - a; // empate: indice maior primeiro
+    });
+  for (let k = 0; BigInt(k) < sobra; k++) cotas[ordem[k]] += 1n;
+  return cotas;
+}
+
+/** round(desconto / bruto x 100, 3) half-up, em milesimos de percentual. 4/17704 -> 23 ("0.023"). */
+export function percentualMilli(descontoC: bigint, brutoC: bigint): bigint {
+  if (brutoC <= 0n) {
+    throw new CalcOrcamentoError("VALOR_FORA_DO_LIMITE", "Valor bruto do orcamento deve ser maior que zero.");
+  }
+  return (descontoC * 100000n + brutoC / 2n) / brutoC;
+}
+
+/** 35059n -> "35.059" */
+export function percentualTexto(pMilli: bigint): string {
+  return milliParaTexto(pMilli);
+}
+
+export interface LinhaCalcEntrada {
+  qMilli: bigint;
+  precoMilli: bigint;
+  /** Preco informado pelo chamador. Abaixo do preco vira desconto; acima e gravado como valor do item. */
+  valorUnitarioMilli?: bigint;
+  /** Desconto explicito da linha, em centavos. */
+  descontoItemC?: bigint;
+}
+
+export interface LinhaCalcSaida {
+  /** Valor unitario gravado em orcamento_item.valoritem (milesimos). */
+  valorItemMilli: bigint;
+  /** round2(quantidade x valorItem), em centavos. */
+  totalC: bigint;
+  /** Desconto total da linha: implicito + explicito + cota do desconto global. */
+  descontoC: bigint;
+  /** totalC - descontoC (orcamentovalorfinalitem). */
+  finalC: bigint;
+}
+
+export interface TotaisOrcamento {
+  linhas: LinhaCalcSaida[];
+  brutoC: bigint;
+  descontoC: bigint;
+  liquidoC: bigint;
+  percentualMilli: bigint;
+}
+
+/**
+ * Calcula linhas, rateio e totais do orcamento em inteiros (D-02, D-04).
+ * `limitePercentualMilli` vem de conf_vendas.permitedescontode (100% = 100000n); `descontomaximo`
+ * do produto NAO participa (so informativo).
+ */
+export function calcularOrcamento(
+  linhas: LinhaCalcEntrada[],
+  descontoTotalC: bigint,
+  limitePercentualMilli: bigint,
+): TotaisOrcamento {
+  if (linhas.length === 0) {
+    throw new CalcOrcamentoError("VALOR_INVALIDO", "Informe ao menos um item para calcular o orcamento.");
+  }
+  if (descontoTotalC < 0n) {
+    throw new CalcOrcamentoError(
+      "VALOR_INVALIDO",
+      `Desconto total negativo (${centavosParaTexto(descontoTotalC)}) nao e aceito.`,
+    );
+  }
+
+  const parciais = linhas.map((l, indice) => {
+    const numero = indice + 1;
+    const vu = l.valorUnitarioMilli ?? l.precoMilli;
+    const extraC = l.descontoItemC ?? 0n;
+    if (vu < 0n || extraC < 0n || l.qMilli <= 0n || l.precoMilli < 0n) {
+      throw new CalcOrcamentoError("VALOR_INVALIDO", `Valores negativos ou zerados no item ${numero}.`, indice);
+    }
+
+    const valorItemMilli = vu > l.precoMilli ? vu : l.precoMilli;
+    const totalC = linhaCentavos(l.qMilli, valorItemMilli);
+    if (totalC <= 0n || totalC >= LIMITE_LINHA_CENTAVOS) {
+      throw new CalcOrcamentoError(
+        "VALOR_FORA_DO_LIMITE",
+        `Total do item ${numero} (${centavosParaTexto(totalC)}) fora do limite aceito: deve ser maior que zero e menor que ${centavosParaTexto(LIMITE_LINHA_CENTAVOS)}.`,
+        indice,
+      );
+    }
+
+    // Preco abaixo do cadastro e desconto, nao erro (D-04).
+    const implicitoC = vu < l.precoMilli ? linhaCentavos(l.qMilli, l.precoMilli) - linhaCentavos(l.qMilli, vu) : 0n;
+    const descontoItemC = implicitoC + extraC;
+    if (descontoItemC > totalC) {
+      throw new CalcOrcamentoError(
+        "DESCONTO_ACIMA_LIMITE",
+        `Desconto do item ${numero} (${centavosParaTexto(descontoItemC)}) maior que o total da linha (${centavosParaTexto(totalC)}).`,
+        indice,
+      );
+    }
+    return { valorItemMilli, totalC, descontoItemC };
+  });
+
+  const liquidos = parciais.map((p) => p.totalC - p.descontoItemC);
+  const somaLiquidos = liquidos.reduce((acc, v) => acc + v, 0n);
+  if (descontoTotalC > somaLiquidos) {
+    throw new CalcOrcamentoError(
+      "DESCONTO_ACIMA_LIMITE",
+      `Desconto total de ${centavosParaTexto(descontoTotalC)} maior que o total liquido dos itens (${centavosParaTexto(somaLiquidos)}).`,
+    );
+  }
+  const cotas = ratear(descontoTotalC, liquidos);
+
+  const saida: LinhaCalcSaida[] = parciais.map((p, i) => {
+    const descontoC = p.descontoItemC + cotas[i];
+    return { valorItemMilli: p.valorItemMilli, totalC: p.totalC, descontoC, finalC: p.totalC - descontoC };
+  });
+
+  const brutoC = saida.reduce((acc, l) => acc + l.totalC, 0n);
+  const descontoC = saida.reduce((acc, l) => acc + l.descontoC, 0n);
+  const pMilli = percentualMilli(descontoC, brutoC);
+
+  // Comparacao exata em inteiros: descontoC/brutoC x 100 <= limite% <=> descontoC x 100000 <= limiteMilli x brutoC
+  if (descontoC * 100000n > limitePercentualMilli * brutoC) {
+    throw new CalcOrcamentoError(
+      "DESCONTO_ACIMA_LIMITE",
+      `Desconto total de ${percentualTexto(pMilli)}% ultrapassa o limite permitido de ${percentualTexto(limitePercentualMilli)}%.`,
+    );
+  }
+
+  return { linhas: saida, brutoC, descontoC, liquidoC: brutoC - descontoC, percentualMilli: pMilli };
+}
