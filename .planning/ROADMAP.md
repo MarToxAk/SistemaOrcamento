@@ -34,6 +34,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [x] **Phase 39: Scaffold, Leitura e Spikes de Introspecão** - Spikes de introspecção no DB de referência (192.168.3.198), extração de validarFkExiste para util reutilizável, e endpoint GET de listagem enriquecida de componentes — tudo que não depende do write GRANT (completed 2026-06-30)
 - [x] **Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)** - Quatro endpoints de escrita com validação dual de FK, gerenciamento transacional do flag, PK serial via RETURNING e mapeamento completo de erros Postgres; cobertura de testes Jest (completed 2026-09-04, verificação retroativa)
 - [ ] **Phase 43: Baixa automática de contas a receber no Athos**
+- [ ] **Phase 44: API de criação de orçamento no Athos para IA**
 
 ### Phase Details
 
@@ -164,6 +165,16 @@ Plans:
 - [x] 43-02-PLAN.md — Wave 2 · Encargos e valor pago: checkpoint humano de introspecção somente leitura do Athos + fórmula de juros/multa/atraso validada contra casos reais (TDD) + decisão do valor efetivamente pago (D-02)
 - [x] 43-03-PLAN.md — Wave 3 · Registro durável e retentativa: migration (athosBaixa* + CobrancaBaixaAthosLog), baixa manual protegida com simulação, job de retentativa, guardas de cancelamento (D-01, D-08)
 - [x] 43-04-PLAN.md — Wave 4 · Estorno ("Voltar Contas Recebidas") transacional + endpoint protegido + controles no painel de boletos + roteiro de verificação guiada pelo usuário (D-06, D-07)
+
+### Phase 44: API de criação de orçamento no Athos para IA
+
+**Goal:** Uma IA (agente externo) consegue montar e gravar um orçamento real no Athos via API REST protegida por `x-internal-api-key`: (1) buscar produtos com preço (`precovendaproduto`) e custo, (2) listar formas de pagamento ativas, (3) criar o orçamento gravando `orcamento` + `orcamento_item` + `orcamento_forma_pagamento` em UMA transação com `RETURNING idorcamento`, reproduzindo o SQL capturado do `Balcao.exe` (ver `44-REFERENCIA-SQL-ATHOS.md`), e (4) consultar o orçamento criado (número para o cliente/PDV). SQL compatível com PostgreSQL 9.0.5. Escrita é nova exceção à regra read-only do Athos. Testes de integração somente no clone `athos-teste` (127.0.0.1:5440) — nunca contra o Athos original (192.168.33.198 / 100.102.146.44).
+**Requirements**: TBD
+**Depends on:** Phase 43
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 44 to break down)
 
 ---
 
