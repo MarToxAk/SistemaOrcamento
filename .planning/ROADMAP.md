@@ -183,12 +183,16 @@ Plans:
 ### Phase 45: Aviso de boletos a vencer e atrasados (alerta interno + e-mail automatico)
 
 **Goal:** O sistema avisa sobre boletos (modulo cobranca / Contas a Receber) proximos do vencimento e atrasados: (a) alerta interno na tela (dashboard / Contas a Receber) e (b) e-mail automatico ao cliente e aos destinatarios em copia (CC) da Fase 42, reutilizando o email-envio.service. Lembrete antes do vencimento: 3 dias antes e 1 dia antes. Atraso: 2 dias, 7 dias e 14 dias depois do vencimento (maximo 3 avisos de atraso). Cada aviso e registrado para nao ser enviado em duplicidade; boletos pagos/cancelados nao geram aviso.
-**Requirements**: TBD
+**Requirements**: AVISO-01, AVISO-02, AVISO-03, AVISO-04, AVISO-05, AVISO-06, AVISO-07, AVISO-08 (IDs locais da fase — definidos em 45-01-PLAN.md)
 **Depends on:** Phase 44
-**Plans:** 0 plans
+**Plans:** 5 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 45 to break down)
+- [ ] 45-01-PLAN.md — Wave 1 · Tracer: aviso D-1 ponta a ponta (job com kill switch -> serviço -> util de janelas -> EmailEnvioService -> SMTP + CobrancaAvisoVencimento/CobrancaEmailEnvio) + tabela/migration idempotente + e-mail de aviso robusto (link + PDF best-effort, CC, sem emoji) (D-01..D-07; AVISO-01, 02, 03, 04, 07)
+- [ ] 45-02-PLAN.md — Wave 2 · Janelas/fuso/catch-up provados, cache por cliente, teto de 100 envios com pausa, idempotência sob falha (retomada atômica, máx. 3 tentativas), sem e-mail terminal, Athos fora sem reserva, prévia detalhada (D-02..D-07; AVISO-01, 02, 04, 07)
+- [ ] 45-03-PLAN.md — Wave 2 · Operação: testes do job (kill switch exato, dry-run, running, cron 08:00/14:00 SP), prévia protegida GET /api/cobranca/aviso-vencimento/previa (AdminOnly, sempre dry-run) e COBRANCA_AVISO_* com padrão false nos 2 compose e exemplos de env (D-07; AVISO-04, 08)
+- [ ] 45-04-PLAN.md — Wave 2 · Alerta interno: dashboard com situacaoVencimento/ultimoAviso e "hoje" em São Paulo + pills "Vence em Nd"/"Vence hoje"/"Atrasado há Nd", contadores e último aviso ("Sem e-mail cadastrado") no painel de /contas-receber (D-01, D-04, D-06, D-08; AVISO-05, 06, 07)
+- [ ] 45-05-PLAN.md — Wave 3 · Roteiro de ativação (prévia -> dry-run -> envio real -> desligar) + gates da fase + verificação humana com o envio desligado; nada é ativado pelo executor (D-07, D-08; AVISO-04, 06, 08)
 
 ---
 
