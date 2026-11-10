@@ -35,6 +35,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [x] **Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)** - Quatro endpoints de escrita com validação dual de FK, gerenciamento transacional do flag, PK serial via RETURNING e mapeamento completo de erros Postgres; cobertura de testes Jest (completed 2026-09-04, verificação retroativa)
 - [ ] **Phase 43: Baixa automática de contas a receber no Athos**
 - [ ] **Phase 44: API de criação de orçamento no Athos para IA**
+- [ ] **Phase 45: Aviso de boletos a vencer e atrasados (alerta interno + e-mail automatico)**
 
 ### Phase Details
 
@@ -178,6 +179,16 @@ Plans:
 - [ ] 44-02-PLAN.md — Wave 2 · Simulação READ ONLY, cliente opcional, descontos (por item, preço abaixo do cadastro, global) com limites de conf_vendas, suíte unitária com pg falso e compatibilidade 9.0.5, envs ATHOS_ORCAMENTO_* no deploy (D-01, D-02, D-03, D-04)
 - [ ] 44-03-PLAN.md — Wave 2 · Idempotency-Key reserva-primeiro + auditoria AthosOrcamentoIa (model + migration aditiva), teste HTTP do controller e replay sem duplicata no clone (D-03)
 - [ ] 44-04-PLAN.md — Wave 3 · GET produtos e GET :id, ciclo completo provado no clone, roteiro de verificação manual em produção + checkpoint humano (D-01, D-03, D-04)
+
+### Phase 45: Aviso de boletos a vencer e atrasados (alerta interno + e-mail automatico)
+
+**Goal:** O sistema avisa sobre boletos (modulo cobranca / Contas a Receber) proximos do vencimento e atrasados: (a) alerta interno na tela (dashboard / Contas a Receber) e (b) e-mail automatico ao cliente e aos destinatarios em copia (CC) da Fase 42, reutilizando o email-envio.service. Lembrete antes do vencimento: 3 dias antes e 1 dia antes. Atraso: 2 dias, 7 dias e 14 dias depois do vencimento (maximo 3 avisos de atraso). Cada aviso e registrado para nao ser enviado em duplicidade; boletos pagos/cancelados nao geram aviso.
+**Requirements**: TBD
+**Depends on:** Phase 44
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 45 to break down)
 
 ---
 
