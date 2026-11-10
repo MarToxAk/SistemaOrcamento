@@ -426,8 +426,17 @@ export class EmailEnvioService {
         cc: [],
       };
     }
-    const padrao = await this.buscarCcPadrao(idclienteAthos);
-    const cc = normalizarListaCc(padrao.emails, principal);
+    // A lista ja e normalizada ao salvar (Fase 42); o try/catch e so defesa contra dado legado invalido:
+    // CC ruim nunca deve impedir o aviso ao cliente.
+    let cc: string[] = [];
+    try {
+      const padrao = await this.buscarCcPadrao(idclienteAthos);
+      cc = normalizarListaCc(padrao.emails, principal);
+    } catch (err) {
+      this.logger.warn(
+        `Aviso: CC padrao invalido ignorado (cliente=${idclienteAthos}): ${err instanceof Error ? err.name : "erro"}.`,
+      );
+    }
     return { lookup: "ok", nomeCliente, destinatario: principal, cc };
   }
 
@@ -449,15 +458,23 @@ export class EmailEnvioService {
     const empresaCor = this.config.get<string>("EMPRESA_COR_PRIMARIA") ?? "#0d6efd";
     const assunto = `Financeiro ${empresaNome} — ${textoAssuntoAviso(input.tipo, input.diasParaVencer)}`;
 
-    const linkBoleto = input.linkBoleto;
+    // Link so com http(s): qualquer outro esquema (ex.: javascript:) e tratado como ausente (T-45-02).
+    const linkBoleto = input.linkBoleto && /^https?:\/\//i.test(input.linkBoleto.trim()) ? input.linkBoleto.trim() : null;
     const attachments: Anexo[] = [];
     if (linkBoleto) {
-      const boletoPdf = await this.cobrancaService.downloadBoletoPdf(input.cobrancaBoletoId);
-      attachments.push({
-        filename: boletoPdf.nomeArquivo,
-        content: boletoPdf.pdfBuffer,
-        contentType: "application/pdf",
-      });
+      // Best-effort: falha ao baixar o PDF nunca bloqueia o aviso (o corpo ja traz o link).
+      try {
+        const boletoPdf = await this.cobrancaService.downloadBoletoPdf(input.cobrancaBoletoId);
+        attachments.push({
+          filename: boletoPdf.nomeArquivo,
+          content: boletoPdf.pdfBuffer,
+          contentType: "application/pdf",
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Aviso: PDF do boleto indisponivel, enviando so o link (cobrancaBoletoId=${input.cobrancaBoletoId}): ${err instanceof Error ? err.name : "erro"}.`,
+        );
+      }
     }
     const anexouPdf = attachments.length > 0;
 
@@ -495,20 +512,30 @@ export class EmailEnvioService {
       throw new InternalServerErrorException("Falha ao enviar o aviso de vencimento.");
     }
 
-    const row = await this.prisma.cobrancaEmailEnvio.create({
-      data: {
-        token,
-        idclienteAthos: input.idclienteAthos,
-        destinatario: input.destinatario,
-        cc: input.cc,
-        assunto,
-        status: "enviado",
-        cobrancaBoletoId: input.cobrancaBoletoId,
-        nfseEmitidaIds: [],
-        nfeNumeros: [],
-      },
-    });
-    return { id: row.id, token, assunto, anexouPdf };
+    // O e-mail ja saiu: falha ao gravar o historico NAO pode lancar, senao o orquestrador marcaria erro
+    // e reenviaria o aviso (duplicado ao cliente).
+    let id: number | null = null;
+    try {
+      const row = await this.prisma.cobrancaEmailEnvio.create({
+        data: {
+          token,
+          idclienteAthos: input.idclienteAthos,
+          destinatario: input.destinatario,
+          cc: input.cc,
+          assunto,
+          status: "enviado",
+          cobrancaBoletoId: input.cobrancaBoletoId,
+          nfseEmitidaIds: [],
+          nfeNumeros: [],
+        },
+      });
+      id = row.id;
+    } catch (err) {
+      this.logger.error(
+        `Aviso enviado, mas o historico nao foi gravado (cobrancaBoletoId=${input.cobrancaBoletoId} tipo=${input.tipo}): ${err instanceof Error ? err.name : "erro"}.`,
+      );
+    }
+    return { id, token, assunto, anexouPdf };
   }
 
   /**
