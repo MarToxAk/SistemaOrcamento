@@ -15,14 +15,40 @@ import { EmailEnvioService } from "./email-envio.service";
 
 /** Teto de candidatos lidos por ciclo (take da consulta). */
 export const AVISO_MAX_CANDIDATOS = 500;
-/** Teto de tentativas SMTP por ciclo (aplicado em 45-02). */
+/** Teto de tentativas SMTP por ciclo (D-07). */
 export const AVISO_MAX_ENVIOS_POR_CICLO = 100;
-/** Tentativas por (boleto, tipo) antes de desistir (retomada em 45-02). */
+/** Tentativas por (boleto, tipo) antes de desistir (D-05). */
 export const AVISO_MAX_TENTATIVAS = 3;
-/** Pausa entre envios para nao saturar o SMTP (aplicada em 45-02). */
+/** Pausa entre envios para nao saturar o SMTP (D-07). */
 export const AVISO_INTERVALO_ENVIO_MS = 250;
 
 const ERRO_MAX_CHARS = 300;
+const EMAIL_RE = /[^\s@]+@[^\s@]+/g;
+
+interface DestinatariosAviso {
+  lookup: "ok" | "falha";
+  nomeCliente: string;
+  destinatario: string | null;
+  motivoSemEmail?: "vazio" | "invalido";
+  cc: string[];
+}
+
+interface LinhaAvisoExistente {
+  id: number;
+  tipo: string;
+  status: string;
+  tentativas: number;
+}
+
+/** Texto seguro para a coluna erro: sem trechos com formato de e-mail e limitado a 300 caracteres. */
+function sanitizarErro(err: unknown): string {
+  const bruto = `${err instanceof Error ? err.name : "Erro"}: ${err instanceof Error ? err.message : String(err)}`;
+  return bruto.replace(EMAIL_RE, "[email]").slice(0, ERRO_MAX_CHARS);
+}
+
+function ehP2002(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === "P2002";
+}
 
 export type DesfechoAviso =
   | "enviado"
@@ -96,6 +122,24 @@ export class CobrancaAvisoVencimentoService {
       take: AVISO_MAX_CANDIDATOS,
     });
 
+    if (candidatos.length >= AVISO_MAX_CANDIDATOS) {
+      this.logger.warn(
+        `Consulta de avisos atingiu o limite de ${AVISO_MAX_CANDIDATOS} candidatos; o restante fica para o proximo disparo.`,
+      );
+    }
+
+    // Cadastro do cliente lido uma unica vez por ciclo (Athos de producao).
+    const cacheClientes = new Map<number, Promise<DestinatariosAviso>>();
+    const resolverCliente = (idcliente: number): Promise<DestinatariosAviso> => {
+      let p = cacheClientes.get(idcliente);
+      if (!p) {
+        p = this.emailEnvio.resolverDestinatariosAviso(idcliente);
+        cacheClientes.set(idcliente, p);
+      }
+      return p;
+    };
+    let tentativasEnvio = 0;
+
     const resultado: ResultadoCicloAviso = {
       hoje,
       dryRun,
@@ -132,7 +176,14 @@ export class CobrancaAvisoVencimentoService {
         continue;
       }
 
-      const dest = await this.emailEnvio.resolverDestinatariosAviso(b.idclienteAthos);
+      if (!dryRun && tentativasEnvio >= AVISO_MAX_ENVIOS_POR_CICLO) {
+        this.logger.warn(
+          `Aviso: teto de ${AVISO_MAX_ENVIOS_POR_CICLO} envios por ciclo atingido; o restante fica para o proximo disparo.`,
+        );
+        break;
+      }
+
+      const dest = await resolverCliente(b.idclienteAthos);
       if (dest.lookup === "falha") {
         this.logger.warn(
           `Aviso ${tipo}: cadastro do cliente indisponivel (boleto=${b.id}, cliente=${b.idclienteAthos}) - tentara no proximo ciclo.`,
@@ -185,6 +236,7 @@ export class CobrancaAvisoVencimentoService {
         throw err;
       }
 
+      tentativasEnvio += 1;
       try {
         await this.emailEnvio.enviarAvisoVencimento({
           cobrancaBoletoId: b.id,
@@ -220,11 +272,17 @@ export class CobrancaAvisoVencimentoService {
         );
       }
       resultado.itens.push(item);
+      await this.aguardar(AVISO_INTERVALO_ENVIO_MS);
     }
 
     this.logger.log(
       `Ciclo de avisos${dryRun ? " (dry-run)" : ""} concluido: candidatos=${resultado.candidatos}, enviados=${resultado.enviados}, sem_email=${resultado.semEmail}, ja_processados=${resultado.jaProcessados}, erros=${resultado.erros}, lookup_falhou=${resultado.lookupFalhou}.`,
     );
     return resultado;
+  }
+
+  /** Pausa entre envios (substituivel em teste). */
+  private aguardar(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
