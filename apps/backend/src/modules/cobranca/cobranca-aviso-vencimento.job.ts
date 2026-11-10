@@ -8,8 +8,10 @@ import {
 } from "./cobranca-aviso-vencimento.service";
 
 /**
- * Job do aviso de vencimento/atraso de boletos (Fase 45, D-07). Roda as 08:00 e 14:00 em America/Sao_Paulo
- * (a segunda janela serve de nova tentativa para falhas do ciclo da manha).
+ * Job do aviso de vencimento/atraso de boletos (Fase 45, D-07). Roda as 08:00 e 14:00 em America/Sao_Paulo.
+ * Dois disparos por dia porque: (1) uma falha de SMTP no ciclo da manha ganha nova tentativa ainda dentro da
+ * janela de um dia do D-1; (2) se o processo estava fora do ar as 08:00, o ciclo das 14:00 recupera o aviso
+ * (@nestjs/schedule nao recupera disparos perdidos - premissa A4 da pesquisa).
  *
  * DESLIGADO POR PADRAO: envia e-mail real a clientes, entao so liga com COBRANCA_AVISO_ATIVO exatamente
  * igual a "true" (kill switch invertido: ausente, "false", "TRUE" ou qualquer outro texto = desligado).
@@ -48,7 +50,14 @@ export class CobrancaAvisoVencimentoJob {
 
     this.running = true;
     try {
-      return await this.avisos.processarCiclo({ dryRun });
+      const resultado = await this.avisos.processarCiclo({ dryRun });
+      // So contagens: nunca e-mails nem nomes de clientes no log.
+      this.logger.log(
+        `Aviso de vencimento: ciclo concluido (dryRun=${resultado.dryRun}) candidatos=${resultado.candidatos} ` +
+          `enviados=${resultado.enviados} semEmail=${resultado.semEmail} jaProcessados=${resultado.jaProcessados} ` +
+          `erros=${resultado.erros} lookupFalhou=${resultado.lookupFalhou}.`,
+      );
+      return resultado;
     } catch (err) {
       this.logger.error(
         `Aviso de vencimento: ciclo falhou: ${err instanceof Error ? err.name : "erro"}.`,
