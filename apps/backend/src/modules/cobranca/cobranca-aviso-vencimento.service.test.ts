@@ -267,4 +267,237 @@ describe("CobrancaAvisoVencimentoService (Fase 45, plano 02)", () => {
       expect(r.itens).toEqual([]);
     });
   });
+
+  describe("idempotencia sob falha, sem e-mail, Athos fora e previa", () => {
+    it.each(["enviado", "sem_email", "enviando"])(
+      "S8 linha existente em %s nao resolve, reserva nem envia",
+      async (status) => {
+        const { servico, resolverDestinatariosAviso, create, updateMany, enviarAvisoVencimento } = montar(
+          [boleto(1, "2026-11-11")],
+          { linhas: [{ cobrancaBoletoId: 1, tipo: "D-1", status }] },
+        );
+
+        const r = await servico.processarCiclo({ agora: AGORA });
+
+        expect(resolverDestinatariosAviso).not.toHaveBeenCalled();
+        expect(create).not.toHaveBeenCalled();
+        expect(updateMany).not.toHaveBeenCalled();
+        expect(enviarAvisoVencimento).not.toHaveBeenCalled();
+        expect(r.jaProcessados).toBe(1);
+        expect(r.itens).toEqual([expect.objectContaining({ desfecho: "ja_processado" })]);
+      },
+    );
+
+    it("S9 corrida: create lanca P2002 e a linha encontrada ja esta enviada -> nenhum envio", async () => {
+      const { servico, create, findUnique, enviarAvisoVencimento } = montar([boleto(1, "2026-11-11")], {
+        linhas: [{ cobrancaBoletoId: 1, tipo: "D-1", status: "enviado" }],
+        avisosNaConsulta: false,
+      });
+
+      const r = await servico.processarCiclo({ agora: AGORA });
+
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { cobrancaBoletoId_tipo: { cobrancaBoletoId: 1, tipo: "D-1" } },
+        }),
+      );
+      expect(enviarAvisoVencimento).not.toHaveBeenCalled();
+      expect(r.jaProcessados).toBe(1);
+      expect(r.enviados).toBe(0);
+    });
+
+    it("S10 retomada de erro: troca atomica por updateMany e um unico envio", async () => {
+      const { servico, updateMany, update, enviarAvisoVencimento, linhas } = montar(
+        [boleto(1, "2026-11-11")],
+        { linhas: [{ cobrancaBoletoId: 1, tipo: "D-1", status: "erro", tentativas: 1, erro: "x" }] },
+      );
+      const linhaId = linhas[0].id;
+
+      const r = await servico.processarCiclo({ agora: AGORA });
+
+      expect(updateMany).toHaveBeenCalledTimes(1);
+      const arg = (updateMany.mock.calls[0] as unknown[])[0] as {
+        where: unknown;
+        data: Record<string, unknown>;
+      };
+      expect(arg.where).toEqual({ id: linhaId, status: "erro", tentativas: { lt: 3 } });
+      expect(arg.data).toEqual(
+        expect.objectContaining({ status: "enviando", tentativas: { increment: 1 }, erro: null }),
+      );
+      expect(enviarAvisoVencimento).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith({
+        where: { id: linhaId },
+        data: expect.objectContaining({ status: "enviado", enviadoEm: expect.any(Date) }),
+      });
+      expect(r.enviados).toBe(1);
+      expect(linhas[0].tentativas).toBe(2);
+    });
+
+    it("S11 tentativas esgotadas: erro com 3 tentativas nao e retomado", async () => {
+      const { servico, updateMany, enviarAvisoVencimento } = montar([boleto(1, "2026-11-11")], {
+        linhas: [{ cobrancaBoletoId: 1, tipo: "D-1", status: "erro", tentativas: 3 }],
+      });
+
+      const r = await servico.processarCiclo({ agora: AGORA });
+
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(enviarAvisoVencimento).not.toHaveBeenCalled();
+      expect(r.jaProcessados).toBe(1);
+    });
+
+    it("S12 retomada concorrente: updateMany devolve count 0 -> nenhum envio", async () => {
+      const { servico, updateMany, enviarAvisoVencimento } = montar([boleto(1, "2026-11-11")], {
+        linhas: [{ cobrancaBoletoId: 1, tipo: "D-1", status: "erro", tentativas: 1 }],
+        updateManyCount: 0,
+      });
+
+      const r = await servico.processarCiclo({ agora: AGORA });
+
+      expect(updateMany).toHaveBeenCalledTimes(1);
+      expect(enviarAvisoVencimento).not.toHaveBeenCalled();
+      expect(r.enviados).toBe(0);
+      expect(r.jaProcessados).toBe(1);
+    });
+
+    it("S13 falha SMTP: erro saneado (sem e-mail, ate 300 chars) e o proximo boleto segue", async () => {
+      const { servico, update, enviarAvisoVencimento, linhas } = montar([
+        boleto(1, "2026-11-11", { idclienteAthos: 10 }),
+        boleto(2, "2026-11-11", { idclienteAthos: 20 }),
+      ]);
+      enviarAvisoVencimento
+        .mockRejectedValueOnce(new Error("SMTP recusou cob@x.com: " + "x".repeat(500)))
+        .mockResolvedValueOnce({ id: 2, token: "t", assunto: "a", anexouPdf: true });
+
+      const r = await servico.processarCiclo({ agora: AGORA });
+
+      const chamadaErro = update.mock.calls
+        .map((c) => (c as unknown[])[0] as { data: { status: string; erro?: string } })
+        .find((a) => a.data.status === "erro");
+      expect(chamadaErro).toBeDefined();
+      const erro = chamadaErro?.data.erro ?? "";
+      expect(erro.length).toBeGreaterThan(0);
+      expect(erro.length).toBeLessThanOrEqual(300);
+      expect(erro).not.toContain("@");
+      expect(erro).not.toContain("cob");
+      expect(r.erros).toBe(1);
+      expect(r.enviados).toBe(1);
+      expect(enviarAvisoVencimento).toHaveBeenCalledTimes(2);
+      expect(linhas.map((l) => l.status).sort()).toEqual(["enviado", "erro"]);
+    });
+
+    it("S14 sem e-mail terminal: uma linha sem_email e um warn; o ciclo seguinte nao regrava", async () => {
+      const resolver = jest.fn().mockResolvedValue({
+        lookup: "ok",
+        nomeCliente: "ACME",
+        destinatario: null,
+        motivoSemEmail: "vazio",
+        cc: [],
+      });
+      const { servico, create, enviarAvisoVencimento, logger, linhas, resolverDestinatariosAviso } = montar(
+        [boleto(1, "2026-11-11")],
+        { resolver },
+      );
+
+      const r1 = await servico.processarCiclo({ agora: AGORA });
+
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          status: "sem_email",
+          tentativas: 0,
+          destinatario: null,
+          erro: "vazio",
+        }),
+      });
+      expect(enviarAvisoVencimento).not.toHaveBeenCalled();
+      expect(r1.semEmail).toBe(1);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(linhas).toHaveLength(1);
+
+      const r2 = await servico.processarCiclo({ agora: AGORA });
+
+      expect(resolverDestinatariosAviso).toHaveBeenCalledTimes(1);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(r2.semEmail).toBe(0);
+      expect(r2.jaProcessados).toBe(1);
+    });
+
+    it("S15 Athos fora: nada e gravado, uma leitura e um warn por cliente", async () => {
+      const resolver = jest
+        .fn()
+        .mockResolvedValue({ lookup: "falha", nomeCliente: "", destinatario: null, cc: [] });
+      const { servico, create, update, enviarAvisoVencimento, logger } = montar(
+        [boleto(1, "2026-11-11"), boleto(2, "2026-11-11")],
+        { resolver },
+      );
+
+      const r = await servico.processarCiclo({ agora: AGORA });
+
+      expect(create).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(enviarAvisoVencimento).not.toHaveBeenCalled();
+      expect(r.lookupFalhou).toBe(2);
+      expect(resolver).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("S16 previa detalhada: desfechos por item e nenhuma escrita nem envio", async () => {
+      const resolver = jest.fn(async (id: number) => {
+        if (id === 20) {
+          return { lookup: "ok", nomeCliente: "B", destinatario: null, motivoSemEmail: "invalido", cc: [] };
+        }
+        if (id === 40) return { lookup: "falha", nomeCliente: "", destinatario: null, cc: [] };
+        return { lookup: "ok", nomeCliente: "A", destinatario: "cob@x.com", cc: ["socio@x.com"] };
+      });
+      const { servico, create, update, updateMany, enviarAvisoVencimento } = montar(
+        [
+          boleto(1, "2026-11-11", { idclienteAthos: 10 }),
+          boleto(2, "2026-11-11", { idclienteAthos: 20 }),
+          boleto(3, "2026-11-11", { idclienteAthos: 30 }),
+          boleto(4, "2026-11-11", { idclienteAthos: 40 }),
+        ],
+        { resolver, linhas: [{ cobrancaBoletoId: 3, tipo: "D-1", status: "enviado" }] },
+      );
+
+      const r = await servico.processarCiclo({ agora: AGORA, dryRun: true });
+
+      expect(r.dryRun).toBe(true);
+      expect(r.itens.map((i) => [i.cobrancaBoletoId, i.desfecho])).toEqual([
+        [1, "previa_enviaria"],
+        [2, "previa_sem_email"],
+        [3, "ja_processado"],
+        [4, "lookup_falhou"],
+      ]);
+      expect(r.itens[0]).toEqual(
+        expect.objectContaining({ destinatarioMascarado: "co***@x.com", ccQuantidade: 1 }),
+      );
+      expect(create).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(enviarAvisoVencimento).not.toHaveBeenCalled();
+    });
+
+    it("S17 logs sem e-mail completo (retomada, falha SMTP e previa)", async () => {
+      const retomada = montar([boleto(1, "2026-11-11")], {
+        linhas: [{ cobrancaBoletoId: 1, tipo: "D-1", status: "erro", tentativas: 1 }],
+      });
+      await retomada.servico.processarCiclo({ agora: AGORA });
+
+      const falha = montar([boleto(1, "2026-11-11")]);
+      falha.enviarAvisoVencimento.mockRejectedValueOnce(new Error("SMTP recusou cob@x.com e socio@x.com"));
+      await falha.servico.processarCiclo({ agora: AGORA });
+
+      const previa = montar([boleto(1, "2026-11-11")]);
+      await previa.servico.processarCiclo({ agora: AGORA, dryRun: true });
+
+      for (const m of [retomada, falha, previa]) {
+        const texto = textosDeLog(m.logger);
+        expect(texto.length).toBeGreaterThan(0);
+        expect(texto).not.toContain("cob@x.com");
+        expect(texto).not.toContain("socio@x.com");
+      }
+    });
+  });
 });
