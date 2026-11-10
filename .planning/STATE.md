@@ -349,4 +349,5 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 | Phase | State | Resume |
 |-------|-------|--------|
+| 45 | verification_deferred_human | /gsd-verify-work 45 |
 | 44 | verification_deferred_human | /gsd-verify-work 44 |
