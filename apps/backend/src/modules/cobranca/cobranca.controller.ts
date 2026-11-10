@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Put, Query, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, ParseIntPipe, Post, Put, Query, Res, ServiceUnavailableException, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
@@ -6,6 +6,7 @@ type ExpressResponse = any;
 import { AdminOnly } from "../security/admin.decorator";
 import { Public } from "../security/public.decorator";
 import { UploadedXmlFile } from "../integrations/nfse/nfse.service";
+import { CobrancaAvisoVencimentoService } from "./cobranca-aviso-vencimento.service";
 import { CobrancaBaixaAthosService } from "./cobranca-baixa-athos.service";
 import { CobrancaService } from "./cobranca.service";
 import { EmailEnvioService } from "./email-envio.service";
@@ -28,6 +29,9 @@ export class CobrancaController {
     private readonly cobrancaService: CobrancaService,
     private readonly emailEnvioService: EmailEnvioService,
     private readonly baixaAthosService: CobrancaBaixaAthosService,
+    // Opcional so no tipo: os testes antigos da Fase 43 instanciam o controller com 3 argumentos. Em runtime
+    // o Nest sempre injeta (CobrancaAvisoVencimentoService esta em providers do CobrancaModule).
+    private readonly avisoVencimentoService?: CobrancaAvisoVencimentoService,
   ) {}
 
   /**
@@ -231,6 +235,21 @@ export class CobrancaController {
   @Post("boleto/:id/estornar-baixa-athos")
   async estornarBaixaAthos(@Param("id", ParseIntPipe) id: number, @Body() dto: EstornarBaixaAthosDto) {
     return this.baixaAthosService.estornarBaixa(id, dto);
+  }
+
+  /**
+   * Previa do aviso de boletos a vencer/atrasados - Fase 45 (D-07). Somente leitura: consulta o banco do
+   * Sistema e le o cadastro do cliente no Athos, sem reservar linha, sem enviar e-mail e sem gravar nada.
+   * Funciona com COBRANCA_AVISO_ATIVO desligado; e-mails vem mascarados. Sem parametros: nada pode desligar o
+   * dry-run. Exige x-admin-api-key (AdminOnly) alem da chave interna do guard global.
+   */
+  @AdminOnly()
+  @Get("aviso-vencimento/previa")
+  async previaAvisoVencimento() {
+    if (!this.avisoVencimentoService) {
+      throw new ServiceUnavailableException("Servico de aviso de vencimento indisponivel.");
+    }
+    return this.avisoVencimentoService.processarCiclo({ dryRun: true });
   }
 
   /** Status persistido da baixa no Athos e historico das ultimas tentativas. AUTHED via guard global. */
