@@ -1,6 +1,6 @@
 import "reflect-metadata";
 
-import { BadRequestException, ValidationPipe } from "@nestjs/common";
+import { BadRequestException, InternalServerErrorException, ValidationPipe } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
 
 import { EnviarEmailCobrancaDto } from "./dto/enviar-email-cobranca.dto";
@@ -504,5 +504,231 @@ describe("EmailEnvioService.registrarConfirmacao", () => {
     const r2 = await service.registrarConfirmacao("desconhecido");
     expect(r2).toEqual({ found: false });
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("EmailEnvioService - aviso de vencimento (Fase 45)", () => {
+  const BASE_INPUT = {
+    cobrancaBoletoId: 10,
+    idclienteAthos: 7,
+    nomeCliente: "ACME LTDA",
+    destinatario: "cob@x.com",
+    cc: ["socio@x.com"],
+    tipo: "D-1" as "D-3" | "D-1" | "A+2" | "A+7" | "A+14",
+    diasParaVencer: 1,
+    valor: 150,
+    expireAt: "2026-11-11",
+    linkBoleto: "https://download.sejaefi.com.br/b.pdf" as string | null,
+  };
+
+  function clienteAthos(service: EmailEnvioService, dados: Record<string, unknown> | null) {
+    ((service as any).athosService.buscarDadosClienteContasReceber as jest.Mock).mockResolvedValue(
+      dados,
+    );
+  }
+
+  it("E1 destinatario principal e CC padrao sem o principal (case-insensitive)", async () => {
+    const { service } = makeService();
+    (service as any).prisma.cobrancaEmailCcPadrao.findUnique.mockResolvedValue({
+      idclienteAthos: 7,
+      emails: ["socio@x.com", "COB@x.com"],
+    });
+
+    const r = await service.resolverDestinatariosAviso(7);
+
+    expect(r).toEqual({
+      lookup: "ok",
+      nomeCliente: "ACME LTDA",
+      destinatario: "cob@x.com",
+      cc: ["socio@x.com"],
+    });
+  });
+
+  it("E2 fallback para emailcliente quando emailcobrancacliente e invalido", async () => {
+    const { service } = makeService();
+    clienteAthos(service, {
+      nome_cliente: "ACME LTDA",
+      emailcobrancacliente: "lixo sem arroba",
+      emailcliente: "c@x.com",
+    });
+
+    const r = await service.resolverDestinatariosAviso(7);
+
+    expect(r.destinatario).toBe("c@x.com");
+  });
+
+  it("E3 sem e-mail: vazio x invalido", async () => {
+    const { service } = makeService();
+    clienteAthos(service, { nome_cliente: "A", emailcobrancacliente: "", emailcliente: null });
+    const vazio = await service.resolverDestinatariosAviso(7);
+    expect(vazio).toEqual(
+      expect.objectContaining({ lookup: "ok", destinatario: null, motivoSemEmail: "vazio", cc: [] }),
+    );
+
+    clienteAthos(service, {
+      nome_cliente: "A",
+      emailcobrancacliente: "a; b@x.com",
+      emailcliente: "sem-arroba",
+    });
+    const invalido = await service.resolverDestinatariosAviso(7);
+    expect(invalido).toEqual(
+      expect.objectContaining({ destinatario: null, motivoSemEmail: "invalido", cc: [] }),
+    );
+  });
+
+  it("E4 Athos fora: lookup falha e nao consulta o CC padrao", async () => {
+    const { service } = makeService();
+    clienteAthos(service, null);
+
+    const r = await service.resolverDestinatariosAviso(7);
+
+    expect(r).toEqual(expect.objectContaining({ lookup: "falha", destinatario: null }));
+    expect((service as any).prisma.cobrancaEmailCcPadrao.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("E5 CC padrao legado invalido: nao lanca, cc vazio e logger.warn", async () => {
+    const { service } = makeService();
+    (service as any).prisma.cobrancaEmailCcPadrao.findUnique.mockResolvedValue({
+      idclienteAthos: 7,
+      emails: ["ok@x.com", "invalido"],
+    });
+
+    const r = await service.resolverDestinatariosAviso(7);
+
+    expect(r.destinatario).toBe("cob@x.com");
+    expect(r.cc).toEqual([]);
+    expect((service as any).logger.warn).toHaveBeenCalled();
+  });
+
+  it("E6 envio D-1: assunto, anexo, valor, data, link, pixel e historico", async () => {
+    const { service, sendMail } = makeService();
+
+    const out = await service.enviarAvisoVencimento(BASE_INPUT);
+
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.from).toBe("F <u@g.com>");
+    expect(mail.to).toBe("cob@x.com");
+    expect(mail.cc).toEqual(["socio@x.com"]);
+    expect(mail.subject).toBe("Financeiro Bom Custo — Lembrete: seu boleto vence amanhã");
+    expect(mail.attachments).toEqual([expect.objectContaining({ filename: "boleto.pdf" })]);
+    expect(mail.html).toMatch(/R\$\s150,00/);
+    expect(mail.html).toContain("11/11/2026");
+    expect(mail.html).toContain("https://download.sejaefi.com.br/b.pdf");
+    expect(mail.html).toContain(`https://app.exemplo.com/cobranca/pixel/${out.token}`);
+    expect(mail.html).not.toContain("Confirmar recebimento");
+    expect((service as any).prisma.cobrancaEmailEnvio.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        cobrancaBoletoId: 10,
+        status: "enviado",
+        nfseEmitidaIds: [],
+        nfeNumeros: [],
+        assunto: mail.subject,
+      }),
+    });
+    expect(out.anexouPdf).toBe(true);
+  });
+
+  it("E7 assunto por tipo usa os dias reais", async () => {
+    const { service, sendMail } = makeService();
+
+    await service.enviarAvisoVencimento({ ...BASE_INPUT, tipo: "D-3", diasParaVencer: 2 });
+    expect(sendMail.mock.calls[0][0].subject.endsWith("vence em 2 dias")).toBe(true);
+
+    await service.enviarAvisoVencimento({ ...BASE_INPUT, tipo: "A+7", diasParaVencer: -9 });
+    const atraso = sendMail.mock.calls[1][0];
+    expect(atraso.subject.endsWith("Aviso: boleto vencido há 9 dias")).toBe(true);
+    expect(atraso.text).toContain("desconsidere");
+
+    await service.enviarAvisoVencimento({ ...BASE_INPUT, tipo: "A+2", diasParaVencer: -3 });
+    await service.enviarAvisoVencimento({ ...BASE_INPUT, tipo: "A+14", diasParaVencer: -15 });
+    expect(sendMail.mock.calls[2][0].subject).toContain("vencido há 3 dias");
+    expect(sendMail.mock.calls[3][0].subject).toContain("vencido há 15 dias");
+  });
+
+  it("E8 sem emoji em nenhum tipo", async () => {
+    const { service, sendMail } = makeService();
+    const casos: Array<[typeof BASE_INPUT.tipo, number]> = [
+      ["D-3", 3],
+      ["D-1", 1],
+      ["A+2", -2],
+      ["A+7", -7],
+      ["A+14", -14],
+    ];
+    for (const [tipo, dias] of casos) {
+      await service.enviarAvisoVencimento({ ...BASE_INPUT, tipo, diasParaVencer: dias });
+    }
+    expect(sendMail).toHaveBeenCalledTimes(5);
+    for (const [args] of sendMail.mock.calls) {
+      expect(args.subject).not.toMatch(/\p{Extended_Pictographic}/u);
+      expect(args.text).not.toMatch(/\p{Extended_Pictographic}/u);
+      expect(args.html).not.toMatch(/\p{Extended_Pictographic}/u);
+    }
+  });
+
+  it("E9 escapa o nome do cliente no HTML", async () => {
+    const { service, sendMail } = makeService();
+
+    await service.enviarAvisoVencimento({ ...BASE_INPUT, nomeCliente: "<b>ACME & Cia</b>" });
+
+    const html = sendMail.mock.calls[0][0].html as string;
+    expect(html).toContain("&lt;b&gt;ACME &amp; Cia&lt;/b&gt;");
+    expect(html).not.toContain("<b>ACME");
+  });
+
+  it("E10 PDF best-effort: falha no download envia sem anexo; sem link nem tenta", async () => {
+    const { service, sendMail } = makeService();
+    const download = (service as any).cobrancaService.downloadBoletoPdf as jest.Mock;
+    download.mockRejectedValueOnce(new Error("timeout"));
+
+    const out = await service.enviarAvisoVencimento(BASE_INPUT);
+
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    expect(sendMail.mock.calls[0][0].attachments ?? []).toHaveLength(0);
+    expect((service as any).logger.warn).toHaveBeenCalled();
+    expect(out.anexouPdf).toBe(false);
+
+    download.mockClear();
+    await service.enviarAvisoVencimento({ ...BASE_INPUT, linkBoleto: null });
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  it("E11 falha SMTP: lanca, nao grava historico e nao loga o endereco", async () => {
+    const { service, sendMail } = makeService();
+    sendMail.mockRejectedValueOnce(new Error("550 rejected cob@x.com"));
+
+    await expect(service.enviarAvisoVencimento(BASE_INPUT)).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+
+    expect((service as any).prisma.cobrancaEmailEnvio.create).not.toHaveBeenCalled();
+    const logger = (service as any).logger as Record<string, jest.Mock>;
+    const logado = [logger.log, logger.warn, logger.error]
+      .flatMap((fn) => fn.mock.calls.map((c) => String(c[0])))
+      .join("\n");
+    expect(logado).not.toContain("cob@x.com");
+  });
+
+  it("E12 historico falha depois do envio: resolve com id nulo e loga erro", async () => {
+    const { service } = makeService();
+    (service as any).prisma.cobrancaEmailEnvio.create.mockRejectedValueOnce(new Error("db fora"));
+
+    const out = await service.enviarAvisoVencimento(BASE_INPUT);
+
+    expect(out.id).toBeNull();
+    expect((service as any).logger.error).toHaveBeenCalled();
+  });
+
+  it("E13 link inseguro: sem link no HTML e sem download do PDF", async () => {
+    const { service, sendMail } = makeService();
+
+    const out = await service.enviarAvisoVencimento({
+      ...BASE_INPUT,
+      linkBoleto: "javascript:alert(1)",
+    });
+
+    expect(sendMail.mock.calls[0][0].html).not.toContain("javascript:");
+    expect((service as any).cobrancaService.downloadBoletoPdf).not.toHaveBeenCalled();
+    expect(out.anexouPdf).toBe(false);
   });
 });

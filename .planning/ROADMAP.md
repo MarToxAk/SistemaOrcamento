@@ -35,6 +35,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [x] **Phase 40: Write CRUD (POST + PATCH + DELETE + flag usaprodutocomposto)** - Quatro endpoints de escrita com validação dual de FK, gerenciamento transacional do flag, PK serial via RETURNING e mapeamento completo de erros Postgres; cobertura de testes Jest (completed 2026-09-04, verificação retroativa)
 - [ ] **Phase 43: Baixa automática de contas a receber no Athos**
 - [ ] **Phase 44: API de criação de orçamento no Athos para IA**
+- [ ] **Phase 45: Aviso de boletos a vencer e atrasados (alerta interno + e-mail automatico)**
 
 ### Phase Details
 
@@ -178,6 +179,20 @@ Plans:
 - [ ] 44-02-PLAN.md — Wave 2 · Simulação READ ONLY, cliente opcional, descontos (por item, preço abaixo do cadastro, global) com limites de conf_vendas, suíte unitária com pg falso e compatibilidade 9.0.5, envs ATHOS_ORCAMENTO_* no deploy (D-01, D-02, D-03, D-04)
 - [ ] 44-03-PLAN.md — Wave 2 · Idempotency-Key reserva-primeiro + auditoria AthosOrcamentoIa (model + migration aditiva), teste HTTP do controller e replay sem duplicata no clone (D-03)
 - [ ] 44-04-PLAN.md — Wave 3 · GET produtos e GET :id, ciclo completo provado no clone, roteiro de verificação manual em produção + checkpoint humano (D-01, D-03, D-04)
+
+### Phase 45: Aviso de boletos a vencer e atrasados (alerta interno + e-mail automatico)
+
+**Goal:** O sistema avisa sobre boletos (modulo cobranca / Contas a Receber) proximos do vencimento e atrasados: (a) alerta interno na tela (dashboard / Contas a Receber) e (b) e-mail automatico ao cliente e aos destinatarios em copia (CC) da Fase 42, reutilizando o email-envio.service. Lembrete antes do vencimento: 3 dias antes e 1 dia antes. Atraso: 2 dias, 7 dias e 14 dias depois do vencimento (maximo 3 avisos de atraso). Cada aviso e registrado para nao ser enviado em duplicidade; boletos pagos/cancelados nao geram aviso.
+**Requirements**: AVISO-01, AVISO-02, AVISO-03, AVISO-04, AVISO-05, AVISO-06, AVISO-07, AVISO-08 (IDs locais da fase — definidos em 45-01-PLAN.md)
+**Depends on:** Phase 44
+**Plans:** 5 plans
+
+Plans:
+- [ ] 45-01-PLAN.md — Wave 1 · Tracer: aviso D-1 ponta a ponta (job com kill switch -> serviço -> util de janelas -> EmailEnvioService -> SMTP + CobrancaAvisoVencimento/CobrancaEmailEnvio) + tabela/migration idempotente + e-mail de aviso robusto (link + PDF best-effort, CC, sem emoji) (D-01..D-07; AVISO-01, 02, 03, 04, 07)
+- [ ] 45-02-PLAN.md — Wave 2 · Janelas/fuso/catch-up provados, cache por cliente, teto de 100 envios com pausa, idempotência sob falha (retomada atômica, máx. 3 tentativas), sem e-mail terminal, Athos fora sem reserva, prévia detalhada (D-02..D-07; AVISO-01, 02, 04, 07)
+- [ ] 45-03-PLAN.md — Wave 2 · Operação: testes do job (kill switch exato, dry-run, running, cron 08:00/14:00 SP), prévia protegida GET /api/cobranca/aviso-vencimento/previa (AdminOnly, sempre dry-run) e COBRANCA_AVISO_* com padrão false nos 2 compose e exemplos de env (D-07; AVISO-04, 08)
+- [ ] 45-04-PLAN.md — Wave 2 · Alerta interno: dashboard com situacaoVencimento/ultimoAviso e "hoje" em São Paulo + pills "Vence em Nd"/"Vence hoje"/"Atrasado há Nd", contadores e último aviso ("Sem e-mail cadastrado") no painel de /contas-receber (D-01, D-04, D-06, D-08; AVISO-05, 06, 07)
+- [ ] 45-05-PLAN.md — Wave 3 · Roteiro de ativação (prévia -> dry-run -> envio real -> desligar) + gates da fase + verificação humana com o envio desligado; nada é ativado pelo executor (D-07, D-08; AVISO-04, 06, 08)
 
 ---
 

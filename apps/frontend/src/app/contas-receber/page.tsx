@@ -27,6 +27,16 @@ interface DashboardSummary {
 
 type NfseStatusBoleto = "completa" | "parcial" | "pendente";
 
+/** Classificacao de vencimento calculada no backend (Fase 45); o frontend so mapeia rotulo e cor. */
+type SituacaoVencimento = "atrasado" | "vence_hoje" | "a_vencer";
+
+interface UltimoAvisoBoleto {
+  tipo: string;
+  status: string;
+  enviadoEm: string | null;
+  criadoEm: string;
+}
+
 interface BoletoDashboardItem {
   id: number;
   idclienteAthos: number;
@@ -35,6 +45,8 @@ interface BoletoDashboardItem {
   valor: number;
   expireAt: string | null;
   diasParaVencer: number | null;
+  situacaoVencimento?: SituacaoVencimento | null;
+  ultimoAviso?: UltimoAvisoBoleto | null;
   linkBoleto: string | null;
   criadoEm: string;
   titulos: number[];
@@ -180,6 +192,63 @@ function getAthosBaixaPill(boleto: BoletoDashboardItem): { variant: AthosPillVar
   }
 }
 
+/** Pill de vencimento do alerta interno (Fase 45): so boleto pendente dentro da janela de destaque. */
+function getSituacaoVencimentoPill(boleto: BoletoDashboardItem): { cls: string; label: string; title: string } | null {
+  if (boleto.status !== "pendente") return null;
+  const dias = boleto.diasParaVencer;
+  const titulo = boleto.expireAt ? `Vencimento em ${boleto.expireAt}` : "Vencimento";
+  switch (boleto.situacaoVencimento) {
+    case "a_vencer":
+      return {
+        cls: "pa-pill pa-pill-warning",
+        label: dias === null ? "A vencer" : `Vence em ${dias}d`,
+        title: titulo,
+      };
+    case "vence_hoje":
+      return { cls: "pa-pill pa-pill-warning", label: "Vence hoje", title: titulo };
+    case "atrasado":
+      return {
+        cls: "pa-pill pa-pill-danger",
+        label: dias === null ? "Atrasado" : `Atrasado há ${Math.abs(dias)}d`,
+        title: titulo,
+      };
+    default:
+      return null;
+  }
+}
+
+const ROTULO_TIPO_AVISO: Record<string, string> = {
+  "D-3": "3 dias antes",
+  "D-1": "1 dia antes",
+  "A+2": "2 dias após",
+  "A+7": "7 dias após",
+  "A+14": "14 dias após",
+};
+
+/** Linha do último aviso por e-mail; "sem_email" é o alerta interno de cliente sem e-mail (D-04). */
+function descreverUltimoAviso(aviso: UltimoAvisoBoleto | null | undefined): { texto: string; className: string } | null {
+  if (!aviso) return null;
+  const rotulo = ROTULO_TIPO_AVISO[aviso.tipo] ?? aviso.tipo;
+  switch (aviso.status) {
+    case "enviado": {
+      const quando = new Date(aviso.enviadoEm ?? aviso.criadoEm).toLocaleDateString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit",
+        month: "2-digit",
+      });
+      return { texto: `Aviso ${rotulo} enviado em ${quando}`, className: "text-muted" };
+    }
+    case "erro":
+      return { texto: `Aviso ${rotulo} com erro no envio`, className: "text-danger" };
+    case "enviando":
+      return { texto: `Aviso ${rotulo} em envio`, className: "text-muted" };
+    case "sem_email":
+      return { texto: `Sem e-mail cadastrado (aviso ${rotulo} não enviado)`, className: "text-danger" };
+    default:
+      return null;
+  }
+}
+
 function mensagemErroAthos(status: number, corpo: ErroBackendAthos | null): string {
   if (status === 401) return "Sessão de administrador necessária.";
   const msg = corpo?.message;
@@ -282,12 +351,27 @@ function BoletosConsolidadosPanel() {
     }
   }
 
+  const pendentes = boletos.filter((b) => b.status === "pendente");
+  const totalAVencer = pendentes.filter(
+    (b) => b.situacaoVencimento === "a_vencer" || b.situacaoVencimento === "vence_hoje",
+  ).length;
+  const totalAtrasados = pendentes.filter((b) => b.situacaoVencimento === "atrasado").length;
+
   return (
     <div className="pa-card">
       <div className="pa-card-header">
         <div>
           <strong>Boletos a Receber</strong>
           <span className="pa-card-header-count">({boletos.length})</span>
+          <span
+            className="pa-pill pa-pill-warning ms-2"
+            title="Boletos pendentes que vencem em até 3 dias, incluindo hoje"
+          >
+            A vencer: {totalAVencer}
+          </span>
+          <span className="pa-pill pa-pill-danger ms-1" title="Boletos pendentes vencidos">
+            Atrasados: {totalAtrasados}
+          </span>
         </div>
         <button
           type="button"
@@ -350,6 +434,8 @@ function BoletosConsolidadosPanel() {
                 const podeEstornar = boleto.status === "pago" && boleto.athosBaixaStatus === "baixado";
                 const ocupado = acaoEmAndamento !== null;
                 const vencimentoSuffix = getVencimentoSuffix(boleto.diasParaVencer);
+                const situacaoPill = getSituacaoVencimentoPill(boleto);
+                const ultimoAviso = descreverUltimoAviso(boleto.ultimoAviso);
                 return (
                   <tr key={boleto.id}>
                     <td className="pa-td-cliente">
@@ -361,7 +447,14 @@ function BoletosConsolidadosPanel() {
                     <td className="text-nowrap fw-bold">{formatBRL(boleto.valor)}</td>
                     <td className="text-nowrap small">
                       {boleto.expireAt ?? "-"}
-                      {vencimentoSuffix && <span className="text-muted ms-1">({vencimentoSuffix})</span>}
+                      {situacaoPill ? (
+                        <span className={`${situacaoPill.cls} ms-1`} title={situacaoPill.title}>
+                          {situacaoPill.label}
+                        </span>
+                      ) : (
+                        vencimentoSuffix && <span className="text-muted ms-1">({vencimentoSuffix})</span>
+                      )}
+                      {ultimoAviso && <small className={`d-block ${ultimoAviso.className}`}>{ultimoAviso.texto}</small>}
                     </td>
                     <td>
                       <span className={`pa-pill pa-pill-${paPillVariant(getStatusBoletoBadgeClass(boleto.status))}`}>

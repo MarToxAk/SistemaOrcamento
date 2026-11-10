@@ -14,7 +14,13 @@ import { NfseNacionalDistribuicaoService } from "../integrations/nfse/nfse-nacio
 import { NfseNacionalService } from "../integrations/nfse/nfse-nacional.service";
 import { NfseService, UploadedXmlFile } from "../integrations/nfse/nfse.service";
 import { PrismaService } from "../database/prisma.service";
+import { hojeSaoPaulo } from "../integrations/athos/athos-conta-receber-baixa.service";
 import { CobrancaBaixaAthosService, OrigemBaixa } from "./cobranca-baixa-athos.service";
+import {
+  SituacaoVencimento,
+  calcularDiasParaVencer,
+  classificarVencimento,
+} from "./cobranca-aviso-vencimento.util";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
@@ -867,7 +873,13 @@ export class CobrancaService {
     }));
   }
 
-  /** Lista consolidada de boletos nao cancelados de TODOS os clientes (painel do dashboard, D-06/D-08). */
+  /**
+   * Lista consolidada de boletos nao cancelados de TODOS os clientes (painel do dashboard, D-06/D-08).
+   *
+   * Fase 45: "hoje" e a data de America/Sao_Paulo e a situacao de vencimento usa o mesmo util
+   * (calcularDiasParaVencer/classificarVencimento) do job de aviso, para painel e job concordarem.
+   * O ultimo aviso vem por include aninhado (sem segunda consulta).
+   */
   async buscarBoletosDashboard(): Promise<Array<{
     id: number;
     idclienteAthos: number;
@@ -876,6 +888,8 @@ export class CobrancaService {
     valor: number;
     expireAt: string | null;
     diasParaVencer: number | null;
+    situacaoVencimento: SituacaoVencimento | null;
+    ultimoAviso: { tipo: string; status: string; enviadoEm: Date | null; criadoEm: Date } | null;
     linkBoleto: string | null;
     criadoEm: Date;
     titulos: number[];
@@ -887,7 +901,14 @@ export class CobrancaService {
     const boletos = await this.prisma.cobrancaBoleto.findMany({
       where: { status: { not: "cancelado" } },
       orderBy: { criadoEm: "desc" },
-      include: { titulos: { select: { idcontareceber: true } } },
+      include: {
+        titulos: { select: { idcontareceber: true } },
+        avisos: {
+          orderBy: { criadoEm: "desc" },
+          take: 1,
+          select: { tipo: true, status: true, enviadoEm: true, criadoEm: true },
+        },
+      },
     });
 
     const idsClientes = [...new Set(boletos.map((b) => b.idclienteAthos))];
@@ -899,8 +920,7 @@ export class CobrancaService {
       todosIdcontareceber.length > 0 ? await this.buscarNfseEmitidaParaTitulos(todosIdcontareceber) : [];
     const idsComNfse = new Set(nfseEmitidas.map((n) => n.idcontareceber));
 
-    const hojeISO = new Date().toISOString().slice(0, 10);
-    const hojeMs = Date.parse(`${hojeISO}T00:00:00Z`);
+    const hoje = hojeSaoPaulo();
 
     const linhas = boletos.map((b) => {
       const idsTitulos = b.titulos.map((t) => t.idcontareceber);
@@ -912,13 +932,9 @@ export class CobrancaService {
         nfseStatus = "parcial";
       }
 
-      let diasParaVencer: number | null = null;
-      if (b.expireAt) {
-        const expireMs = Date.parse(`${b.expireAt}T00:00:00Z`);
-        if (!Number.isNaN(expireMs)) {
-          diasParaVencer = Math.round((expireMs - hojeMs) / 86400000);
-        }
-      }
+      const diasParaVencer = calcularDiasParaVencer(b.expireAt, hoje);
+      // Encadeamento opcional: mocks antigos nao trazem a relacao avisos.
+      const ultimo = b.avisos?.[0];
 
       return {
         id: b.id,
@@ -928,6 +944,15 @@ export class CobrancaService {
         valor: Number(b.valor),
         expireAt: b.expireAt,
         diasParaVencer,
+        situacaoVencimento: classificarVencimento(diasParaVencer, b.status),
+        ultimoAviso: ultimo
+          ? {
+              tipo: ultimo.tipo,
+              status: ultimo.status,
+              enviadoEm: ultimo.enviadoEm ?? null,
+              criadoEm: ultimo.criadoEm,
+            }
+          : null,
         linkBoleto: b.linkBoleto,
         criadoEm: b.criadoEm,
         titulos: idsTitulos,
