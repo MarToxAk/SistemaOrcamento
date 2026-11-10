@@ -242,6 +242,7 @@ model CobrancaBoleto {
   atualizadoEm   DateTime               @updatedAt
   titulos        CobrancaBoletoTitulo[]
   emailEnvios    CobrancaEmailEnvio[]
+  avisos         CobrancaAvisoVencimento[]
 
   // Fase 43 (BX-07): resultado duravel da baixa no Athos
   athosBaixaStatus        String?   // null = nunca processado (inclui tudo que ficou pago antes da Fase 43); pendente | baixado | ja_baixado | falha | estornado
@@ -300,6 +301,26 @@ model CobrancaEmailCcPadrao {
   emails         String[] @default([])
   criadoEm       DateTime @default(now())
   atualizadoEm   DateTime @updatedAt
+}
+
+/// Registro idempotente dos avisos de vencimento/atraso por boleto - Fase 45 (D-05). Banco do Sistema apenas.
+model CobrancaAvisoVencimento {
+  id               Int            @id @default(autoincrement())
+  cobrancaBoletoId Int
+  idclienteAthos   Int
+  tipo             String         // D-3 | D-1 | A+2 | A+7 | A+14
+  status           String         @default("enviando") // enviando | enviado | erro | sem_email
+  destinatario     String?
+  cc               String[]       @default([])
+  erro             String?        // ate 300 caracteres, sem e-mail nem dados do cliente
+  tentativas       Int            @default(0)
+  enviadoEm        DateTime?
+  criadoEm         DateTime       @default(now())
+  atualizadoEm     DateTime       @updatedAt
+  cobrancaBoleto   CobrancaBoleto @relation(fields: [cobrancaBoletoId], references: [id], onDelete: Cascade)
+
+  @@unique([cobrancaBoletoId, tipo])
+  @@index([idclienteAthos])
 }
 
 model CobrancaBoletoTitulo {
