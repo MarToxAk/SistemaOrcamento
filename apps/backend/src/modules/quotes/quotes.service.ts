@@ -1693,7 +1693,7 @@ export class QuotesService {
       }
     }
 
-    const linhas = [
+    return [
       `Olá, ${primeiroNome}! 👋`,
       ``,
       `Segue o resumo do seu pedido:`,
@@ -1711,15 +1711,22 @@ export class QuotesService {
       ``,
       sep,
       `Qualquer dúvida, é só chamar! 😊`,
-    ];
+    ].join("\n");
+  }
 
-    // Pix Copia e Cola ao final (separado para não poluir a mensagem principal)
-    if (pixPayment.pixCopiaECola) {
-      linhas.push(``, `_Pix Copia e Cola (caso prefira copiar o código):_`);
-      linhas.push(pixPayment.pixCopiaECola);
+  // Pix Copia e Cola vai em mensagem separada, so com o codigo (D-07). Falha so gera aviso (D-08):
+  // o orcamento e o link do Pix ja foram enviados na mensagem principal. O codigo nunca entra em log.
+  private async enviarPixCopiaECola(conversationId: string, codigo: unknown, quoteId: string): Promise<void> {
+    const codigoNormalizado = typeof codigo === "string" ? codigo.trim() : "";
+    if (!codigoNormalizado) return;
+
+    try {
+      await this.chatwootService.sendOutgoingMessage(conversationId, codigoNormalizado);
+    } catch (err) {
+      this.logger.warn(
+        `Falha ao enviar mensagem separada do Pix Copia e Cola ao Chatwoot para orcamento ${quoteId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
-
-    return linhas.join("\n");
   }
 
   async enviarParaCliente(quoteId: string) {
@@ -1919,6 +1926,9 @@ export class QuotesService {
       const convId = quote.conversationId ? String(quote.conversationId) : undefined;
       if (convId) {
         await this.chatwootService.sendOutgoingMessage(convId, finalMessage);
+
+        // Pix Copia e Cola em mensagem separada: depois da principal e antes do PDF
+        await this.enviarPixCopiaECola(convId, pixPayment?.pixCopiaECola, quote.id);
 
         // Reutiliza PDF existente no MinIO se disponível; só regenera se ausente
         try {

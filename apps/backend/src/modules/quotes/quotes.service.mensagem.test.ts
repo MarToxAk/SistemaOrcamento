@@ -346,4 +346,85 @@ describe("QuotesService.enviarParaCliente — mensagem (fase 46)", () => {
     const avisos = amb.logger.warn.mock.calls.map((c) => String(c[0]));
     expect(avisos.some((a) => a.toLowerCase().includes("diverg"))).toBe(true);
   });
+
+  describe("Pix Copia e Cola em mensagem separada (D-07, D-08)", () => {
+    const quote25877 = () =>
+      makeQuoteCompleto({
+        externalQuoteId: 25877,
+        total: 130,
+        itens: [{ descricao: "Caneta teste", quantidade: 200, unitPrice: 0.95, discount: 60, finalPrice: 130 }],
+      });
+
+    it("X1 separada: 2 mensagens (principal sem o codigo, depois so o codigo) e PDF por ultimo", async () => {
+      const amb = await montarAmbiente(quote25877(), CODIGO_PIX);
+
+      await amb.service.enviarParaCliente("quote-mensagem-001");
+
+      expect(amb.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(2);
+      const principal = String(amb.chatwoot.sendOutgoingMessage.mock.calls[0][1]);
+      expect(principal).toContain("https://pix.exemplo/abc");
+      expect(principal).not.toContain(CODIGO_PIX);
+      expect(principal).not.toContain("caso prefira copiar");
+      expect(amb.chatwoot.sendOutgoingMessage.mock.calls[1][0]).toBe(amb.chatwoot.sendOutgoingMessage.mock.calls[0][0]);
+      expect(amb.chatwoot.sendOutgoingMessage.mock.calls[1][1]).toBe(CODIGO_PIX);
+
+      expect(amb.chatwoot.sendAttachment).toHaveBeenCalledTimes(1);
+      const ordemCodigo = amb.chatwoot.sendOutgoingMessage.mock.invocationCallOrder[1];
+      const ordemPdf = amb.chatwoot.sendAttachment.mock.invocationCallOrder[0];
+      expect(ordemCodigo).toBeLessThan(ordemPdf);
+    });
+
+    it.each([
+      ["null", null],
+      ["string vazia", ""],
+      ["so espacos", "   "],
+    ])("X2 sem codigo (%s): uma unica mensagem", async (_nome, valor) => {
+      const amb = await montarAmbiente(quote25877(), valor);
+
+      await amb.service.enviarParaCliente("quote-mensagem-001");
+
+      expect(amb.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("X3 falha na separada: so aviso sem o codigo, resultado igual e o PDF segue", async () => {
+      const amb = await montarAmbiente(quote25877(), CODIGO_PIX);
+      amb.chatwoot.sendOutgoingMessage
+        .mockResolvedValueOnce({ enabled: true })
+        .mockRejectedValueOnce(new Error("falha chatwoot"));
+
+      const resultado = await amb.service.enviarParaCliente("quote-mensagem-001");
+
+      expect(resultado).toEqual({ message: "Mensagem enviada (ou tentativa realizada).", approvalLink: null });
+      const avisos = amb.logger.warn.mock.calls.map((c) => String(c[0]));
+      const aviso = avisos.find((a) => a.includes("falha chatwoot"));
+      expect(aviso).toBeDefined();
+      expect(aviso).toContain("quote-mensagem-001");
+      for (const a of avisos) expect(a).not.toContain(CODIGO_PIX);
+      expect(amb.chatwoot.sendAttachment).toHaveBeenCalledTimes(1);
+    });
+
+    it("X4 falha na principal: a mensagem do codigo nao e tentada", async () => {
+      const amb = await montarAmbiente(quote25877(), CODIGO_PIX);
+      amb.chatwoot.sendOutgoingMessage.mockRejectedValueOnce(new Error("chatwoot fora"));
+
+      await amb.service.enviarParaCliente("quote-mensagem-001");
+
+      expect(amb.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+      const avisos = amb.logger.warn.mock.calls.map((c) => String(c[0]));
+      expect(avisos.some((a) => a.includes("Falha ao enviar mensagem ao Chatwoot") && a.includes("chatwoot fora"))).toBe(true);
+    });
+
+    it("X5 sem PIX: mensagem de fallback atual, 1 chamada e nenhuma mensagem de codigo", async () => {
+      const amb = await montarAmbiente(quote25877(), CODIGO_PIX);
+      amb.efi.createPixPaymentLink.mockRejectedValueOnce(new Error("EFI fora"));
+
+      await amb.service.enviarParaCliente("quote-mensagem-001");
+
+      expect(amb.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+      const msg = mensagemPrincipal(amb);
+      expect(msg).toContain("Orçamento #25877");
+      expect(msg).toContain("💰 *Total: R$ 130.00*");
+      expect(msg).not.toContain(CODIGO_PIX);
+    });
+  });
 });
