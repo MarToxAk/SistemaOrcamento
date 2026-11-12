@@ -11,6 +11,7 @@ import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { buildQuoteIdentifierWhereCandidates } from "./quote-identifier.util";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
 import { resolveQuoteTotal } from "./quote-totals.util";
+import { calcularResumoValores, formatarLinhaItem, montarLinhasTotal, type ItemMensagem } from "./quote-message.util";
 
 const statusTransitions = {
   PENDENTE: ["ENVIADO", "PAGAMENTO_PARCIAL", "APROVADO", "CANCELADO"],
@@ -1620,7 +1621,7 @@ export class QuotesService {
     clienteNome: string,
     numero: string | number,
     total: number,
-    itens: Array<{ descricao: string; quantidade: number; total: number }>,
+    itens: ItemMensagem[],
     pixPayment: {
       linkVisualizacao: string;
       amount: number;
@@ -1633,6 +1634,7 @@ export class QuotesService {
       pix5050Link?: string;
       pix5050Half?: number;
       cardLink?: string;
+      acrescimo?: number;
     } = {},
   ): string {
     const fmt = (v: number) =>
@@ -1641,10 +1643,15 @@ export class QuotesService {
     const primeiroNome = clienteNome.split(" ")[0];
     const sep = "────────────";
 
-    const linhasItens = itens
-      .slice(0, 10)
-      .map((it) => `• ${it.descricao} (${it.quantidade}x) — ${fmt(it.total)}`)
-      .join("\n");
+    const linhasItens = itens.slice(0, 10).map(formatarLinhaItem).join("\n");
+
+    // Subtotal e Desconto consideram TODOS os itens (a lista exibida e limitada a 10 linhas)
+    const resumo = calcularResumoValores({ itens, total, acrescimo: extra.acrescimo });
+    if (resumo.divergente) {
+      this.logger.warn(
+        `Divergencia entre total e itens na mensagem do orcamento ${numero}: subtotal=${resumo.subtotal} desconto_itens=${itens.reduce((acc, it) => acc + Math.max(0, Number(it.desconto ?? 0)), 0)} acrescimo=${resumo.acrescimo} total=${resumo.total}; desconto exibido=${resumo.desconto}`,
+      );
+    }
     const maisItens = itens.length > 10 ? `\n_...e mais ${itens.length - 10} item(s)_` : "";
 
     const opts = paymentOptions.options;
@@ -1695,7 +1702,7 @@ export class QuotesService {
       ``,
       linhasItens + maisItens,
       ``,
-      `💰 *Total: ${fmt(total)}*`,
+      ...montarLinhasTotal(resumo),
       ``,
       sep,
       `*Como você prefere pagar?*`,
@@ -1773,6 +1780,7 @@ export class QuotesService {
     const numero = mappedQuote.numero ?? quote.internalNumber;
     const itens = Array.isArray(mappedQuote.itens) ? mappedQuote.itens : [];
     const total = Number(quote.total ?? 0);
+    const acrescimo = Number(quote.surcharge ?? 0);
 
     // Preparar opções de pagamento e gerar links via EFI (se possível)
     let paymentOptions: ReturnType<typeof this.efiService.resolvePaymentOptions> | null = null;
@@ -1876,6 +1884,7 @@ export class QuotesService {
         pix5050Link: pix5050?.linkVisualizacao ?? undefined,
         pix5050Half: pix5050?.halfAmount ?? undefined,
         cardLink: cardLink ?? undefined,
+        acrescimo,
       });
     } else if (paymentOptions) {
       // Fallback textual quando não for possível gerar links
