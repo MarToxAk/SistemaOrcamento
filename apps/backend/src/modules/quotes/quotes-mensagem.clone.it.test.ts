@@ -62,17 +62,26 @@ const SPEC_25822: Spec = {
   header: { valor: 13, descontors: 0, desconto: 0, valoracrescimo: 0 },
   itens: [{ qtd: 13, valoritem: 1, vd: 13, od: 0, final: 13 }],
 };
+// Pedido real 25877: 2 itens (o item 2 e o caso do bug: preco digitado 0,65 sobre tabela 0,95; valordesconto = TOTAL da linha).
 const SPEC_25877: Spec = {
-  header: { valor: 130, descontors: 0, desconto: 0, valoracrescimo: 0 },
-  itens: [{ qtd: 200, valoritem: 0.65, vd: 60, od: 0, final: 130 }],
+  header: { valor: 280, descontors: 0, desconto: 0, valoracrescimo: 0 },
+  itens: [
+    { qtd: 200, valoritem: 0.75, vd: 0, od: 0, final: 150 },
+    { qtd: 200, valoritem: 0.65, vd: 60, od: 0, final: 130 },
+  ],
 };
 const SPEC_25952: Spec = {
   header: { valor: 583, descontors: 58.3, desconto: 10, valoracrescimo: 0 },
   itens: [{ qtd: 110, valoritem: 5.3, vd: 0, od: 58.3, final: 524.7 }],
 };
+// Pedido real 25900: 3 itens (o item 3 e o aumento de preco: 5,00 sobre tabela 1,00).
 const SPEC_25900: Spec = {
-  header: { valor: 5, descontors: 0, desconto: 0, valoracrescimo: 0 },
-  itens: [{ qtd: 1, valoritem: 5, vd: 0, od: 0, final: 5 }],
+  header: { valor: 11, descontors: 0, desconto: 0, valoracrescimo: 0 },
+  itens: [
+    { qtd: 4, valoritem: 1, vd: 0, od: 0, final: 4 },
+    { qtd: 1, valoritem: 2, vd: 0, od: 0, final: 2 },
+    { qtd: 1, valoritem: 5, vd: 0, od: 0, final: 5 },
+  ],
 };
 
 /** Converte "1.234,56" (pt-BR) em numero. */
@@ -482,21 +491,22 @@ rodar("IT clone athos-teste: Athos real -> Quote -> mensagem/PIX (fase 46)", () 
     expect(jest.isMockFunction(amb.efi.createPixPaymentLink)).toBe(true);
   });
 
-  it("IT1 tracer 25877: item 0,95 / desconto 60 / total 130; mensagem com Subtotal/Desconto/Total e PIX 130; codigo Pix em mensagem separada", async () => {
+  it("IT1 tracer 25877: item 2 = 0,95 / desconto 60 / total 130; pedido 280 (Subtotal 340, Desconto 60); PIX 280; codigo Pix em mensagem separada", async () => {
     const { id } = await obterOuCriarReferencia(25877, SPEC_25877);
     const r = await executarFluxo(id);
 
-    comparar("25877", "item.valor (preco original)", 0.95, r.itensLidos[0].valor);
-    comparar("25877", "item.desconto", 60, r.itensLidos[0].desconto);
-    comparar("25877", "item.total", 130, r.itensLidos[0].total);
-    comparar("25877", "Quote.total", 130, r.quote.total);
+    comparar("25877", "item 2 valor (preco original)", 0.95, r.itensLidos[1].valor);
+    comparar("25877", "item 2 desconto", 60, r.itensLidos[1].desconto);
+    comparar("25877", "item 2 total", 130, r.itensLidos[1].total);
+    comparar("25877", "item 1 total (sem desconto)", 150, r.itensLidos[0].total);
+    comparar("25877", "Quote.total", 280, r.quote.total);
     comparar("25877", "Quote.discount", 60, r.quote.discount);
     comparar("25877", "Quote.surcharge", 0, r.quote.surcharge);
     contem("25877", "mensagem item riscado", r.mensagemPrincipal, "~R$ 190,00~ R$ 130,00");
-    contem("25877", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 190,00");
+    contem("25877", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 340,00");
     contem("25877", "mensagem Desconto", r.mensagemPrincipal, "Desconto: -R$ 60,00");
-    contem("25877", "mensagem Total", r.mensagemPrincipal, "Total: R$ 130,00");
-    comparar("25877", "PIX amount (createPixPaymentLink)", 130, r.pixAmount);
+    contem("25877", "mensagem Total", r.mensagemPrincipal, "Total: R$ 280,00");
+    comparar("25877", "PIX amount (createPixPaymentLink)", 280, r.pixAmount);
     comparar("25877", "mensagens enviadas (principal + Pix)", 2, r.mensagens.length);
     comparar("25877", "mensagem 2 (so o codigo Pix)", CODIGO_PIX_FICTICIO, r.mensagens[1]);
     naoContem("25877", "codigo Pix fora da principal", r.mensagemPrincipal, CODIGO_PIX_FICTICIO);
@@ -516,15 +526,15 @@ rodar("IT clone athos-teste: Athos real -> Quote -> mensagem/PIX (fase 46)", () 
     comparar("25822", "PIX amount", 13, r.pixAmount);
   });
 
-  it("R2 25877: Quote.total 130 e a soma dos totais lidos bate com mapped.totais.liquido", async () => {
+  it("R2 25877: Quote.total 280 e a soma dos totais lidos bate com mapped.totais.liquido", async () => {
     const { id } = await obterOuCriarReferencia(25877, SPEC_25877);
     const r = await executarFluxo(id);
 
-    comparar("25877", "Quote.total", 130, r.quote.total);
+    comparar("25877", "Quote.total", 280, r.quote.total);
     const somaTotais = r.itensLidos.reduce((acc, i) => acc + i.total, 0);
-    comparar("25877", "soma dos totais dos itens", 130, somaTotais);
-    comparar("25877", "mapped.totais.liquido", 130, (r.mapped as any).totais.liquido);
-    contem("25877", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 190,00");
+    comparar("25877", "soma dos totais dos itens", 280, somaTotais);
+    comparar("25877", "mapped.totais.liquido", 280, (r.mapped as any).totais.liquido);
+    contem("25877", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 340,00");
   });
 
   it("R3 25952: original 5,30; desconto 58,30; total 524,70; cabecalho 583 e liquido 524,70; Quote NUNCA 583; PIX 524,70", async () => {
@@ -544,19 +554,19 @@ rodar("IT clone athos-teste: Athos real -> Quote -> mensagem/PIX (fase 46)", () 
     comparar("25952", "PIX amount", 524.7, r.pixAmount);
   });
 
-  it("R4 25900 (aumento de preco): original 5,00; desconto 0; total 5,00; sem Subtotal/Desconto/riscado; PIX 5,00", async () => {
+  it("R4 25900 (aumento de preco): item 3 original 5,00; desconto 0; pedido 11,00; sem Subtotal/Desconto/riscado; PIX 11,00", async () => {
     const { id } = await obterOuCriarReferencia(25900, SPEC_25900);
     const r = await executarFluxo(id);
 
-    comparar("25900", "item.valor (preco original)", 5, r.itensLidos[0].valor);
-    comparar("25900", "item.desconto", 0, r.itensLidos[0].desconto);
-    comparar("25900", "item.total", 5, r.itensLidos[0].total);
-    comparar("25900", "Quote.total", 5, r.quote.total);
+    comparar("25900", "item 3 valor (preco original)", 5, r.itensLidos[2].valor);
+    comparar("25900", "item 3 desconto", 0, r.itensLidos[2].desconto);
+    comparar("25900", "item 3 total", 5, r.itensLidos[2].total);
+    comparar("25900", "Quote.total", 11, r.quote.total);
     naoContem("25900", "mensagem sem Subtotal", r.mensagemPrincipal, "Subtotal");
     naoContem("25900", "mensagem sem Desconto:", r.mensagemPrincipal, "Desconto:");
     naoContem("25900", "mensagem sem item riscado", r.mensagemPrincipal, "~");
-    contem("25900", "mensagem Total", r.mensagemPrincipal, "Total: R$ 5,00");
-    comparar("25900", "PIX amount", 5, r.pixAmount);
+    contem("25900", "mensagem Total", r.mensagemPrincipal, "Total: R$ 11,00");
+    comparar("25900", "PIX amount", 11, r.pixAmount);
   });
 
   it("R5 outros de referencia (25951, 26047, 26109, quando existirem): itens reconciliam, Quote.total = liquido e a mensagem fecha", async () => {

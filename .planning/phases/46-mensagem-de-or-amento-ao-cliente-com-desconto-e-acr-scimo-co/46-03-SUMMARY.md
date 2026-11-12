@@ -162,3 +162,10 @@ Nenhum. Mitigacoes: T-46-08 (trava host/porta/db antes de qualquer conexao, NODE
 - Commits `01785f3`, `490a7a4`, `e503039`, `0882067` presentes no historico.
 - Criterios por grep/teste: `ATHOS_IT_CLONE` no IT = 3; `5440` = 5; IP de producao = 0; `athosteste` = 0; `athos_novo` no script = 5; linhas com `psql`/`pg_restore` fora de `docker exec athos-teste` = 0; `bash -n` ok; dry-run sai 0 sem a senha; origem local e variavel ausente sao recusadas (exit 3 e 2); `B3` e `criarOrcamento` presentes no IT.
 - Pendente (nao falha do self-check): `select count(*) from orcamento where idorcamento in (25822,25877,25900,25951,25952,26047,26109)` = 1 (so 25822), por falta do refresh com dump novo.
+
+## Atualização pós-execução (orquestrador, 2026-11-12) — D-10 fechado
+
+- O refresh real do clone foi executado pelo orquestrador com o script corrigido (`scripts/athos-clone-refresh.sh`, pg_dump somente leitura do Athos original, 1 conexão): dump + restore em 238s (240s total), banco de 608 MB, **26.113 orçamentos, max(idorcamento)=26145**, ids de referência 25822, 25877, 25900, 25951, 25952, 26047 e 26109 presentes.
+- Ao rodar o IT com os pedidos REAIS (modo "dump"), 3 casos falharam por premissa do teste (as réplicas tinham 1 item; os pedidos reais têm 25877 = 2 itens [150 + 130], 25900 = 3 itens [4 + 2 + 5]). O código de produção estava correto: item 2 do 25877 = original 0,95, desconto 60, total 130. Corrigidas as réplicas e as expectativas (item do caso por índice; totais do pedido: 25877 = 280, Subtotal 340; 25900 = 11).
+- Resultado final: `quotes-mensagem.clone` + `athos-orcamento.clone` = **28 passed, 0 failed**; pedidos `IT46` residuais no clone = 0.
+- Varreduras reais: P1 = 57 pedidos / 162 itens com `valordesconto` ≠ 0 e P2 = 35 itens acima da tabela, ambas com 0 divergências.
