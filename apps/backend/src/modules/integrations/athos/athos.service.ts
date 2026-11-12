@@ -126,21 +126,34 @@ export function resolveItemTotal(totalArmazenado: number, totalCalculado: number
 
 export type ItemCorrecao = { valorItem: number; valorDesconto: number; valorFinalItem: number };
 
-export type ItemPricingBruto = { valorItem: number; descontoItem: number; descontoOrcamento: number };
+export type ItemPricingBruto = {
+  valorItem: number;
+  descontoItem: number;
+  descontoOrcamento: number;
+  quantidade: number;
+};
 
-// O Athos grava o desconto do item de duas formas diferentes dependendo de como foi
-// aplicado no PDV:
-// - Desconto dado direto no produto (ex: orcamento #21717/#21659): valoritem ja vem
-//   LIQUIDO (com desconto embutido) e o valor do desconto fica em valordesconto.
-// - Desconto geral da compra, rateado por item (ex: orcamento #21718): valoritem vem
-//   BRUTO (preco cheio) e o valor rateado fica em orcamentodesconto.
-// Sem diferenciar os dois casos, valor unitario e desconto exibidos nao reconciliavam
-// com o total (ex: valor=2,50 desconto=0,80 total=2,50 — nao bate: 2,50-0,80=1,70).
+// Como o Athos grava preco e desconto do item (verificado no clone athos-teste, 25.833
+// orcamentos; para id >= 21000 vale `valor - descontors == soma(orcamentovalorfinalitem)`):
+// - valordesconto e o TOTAL da LINHA (nao o desconto por unidade) e so REGISTRA o preco
+//   digitado no Balcao: nunca e subtraido do final armazenado. Ex. 25822: qtd 13, valoritem
+//   1,00, valordesconto 13,00, final 13,00 (preco de tabela 2,00). Ex. 25877: qtd 200,
+//   valoritem 0,65, valordesconto 60,00, final 130,00 (preco de tabela 0,95).
+// - orcamentodesconto e o rateio do desconto geral da compra, por item (ex. #21718), e o
+//   valoritem vem BRUTO nesse caso.
+// - O final armazenado e qtd x valoritem - orcamentodesconto.
+// Por isso: preco original = valoritem + valordesconto / quantidade e desconto da linha =
+// valordesconto + orcamentodesconto, o que reconcilia com o final em todos os casos
+// (qtd x original - desconto = final). Somar o TOTAL da linha ao unitario (comportamento
+// antigo) gerava 60,65 por unidade no 25877. Aumento de preco (valoritem acima da tabela)
+// chega com os dois descontos zerados e nunca vira desconto.
 export function resolveItemPricing(bruto: ItemPricingBruto): { valorOriginal: number; desconto: number } {
-  if (bruto.descontoItem > 0) {
-    return { valorOriginal: bruto.valorItem + bruto.descontoItem, desconto: bruto.descontoItem };
-  }
-  return { valorOriginal: bruto.valorItem, desconto: bruto.descontoOrcamento };
+  const quantidadeValida = Number.isFinite(bruto.quantidade) && bruto.quantidade > 0;
+  // valordesconto e o total da linha: dilui por unidade antes de somar ao preco unitario.
+  const descontoPorUnidade = quantidadeValida ? bruto.descontoItem / bruto.quantidade : 0;
+  const valorOriginal = Number((bruto.valorItem + descontoPorUnidade).toFixed(9));
+  const desconto = Number((bruto.descontoItem + bruto.descontoOrcamento).toFixed(3));
+  return { valorOriginal, desconto };
 }
 
 // Alguns orcamentos sao lancados no balcao do Athos com erro de digitacao (ex: preco
@@ -478,6 +491,7 @@ async function loadItems(
         valorItem: valorItemBruto,
         descontoItem,
         descontoOrcamento,
+        quantidade,
       });
       const totalCalculado = quantidade * valor - desconto;
       const totalArmazenado = pickNumber(row, ["orcamentovalorfinalitem", "valortotal", "total"], totalCalculado);
