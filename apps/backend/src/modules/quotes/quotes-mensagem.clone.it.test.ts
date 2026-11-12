@@ -593,4 +593,278 @@ rodar("IT clone athos-teste: Athos real -> Quote -> mensagem/PIX (fase 46)", () 
       );
     }
   });
+
+  // -------------------------------------------------------------------------
+  // Pedidos criados pela API da Fase 44 (AthosOrcamentoService.criarOrcamento) no clone.
+  // O esperado e calculado em SQL/centavos aqui, independente das funcoes de producao.
+  // -------------------------------------------------------------------------
+
+  /** Preco de tabela (3 casas) e bruto da linha arredondado a centavos, lidos do proprio Athos do clone. */
+  async function precoTabela(idproduto: number, quantidade: number) {
+    const r = await pg.query<{ p: string; b: string }>(
+      "SELECT precovendaproduto($1)::text AS p, round($2::numeric * precovendaproduto($1), 2)::text AS b",
+      [idproduto, String(quantidade)],
+    );
+    return { preco: Number(r.rows[0].p), brutoC: Math.round(Number(r.rows[0].b) * 100) };
+  }
+
+  /** Formata em pt-BR com separador de milhar (como a mensagem). */
+  function fmtBRL(centavos: number): string {
+    const abs = Math.abs(centavos);
+    const inteiro = Math.floor(abs / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return `${inteiro},${String(abs % 100).padStart(2, "0")}`;
+  }
+
+  async function criarViaFase44(caso: string, input: Parameters<AthosOrcamentoService["criarOrcamento"]>[0]) {
+    const resp = await athosOrcamento.criarOrcamento({ ...input, obs: `teste ${MARCADOR} ${caso}` });
+    if (resp.idorcamento == null) throw new Error("Fase 44 nao devolveu idorcamento (simulacao?)");
+    idsCriados.push(resp.idorcamento);
+    return { ...resp, idorcamento: resp.idorcamento };
+  }
+
+  it("F44-1 desconto por item: desconto 1,50; Quote.total e PIX = valorLiquido; mensagem com Desconto -R$ 1,50", async () => {
+    const { preco, brutoC } = await precoTabela(produtoA, 3);
+    const esperadoLiquidoC = brutoC - 150;
+    const resp = await criarViaFase44("f44-item", { itens: [{ idproduto: produtoA, quantidade: 3, descontoRS: 1.5 }] });
+    const r = await executarFluxo(resp.idorcamento);
+
+    comparar("F44-1", "valorLiquido da Fase 44 (esperado independente)", esperadoLiquidoC / 100, resp.valorLiquido);
+    comparar("F44-1", "item.valor = preco de tabela", preco, r.itensLidos[0].valor);
+    comparar("F44-1", "item.valor = itens[0].valorUnitario da Fase 44", Number(resp.itens[0].valorUnitario), r.itensLidos[0].valor);
+    comparar("F44-1", "item.desconto", 1.5, r.itensLidos[0].desconto);
+    comparar("F44-1", "item.total = itens[0].valorFinal da Fase 44", Number(resp.itens[0].valorFinal), r.itensLidos[0].total);
+    comparar("F44-1", "item.total (esperado independente)", esperadoLiquidoC / 100, r.itensLidos[0].total);
+    comparar("F44-1", "Quote.total = valorLiquido", Number(resp.valorLiquido), r.quote.total);
+    comparar("F44-1", "PIX amount = valorLiquido", Number(resp.valorLiquido), r.pixAmount);
+    contem("F44-1", "mensagem Desconto", r.mensagemPrincipal, "Desconto: -R$ 1,50");
+    contem("F44-1", "mensagem Subtotal = valorBruto", r.mensagemPrincipal, `Subtotal: R$ ${fmtBRL(brutoC)}`);
+    contem("F44-1", "mensagem Total", r.mensagemPrincipal, `Total: R$ ${fmtBRL(esperadoLiquidoC)}`);
+  });
+
+  it("F44-2 desconto global (2 itens, descontoTotalRS 2): rateio soma 2,00; Subtotal = valorBruto; Quote.total e PIX = valorLiquido", async () => {
+    const a = await precoTabela(produtoA, 2);
+    const b = await precoTabela(produtoB, 1);
+    const brutoC = a.brutoC + b.brutoC;
+    const resp = await criarViaFase44("f44-global", {
+      itens: [
+        { idproduto: produtoA, quantidade: 2 },
+        { idproduto: produtoB, quantidade: 1 },
+      ],
+      descontoTotalRS: 2,
+    });
+    const r = await executarFluxo(resp.idorcamento);
+
+    comparar("F44-2", "valorBruto da Fase 44 (esperado independente)", brutoC / 100, resp.valorBruto);
+    comparar("F44-2", "valorLiquido da Fase 44 (esperado independente)", (brutoC - 200) / 100, resp.valorLiquido);
+    comparar("F44-2", "soma dos desconto dos itens lidos (rateio)", 2, r.itensLidos.reduce((acc, i) => acc + i.desconto, 0));
+    comparar("F44-2", "soma dos totais dos itens lidos", Number(resp.valorLiquido), r.itensLidos.reduce((acc, i) => acc + i.total, 0));
+    comparar("F44-2", "Quote.total = valorLiquido", Number(resp.valorLiquido), r.quote.total);
+    comparar("F44-2", "PIX amount = valorLiquido", Number(resp.valorLiquido), r.pixAmount);
+    contem("F44-2", "mensagem Subtotal = valorBruto", r.mensagemPrincipal, `Subtotal: R$ ${fmtBRL(brutoC)}`);
+    contem("F44-2", "mensagem Desconto", r.mensagemPrincipal, "Desconto: -R$ 2,00");
+    contem("F44-2", "mensagem Total", r.mensagemPrincipal, `Total: R$ ${fmtBRL(brutoC - 200)}`);
+  });
+
+  it("F44-3 preco unitario abaixo da tabela (-0,50, qtd 4): desconto implicito 2,00 e total = 4 x preco - 2,00", async () => {
+    const { preco, brutoC } = await precoTabela(produtoA, 4);
+    const resp = await criarViaFase44("f44-abaixo", {
+      itens: [{ idproduto: produtoA, quantidade: 4, valorUnitario: Number((preco - 0.5).toFixed(3)) }],
+    });
+    const r = await executarFluxo(resp.idorcamento);
+
+    comparar("F44-3", "item.valor = preco de tabela", preco, r.itensLidos[0].valor);
+    comparar("F44-3", "item.desconto (implicito)", 2, r.itensLidos[0].desconto);
+    comparar("F44-3", "item.total (esperado independente)", (brutoC - 200) / 100, r.itensLidos[0].total);
+    comparar("F44-3", "Quote.total = valorLiquido da Fase 44", Number(resp.valorLiquido), r.quote.total);
+    comparar("F44-3", "PIX amount = valorLiquido", Number(resp.valorLiquido), r.pixAmount);
+    contem("F44-3", "mensagem Desconto", r.mensagemPrincipal, "Desconto: -R$ 2,00");
+  });
+
+  it("F44-4 preco unitario ACIMA da tabela (+0,50, qtd 2): desconto 0, valor = preco + 0,50, sem riscado nem Subtotal", async () => {
+    const { preco } = await precoTabela(produtoB, 2);
+    const unitario = Number((preco + 0.5).toFixed(3));
+    const totalC = Math.round(2 * unitario * 100);
+    const resp = await criarViaFase44("f44-acima", { itens: [{ idproduto: produtoB, quantidade: 2, valorUnitario: unitario }] });
+    const r = await executarFluxo(resp.idorcamento);
+
+    comparar("F44-4", "item.valor = preco + 0,50", unitario, r.itensLidos[0].valor);
+    comparar("F44-4", "item.desconto", 0, r.itensLidos[0].desconto);
+    comparar("F44-4", "item.total (esperado independente)", totalC / 100, r.itensLidos[0].total);
+    comparar("F44-4", "Quote.total = valorLiquido da Fase 44", Number(resp.valorLiquido), r.quote.total);
+    comparar("F44-4", "Quote.total (esperado independente)", totalC / 100, r.quote.total);
+    comparar("F44-4", "PIX amount", totalC / 100, r.pixAmount);
+    naoContem("F44-4", "mensagem sem item riscado", r.mensagemPrincipal, "~");
+    naoContem("F44-4", "mensagem sem Subtotal", r.mensagemPrincipal, "Subtotal");
+    naoContem("F44-4", "mensagem sem Desconto:", r.mensagemPrincipal, "Desconto:");
+  });
+
+  // -------------------------------------------------------------------------
+  // Pedidos por INSERT no padrao do Balcao (D-11): valoritem = preco digitado, valordesconto = TOTAL da
+  // linha, orcamentovalorfinalitem = qtd x valoritem - descontos.
+  // -------------------------------------------------------------------------
+
+  it("B1 qtd 30, 2,10, valordesconto 6,00: original 2,30; desconto 6,00; total 63,00; Subtotal 69,00", async () => {
+    const id = await inserirPedido(
+      { header: { valor: 63, descontors: 0, desconto: 0, valoracrescimo: 0 }, itens: [{ qtd: 30, valoritem: 2.1, vd: 6, od: 0, final: 63 }] },
+      "[IT46] caso B1",
+    );
+    const r = await executarFluxo(id);
+    comparar("B1", "item.valor (preco original)", 2.3, r.itensLidos[0].valor);
+    comparar("B1", "item.desconto", 6, r.itensLidos[0].desconto);
+    comparar("B1", "item.total", 63, r.itensLidos[0].total);
+    comparar("B1", "Quote.total", 63, r.quote.total);
+    contem("B1", "mensagem item riscado", r.mensagemPrincipal, "~R$ 69,00~ R$ 63,00");
+    contem("B1", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 69,00");
+    contem("B1", "mensagem Desconto", r.mensagemPrincipal, "Desconto: -R$ 6,00");
+    comparar("B1", "PIX amount", 63, r.pixAmount);
+  });
+
+  it("B2 qtd 5, 0,90, valordesconto 0,50 + orcamentodesconto 1,38: original 1,00; desconto 1,88; total 3,12; Subtotal 5,00", async () => {
+    const id = await inserirPedido(
+      { header: { valor: 4.5, descontors: 1.38, desconto: 30.667, valoracrescimo: 0 }, itens: [{ qtd: 5, valoritem: 0.9, vd: 0.5, od: 1.38, final: 3.12 }] },
+      "[IT46] caso B2",
+    );
+    const r = await executarFluxo(id);
+    comparar("B2", "item.valor (preco original)", 1, r.itensLidos[0].valor);
+    comparar("B2", "item.desconto (valordesconto + orcamentodesconto)", 1.88, r.itensLidos[0].desconto);
+    comparar("B2", "item.total", 3.12, r.itensLidos[0].total);
+    comparar("B2", "Quote.total", 3.12, r.quote.total);
+    contem("B2", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 5,00");
+    contem("B2", "mensagem Desconto", r.mensagemPrincipal, "Desconto: -R$ 1,88");
+    contem("B2", "mensagem Total", r.mensagemPrincipal, "Total: R$ 3,12");
+    comparar("B2", "PIX amount", 3.12, r.pixAmount);
+  });
+
+  it("B3 aumento de preco 1,00 -> 1,50 (qtd 4, Balcao): valor 1,50; desconto 0; total 6,00; sem Subtotal nem riscado; PIX 6,00", async () => {
+    const id = await inserirPedido(
+      { header: { valor: 6, descontors: 0, desconto: 0, valoracrescimo: 0 }, itens: [{ qtd: 4, valoritem: 1.5, vd: 0, od: 0, final: 6 }] },
+      "[IT46] caso B3 aumento 1.5",
+    );
+    const r = await executarFluxo(id);
+    comparar("B3", "item.valor (preco original)", 1.5, r.itensLidos[0].valor);
+    comparar("B3", "item.desconto", 0, r.itensLidos[0].desconto);
+    comparar("B3", "item.total", 6, r.itensLidos[0].total);
+    comparar("B3", "Quote.total", 6, r.quote.total);
+    naoContem("B3", "mensagem sem Subtotal", r.mensagemPrincipal, "Subtotal");
+    naoContem("B3", "mensagem sem item riscado", r.mensagemPrincipal, "~");
+    comparar("B3", "PIX amount", 6, r.pixAmount);
+  });
+
+  it("B4 acrescimo de cabecalho 7,50 (qtd 2, 10,00): Quote.total 27,50; surcharge 7,50; Acrescimo +R$ 7,50; PIX 27,50", async () => {
+    const id = await inserirPedido(
+      { header: { valor: 20, descontors: 0, desconto: 0, valoracrescimo: 7.5 }, itens: [{ qtd: 2, valoritem: 10, vd: 0, od: 0, final: 20 }] },
+      "[IT46] caso B4",
+    );
+    const r = await executarFluxo(id);
+    comparar("B4", "mapped.totais.valoracrescimo", 7.5, (r.mapped as any).totais.valoracrescimo);
+    comparar("B4", "Quote.total", 27.5, r.quote.total);
+    comparar("B4", "Quote.surcharge", 7.5, r.quote.surcharge);
+    contem("B4", "mensagem Acrescimo", r.mensagemPrincipal, "Acréscimo: +R$ 7,50");
+    contem("B4", "mensagem Total", r.mensagemPrincipal, "Total: R$ 27,50");
+    comparar("B4", "PIX amount", 27.5, r.pixAmount);
+  });
+
+  it("B5 misto (aumento + desconto): item 2 com ~R$ 10,00~ R$ 6,50; Subtotal 13,00; Desconto 3,50; Total e PIX 9,50", async () => {
+    const id = await inserirPedido(
+      {
+        header: { valor: 9.5, descontors: 0, desconto: 0, valoracrescimo: 0 },
+        itens: [
+          { qtd: 2, valoritem: 1.5, vd: 0, od: 0, final: 3 },
+          { qtd: 10, valoritem: 0.65, vd: 3.5, od: 0, final: 6.5 },
+        ],
+      },
+      "[IT46] caso B5",
+    );
+    const r = await executarFluxo(id);
+    comparar("B5", "item 1 valor (aumento)", 1.5, r.itensLidos[0].valor);
+    comparar("B5", "item 1 desconto", 0, r.itensLidos[0].desconto);
+    comparar("B5", "item 2 valor (preco original)", 1, r.itensLidos[1].valor);
+    comparar("B5", "item 2 desconto", 3.5, r.itensLidos[1].desconto);
+    comparar("B5", "item 2 total", 6.5, r.itensLidos[1].total);
+    comparar("B5", "Quote.total", 9.5, r.quote.total);
+    contem("B5", "mensagem item 2 riscado", r.mensagemPrincipal, "~R$ 10,00~ R$ 6,50");
+    contem("B5", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 13,00");
+    contem("B5", "mensagem Desconto", r.mensagemPrincipal, "Desconto: -R$ 3,50");
+    contem("B5", "mensagem Total", r.mensagemPrincipal, "Total: R$ 9,50");
+    comparar("B5", "PIX amount", 9.5, r.pixAmount);
+  });
+
+  // -------------------------------------------------------------------------
+  // Varreduras somente leitura sobre a populacao do clone.
+  // -------------------------------------------------------------------------
+
+  it("P1 varredura de descontos: ate 200 pedidos (id >= 21000 com valordesconto <> 0) reconciliam item e cabecalho", async () => {
+    const alvo = await pg.query<{ idorcamento: number }>(
+      `SELECT o.idorcamento FROM orcamento o
+        WHERE o.idorcamento >= 21000 AND COALESCE(o.obs, '') NOT LIKE $1
+          AND EXISTS (SELECT 1 FROM orcamento_item i WHERE i.idorcamento = o.idorcamento AND i.valordesconto <> 0)
+        ORDER BY o.idorcamento DESC LIMIT 200`,
+      [`%${MARCADOR}%`],
+    );
+    const divergencias: string[] = [];
+    let itensVarridos = 0;
+    for (const { idorcamento } of alvo.rows) {
+      const { mapped } = await athos.buscarOrcamentoPorNumero(String(idorcamento));
+      const itens = mapped.itensDetalhados as Array<Record<string, any>>;
+      let soma = 0;
+      for (const [k, item] of itens.entries()) {
+        const qtd = Number(item.quantidade);
+        const valor = Number(item.valor);
+        const desconto = Number(item.desconto);
+        const total = Number(item.total);
+        soma += total;
+        itensVarridos += 1;
+        const reconciliado = qtd * valor - desconto;
+        if (Math.abs(reconciliado - total) > 0.011) {
+          divergencias.push(`#${idorcamento} item ${k + 1}: ${qtd} x ${valor} - ${desconto} = ${reconciliado.toFixed(3)} mas total ${total}`);
+        }
+      }
+      const t = (mapped as any).totais;
+      if (Math.abs(soma - (t.valor - t.descontors)) > 0.02) {
+        divergencias.push(`#${idorcamento} cabecalho: soma dos totais ${soma.toFixed(3)} x (valor ${t.valor} - descontors ${t.descontors})`);
+      }
+    }
+    relatorio.push({ caso: "P1", campo: `pedidos/itens varridos: ${alvo.rows.length}/${itensVarridos}`, esperado: "0 divergencias", obtido: `${divergencias.length} divergencias` });
+    expect(alvo.rows.length).toBeGreaterThan(0);
+    expect(divergencias).toEqual([]);
+  });
+
+  it("P2 varredura de aumento de preco (D-03): ate 100 itens recentes com valoritem acima da tabela leem desconto 0 e total = qtd x valoritem", async () => {
+    const alvo = await pg.query<{ idorcamento: number; iditemorcamento: number; valoritem: string; qtd: string }>(
+      `SELECT i.idorcamento, i.iditemorcamento, i.valoritem::text AS valoritem, i.quantidadeitem::text AS qtd
+         FROM orcamento_item i
+         JOIN orcamento o ON o.idorcamento = i.idorcamento
+        WHERE i.idorcamento >= 25000 AND COALESCE(o.obs, '') NOT LIKE $1
+          AND i.valoritem > precovendaproduto(i.idproduto) + 0.0005
+          AND COALESCE(i.valordesconto, 0) = 0 AND COALESCE(i.orcamentodesconto, 0) = 0
+        ORDER BY i.idorcamento DESC, i.iditemorcamento LIMIT 100`,
+      [`%${MARCADOR}%`],
+    );
+    const divergencias: string[] = [];
+    const porPedido = new Map<number, typeof alvo.rows>();
+    for (const row of alvo.rows) porPedido.set(row.idorcamento, [...(porPedido.get(row.idorcamento) ?? []), row]);
+    for (const [idorcamento, linhas] of porPedido) {
+      const { mapped } = await athos.buscarOrcamentoPorNumero(String(idorcamento));
+      const lidos = mapped.itensDetalhados as Array<Record<string, any>>;
+      for (const linha of linhas) {
+        const lido = lidos.find((i) => Number(i.itemRaw?.iditemorcamento) === linha.iditemorcamento);
+        if (!lido) {
+          divergencias.push(`#${idorcamento} item ${linha.iditemorcamento}: nao encontrado na leitura`);
+          continue;
+        }
+        const valoritem = Number(linha.valoritem);
+        const esperadoTotal = Number(linha.qtd) * valoritem;
+        if (Number(lido.desconto) !== 0) divergencias.push(`#${idorcamento} item ${linha.iditemorcamento}: desconto ${lido.desconto} (esperado 0)`);
+        if (Math.abs(Number(lido.valor) - valoritem) > 0.0011) divergencias.push(`#${idorcamento} item ${linha.iditemorcamento}: valor ${lido.valor} (esperado ${valoritem})`);
+        if (Math.abs(Number(lido.total) - esperadoTotal) > 0.011) divergencias.push(`#${idorcamento} item ${linha.iditemorcamento}: total ${lido.total} (esperado ${esperadoTotal.toFixed(3)})`);
+      }
+    }
+    relatorio.push({
+      caso: "P2",
+      campo: `itens acima da tabela varridos: ${alvo.rows.length} em ${porPedido.size} pedidos (ex.: ${[...porPedido.keys()].slice(0, 3).join(",")})`,
+      esperado: "0 divergencias",
+      obtido: `${divergencias.length} divergencias`,
+    });
+    expect(divergencias).toEqual([]);
+  });
 });
