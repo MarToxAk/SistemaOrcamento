@@ -1571,6 +1571,77 @@ describe("AthosService - resolveItemPricing", () => {
       desconto: 0.8,
     });
   });
+
+  // --- Fase 46 (46-01): valordesconto e o TOTAL da linha; preco original = valoritem + valordesconto / quantidade ---
+
+  it("P1 orcamento 25822 — qtd 13, valoritem 1,00, valordesconto 13,00 (total da linha): original 2,00 e desconto 13,00", () => {
+    expect(resolveItemPricing({ valorItem: 1, descontoItem: 13, descontoOrcamento: 0, quantidade: 13 })).toEqual({
+      valorOriginal: 2,
+      desconto: 13,
+    });
+  });
+
+  it("P2 orcamento 25877 — qtd 200, valoritem 0,65, valordesconto 60,00: original 0,95 e desconto 60,00", () => {
+    expect(resolveItemPricing({ valorItem: 0.65, descontoItem: 60, descontoOrcamento: 0, quantidade: 200 })).toEqual({
+      valorOriginal: 0.95,
+      desconto: 60,
+    });
+  });
+
+  it("P3 orcamento 25952 — desconto geral rateado (orcamentodesconto 58,30): valoritem vem bruto, original 5,30", () => {
+    expect(resolveItemPricing({ valorItem: 5.3, descontoItem: 0, descontoOrcamento: 58.3, quantidade: 110 })).toEqual({
+      valorOriginal: 5.3,
+      desconto: 58.3,
+    });
+  });
+
+  it("P4 orcamento 25900 / aumento de preco — nunca vira desconto (5,00 e 1,00 -> 1,50 com qtd 4)", () => {
+    expect(resolveItemPricing({ valorItem: 5, descontoItem: 0, descontoOrcamento: 0, quantidade: 1 })).toEqual({
+      valorOriginal: 5,
+      desconto: 0,
+    });
+    expect(resolveItemPricing({ valorItem: 1.5, descontoItem: 0, descontoOrcamento: 0, quantidade: 4 })).toEqual({
+      valorOriginal: 1.5,
+      desconto: 0,
+    });
+  });
+
+  it("P5 regressao com quantidade 1 (#21716, #21717/#21659, #21718) com os mesmos valores de antes", () => {
+    expect(resolveItemPricing({ valorItem: 3.3, descontoItem: 0, descontoOrcamento: 0, quantidade: 1 })).toEqual({
+      valorOriginal: 3.3,
+      desconto: 0,
+    });
+    expect(resolveItemPricing({ valorItem: 2.5, descontoItem: 0.8, descontoOrcamento: 0, quantidade: 1 })).toEqual({
+      valorOriginal: 3.3,
+      desconto: 0.8,
+    });
+    expect(resolveItemPricing({ valorItem: 3.3, descontoItem: 0, descontoOrcamento: 0.8, quantidade: 1 })).toEqual({
+      valorOriginal: 3.3,
+      desconto: 0.8,
+    });
+  });
+
+  it("P6 valordesconto e orcamentodesconto juntos (#3701 seq 1 e #9414 seq 2) reconciliam com o final", () => {
+    // #3701 seq 1: qtd 5, 0,90, valordesconto 0,50, orcamentodesconto 1,38, final 3,12
+    const a = resolveItemPricing({ valorItem: 0.9, descontoItem: 0.5, descontoOrcamento: 1.38, quantidade: 5 });
+    expect(a).toEqual({ valorOriginal: 1, desconto: 1.88 });
+    expect(Number((5 * a.valorOriginal - a.desconto).toFixed(2))).toBe(3.12);
+    // #9414 seq 2: qtd 2, 2,58, valordesconto 0,84, orcamentodesconto 1,81
+    const b = resolveItemPricing({ valorItem: 2.58, descontoItem: 0.84, descontoOrcamento: 1.81, quantidade: 2 });
+    expect(b).toEqual({ valorOriginal: 3, desconto: 2.65 });
+  });
+
+  it.each([0, Number.NaN, -3])("P7 quantidade invalida (%s) nao divide por zero: original = valoritem", (quantidade) => {
+    const r = resolveItemPricing({ valorItem: 2.58, descontoItem: 0.84, descontoOrcamento: 1.81, quantidade });
+    expect(r.valorOriginal).toBe(2.58);
+    expect(r.desconto).toBe(2.65);
+  });
+
+  it("P8 divisao nao exata: valordesconto 1,00 em qtd 3 (valoritem 0) reconstroi 0,333333333 por unidade e fecha o total", () => {
+    const r = resolveItemPricing({ valorItem: 0, descontoItem: 1, descontoOrcamento: 0, quantidade: 3 });
+    expect(r.valorOriginal).toBeCloseTo(0.333333333, 9);
+    expect(Math.round(3 * r.valorOriginal * 100) / 100).toBe(1);
+  });
 });
 
 describe("AthosService - applyItemCorrecao", () => {

@@ -493,7 +493,8 @@ async function loadItems(
         descontoOrcamento,
         quantidade,
       });
-      const totalCalculado = quantidade * valor - desconto;
+      // D-04: desconto maior que a linha nunca gera total negativo (o aviso fica no Quote, onde ha logger).
+      const totalCalculado = Number(Math.max(0, quantidade * valor - desconto).toFixed(3));
       const totalArmazenado = pickNumber(row, ["orcamentovalorfinalitem", "valortotal", "total"], totalCalculado);
       const totalResolvido = resolveItemTotal(totalArmazenado, totalCalculado);
 
@@ -704,6 +705,10 @@ export class AthosService {
       const funcionario = await loadFuncionario(client, quote);
       const carimbos = await loadCarimbos(client, idOrcamento);
 
+      const totaisValor = pickNumber(quote, ["valor"]);
+      const totaisDescontoRs = pickNumber(quote, ["descontors"]);
+      const totaisAcrescimo = pickNumber(quote, ["valoracrescimo"]);
+
       const mapped = {
         numero: String(quote.numero ?? quote.idorcamento ?? numero),
         data: pickDateISO(quote, ["dataorcamento", "data", "createdat", "created_at"]),
@@ -733,6 +738,16 @@ export class AthosService {
         })),
         carimbosDetalhados: carimbos,
         funcionario,
+        // Cabecalho do Athos. `desconto` do cabecalho e PERCENTUAL (por isso descontoPercentual);
+        // `descontors` e o desconto em R$. `valor` e BRUTO no padrao de rateio (ex. 25952: 583,00
+        // com descontors 58,30) e ja LIQUIDO no padrao de preco informado no Balcao (ex. 25822: 13,00).
+        totais: {
+          valor: totaisValor,
+          descontors: totaisDescontoRs,
+          descontoPercentual: pickNumber(quote, ["desconto"]),
+          valoracrescimo: totaisAcrescimo,
+          liquido: Number((totaisValor - totaisDescontoRs + totaisAcrescimo).toFixed(2)),
+        },
         athosRaw: quote,
       };
 

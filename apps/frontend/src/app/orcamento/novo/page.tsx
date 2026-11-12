@@ -139,6 +139,9 @@ export default function PreencherOrcamentoPage() {
   const [numeroBusca, setNumeroBusca] = useState("");
   const [conversationId, setConversationId] = useState<number | undefined>(undefined);
   const [chatwootContactId, setChatwootContactId] = useState<number | undefined>(undefined);
+  // Acrescimo do cabecalho do Athos (valoracrescimo), em R$. Nao entra na tabela de itens:
+  // e reenviado em totais.valoracrescimo e o backend o soma ao total do orcamento.
+  const [valorAcrescimo, setValorAcrescimo] = useState(0);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [sendingState, setSendingState] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
@@ -402,6 +405,9 @@ export default function PreencherOrcamentoPage() {
         }
       }
 
+      const acrescimoAthos = Number(data.totais?.valoracrescimo ?? 0);
+      setValorAcrescimo(Number.isFinite(acrescimoAthos) && acrescimoAthos > 0 ? acrescimoAthos : 0);
+
       // Campos de cliente, telefone e email são preservados do Chatwoot.
       // A busca do Athos preenche apenas se ainda estiverem vazios.
       setForm((current) => ({
@@ -487,7 +493,10 @@ export default function PreencherOrcamentoPage() {
       },
       totais: {
         desconto: Number(form.itens.reduce((acc, item) => acc + Number(item.desconto || 0), 0).toFixed(2)),
+        // valor = soma dos totais dos itens (liquido, SEM acrescimo): o backend soma o acrescimo
+        // (totais.valoracrescimo) ao total do orcamento. Incluir o acrescimo aqui o contaria duas vezes.
         valor: Number(form.itens.reduce((acc, item) => acc + Number(item.total || 0), 0).toFixed(2)),
+        ...(valorAcrescimo > 0 ? { valoracrescimo: Number(valorAcrescimo.toFixed(2)) } : {}),
       },
       source: "MANUAL" as const,
     };
