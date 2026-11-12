@@ -2090,8 +2090,10 @@ export class QuotesService {
       const desconto = Number(it?.valordesconto ?? it?.desconto ?? 0);
       const providedTotal = Number(it?.orcamentovalorfinalitem ?? it?.total ?? NaN);
       const computedTotal = Number((quantidade * valor - desconto).toFixed(2));
+      // Item totalmente descontado grava finalPrice 0 (D-04): nesse caso o zero e legitimo, nao recalcular
+      const zeroExplicadoPorDesconto = providedTotal === 0 && desconto > 0;
       const total = Number.isFinite(providedTotal)
-        ? providedTotal > 0 || valor <= 0 || quantidade <= 0
+        ? providedTotal > 0 || valor <= 0 || quantidade <= 0 || zeroExplicadoPorDesconto
           ? providedTotal
           : computedTotal > 0
             ? computedTotal

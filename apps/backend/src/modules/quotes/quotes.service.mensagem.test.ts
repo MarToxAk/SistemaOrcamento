@@ -222,4 +222,128 @@ describe("QuotesService.enviarParaCliente — mensagem (fase 46)", () => {
     expect(amb.efi.createPixPaymentLink).toHaveBeenCalledTimes(1);
     expect(amb.efi.createPixPaymentLink).toHaveBeenCalledWith(expect.objectContaining({ amount: 130 }));
   });
+
+  it("M1 25952: desconto geral rateado, 583,00 so como Subtotal; PIX em 524,70", async () => {
+    const quote = makeQuoteCompleto({
+      externalQuoteId: 25952,
+      total: 524.7,
+      itens: [{ descricao: "Caneta lote", quantidade: 110, unitPrice: 5.3, discount: 58.3, finalPrice: 524.7 }],
+    });
+    const amb = await montarAmbiente(quote, null);
+
+    await amb.service.enviarParaCliente("quote-mensagem-001");
+
+    const msg = mensagemPrincipal(amb);
+    expect(msg).toContain("~R$ 583,00~ R$ 524,70");
+    expect(msg).toContain("Subtotal: R$ 583,00");
+    expect(msg).toContain("Desconto: -R$ 58,30");
+    expect(msg).toContain("Total: R$ 524,70");
+    expect(msg).not.toContain("Total: R$ 583,00");
+    expect(amb.efi.createPixPaymentLink).toHaveBeenCalledWith(expect.objectContaining({ amount: 524.7 }));
+  });
+
+  it("M2 25900 aumento de preco: sem Subtotal, Desconto nem texto riscado; PIX em 5,00", async () => {
+    const quote = makeQuoteCompleto({
+      externalQuoteId: 25900,
+      total: 5,
+      itens: [{ descricao: "Item teste", quantidade: 1, unitPrice: 5, discount: 0, finalPrice: 5 }],
+    });
+    const amb = await montarAmbiente(quote, null);
+
+    await amb.service.enviarParaCliente("quote-mensagem-001");
+
+    const msg = mensagemPrincipal(amb);
+    expect(msg).not.toContain("Subtotal");
+    expect(msg).not.toContain("Desconto");
+    expect(msg).not.toContain("~");
+    expect(msg).toContain("• Item teste (1x) — R$ 5,00");
+    expect(msg).toContain("Total: R$ 5,00");
+    expect(amb.efi.createPixPaymentLink).toHaveBeenCalledWith(expect.objectContaining({ amount: 5 }));
+  });
+
+  it("M4 acrescimo: Acrescimo +R$ 7,50 entra no Total de 137,50; PIX em 137,50", async () => {
+    const quote = makeQuoteCompleto({
+      externalQuoteId: 25877,
+      total: 137.5,
+      surcharge: 7.5,
+      itens: [{ descricao: "Caneta teste", quantidade: 200, unitPrice: 0.95, discount: 60, finalPrice: 130 }],
+    });
+    const amb = await montarAmbiente(quote, null);
+
+    await amb.service.enviarParaCliente("quote-mensagem-001");
+
+    const msg = mensagemPrincipal(amb);
+    expect(msg).toContain("Subtotal: R$ 190,00");
+    expect(msg).toContain("Desconto: -R$ 60,00");
+    expect(msg).toContain("Acréscimo: +R$ 7,50");
+    expect(msg).toContain("Total: R$ 137,50");
+    expect(amb.efi.createPixPaymentLink).toHaveBeenCalledWith(expect.objectContaining({ amount: 137.5 }));
+  });
+
+  it("M5 bonificado: item 100% descontado aparece como ~R$ 12,00~ R$ 0,00 e o total do item mapeado e 0", async () => {
+    const quote = makeQuoteCompleto({
+      externalQuoteId: 25877,
+      total: 20,
+      itens: [
+        { descricao: "Brinde", quantidade: 10, unitPrice: 1.2, discount: 12, finalPrice: 0 },
+        { descricao: "Caderno", quantidade: 1, unitPrice: 20, discount: 0, finalPrice: 20 },
+      ],
+    });
+    const amb = await montarAmbiente(quote, null);
+
+    const mapeado = (amb.service as any).mapQuoteToAthosMapped(quote);
+    expect(mapeado.itens[0].total).toBe(0);
+    expect(mapeado.itens[1].total).toBe(20);
+
+    await amb.service.enviarParaCliente("quote-mensagem-001");
+
+    const msg = mensagemPrincipal(amb);
+    expect(msg).toContain("~R$ 12,00~ R$ 0,00");
+    expect(msg).toContain("Subtotal: R$ 32,00");
+    expect(msg).toContain("Desconto: -R$ 12,00");
+    expect(msg).toContain("Total: R$ 20,00");
+  });
+
+  it("M6 mais de 10 itens: 10 linhas, aviso de itens restantes e resumo sobre os 12", async () => {
+    const itens: ItemFake[] = Array.from({ length: 12 }, (_, i) => {
+      const comDesconto = i === 3 || i === 11; // um dentro e um fora das 10 linhas exibidas
+      return {
+        descricao: `Item ${i + 1}`,
+        quantidade: 1,
+        unitPrice: 10,
+        discount: comDesconto ? 2 : 0,
+        finalPrice: comDesconto ? 8 : 10,
+      };
+    });
+    const total = 12 * 10 - 4; // 116
+    const quote = makeQuoteCompleto({ externalQuoteId: 25877, total, itens });
+    const amb = await montarAmbiente(quote, null);
+
+    await amb.service.enviarParaCliente("quote-mensagem-001");
+
+    const msg = mensagemPrincipal(amb);
+    expect(msg.split("\n").filter((l) => l.startsWith("• Item "))).toHaveLength(10);
+    expect(msg).toContain("_...e mais 2 item(s)_");
+    expect(msg).toContain("Subtotal: R$ 120,00");
+    expect(msg).toContain("Desconto: -R$ 4,00");
+    expect(msg).toContain("Total: R$ 116,00");
+  });
+
+  it("M7 divergencia: Desconto exibido fecha (-R$ 90,00) e um aviso e registrado", async () => {
+    const quote = makeQuoteCompleto({
+      externalQuoteId: 25877,
+      total: 100,
+      itens: [{ descricao: "Caneta teste", quantidade: 200, unitPrice: 0.95, discount: 60, finalPrice: 130 }],
+    });
+    const amb = await montarAmbiente(quote, null);
+
+    await amb.service.enviarParaCliente("quote-mensagem-001");
+
+    const msg = mensagemPrincipal(amb);
+    expect(msg).toContain("Subtotal: R$ 190,00");
+    expect(msg).toContain("Desconto: -R$ 90,00");
+    expect(msg).toContain("Total: R$ 100,00");
+    const avisos = amb.logger.warn.mock.calls.map((c) => String(c[0]));
+    expect(avisos.some((a) => a.toLowerCase().includes("diverg"))).toBe(true);
+  });
 });
