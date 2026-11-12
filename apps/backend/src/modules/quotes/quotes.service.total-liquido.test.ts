@@ -282,4 +282,94 @@ describe("QuotesService.create - total liquido (fase 46)", () => {
     expect(avisosDivergentes).toHaveLength(0);
     expect(errorSpy).not.toHaveBeenCalled();
   });
+
+  // Payload escrito a mao no formato da pagina para o 25952 (qtd 110, valoritem 5,30, desconto 58,30).
+  const itens25952 = [
+    {
+      sequenciaitem: 1,
+      produto: { descricaoproduto: "Produto 25952", descricaocurta: "Produto 25952" },
+      quantidadeitem: 110,
+      valoritem: 5.3,
+      valordesconto: 58.3,
+      orcamentovalorfinalitem: 524.7,
+    },
+  ];
+  const basePayload = {
+    idorcamento: 25952,
+    vendedorNome: "Vendedor Teste",
+    conversationId: 10,
+    chatwootContactId: 20,
+    cliente: { nome: "Cliente Teste", telefone: "5512999990000" },
+    source: "MANUAL" as const,
+  };
+
+  it("C1 25952 com o payload da pagina (valor ja liquido): total 524,70 e nunca 583,00", async () => {
+    const { quotes, quoteCriados } = criarServicos();
+    await quotes.create({ ...basePayload, itens: itens25952, totais: { valor: 524.7, desconto: 58.3 } } as any);
+    expect(dec(quoteCriados[0].total)).toBe(524.7);
+    expect(dec(quoteCriados[0].total)).not.toBe(583);
+    expect(dec(quoteCriados[0].discount)).toBe(58.3);
+  });
+
+  it("C2 25952 com o cabecalho BRUTO do Athos (valor 583,00 + descontors 58,30): total 524,70 e desconto 58,30", async () => {
+    const { quotes, quoteCriados } = criarServicos();
+    await quotes.create({ ...basePayload, itens: itens25952, totais: { valor: 583, descontors: 58.3 } } as any);
+    expect(dec(quoteCriados[0].total)).toBe(524.7);
+    expect(dec(quoteCriados[0].discount)).toBe(58.3);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("C3 25877 com acrescimo de 7,50 no cabecalho: total 137,50 e surcharge 7,50", async () => {
+    prepararAthos(
+      { numero: 25877, valor: 130, valoracrescimo: 7.5 },
+      [{ id: 501, descricao: "Caneta teste", quantidade: 200, valoritem: 0.65, valordesconto: 60, final: 130 }],
+    );
+    const { athos, quotes, quoteCriados } = criarServicos();
+    const { mapped } = await athos.buscarOrcamentoPorNumero("25877");
+    expect(mapped.totais.valoracrescimo).toBe(7.5);
+
+    await quotes.create(payloadComoPaginaNovo(mapped, { valoracrescimo: mapped.totais.valoracrescimo }) as any);
+    expect(dec(quoteCriados[0].total)).toBe(137.5);
+    expect(dec(quoteCriados[0].surcharge)).toBe(7.5);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("C4 aumento de preco 1,00 -> 1,50 com qtd 4: item finalPrice 6,00, desconto 0 e total 6,00", async () => {
+    prepararAthos(
+      { numero: 25901, valor: 6 },
+      [{ id: 502, descricao: "Item reajustado", quantidade: 4, valoritem: 1.5, final: 6 }],
+    );
+    const { athos, quotes, itensCriados, quoteCriados } = criarServicos();
+    const { mapped } = await athos.buscarOrcamentoPorNumero("25901");
+    await quotes.create(payloadComoPaginaNovo(mapped) as any);
+    expect(dec(itensCriados[0].finalPrice)).toBe(6);
+    expect(dec(itensCriados[0].discount)).toBe(0);
+    expect(dec(quoteCriados[0].total)).toBe(6);
+  });
+
+  it("C5 divergencia cabecalho x itens (valor 500 contra itens 524,70): logger.error 'Divergencia de total' e total persistido 500", async () => {
+    const { quotes, quoteCriados } = criarServicos();
+    await quotes.create({ ...basePayload, itens: itens25952, totais: { valor: 500, desconto: 58.3 } } as any);
+    expect(dec(quoteCriados[0].total)).toBe(500);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Divergencia de total"));
+  });
+
+  it("C6 D-04 desconto maior que a linha (qtd 1, 10,00, desconto 15,00): finalPrice 0 e aviso preservado", async () => {
+    const { quotes, itensCriados } = criarServicos();
+    await quotes.create({
+      ...basePayload,
+      idorcamento: 26001,
+      itens: [
+        {
+          sequenciaitem: 1,
+          produto: { descricaoproduto: "Item inconsistente" },
+          quantidadeitem: 1,
+          valoritem: 10,
+          valordesconto: 15,
+        },
+      ],
+    } as any);
+    expect(dec(itensCriados[0].finalPrice)).toBe(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("desconto maior que o valor do item"));
+  });
 });

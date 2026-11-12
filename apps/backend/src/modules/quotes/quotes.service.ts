@@ -10,6 +10,7 @@ import { PrismaService } from "../database/prisma.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { buildQuoteIdentifierWhereCandidates } from "./quote-identifier.util";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
+import { resolveQuoteTotal } from "./quote-totals.util";
 
 const statusTransitions = {
   PENDENTE: ["ENVIADO", "PAGAMENTO_PARCIAL", "APROVADO", "CANCELADO"],
@@ -612,15 +613,32 @@ export class QuotesService {
       return acc + current + childrenTotal;
     }, 0);
 
-    const discount = Number(payload.totais?.desconto ?? 0);
-    const surcharge = Number(payload.totais?.valoracrescimo ?? 0);
-    const headerTotalRaw = Number(payload.totais?.valor ?? (payload as unknown as { valor?: number }).valor ?? NaN);
-    const total = Number(Number.isFinite(headerTotalRaw) ? headerTotalRaw : computedSubtotal - discount + surcharge);
+    // Bruto dos itens (qtd x valoritem, antes do desconto) para o util detectar cabecalho BRUTO do Athos.
+    const bruto = (item: { quantidadeitem: number; valoritem: number }) =>
+      Number((Number(item.quantidadeitem) * Number(item.valoritem)).toFixed(2));
+    const itensBruto = itemsInput.reduce(
+      (acc, item) => acc + bruto(item) + (item.filhos ?? []).reduce((childAcc, child) => childAcc + bruto(child), 0),
+      0,
+    );
+
+    // `valor` do cabecalho (ou do topo do payload): numero finito ou ausente.
+    const headerValueInput = payload.totais?.valor ?? (payload as unknown as { valor?: number }).valor;
+    const headerValueNumber = headerValueInput === undefined || headerValueInput === null ? NaN : Number(headerValueInput);
+
+    // D-02: total cobrado = liquido (valor - descontors + valoracrescimo). Ver quote-totals.util.ts.
+    const { discount, surcharge, total, headerLiquido } = resolveQuoteTotal({
+      itensLiquido: computedSubtotal,
+      itensBruto,
+      valor: headerValueNumber,
+      descontors: payload.totais?.descontors,
+      desconto: payload.totais?.desconto,
+      valoracrescimo: payload.totais?.valoracrescimo,
+    });
 
     this.logHeaderTotalMismatchIfAny({
       externalQuoteId: payload.idorcamento,
-      headerTotal: headerTotalRaw,
-      itemsTotal: computedSubtotal,
+      headerTotal: headerLiquido ?? NaN,
+      itemsTotal: computedSubtotal + surcharge,
     });
 
     const customer = await this.resolveCustomer(payload, customerInput);

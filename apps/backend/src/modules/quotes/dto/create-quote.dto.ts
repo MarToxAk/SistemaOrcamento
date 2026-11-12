@@ -147,6 +147,12 @@ class CreateQuoteTotalsDto {
   @IsNumber()
   desconto?: number;
 
+  // Desconto do cabecalho do Athos em R$ (coluna descontors). Quando presente, `valor` e o valor
+  // BRUTO do cabecalho e o total liquido do orcamento e valor - descontors + valoracrescimo.
+  @IsOptional()
+  @IsNumber()
+  descontors?: number;
+
   @IsOptional()
   @IsNumber()
   valoracrescimo?: number;
