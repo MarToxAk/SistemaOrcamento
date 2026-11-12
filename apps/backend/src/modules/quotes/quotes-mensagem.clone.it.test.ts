@@ -57,6 +57,36 @@ VALUES ($1, $2, $3, $4, $5, $6, 0, 0, '', 0, 0, 0, '', false, $7, $8)`;
 const t3 = (n: number) => n.toFixed(3);
 const t2 = (n: number) => n.toFixed(2);
 
+// Replicas dos pedidos reais de referencia (usadas so quando o dump do clone nao os contem).
+const SPEC_25822: Spec = {
+  header: { valor: 13, descontors: 0, desconto: 0, valoracrescimo: 0 },
+  itens: [{ qtd: 13, valoritem: 1, vd: 13, od: 0, final: 13 }],
+};
+const SPEC_25877: Spec = {
+  header: { valor: 130, descontors: 0, desconto: 0, valoracrescimo: 0 },
+  itens: [{ qtd: 200, valoritem: 0.65, vd: 60, od: 0, final: 130 }],
+};
+const SPEC_25952: Spec = {
+  header: { valor: 583, descontors: 58.3, desconto: 10, valoracrescimo: 0 },
+  itens: [{ qtd: 110, valoritem: 5.3, vd: 0, od: 58.3, final: 524.7 }],
+};
+const SPEC_25900: Spec = {
+  header: { valor: 5, descontors: 0, desconto: 0, valoracrescimo: 0 },
+  itens: [{ qtd: 1, valoritem: 5, vd: 0, od: 0, final: 5 }],
+};
+
+/** Converte "1.234,56" (pt-BR) em numero. */
+const brl = (texto: string) => Number(texto.replace(/\./g, "").replace(",", "."));
+/** Extrai um valor do bloco de totais da mensagem (rotulo como "Subtotal", "Desconto -", "Acrescimo +"). */
+function extrairValor(msg: string, regex: RegExp): number | null {
+  const m = msg.match(regex);
+  return m ? brl(m[1]) : null;
+}
+const RE_SUBTOTAL = /Subtotal: R\$ ([\d.]+,\d{2})/;
+const RE_DESCONTO = /Desconto: -R\$ ([\d.]+,\d{2})/;
+const RE_ACRESCIMO = /Acréscimo: \+R\$ ([\d.]+,\d{2})/;
+const RE_TOTAL = /\*Total: R\$ ([\d.]+,\d{2})\*/;
+
 // ---------------------------------------------------------------------------
 // Fakes
 // ---------------------------------------------------------------------------
@@ -447,10 +477,7 @@ rodar("IT clone athos-teste: Athos real -> Quote -> mensagem/PIX (fase 46)", () 
   });
 
   it("IT1 tracer 25877: item 0,95 / desconto 60 / total 130; mensagem com Subtotal/Desconto/Total e PIX 130; codigo Pix em mensagem separada", async () => {
-    const { id } = await obterOuCriarReferencia(25877, {
-      header: { valor: 130, descontors: 0, desconto: 0, valoracrescimo: 0 },
-      itens: [{ qtd: 200, valoritem: 0.65, vd: 60, od: 0, final: 130 }],
-    });
+    const { id } = await obterOuCriarReferencia(25877, SPEC_25877);
     const r = await executarFluxo(id);
 
     comparar("25877", "item.valor (preco original)", 0.95, r.itensLidos[0].valor);
@@ -467,5 +494,103 @@ rodar("IT clone athos-teste: Athos real -> Quote -> mensagem/PIX (fase 46)", () 
     comparar("25877", "mensagens enviadas (principal + Pix)", 2, r.mensagens.length);
     comparar("25877", "mensagem 2 (so o codigo Pix)", CODIGO_PIX_FICTICIO, r.mensagens[1]);
     naoContem("25877", "codigo Pix fora da principal", r.mensagemPrincipal, CODIGO_PIX_FICTICIO);
+  });
+
+  it("R1 25822: original 2,00; desconto 13,00; total 13,00; Subtotal 26,00; PIX 13,00", async () => {
+    const { id } = await obterOuCriarReferencia(25822, SPEC_25822);
+    const r = await executarFluxo(id);
+
+    comparar("25822", "item.valor (preco original)", 2, r.itensLidos[0].valor);
+    comparar("25822", "item.desconto", 13, r.itensLidos[0].desconto);
+    comparar("25822", "item.total", 13, r.itensLidos[0].total);
+    comparar("25822", "Quote.total", 13, r.quote.total);
+    contem("25822", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 26,00");
+    contem("25822", "mensagem Desconto", r.mensagemPrincipal, "Desconto: -R$ 13,00");
+    contem("25822", "mensagem Total", r.mensagemPrincipal, "Total: R$ 13,00");
+    comparar("25822", "PIX amount", 13, r.pixAmount);
+  });
+
+  it("R2 25877: Quote.total 130 e a soma dos totais lidos bate com mapped.totais.liquido", async () => {
+    const { id } = await obterOuCriarReferencia(25877, SPEC_25877);
+    const r = await executarFluxo(id);
+
+    comparar("25877", "Quote.total", 130, r.quote.total);
+    const somaTotais = r.itensLidos.reduce((acc, i) => acc + i.total, 0);
+    comparar("25877", "soma dos totais dos itens", 130, somaTotais);
+    comparar("25877", "mapped.totais.liquido", 130, (r.mapped as any).totais.liquido);
+    contem("25877", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 190,00");
+  });
+
+  it("R3 25952: original 5,30; desconto 58,30; total 524,70; cabecalho 583 e liquido 524,70; Quote NUNCA 583; PIX 524,70", async () => {
+    const { id } = await obterOuCriarReferencia(25952, SPEC_25952);
+    const r = await executarFluxo(id);
+
+    comparar("25952", "item.valor (preco original)", 5.3, r.itensLidos[0].valor);
+    comparar("25952", "item.desconto", 58.3, r.itensLidos[0].desconto);
+    comparar("25952", "item.total", 524.7, r.itensLidos[0].total);
+    comparar("25952", "mapped.totais.valor (bruto do cabecalho)", 583, (r.mapped as any).totais.valor);
+    comparar("25952", "mapped.totais.liquido", 524.7, (r.mapped as any).totais.liquido);
+    comparar("25952", "Quote.total", 524.7, r.quote.total);
+    expect(r.quote.total).not.toBeCloseTo(583, 2);
+    contem("25952", "mensagem Subtotal", r.mensagemPrincipal, "Subtotal: R$ 583,00");
+    contem("25952", "mensagem Desconto", r.mensagemPrincipal, "Desconto: -R$ 58,30");
+    contem("25952", "mensagem Total", r.mensagemPrincipal, "Total: R$ 524,70");
+    comparar("25952", "PIX amount", 524.7, r.pixAmount);
+  });
+
+  it("R4 25900 (aumento de preco): original 5,00; desconto 0; total 5,00; sem Subtotal/Desconto/riscado; PIX 5,00", async () => {
+    const { id } = await obterOuCriarReferencia(25900, SPEC_25900);
+    const r = await executarFluxo(id);
+
+    comparar("25900", "item.valor (preco original)", 5, r.itensLidos[0].valor);
+    comparar("25900", "item.desconto", 0, r.itensLidos[0].desconto);
+    comparar("25900", "item.total", 5, r.itensLidos[0].total);
+    comparar("25900", "Quote.total", 5, r.quote.total);
+    naoContem("25900", "mensagem sem Subtotal", r.mensagemPrincipal, "Subtotal");
+    naoContem("25900", "mensagem sem Desconto:", r.mensagemPrincipal, "Desconto:");
+    naoContem("25900", "mensagem sem item riscado", r.mensagemPrincipal, "~");
+    contem("25900", "mensagem Total", r.mensagemPrincipal, "Total: R$ 5,00");
+    comparar("25900", "PIX amount", 5, r.pixAmount);
+  });
+
+  it("R5 outros de referencia (25951, 26047, 26109, quando existirem): itens reconciliam, Quote.total = liquido e a mensagem fecha", async () => {
+    const existentes = await pg.query<{ idorcamento: number }>(
+      "SELECT idorcamento FROM orcamento WHERE idorcamento = ANY($1::int[]) ORDER BY idorcamento",
+      [[25951, 26047, 26109]],
+    );
+    console.log(`[IT46] R5 referencias presentes no clone: ${existentes.rows.map((x) => x.idorcamento).join(",") || "nenhuma"}`);
+    for (const { idorcamento } of existentes.rows) {
+      const caso = String(idorcamento);
+      const r = await executarFluxo(idorcamento);
+      const totais = (r.mapped as any).totais;
+
+      r.itensLidos.forEach((i, k) => {
+        const reconciliado = i.quantidade * i.valor - i.desconto;
+        relatorio.push({
+          caso,
+          campo: `item ${k + 1}: qtd x valor - desconto = total (qtd ${i.quantidade}, valor ${i.valor}, desc ${i.desconto})`,
+          esperado: Number(i.total.toFixed(2)),
+          obtido: Number(reconciliado.toFixed(2)),
+        });
+        // D-04: desconto maior que a linha trava o total em 0; fora isso a conta fecha.
+        if (reconciliado >= 0) expect(Math.abs(reconciliado - i.total)).toBeLessThanOrEqual(0.011);
+        else expect(i.total).toBe(0);
+      });
+      comparar(caso, "Quote.total = mapped.totais.liquido", totais.liquido, r.quote.total);
+      comparar(caso, "PIX amount = Quote.total", r.quote.total, r.pixAmount);
+
+      const msg = r.mensagemPrincipal;
+      const total = extrairValor(msg, RE_TOTAL) as number;
+      const subtotal = extrairValor(msg, RE_SUBTOTAL);
+      const desconto = extrairValor(msg, RE_DESCONTO) ?? 0;
+      const acrescimo = extrairValor(msg, RE_ACRESCIMO) ?? 0;
+      comparar(caso, "mensagem Total = Quote.total", r.quote.total, total);
+      const somaItens = r.itensLidos.reduce((acc, i) => acc + i.total, 0);
+      const base = subtotal ?? somaItens;
+      comparar(caso, "mensagem: Subtotal - Desconto + Acrescimo = Total", Number(total.toFixed(2)), Number((base - desconto + acrescimo).toFixed(2)));
+      console.log(
+        `[IT46] R5 ${caso}: itens=${r.itensLidos.length} subtotal=${subtotal ?? "-"} desconto=${desconto} acrescimo=${acrescimo} total=${total} pix=${r.pixAmount}`,
+      );
+    }
   });
 });
