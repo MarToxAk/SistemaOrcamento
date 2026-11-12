@@ -335,7 +335,7 @@ rodar("IT clone athos-teste: Athos real -> Quote -> mensagem/PIX (fase 46)", () 
   }
 
   /** INSERT no padrao do Balcao: valordesconto = TOTAL da linha; final = qtd x valoritem - descontos. */
-  async function inserirPedido(spec: Spec, obs: string, produto = produtoA): Promise<number> {
+  async function inserirPedido(spec: Spec, obs: string, produto = produtoA, idFixo?: number): Promise<number> {
     const cab = await pg.query<{ idorcamento: number }>(SQL_INSERIR_ORCAMENTO, [
       t3(spec.header.descontors),
       Number(process.env.ATHOS_ORCAMENTO_ID_VENDEDOR),
@@ -346,7 +346,12 @@ rodar("IT clone athos-teste: Athos real -> Quote -> mensagem/PIX (fase 46)", () 
       obs,
       t3(spec.header.valoracrescimo),
     ]);
-    const id = Number(cab.rows[0].idorcamento);
+    let id = Number(cab.rows[0].idorcamento);
+    if (idFixo !== undefined) {
+      // Replica de pedido de referencia: assume o mesmo numero (ainda sem itens, entao nenhuma FK depende do id).
+      await pg.query("UPDATE orcamento SET idorcamento = $1 WHERE idorcamento = $2", [idFixo, id]);
+      id = idFixo;
+    }
     idsCriados.push(id);
     for (const [k, linha] of spec.itens.entries()) {
       await pg.query(SQL_INSERIR_ITEM, [id, k + 1, produto, t3(linha.qtd), t3(linha.valoritem), t3(linha.vd), t2(linha.od), t2(linha.final)]);
@@ -356,12 +361,13 @@ rodar("IT clone athos-teste: Athos real -> Quote -> mensagem/PIX (fase 46)", () 
 
   /** Pedido real do clone (modo "dump") ou replica por INSERT (modo "replica"). */
   async function obterOuCriarReferencia(ref: number, spec: Spec): Promise<{ id: number; modo: "dump" | "replica" }> {
+    if (idsCriados.includes(ref)) return { id: ref, modo: "replica" }; // replica criada antes neste IT
     const existe = await pg.query("SELECT 1 FROM orcamento WHERE idorcamento = $1", [ref]);
     if (existe.rows.length > 0) {
       console.log(`[IT46] modo-referencia=dump caso=${ref}`);
       return { id: ref, modo: "dump" };
     }
-    const id = await inserirPedido(spec, `[IT46] replica de ${ref}`);
+    const id = await inserirPedido(spec, `[IT46] replica de ${ref}`, produtoA, ref);
     console.log(`[IT46] modo-referencia=replica caso=${ref} id-no-clone=${id}`);
     return { id, modo: "replica" };
   }
