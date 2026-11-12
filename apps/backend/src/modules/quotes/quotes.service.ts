@@ -10,6 +10,8 @@ import { PrismaService } from "../database/prisma.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { buildQuoteIdentifierWhereCandidates } from "./quote-identifier.util";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
+import { resolveQuoteTotal } from "./quote-totals.util";
+import { calcularResumoValores, formatarLinhaItem, montarLinhasTotal, type ItemMensagem } from "./quote-message.util";
 
 const statusTransitions = {
   PENDENTE: ["ENVIADO", "PAGAMENTO_PARCIAL", "APROVADO", "CANCELADO"],
@@ -612,15 +614,32 @@ export class QuotesService {
       return acc + current + childrenTotal;
     }, 0);
 
-    const discount = Number(payload.totais?.desconto ?? 0);
-    const surcharge = Number(payload.totais?.valoracrescimo ?? 0);
-    const headerTotalRaw = Number(payload.totais?.valor ?? (payload as unknown as { valor?: number }).valor ?? NaN);
-    const total = Number(Number.isFinite(headerTotalRaw) ? headerTotalRaw : computedSubtotal - discount + surcharge);
+    // Bruto dos itens (qtd x valoritem, antes do desconto) para o util detectar cabecalho BRUTO do Athos.
+    const bruto = (item: { quantidadeitem: number; valoritem: number }) =>
+      Number((Number(item.quantidadeitem) * Number(item.valoritem)).toFixed(2));
+    const itensBruto = itemsInput.reduce(
+      (acc, item) => acc + bruto(item) + (item.filhos ?? []).reduce((childAcc, child) => childAcc + bruto(child), 0),
+      0,
+    );
+
+    // `valor` do cabecalho (ou do topo do payload): numero finito ou ausente.
+    const headerValueInput = payload.totais?.valor ?? (payload as unknown as { valor?: number }).valor;
+    const headerValueNumber = headerValueInput === undefined || headerValueInput === null ? NaN : Number(headerValueInput);
+
+    // D-02: total cobrado = liquido (valor - descontors + valoracrescimo). Ver quote-totals.util.ts.
+    const { discount, surcharge, total, headerLiquido } = resolveQuoteTotal({
+      itensLiquido: computedSubtotal,
+      itensBruto,
+      valor: headerValueNumber,
+      descontors: payload.totais?.descontors,
+      desconto: payload.totais?.desconto,
+      valoracrescimo: payload.totais?.valoracrescimo,
+    });
 
     this.logHeaderTotalMismatchIfAny({
       externalQuoteId: payload.idorcamento,
-      headerTotal: headerTotalRaw,
-      itemsTotal: computedSubtotal,
+      headerTotal: headerLiquido ?? NaN,
+      itemsTotal: computedSubtotal + surcharge,
     });
 
     const customer = await this.resolveCustomer(payload, customerInput);
@@ -1602,7 +1621,7 @@ export class QuotesService {
     clienteNome: string,
     numero: string | number,
     total: number,
-    itens: Array<{ descricao: string; quantidade: number; total: number }>,
+    itens: ItemMensagem[],
     pixPayment: {
       linkVisualizacao: string;
       amount: number;
@@ -1615,6 +1634,7 @@ export class QuotesService {
       pix5050Link?: string;
       pix5050Half?: number;
       cardLink?: string;
+      acrescimo?: number;
     } = {},
   ): string {
     const fmt = (v: number) =>
@@ -1623,10 +1643,15 @@ export class QuotesService {
     const primeiroNome = clienteNome.split(" ")[0];
     const sep = "────────────";
 
-    const linhasItens = itens
-      .slice(0, 10)
-      .map((it) => `• ${it.descricao} (${it.quantidade}x) — ${fmt(it.total)}`)
-      .join("\n");
+    const linhasItens = itens.slice(0, 10).map(formatarLinhaItem).join("\n");
+
+    // Subtotal e Desconto consideram TODOS os itens (a lista exibida e limitada a 10 linhas)
+    const resumo = calcularResumoValores({ itens, total, acrescimo: extra.acrescimo });
+    if (resumo.divergente) {
+      this.logger.warn(
+        `Divergencia entre total e itens na mensagem do orcamento ${numero}: subtotal=${resumo.subtotal} desconto_itens=${itens.reduce((acc, it) => acc + Math.max(0, Number(it.desconto ?? 0)), 0)} acrescimo=${resumo.acrescimo} total=${resumo.total}; desconto exibido=${resumo.desconto}`,
+      );
+    }
     const maisItens = itens.length > 10 ? `\n_...e mais ${itens.length - 10} item(s)_` : "";
 
     const opts = paymentOptions.options;
@@ -1668,7 +1693,7 @@ export class QuotesService {
       }
     }
 
-    const linhas = [
+    return [
       `Olá, ${primeiroNome}! 👋`,
       ``,
       `Segue o resumo do seu pedido:`,
@@ -1677,7 +1702,7 @@ export class QuotesService {
       ``,
       linhasItens + maisItens,
       ``,
-      `💰 *Total: ${fmt(total)}*`,
+      ...montarLinhasTotal(resumo),
       ``,
       sep,
       `*Como você prefere pagar?*`,
@@ -1686,15 +1711,22 @@ export class QuotesService {
       ``,
       sep,
       `Qualquer dúvida, é só chamar! 😊`,
-    ];
+    ].join("\n");
+  }
 
-    // Pix Copia e Cola ao final (separado para não poluir a mensagem principal)
-    if (pixPayment.pixCopiaECola) {
-      linhas.push(``, `_Pix Copia e Cola (caso prefira copiar o código):_`);
-      linhas.push(pixPayment.pixCopiaECola);
+  // Pix Copia e Cola vai em mensagem separada, so com o codigo (D-07). Falha so gera aviso (D-08):
+  // o orcamento e o link do Pix ja foram enviados na mensagem principal. O codigo nunca entra em log.
+  private async enviarPixCopiaECola(conversationId: string, codigo: unknown, quoteId: string): Promise<void> {
+    const codigoNormalizado = typeof codigo === "string" ? codigo.trim() : "";
+    if (!codigoNormalizado) return;
+
+    try {
+      await this.chatwootService.sendOutgoingMessage(conversationId, codigoNormalizado);
+    } catch (err) {
+      this.logger.warn(
+        `Falha ao enviar mensagem separada do Pix Copia e Cola ao Chatwoot para orcamento ${quoteId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
-
-    return linhas.join("\n");
   }
 
   async enviarParaCliente(quoteId: string) {
@@ -1755,6 +1787,7 @@ export class QuotesService {
     const numero = mappedQuote.numero ?? quote.internalNumber;
     const itens = Array.isArray(mappedQuote.itens) ? mappedQuote.itens : [];
     const total = Number(quote.total ?? 0);
+    const acrescimo = Number(quote.surcharge ?? 0);
 
     // Preparar opções de pagamento e gerar links via EFI (se possível)
     let paymentOptions: ReturnType<typeof this.efiService.resolvePaymentOptions> | null = null;
@@ -1858,6 +1891,7 @@ export class QuotesService {
         pix5050Link: pix5050?.linkVisualizacao ?? undefined,
         pix5050Half: pix5050?.halfAmount ?? undefined,
         cardLink: cardLink ?? undefined,
+        acrescimo,
       });
     } else if (paymentOptions) {
       // Fallback textual quando não for possível gerar links
@@ -1892,6 +1926,9 @@ export class QuotesService {
       const convId = quote.conversationId ? String(quote.conversationId) : undefined;
       if (convId) {
         await this.chatwootService.sendOutgoingMessage(convId, finalMessage);
+
+        // Pix Copia e Cola em mensagem separada: depois da principal e antes do PDF
+        await this.enviarPixCopiaECola(convId, pixPayment?.pixCopiaECola, quote.id);
 
         // Reutiliza PDF existente no MinIO se disponível; só regenera se ausente
         try {
@@ -2063,8 +2100,10 @@ export class QuotesService {
       const desconto = Number(it?.valordesconto ?? it?.desconto ?? 0);
       const providedTotal = Number(it?.orcamentovalorfinalitem ?? it?.total ?? NaN);
       const computedTotal = Number((quantidade * valor - desconto).toFixed(2));
+      // Item totalmente descontado grava finalPrice 0 (D-04): nesse caso o zero e legitimo, nao recalcular
+      const zeroExplicadoPorDesconto = providedTotal === 0 && desconto > 0;
       const total = Number.isFinite(providedTotal)
-        ? providedTotal > 0 || valor <= 0 || quantidade <= 0
+        ? providedTotal > 0 || valor <= 0 || quantidade <= 0 || zeroExplicadoPorDesconto
           ? providedTotal
           : computedTotal > 0
             ? computedTotal

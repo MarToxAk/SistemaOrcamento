@@ -36,6 +36,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 43: Baixa automática de contas a receber no Athos**
 - [ ] **Phase 44: API de criação de orçamento no Athos para IA**
 - [ ] **Phase 45: Aviso de boletos a vencer e atrasados (alerta interno + e-mail automatico)**
+- [ ] **Phase 46: Mensagem de orçamento ao cliente com desconto e acréscimo corretos**
 
 ### Phase Details
 
@@ -193,6 +194,18 @@ Plans:
 - [ ] 45-03-PLAN.md — Wave 2 · Operação: testes do job (kill switch exato, dry-run, running, cron 08:00/14:00 SP), prévia protegida GET /api/cobranca/aviso-vencimento/previa (AdminOnly, sempre dry-run) e COBRANCA_AVISO_* com padrão false nos 2 compose e exemplos de env (D-07; AVISO-04, 08)
 - [ ] 45-04-PLAN.md — Wave 2 · Alerta interno: dashboard com situacaoVencimento/ultimoAviso e "hoje" em São Paulo + pills "Vence em Nd"/"Vence hoje"/"Atrasado há Nd", contadores e último aviso ("Sem e-mail cadastrado") no painel de /contas-receber (D-01, D-04, D-06, D-08; AVISO-05, 06, 07)
 - [ ] 45-05-PLAN.md — Wave 3 · Roteiro de ativação (prévia -> dry-run -> envio real -> desligar) + gates da fase + verificação humana com o envio desligado; nada é ativado pelo executor (D-07, D-08; AVISO-04, 06, 08)
+
+### Phase 46: Mensagem de orçamento ao cliente com desconto e acréscimo corretos
+
+**Goal:** A mensagem de orçamento enviada ao cliente (WhatsApp via Chatwoot, mantido) e a cobrança PIX mostram valores corretos quando houve alteração de preço unitário no Balcão, desconto por item ou desconto geral. Hoje `resolveItemPricing` (athos.service.ts) soma `valordesconto` (TOTAL da LINHA no Athos) ao preço unitário, gerando valores absurdos (ex.: orçamentos 25822 e 25877). Escopo: (1) corrigir preço original = valoritem + valordesconto/quantidade; (2) verificar/corrigir se o total do Quote e a cobrança PIX descontam `descontors` (cabeçalho Athos `valor` é BRUTO) e acréscimo; (3) mensagem com subtotal/desconto/total e preço original riscado quando houver desconto, mais Pix Copia e Cola; (4) investigar erro ao SUBIR o preço unitário (orçamento a informar pelo usuário); (5) testes com casos reais (25822, 25877, 25952, 25900) e verificação no clone athos-teste (127.0.0.1:5440), NUNCA no Athos original. Fora do escopo: envio direto pela Evolution / função sendPix.
+**Requirements**: MSG-01, MSG-02, MSG-03, MSG-04, MSG-05, MSG-06, MSG-07 (IDs locais da fase — definidos em 46-01-PLAN.md)
+**Depends on:** Phase 45
+**Plans:** 3 plans
+
+Plans:
+- [ ] 46-01-PLAN.md — Wave 1 · Tracer 25877 (pg falso -> payload da página -> Quote) + preço original = valoritem + valordesconto/qtd e desconto = valordesconto + orcamentodesconto (casos 25822, 25877, 25952, 25900, regressão qtd=1, aumento 1,00 -> 1,50, desconto > linha) + mapped.totais + total líquido do Quote (valor - descontors + valoracrescimo) com acréscimo (D-01..D-05, D-09; MSG-01, 02, 03, 06)
+- [ ] 46-02-PLAN.md — Wave 2 · Tracer enviarParaCliente do 25877 + mensagem com item riscado, Subtotal/Desconto/Acréscimo/Total (sem desconto fica igual a hoje) + PIX no total líquido + Pix Copia e Cola em mensagem separada só com o código (falha só gera aviso) (D-02, D-06..D-09; MSG-02, 04, 05, 06)
+- [ ] 46-03-PLAN.md — Wave 3 · Verificação no clone athos-teste: script de refresh somente leitura do original (pg_dump 14) + IT gated por ATHOS_IT_CLONE=1 do caminho real Athos -> Quote -> mensagem/PIX com pedidos da Fase 44 e INSERTs no padrão do Balcão (qtd > 1, aumento 1,00 -> 1,50, acréscimo) e varreduras; esperado x obtido no SUMMARY (D-02, D-03, D-05, D-10, D-11; MSG-07)
 
 ---
 
