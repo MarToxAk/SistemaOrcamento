@@ -13,6 +13,7 @@ import { hojeSaoPaulo } from "../integrations/athos/athos-conta-receber-baixa.se
 import { DanfePdfService } from "../integrations/nfse/danfe-pdf.service";
 import { CobrancaService } from "./cobranca.service";
 import { BaixarNotasZipDto } from "./dto/baixar-notas-zip.dto";
+import { ListarNotasQueryDto } from "./dto/listar-notas.query.dto";
 import { EntradaZip, criarZipStore } from "./zip-store.util";
 
 /** Maximo de notas (NFS-e + NF-e) por arquivo ZIP. O frontend (plano 47-06) espelha este valor. */
@@ -22,6 +23,54 @@ export const LIMITE_NOTAS_ZIP = 50;
 export const TAMANHO_MAXIMO_XML_BYTES = 5 * 1024 * 1024;
 
 const TIMEOUT_DOWNLOAD_XML_MS = 15_000;
+
+/** Maximo de NFS-e devolvidas na lista geral (D-09). Acima disso a resposta vem com truncado: true. */
+export const LIMITE_LISTA_NFSE = 500;
+
+export type SituacaoXmlNfse = "salvo" | "link" | "indisponivel";
+
+export interface NotaNfseLista {
+  tipo: "NFS-e";
+  id: number;
+  numero: string | null;
+  idclienteAthos: number;
+  nomeCliente: string;
+  valor: number;
+  /** ISO 8601 (UTC). */
+  dataEmissao: string;
+  titulos: number[];
+  xml: SituacaoXmlNfse;
+}
+
+export interface NotaNfeLista {
+  tipo: "NF-e";
+  cobrancaBoletoId: number;
+  boletoStatus: string;
+  numero: string;
+  idclienteAthos: number;
+  nomeCliente: string;
+  valor: number | null;
+  /** AAAA-MM-DD. */
+  dataEmissao: string | null;
+  titulos: number[];
+}
+
+export interface ListaNotasFiscais {
+  nfse: NotaNfseLista[];
+  nfe: NotaNfeLista[];
+  truncado: boolean;
+  avisoNfe: string | null;
+}
+
+/** Converte AAAA-MM-DD para a meia-noite de Sao Paulo (UTC-3, sem horario de verao desde 2019), somando `dias`. */
+function meiaNoiteSaoPaulo(dia: string, dias = 0): Date {
+  const base = new Date(`${dia}T00:00:00.000Z`);
+  if (Number.isNaN(base.getTime()) || base.toISOString().slice(0, 10) !== dia) {
+    throw new BadRequestException(`Data inválida: ${dia}.`);
+  }
+  base.setUTCDate(base.getUTCDate() + dias);
+  return new Date(`${base.toISOString().slice(0, 10)}T03:00:00.000Z`);
+}
 
 /** Deixa so [A-Za-z0-9_-]; qualquer outro caractere vira "_" (nome de arquivo e de entrada do ZIP, T-47-03). */
 export function sanearNomeArquivo(valor: string | number | null | undefined): string {
@@ -65,6 +114,81 @@ export class CobrancaNotasService {
     private readonly athosService: AthosService,
     private readonly danfePdfService: DanfePdfService,
   ) {}
+
+  /**
+   * Lista geral de notas fiscais para /contas-receber/notas e para a aba Notas do cliente (D-01, D-09).
+   * SOMENTE LEITURA. NFS-e: ate LIMITE_LISTA_NFSE, mais recentes primeiro, sem carregar o texto do XML
+   * (a situacao do XML vem de uma segunda consulta so por ids, "select: { id }").
+   */
+  async listarNotas(filtros: ListarNotasQueryDto): Promise<ListaNotasFiscais> {
+    const where: {
+      idclienteAthos?: number;
+      dataEmissao?: { gte?: Date; lt?: Date };
+    } = {};
+    if (filtros.idclienteAthos !== undefined) where.idclienteAthos = filtros.idclienteAthos;
+    if (filtros.de || filtros.ate) {
+      where.dataEmissao = {};
+      if (filtros.de) where.dataEmissao.gte = meiaNoiteSaoPaulo(filtros.de);
+      if (filtros.ate) where.dataEmissao.lt = meiaNoiteSaoPaulo(filtros.ate, 1);
+    }
+
+    const linhas = await this.prisma.nfseEmitida.findMany({
+      where,
+      orderBy: { dataEmissao: "desc" },
+      take: LIMITE_LISTA_NFSE + 1,
+      select: {
+        id: true,
+        numeroNfse: true,
+        idclienteAthos: true,
+        valorServico: true,
+        dataEmissao: true,
+        linkNfse: true,
+        titulos: { select: { idcontareceber: true } },
+      },
+    });
+    const truncado = linhas.length > LIMITE_LISTA_NFSE;
+    const nfseLinhas = truncado ? linhas.slice(0, LIMITE_LISTA_NFSE) : linhas;
+
+    const idsComXml = new Set<number>();
+    if (nfseLinhas.length > 0) {
+      const comXml = await this.prisma.nfseEmitida.findMany({
+        where: { id: { in: nfseLinhas.map((n) => n.id) }, xmlNacional: { not: null } },
+        select: { id: true },
+      });
+      for (const n of comXml) idsComXml.add(n.id);
+    }
+
+    const nomes = await this.nomesDosClientes(nfseLinhas.map((n) => n.idclienteAthos));
+
+    const nfse: NotaNfseLista[] = nfseLinhas.map((n) => ({
+      tipo: "NFS-e",
+      id: n.id,
+      numero: n.numeroNfse ?? null,
+      idclienteAthos: n.idclienteAthos,
+      nomeCliente: nomes.get(n.idclienteAthos) ?? `Cliente #${n.idclienteAthos}`,
+      valor: Number(n.valorServico),
+      dataEmissao: n.dataEmissao.toISOString(),
+      titulos: n.titulos.map((t) => t.idcontareceber),
+      xml: idsComXml.has(n.id) ? "salvo" : n.linkNfse ? "link" : "indisponivel",
+    }));
+
+    return { nfse, nfe: [], truncado, avisoNfe: null };
+  }
+
+  /** Nomes dos clientes no Athos; falha ou ausencia nao derrubam a lista ("Cliente #id" no chamador). */
+  private async nomesDosClientes(ids: number[]): Promise<Map<number, string>> {
+    const unicos = [...new Set(ids)];
+    if (unicos.length === 0) return new Map();
+    try {
+      const nomes = await this.athosService.buscarNomesClientes(unicos);
+      return new Map(nomes.map((n) => [n.idcliente, n.nome_cliente]));
+    } catch (err) {
+      this.logger.warn(
+        `Lista de notas: nomes dos clientes indisponíveis: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return new Map();
+    }
+  }
 
   /**
    * XML salvo da NFS-e, na ordem do D-11: xmlNacional (cache) -> conteudo de linkNfse -> 404.

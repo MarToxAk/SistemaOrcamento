@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Res } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Query, Res } from "@nestjs/common";
 
 import { CobrancaNotasService } from "./cobranca-notas.service";
 import { BaixarNotasZipDto } from "./dto/baixar-notas-zip.dto";
+import { ListarNotasQueryDto } from "./dto/listar-notas.query.dto";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
@@ -13,6 +14,12 @@ type ExpressResponse = any;
 @Controller("cobranca")
 export class CobrancaNotasController {
   constructor(private readonly notasService: CobrancaNotasService) {}
+
+  /** Lista geral de NFS-e e NF-e dos boletos, com filtros opcionais de cliente e periodo. Somente leitura (Fase 47, D-09). */
+  @Get("notas")
+  async listar(@Query() query: ListarNotasQueryDto) {
+    return this.notasService.listarNotas(query);
+  }
 
   /** XML salvo da NFS-e (xmlNacional, senao linkNfse). 404 "XML indisponível ..." quando nao ha XML real. */
   @Get("nfse/:id/xml")
