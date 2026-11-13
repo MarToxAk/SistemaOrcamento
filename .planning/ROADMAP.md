@@ -37,6 +37,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 44: API de criação de orçamento no Athos para IA**
 - [ ] **Phase 45: Aviso de boletos a vencer e atrasados (alerta interno + e-mail automatico)**
 - [ ] **Phase 46: Mensagem de orçamento ao cliente com desconto e acréscimo corretos**
+- [ ] **Phase 47: Contas a receber: páginas separadas, boletos e notas fiscais PDF/XML**
 
 ### Phase Details
 
@@ -206,6 +207,21 @@ Plans:
 - [ ] 46-01-PLAN.md — Wave 1 · Tracer 25877 (pg falso -> payload da página -> Quote) + preço original = valoritem + valordesconto/qtd e desconto = valordesconto + orcamentodesconto (casos 25822, 25877, 25952, 25900, regressão qtd=1, aumento 1,00 -> 1,50, desconto > linha) + mapped.totais + total líquido do Quote (valor - descontors + valoracrescimo) com acréscimo (D-01..D-05, D-09; MSG-01, 02, 03, 06)
 - [ ] 46-02-PLAN.md — Wave 2 · Tracer enviarParaCliente do 25877 + mensagem com item riscado, Subtotal/Desconto/Acréscimo/Total (sem desconto fica igual a hoje) + PIX no total líquido + Pix Copia e Cola em mensagem separada só com o código (falha só gera aviso) (D-02, D-06..D-09; MSG-02, 04, 05, 06)
 - [ ] 46-03-PLAN.md — Wave 3 · Verificação no clone athos-teste: script de refresh somente leitura do original (pg_dump 14) + IT gated por ATHOS_IT_CLONE=1 do caminho real Athos -> Quote -> mensagem/PIX com pedidos da Fase 44 e INSERTs no padrão do Balcão (qtd > 1, aumento 1,00 -> 1,50, acréscimo) e varreduras; esperado x obtido no SUMMARY (D-02, D-03, D-05, D-10, D-11; MSG-07)
+
+### Phase 47: Contas a receber: páginas separadas, boletos e notas fiscais PDF/XML
+
+**Goal:** Tornar a área de contas a receber mais funcional: separar em páginas/abas (lista geral e visão por cliente, com geração de boletos e consulta das contas), melhorar a visualização dos boletos (status, vencimento, linha digitável, PDF) e permitir baixar as notas fiscais em PDF e XML.
+**Requirements**: REC-01, REC-02, REC-03, REC-04, REC-05, REC-06, REC-07 (IDs locais da fase — definidos em 47-01-PLAN.md)
+**Depends on:** Phase 46
+**Plans:** 6 plans
+
+Plans:
+- [ ] 47-01-PLAN.md — Wave 1 · Backend: tracer do XML da NFS-e (proxy -> CobrancaNotasController -> xmlNacional -> linkNfse -> 404 "XML indisponível") + zip-store.util (ZIP STORE próprio, sem dependência) + POST notas/zip PDF+XML com LEIA-ME e limite de 50 (D-11, D-12; REC-04, 06, 07)
+- [ ] 47-02-PLAN.md — Wave 1 · Frontend: rota /contas-receber/boletos com o painel movido, resumo enxuto com cartão ResumoBoletos, subnavegação no admin-shell, hook useFiltrosUrl + status/busca do resumo na URL (D-01, D-03, D-04; REC-01, 07)
+- [ ] 47-03-PLAN.md — Wave 2 · Backend somente leitura: GET cobranca/notas (NFS-e + NF-e dos boletos via SELECT novo no Athos) e GET boleto/:id/detalhe (linha digitável e PIX da EFI) + proxies (D-01, D-06, D-09, D-10; REC-01, 03, 05, 07)
+- [ ] 47-04-PLAN.md — Wave 2 · Frontend: tela do cliente em abas na URL (?aba=) — Contas em Aberto, Gerar Boleto, Boletos, Notas Fiscais em arquivos próprios, page.tsx <= 350 linhas, PasswordGate (D-02, D-03, D-04; REC-01, 02, 07)
+- [ ] 47-05-PLAN.md — Wave 3 · Frontend: boletos em tabela compacta com linha expansível (linha digitável/PIX copiáveis, títulos, último aviso, histórico de baixa), ações reunidas e filtros na URL; botão Detalhes na aba do cliente (D-05..D-08; REC-01, 03, 07)
+- [ ] 47-06-PLAN.md — Wave 3 · Frontend: /contas-receber/notas e aba Notas do cliente com PDF (DANFSe/DANFE), XML, "PDF e XML" e ZIP em lote, filtros na URL (D-01, D-04, D-09..D-12; REC-01, 04, 05, 06, 07)
 
 ---
 
