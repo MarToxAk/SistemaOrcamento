@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import BoletoDetalhe from "../../_componentes/boleto-detalhe";
 import { formatBRL, formatDate } from "../../_shared/formatadores";
 import {
   EMAIL_CC_MAX,
@@ -50,6 +51,8 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
     anexos?: string[];
   } | null>(null);
   const [emailErro, setEmailErro] = useState("");
+  // Boleto cujo detalhe (linha digitavel, PIX, titulos, historico de baixa) esta aberto (D-06).
+  const [detalheAbertoId, setDetalheAbertoId] = useState<number | null>(null);
 
   // Boletos ativos agrupados por cobranca
   const boletoGrupos = new Map<number, { boleto: NonNullable<typeof titulos[0]["boletoAtivo"]>; titulos: typeof titulos }>();
@@ -225,6 +228,7 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                   const totalBoleto = tsBoleto.reduce((s, t) => s + t.valor, 0);
                   const isPago = boleto.status === "pago";
                   const pillVariante = isPago ? "success" : boleto.status === "cancelado" ? "secondary" : "warning";
+                  const detalheAberto = detalheAbertoId === boleto.cobrancaId;
                   return (
                     <div key={boleto.cobrancaId} className="pa-card mb-2">
                       {/* Cabeçalho do grupo */}
@@ -238,6 +242,12 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                           <StatusEmailBadge ultimoEmail={boleto.ultimoEmail} />
                         </div>
                         <div className="d-flex gap-2">
+                          <button type="button" className="btn btn-sm btn-outline-secondary"
+                            aria-expanded={detalheAberto}
+                            title="Mostrar linha digitável, PIX, títulos e histórico de baixa"
+                            onClick={() => setDetalheAbertoId(detalheAberto ? null : boleto.cobrancaId)}>
+                            <i className={`bi ${detalheAberto ? "bi-chevron-up" : "bi-chevron-down"} me-1`} />Detalhes
+                          </button>
                           {boleto.linkBoleto && (
                             <a href={`/api/cobranca/boleto/${boleto.cobrancaId}/pdf`}
                               download={boleto.nomeArquivo ?? undefined}
@@ -272,6 +282,9 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                           )}
                         </div>
                       </div>
+                      {detalheAberto && (
+                        <BoletoDetalhe cobrancaId={boleto.cobrancaId} status={boleto.status} />
+                      )}
                       {/* Sub-tabela de títulos deste boleto */}
                       <div className="pa-card-body-flush">
                         <table className="pa-table">
