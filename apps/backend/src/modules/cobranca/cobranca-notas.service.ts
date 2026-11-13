@@ -158,21 +158,109 @@ export class CobrancaNotasService {
       for (const n of comXml) idsComXml.add(n.id);
     }
 
-    const nomes = await this.nomesDosClientes(nfseLinhas.map((n) => n.idclienteAthos));
+    const { nfeBase, avisoNfe } = await this.listarNfeDosBoletos(filtros);
+
+    const nomes = await this.nomesDosClientes([
+      ...nfseLinhas.map((n) => n.idclienteAthos),
+      ...nfeBase.map((n) => n.idclienteAthos),
+    ]);
+    const nomeDe = (id: number) => nomes.get(id) ?? `Cliente #${id}`;
 
     const nfse: NotaNfseLista[] = nfseLinhas.map((n) => ({
       tipo: "NFS-e",
       id: n.id,
       numero: n.numeroNfse ?? null,
       idclienteAthos: n.idclienteAthos,
-      nomeCliente: nomes.get(n.idclienteAthos) ?? `Cliente #${n.idclienteAthos}`,
+      nomeCliente: nomeDe(n.idclienteAthos),
       valor: Number(n.valorServico),
       dataEmissao: n.dataEmissao.toISOString(),
       titulos: n.titulos.map((t) => t.idcontareceber),
       xml: idsComXml.has(n.id) ? "salvo" : n.linkNfse ? "link" : "indisponivel",
     }));
+    const nfe: NotaNfeLista[] = nfeBase.map((n) => ({ ...n, nomeCliente: nomeDe(n.idclienteAthos) }));
 
-    return { nfse, nfe: [], truncado, avisoNfe: null };
+    return { nfse, nfe, truncado, avisoNfe };
+  }
+
+  /**
+   * NF-e (produto) dos boletos nao cancelados, resolvidas pelos titulos no Athos com os mesmos filtros
+   * do download (D-09). Falha do Athos (ou do banco) nao derruba a lista: nfe vazia + avisoNfe.
+   * Sem nome do cliente: o chamador junta tudo numa unica consulta de nomes.
+   */
+  private async listarNfeDosBoletos(
+    filtros: ListarNotasQueryDto,
+  ): Promise<{ nfeBase: Array<Omit<NotaNfeLista, "nomeCliente">>; avisoNfe: string | null }> {
+    try {
+      const boletos = await this.prisma.cobrancaBoleto.findMany({
+        where: {
+          status: { not: "cancelado" },
+          ...(filtros.idclienteAthos !== undefined ? { idclienteAthos: filtros.idclienteAthos } : {}),
+        },
+        select: {
+          id: true,
+          idclienteAthos: true,
+          status: true,
+          titulos: { select: { idcontareceber: true } },
+        },
+      });
+      const todosTitulos = [...new Set(boletos.flatMap((b) => b.titulos.map((t) => t.idcontareceber)))];
+      if (todosTitulos.length === 0) return { nfeBase: [], avisoNfe: null };
+
+      const resumo = await this.athosService.buscarNfeResumoPorTitulos(todosTitulos);
+      const porTitulo = new Map<number, typeof resumo>();
+      for (const r of resumo) {
+        const lista = porTitulo.get(r.idcontareceber) ?? [];
+        lista.push(r);
+        porTitulo.set(r.idcontareceber, lista);
+      }
+
+      const nfeBase: Array<Omit<NotaNfeLista, "nomeCliente">> = [];
+      for (const boleto of boletos) {
+        // Uma entrada por (boleto, numero da nota); varios titulos do boleto podem apontar para a mesma nota.
+        const porNumero = new Map<string, Omit<NotaNfeLista, "nomeCliente">>();
+        for (const titulo of boleto.titulos) {
+          for (const r of porTitulo.get(titulo.idcontareceber) ?? []) {
+            const existente = porNumero.get(r.numero);
+            if (existente) {
+              if (!existente.titulos.includes(titulo.idcontareceber)) existente.titulos.push(titulo.idcontareceber);
+            } else {
+              porNumero.set(r.numero, {
+                tipo: "NF-e",
+                cobrancaBoletoId: boleto.id,
+                boletoStatus: boleto.status,
+                numero: r.numero,
+                idclienteAthos: boleto.idclienteAthos,
+                valor: r.valor,
+                dataEmissao: r.dataemissao,
+                titulos: [titulo.idcontareceber],
+              });
+            }
+          }
+        }
+        nfeBase.push(...porNumero.values());
+      }
+
+      // Periodo (AAAA-MM-DD, comparacao de texto); data nula sai quando ha filtro.
+      const filtradas = nfeBase.filter((n) => {
+        if (!filtros.de && !filtros.ate) return true;
+        if (!n.dataEmissao) return false;
+        if (filtros.de && n.dataEmissao < filtros.de) return false;
+        if (filtros.ate && n.dataEmissao > filtros.ate) return false;
+        return true;
+      });
+      filtradas.sort((a, b) => {
+        if (a.dataEmissao === b.dataEmissao) return b.numero.localeCompare(a.numero, "pt-BR", { numeric: true });
+        if (a.dataEmissao === null) return 1;
+        if (b.dataEmissao === null) return -1;
+        return a.dataEmissao < b.dataEmissao ? 1 : -1;
+      });
+      return { nfeBase: filtradas, avisoNfe: null };
+    } catch (err) {
+      this.logger.warn(
+        `Lista de notas: NF-e indisponíveis: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return { nfeBase: [], avisoNfe: "Não foi possível consultar as NF-e no Athos agora." };
+    }
   }
 
   /** Nomes dos clientes no Athos; falha ou ausencia nao derrubam a lista ("Cliente #id" no chamador). */

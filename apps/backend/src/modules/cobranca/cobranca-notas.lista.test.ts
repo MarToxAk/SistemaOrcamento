@@ -156,6 +156,141 @@ describe("CobrancaNotasService.listarNotas - NFS-e (D-01, D-09, D-04)", () => {
   });
 });
 
+describe("CobrancaNotasService.listarNotas - NF-e dos boletos (D-09, D-10)", () => {
+  const boletos = [
+    { id: 45, idclienteAthos: 12, status: "pago", titulos: [{ idcontareceber: 1363 }, { idcontareceber: 1364 }] },
+    { id: 46, idclienteAthos: 13, status: "pendente", titulos: [{ idcontareceber: 1400 }] },
+  ];
+  const resumo = [
+    { idcontareceber: 1363, numero: "4521", dataemissao: "2026-11-05", valor: 150 },
+    { idcontareceber: 1364, numero: "4521", dataemissao: "2026-11-05", valor: 150 },
+    { idcontareceber: 1400, numero: "4600", dataemissao: "2026-11-03", valor: 80.5 },
+  ];
+
+  it("L6. agrupa por boleto e numero, traz nomes numa unica consulta e filtra boletos nao cancelados", async () => {
+    const { service, prisma, athos } = montar();
+    prisma.nfseEmitida.findMany.mockResolvedValueOnce([linhaNfse(74)]).mockResolvedValueOnce([]);
+    prisma.cobrancaBoleto.findMany.mockResolvedValue(boletos);
+    athos.buscarNfeResumoPorTitulos.mockResolvedValue(resumo);
+    athos.buscarNomesClientes.mockResolvedValue([
+      { idcliente: 12, nome_cliente: "Cliente Doze" },
+      { idcliente: 13, nome_cliente: "Cliente Treze" },
+    ]);
+
+    const r = await service.listarNotas({});
+
+    expect(r.nfe).toEqual([
+      {
+        tipo: "NF-e",
+        cobrancaBoletoId: 45,
+        boletoStatus: "pago",
+        numero: "4521",
+        idclienteAthos: 12,
+        nomeCliente: "Cliente Doze",
+        valor: 150,
+        dataEmissao: "2026-11-05",
+        titulos: [1363, 1364],
+      },
+      {
+        tipo: "NF-e",
+        cobrancaBoletoId: 46,
+        boletoStatus: "pendente",
+        numero: "4600",
+        idclienteAthos: 13,
+        nomeCliente: "Cliente Treze",
+        valor: 80.5,
+        dataEmissao: "2026-11-03",
+        titulos: [1400],
+      },
+    ]);
+    expect(r.avisoNfe).toBeNull();
+    expect(r.nfse).toHaveLength(1);
+
+    const consultaBoletos = prisma.cobrancaBoleto.findMany.mock.calls[0][0];
+    expect(consultaBoletos.where).toEqual({ status: { not: "cancelado" } });
+    expect(athos.buscarNfeResumoPorTitulos).toHaveBeenCalledWith([1363, 1364, 1400]);
+    // Uma unica consulta de nomes, com NFS-e e boletos juntos.
+    expect(athos.buscarNomesClientes).toHaveBeenCalledTimes(1);
+    expect([...athos.buscarNomesClientes.mock.calls[0][0]].sort()).toEqual([12, 13]);
+  });
+
+  it("L6b. filtro de cliente vai para a consulta de boletos", async () => {
+    const { service, prisma } = montar();
+    prisma.nfseEmitida.findMany.mockResolvedValueOnce([]);
+
+    await service.listarNotas({ idclienteAthos: 12 });
+
+    expect(prisma.cobrancaBoleto.findMany.mock.calls[0][0].where).toEqual({
+      status: { not: "cancelado" },
+      idclienteAthos: 12,
+    });
+  });
+
+  it("L6c. notas diferentes no mesmo boleto viram entradas separadas; sem nome, 'Cliente #id'", async () => {
+    const { service, prisma, athos } = montar();
+    prisma.nfseEmitida.findMany.mockResolvedValueOnce([]);
+    prisma.cobrancaBoleto.findMany.mockResolvedValue([boletos[0]]);
+    athos.buscarNfeResumoPorTitulos.mockResolvedValue([
+      { idcontareceber: 1363, numero: "4521", dataemissao: "2026-11-05", valor: 100 },
+      { idcontareceber: 1364, numero: "4522", dataemissao: "2026-11-06", valor: 50 },
+    ]);
+
+    const r = await service.listarNotas({});
+
+    expect(r.nfe.map((n) => [n.numero, n.titulos])).toEqual([
+      ["4522", [1364]],
+      ["4521", [1363]],
+    ]);
+    expect(r.nfe[0].nomeCliente).toBe("Cliente #12");
+  });
+
+  it("L7. periodo: NF-e fora do intervalo ou sem data ficam de fora; ordenado por data desc", async () => {
+    const { service, prisma, athos } = montar();
+    prisma.nfseEmitida.findMany.mockResolvedValueOnce([]);
+    prisma.cobrancaBoleto.findMany.mockResolvedValue(boletos);
+    athos.buscarNfeResumoPorTitulos.mockResolvedValue([
+      { idcontareceber: 1363, numero: "4521", dataemissao: "2026-11-05", valor: 150 },
+      { idcontareceber: 1364, numero: "4522", dataemissao: "2026-10-31", valor: 10 },
+      { idcontareceber: 1400, numero: "4600", dataemissao: null, valor: 80 },
+    ]);
+
+    const filtrado = await service.listarNotas({ de: "2026-11-01", ate: "2026-11-13" });
+    expect(filtrado.nfe.map((n) => n.numero)).toEqual(["4521"]);
+
+    // Sem filtro: ordem por data desc, nula no fim.
+    prisma.nfseEmitida.findMany.mockResolvedValueOnce([]);
+    const todos = await service.listarNotas({});
+    expect(todos.nfe.map((n) => n.numero)).toEqual(["4521", "4522", "4600"]);
+  });
+
+  it("L8. Athos lanca: nfe [], avisoNfe e as NFS-e continuam na resposta", async () => {
+    const { service, prisma, athos } = montar();
+    prisma.nfseEmitida.findMany.mockResolvedValueOnce([linhaNfse(74)]).mockResolvedValueOnce([]);
+    prisma.cobrancaBoleto.findMany.mockResolvedValue(boletos);
+    athos.buscarNfeResumoPorTitulos.mockRejectedValue(new Error("Athos fora"));
+
+    const r = await service.listarNotas({});
+
+    expect(r.nfe).toEqual([]);
+    expect(r.avisoNfe).toBe("Não foi possível consultar as NF-e no Athos agora.");
+    expect(r.nfse).toHaveLength(1);
+  });
+
+  it("L9. sem boletos (ou boletos sem titulos): Athos nao e consultado para NF-e", async () => {
+    const { service, prisma, athos } = montar();
+    prisma.nfseEmitida.findMany.mockResolvedValue([]);
+
+    prisma.cobrancaBoleto.findMany.mockResolvedValue([]);
+    await service.listarNotas({});
+    prisma.cobrancaBoleto.findMany.mockResolvedValue([{ id: 9, idclienteAthos: 1, status: "pendente", titulos: [] }]);
+    const r = await service.listarNotas({});
+
+    expect(athos.buscarNfeResumoPorTitulos).not.toHaveBeenCalled();
+    expect(r.nfe).toEqual([]);
+    expect(r.avisoNfe).toBeNull();
+  });
+});
+
 describe("CobrancaNotasController.listar (C3)", () => {
   it("C3. rota GET 'notas' delega para listarNotas com a query", async () => {
     expect(Reflect.getMetadata(PATH_METADATA, CobrancaNotasController.prototype.listar)).toBe("notas");
