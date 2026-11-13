@@ -1,172 +1,28 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
-import Script from "next/script";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 import { safeHttpUrl } from "@/lib/safe-url";
+import PasswordGate from "@/components/password-gate";
 import AdminShell from "../admin-shell";
+import RecursosBootstrap from "../_shared/recursos-bootstrap";
+import { lerOpcao } from "../_shared/filtros-url";
+import { formatBRL, formatDate } from "../_shared/formatadores";
+import { useFiltrosUrl } from "../_shared/use-filtros-url";
+import {
+  AbasNavegacao,
+  EMAIL_CC_MAX,
+  EMAIL_CC_PADRAO_TIMEOUT_MS,
+  StatusEmailBadge,
+  badgeClassName,
+  mesclarEmailsCc,
+  type AbaCliente,
+  type NfseEmitidaCliente,
+  type NotaFiscalAthos,
+} from "./_abas/compartilhado";
+import { useDadosCliente } from "./_abas/use-dados-cliente";
+import { AbaContasEmAberto } from "./_abas/aba-contas-em-aberto";
 
-interface NfseEmitidaCliente {
-  id: number;
-  numeroNfse: string | null;
-  numeroRps: number | null;
-  valorServico: number;
-  linkNfse: string | null;
-  dataEmissao: string;
-  titulos: number[];
-}
-
-interface NotaFiscalAthos {
-  numero: string;
-  dataemissao: string | null;
-  valor: number;
-  tipo: string;
-}
-
-interface DadosCliente {
-  idcliente: number;
-  nome_cliente: string;
-  telefone_completo: string | null;
-  emailcliente: string | null;
-  emailcobrancacliente: string | null;
-  limitecredito: number;
-  bloqueaprazo: string | null;
-}
-
-interface TituloReceber {
-  idcontareceber: number;
-  numerotitulo: string | null;
-  datavencimento: string;
-  valor: number;
-  observacao: string | null;
-  idvenda: number | null;
-  dataemissao: string | null;
-  numeroordem: string | null;
-  tipoNf?: string | null;
-  numeroNf?: string | null;
-  boletoAtivo?: {
-    cobrancaId: number;
-    status: string;
-    linkBoleto: string | null;
-    nomeArquivo: string | null;
-    ultimoEmail?: {
-      status: string;
-      destinatario: string;
-      cc?: string[];
-      enviadoEm: string;
-      abertoEm: string | null;
-      confirmadoEm: string | null;
-    } | null;
-  } | null;
-  nfseAtivo?: { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null } | null;
-}
-
-interface HistoricoCliente {
-  pagos: Array<{
-    idcontareceber: number;
-    numerotitulo: string | null;
-    datavencimento: string;
-    datapagamento: string | null;
-    valor: number;
-    valorpago: number;
-    juros: number;
-    desconto: number;
-    idvenda: number | null;
-    numeroordem: string | null;
-  }>;
-  truncado: boolean;
-  totalPago: number;
-  titulosPagos: number;
-  itensPorValor: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
-  itensPorQuantidade: Array<{ idproduto: number; descricao: string; quantidade: number; valorTotal: number; compras: number }>;
-  meses: Array<{ mes: string; total: number; titulos: number }>;
-  mesMaiorGasto: { mes: string; total: number } | null;
-}
-
-function formatMesAno(mes: string): string {
-  const [ano, m] = mes.split("-");
-  if (!ano || !m) return mes;
-  return `${m}/${ano}`;
-}
-
-function formatBRL(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
-
-const EMAIL_CC_MAX = 10; // espelha EMAIL_CC_MAX de apps/backend/src/modules/cobranca/dto/enviar-email-cobranca.dto.ts
-const EMAIL_CC_PADRAO_TIMEOUT_MS = 8000; // limite do GET do padrao de CC (nao pode travar o Enviar)
-// mesma regex do backend (email-envio.service.ts)
-const EMAIL_RE =
-  /^[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+@[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+\.[^\s@<>,;"()[\]\\\x00-\x1f\x7f]+$/;
-
-/** Funde o texto digitado (separado por virgula, ponto e virgula ou espaco) na lista de CC atual. */
-function mesclarEmailsCc(
-  atual: string[],
-  texto: string,
-  principal: string,
-): { lista: string[]; invalidos: string[]; excedentes: number } {
-  const principalLc = principal.trim().toLowerCase();
-  const lista = atual.filter((e) => e.toLowerCase() !== principalLc);
-  const invalidos: string[] = [];
-  let excedentes = 0;
-  const tokens = texto
-    .split(/[,;\s]+/)
-    .map((t) => t.trim())
-    .filter(Boolean);
-  for (const token of tokens) {
-    if (!EMAIL_RE.test(token)) {
-      invalidos.push(token);
-      continue;
-    }
-    const lc = token.toLowerCase();
-    if (lc === principalLc || lista.some((e) => e.toLowerCase() === lc)) continue;
-    if (lista.length >= EMAIL_CC_MAX) {
-      excedentes += 1;
-      continue;
-    }
-    lista.push(token);
-  }
-  return { lista, invalidos, excedentes };
-}
-
-function formatDateHora(iso: string): string {
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
-
-/** Indicador de leitura do último e-mail enviado para o boleto (enviado -> aberto -> confirmado). */
-function StatusEmailBadge({ ultimoEmail }: { ultimoEmail: NonNullable<TituloReceber["boletoAtivo"]>["ultimoEmail"] }) {
-  if (!ultimoEmail) return null;
-  const config = {
-    confirmado: { classe: "bg-success", icone: "bi-check-circle-fill", texto: "Confirmado", data: ultimoEmail.confirmadoEm },
-    aberto: { classe: "bg-warning text-dark", icone: "bi-eye-fill", texto: "Aberto", data: ultimoEmail.abertoEm },
-    enviado: { classe: "bg-secondary", icone: "bi-envelope-check", texto: "Enviado", data: ultimoEmail.enviadoEm },
-  }[ultimoEmail.status] ?? { classe: "bg-secondary", icone: "bi-envelope", texto: ultimoEmail.status, data: ultimoEmail.enviadoEm };
-
-  return (
-    <span
-      className={`badge ${config.classe}`}
-      title={`E-mail para ${ultimoEmail.destinatario}${
-        ultimoEmail.cc && ultimoEmail.cc.length > 0 ? ` (cópia: ${ultimoEmail.cc.join(", ")})` : ""
-      } — enviado em ${formatDateHora(ultimoEmail.enviadoEm)}${
-        ultimoEmail.abertoEm ? ` · aberto em ${formatDateHora(ultimoEmail.abertoEm)}` : ""
-      }${ultimoEmail.confirmadoEm ? ` · confirmado em ${formatDateHora(ultimoEmail.confirmadoEm)}` : ""}`}
-    >
-      <i className={`bi ${config.icone} me-1`} />
-      {config.texto}
-      {config.data ? ` · ${formatDateHora(config.data)}` : ""}
-    </span>
-  );
-}
-
-function badgeClassName(tipoNf?: string | null): string {
-  if (!tipoNf) return "";
-  if (tipoNf === "NF-e") return "bg-primary";
-  if (tipoNf === "NFS-e") return "bg-success";
-  return "bg-secondary"; // combined or other labels
-}
+const ABAS_PERMITIDAS: readonly AbaCliente[] = ["contas", "gerar-boleto", "boletos", "notas"];
 
 export default function ClienteDetalhePage({
   params,
@@ -175,16 +31,43 @@ export default function ClienteDetalhePage({
 }) {
   const { idcliente } = use(params);
 
-  const [dadosCliente, setDadosCliente] = useState<DadosCliente | null>(null);
-  const [titulos, setTitulos] = useState<TituloReceber[]>([]);
-  const [loadingCliente, setLoadingCliente] = useState(true);
-  const [loadingTitulos, setLoadingTitulos] = useState(true);
-  const [erroCliente, setErroCliente] = useState("");
-  const [erroTitulos, setErroTitulos] = useState("");
-  const [historico, setHistorico] = useState<HistoricoCliente | null>(null);
-  const [loadingHistorico, setLoadingHistorico] = useState(true);
-  const [erroHistorico, setErroHistorico] = useState("");
-  const [ordemItens, setOrdemItens] = useState<"valor" | "quantidade">("valor");
+  return (
+    <PasswordGate
+      title="Contas a Receber"
+      description="Esta area exibe dados financeiros de clientes. Digite a senha de configuracoes para continuar."
+    >
+      <Suspense
+        fallback={
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Carregando...</span>
+            </div>
+          </div>
+        }
+      >
+        <ClienteDetalheConteudo idcliente={idcliente} />
+      </Suspense>
+    </PasswordGate>
+  );
+}
+
+function ClienteDetalheConteudo({ idcliente }: { idcliente: string }) {
+  const { obter, definir } = useFiltrosUrl();
+  const aba = lerOpcao<AbaCliente>(obter("aba"), ABAS_PERMITIDAS, "contas");
+
+  const {
+    dadosCliente,
+    loadingCliente,
+    erroCliente,
+    titulos,
+    loadingTitulos,
+    erroTitulos,
+    historico,
+    loadingHistorico,
+    erroHistorico,
+    recarregar,
+  } = useDadosCliente(idcliente);
+
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // Modal boleto states
@@ -236,9 +119,6 @@ export default function ClienteDetalhePage({
   const [nfseErroDetalhe, setNfseErroDetalhe] = useState("");
   const [nfseTitulosElegiveis, setNfseTitulosElegiveis] = useState<number[]>([]);
 
-  // Refetch key for triggering title list reload
-  const [refetchKey, setRefetchKey] = useState(0);
-
   // Seção NFS-e Emitidas
   const [nfseAberta, setNfseAberta] = useState(false);
   const [nfseCarregada, setNfseCarregada] = useState(false);
@@ -284,6 +164,7 @@ export default function ClienteDetalhePage({
   } | null>(null);
   const [emailErro, setEmailErro] = useState("");
 
+
   const checkboxRef = useRef<HTMLInputElement>(null);
 
   const totalSelecionado = titulos
@@ -309,128 +190,6 @@ export default function ClienteDetalhePage({
       checkboxRef.current.indeterminate = someSelected;
     }
   }, [someSelected]);
-
-  useEffect(() => {
-    // Fetch dados cadastrais do cliente
-    fetch(`/api/athos/contas-receber/cliente/${idcliente}`, { cache: "no-store" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Erro ao carregar dados do cliente.");
-        const data = (await res.json()) as DadosCliente;
-        setDadosCliente(data);
-      })
-      .catch(() => setErroCliente("Erro ao carregar dados do cliente."))
-      .finally(() => setLoadingCliente(false));
-
-    // Fetch títulos do cliente + verificação de NF em paralelo
-    fetch(`/api/athos/contas-receber/cliente/${idcliente}/titulos`, { cache: "no-store" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Erro ao carregar títulos.");
-        const data = (await res.json()) as TituloReceber[];
-        // Verificar NF para cada título
-        const ids = data.map((t) => t.idcontareceber);
-        if (ids.length > 0) {
-          try {
-            const nfRes = await fetch(`/api/athos/contas-receber/cliente/${idcliente}/nf-status`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ idcontasReceber: ids }),
-              cache: "no-store",
-            });
-            if (nfRes.ok) {
-              const nfData = (await nfRes.json()) as Array<{ idcontareceber: number; tipoNf: string | null; numeroNf: string | null }>;
-              const nfMap = new Map(nfData.map((n) => [n.idcontareceber, { tipoNf: n.tipoNf, numeroNf: n.numeroNf }]));
-              // Verificar boletos ativos para os mesmos títulos
-                let boletoMap = new Map<number, NonNullable<TituloReceber["boletoAtivo"]>>();
-                try {
-                  const boletoRes = await fetch("/api/cobranca/boleto/titulos-em-uso", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ idcontasReceber: ids }),
-                    cache: "no-store",
-                  });
-                  if (boletoRes.ok) {
-                    const boletoData = (await boletoRes.json()) as Array<
-                      { idcontareceber: number } & NonNullable<TituloReceber["boletoAtivo"]>
-                    >;
-                    boletoMap = new Map(
-                      boletoData.map((b) => [
-                        b.idcontareceber,
-                        {
-                          cobrancaId: b.cobrancaId,
-                          status: b.status,
-                          linkBoleto: b.linkBoleto,
-                          nomeArquivo: b.nomeArquivo,
-                          ultimoEmail: b.ultimoEmail ?? null,
-                        },
-                      ]),
-                    );
-                  }
-                } catch { /* silently ignore */ }
-
-                // Verificar NFS-e emitidas no nosso banco para os mesmos títulos
-                let nfseMap = new Map<number, { nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null }>();
-                try {
-                  const nfseRes = await fetch("/api/cobranca/nfse/titulos-em-uso", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ idcontasReceber: ids }),
-                    cache: "no-store",
-                  });
-                  if (nfseRes.ok) {
-                    const nfseData = (await nfseRes.json()) as Array<{ idcontareceber: number; nfseEmitidaId: number; numeroNfse: string | null; linkNfse?: string | null }>;
-                    nfseMap = new Map(nfseData.map((n) => [n.idcontareceber, { nfseEmitidaId: n.nfseEmitidaId, numeroNfse: n.numeroNfse, linkNfse: n.linkNfse }]));
-                  }
-                } catch { /* silently ignore */ }
-
-                setTitulos(data.map((t) => {
-                  const nf = nfMap.get(t.idcontareceber);
-                  const nfseAtivo = nfseMap.get(t.idcontareceber) ?? null;
-                  // Se houver NFS-e no nosso banco E NF-e/Athos, mostrar ambos combinados
-                  let tipoNf: string | null = null;
-                  let numeroNf: string | null = null;
-                  if (nfseAtivo && nf?.tipoNf) {
-                    tipoNf = `${nf.tipoNf} / NFS-e`;
-                    const nums: string[] = [];
-                    if (nf.numeroNf) nums.push(nf.numeroNf);
-                    if (nfseAtivo.numeroNfse) nums.push(nfseAtivo.numeroNfse);
-                    numeroNf = nums.length > 0 ? nums.join(", ") : null;
-                  } else if (nfseAtivo) {
-                    tipoNf = "NFS-e";
-                    numeroNf = nfseAtivo.numeroNfse ?? null;
-                  } else {
-                    tipoNf = nf?.tipoNf ?? null;
-                    numeroNf = nf?.numeroNf ?? null;
-                  }
-                  return {
-                    ...t,
-                    tipoNf,
-                    numeroNf,
-                    boletoAtivo: boletoMap.get(t.idcontareceber) ?? null,
-                    nfseAtivo,
-                  };
-                }));
-              return;
-            }
-          } catch { /* silently ignore NF check errors */ }
-        }
-        setTitulos(data);
-      })
-      .catch(() => setErroTitulos("Erro ao carregar títulos."))
-      .finally(() => setLoadingTitulos(false));
-
-    // Fetch histórico de consumo do cliente (contas pagas, itens mais comprados, mês de maior gasto)
-    setLoadingHistorico(true);
-    fetch(`/api/athos/contas-receber/cliente/${idcliente}/historico`, { cache: "no-store" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Erro ao carregar histórico.");
-        const data = (await res.json()) as HistoricoCliente;
-        setHistorico(data);
-        setErroHistorico("");
-      })
-      .catch(() => setErroHistorico("Erro ao carregar histórico do cliente."))
-      .finally(() => setLoadingHistorico(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idcliente, refetchKey]);
 
   // ESC key handler for boleto modal
   useEffect(() => {
@@ -811,8 +570,7 @@ export default function ClienteDetalhePage({
     setNfseFile(null);
     setNfseModoEmissao("manual");
     if (withRefetch) {
-      setLoadingTitulos(true);
-      setRefetchKey((k) => k + 1);
+      recarregar(true);
     }
   }
 
@@ -962,24 +720,10 @@ export default function ClienteDetalhePage({
   const hoje = new Date().toISOString().slice(0, 10);
   const expireAtInvalido = !expireAt || expireAt < hoje;
 
+
   return (
     <>
-      <Script
-        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
-        strategy="beforeInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.js"
-        strategy="beforeInteractive"
-      />
-      <link
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
-        rel="stylesheet"
-      />
-      <link
-        rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"
-      />
+      <RecursosBootstrap />
 
       <AdminShell
         activeHref="/contas-receber"
@@ -1037,32 +781,212 @@ export default function ClienteDetalhePage({
           </div>
         </div>
 
-        {/* Tabela de títulos */}
-        <div className="pa-card">
-          <div className="pa-card-header">
-            <strong><i className="bi bi-receipt me-2 text-primary" />Títulos em Aberto</strong>
+        <AbasNavegacao
+          abaAtual={aba}
+          onSelecionar={(id) => definir({ aba: id === "contas" ? null : id })}
+          contagens={{
+            contas: titulos.length,
+            "gerar-boleto": titulosLivres.length,
+            boletos: boletoGrupos.size,
+          }}
+        />
+
+        {aba === "contas" && (
+          <AbaContasEmAberto
+            titulos={titulos}
+            loadingTitulos={loadingTitulos}
+            erroTitulos={erroTitulos}
+            historico={historico}
+            loadingHistorico={loadingHistorico}
+            erroHistorico={erroHistorico}
+          />
+        )}
+
+        {aba === "gerar-boleto" && (
+          <>
+            <div className="pa-card">
+              <div className="pa-card-header">
+                <strong><i className="bi bi-upc-scan me-2 text-primary" />Títulos Disponíveis</strong>
+              </div>
+              <div className="pa-card-body">
+                {loadingTitulos ? (
+                  <div className="text-center py-3">
+                    <div className="spinner-border spinner-border-sm text-primary" role="status">
+                      <span className="visually-hidden">Carregando...</span>
+                    </div>
+                  </div>
+                ) : erroTitulos ? (
+                  <div className="alert alert-danger">{erroTitulos}</div>
+                ) : titulos.length === 0 ? (
+                  <div className="alert alert-info">
+                    <i className="bi bi-info-circle me-2" />Nenhum título encontrado para este cliente.
+                  </div>
+                ) : (
+                  <div>
+                    {boletoGrupos.size > 0 && (
+                      <p className="small text-muted mb-3">
+                        <i className="bi bi-info-circle me-1" />
+                        {titulos.length - titulosLivres.length} título(s) já têm boleto emitido — veja a aba Boletos.
+                      </p>
+                    )}
+                    {titulosLivres.length === 0 ? (
+                      <div className="alert alert-info mb-0">
+                        <i className="bi bi-info-circle me-2" />Todos os títulos em aberto já têm boleto emitido.
+                      </div>
+                    ) : (
+                    <table className="pa-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: "40px" }}>
+                            <input type="checkbox" className="form-check-input"
+                              checked={allSelected} ref={checkboxRef} onChange={handleToggleAll} />
+                          </th>
+                          <th>Título</th>
+                          <th>Vencimento</th>
+                          <th>Valor</th>
+                          <th>NF</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {titulosLivres.map((titulo) => {
+                          const vencido = new Date(titulo.datavencimento) < new Date();
+                          return (
+                            <tr key={titulo.idcontareceber}>
+                              <td>
+                                <input type="checkbox" className="form-check-input"
+                                  checked={selectedIds.has(titulo.idcontareceber)}
+                                  onChange={() => handleToggle(titulo.idcontareceber)} />
+                              </td>
+                              <td className="small">{titulo.numerotitulo ?? "—"}</td>
+                              <td className={`small${vencido ? " text-danger fw-semibold" : ""}`}>
+                                {formatDate(titulo.datavencimento)}
+                              </td>
+                              <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
+                              <td>
+                                {titulo.tipoNf ? (
+                                  <span className="d-inline-flex align-items-center gap-1">
+                                    <span className={`badge ${badgeClassName(titulo.tipoNf)}`}
+                                      title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
+                                      {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
+                                    </span>
+                                    {titulo.nfseAtivo?.nfseEmitidaId && (
+                                      <a
+                                        href={`/api/cobranca/nfse/${titulo.nfseAtivo.nfseEmitidaId}/pdf`}
+                                        className="btn btn-link btn-sm p-0 text-success"
+                                        title="Baixar PDF da NFS-e"
+                                        style={{ lineHeight: 1 }}
+                                      >
+                                        <i className="bi bi-file-earmark-arrow-down" />
+                                      </a>
+                                    )}
+                                    {titulo.nfseAtivo && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-link btn-sm p-0 text-danger"
+                                        title="Remover NFS-e do banco (permite novo anexo)"
+                                        style={{ lineHeight: 1 }}
+                                        onClick={async () => {
+                                          if (!confirm(`Remover registro da NFS-e #${titulo.nfseAtivo!.numeroNfse ?? titulo.nfseAtivo!.nfseEmitidaId} do banco?\n\nIsso NÃO cancela a nota na prefeitura, apenas libera o título para novo anexo.`)) return;
+                                          try {
+                                            const res = await fetch(`/api/cobranca/nfse/${titulo.nfseAtivo!.nfseEmitidaId}`, { method: "DELETE" });
+                                            if (!res.ok) {
+                                              const d = await res.json().catch(() => ({}));
+                                              alert((d as { error?: string }).error ?? "Erro ao remover NFS-e.");
+                                            } else {
+                                              recarregar();
+                                              setNfseCarregada(false); // força reload da seção NFS-e Emitidas
+                                            }
+                                          } catch {
+                                            alert("Falha na conexão.");
+                                          }
+                                        }}
+                                      >
+                                        <i className="bi bi-x-circle" />
+                                      </button>
+                                    )}
+                                  </span>
+                                ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
+                              </td>
+                              <td>
+                                {vencido
+                                  ? <span className="badge bg-danger">VEN</span>
+                                  : <span className="badge bg-info text-dark">AVC</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="table-secondary">
+                          <td colSpan={6} className="small text-muted">
+                            {selectedIds.size} título(s) selecionado(s) — Total: <strong>{formatBRL(totalSelecionado)}</strong>
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+        {/* Barra de ações — visível SOMENTE quando há seleção */}
+        {selectedIds.size > 0 && (
+        <div className="pa-actionbar d-flex align-items-center gap-3 flex-wrap">
+          <span className="text-muted small">
+            <strong>{selectedIds.size}</strong> título(s) selecionado(s) —{" "}
+            <strong>{formatBRL(totalSelecionado)}</strong>
+          </span>
+          <div className="ms-auto d-flex align-items-center gap-2">
+            {selecionadosSemNf.length > 0 && (
+              <small className="text-danger">
+                <i className="bi bi-exclamation-triangle me-1" />
+                {selecionadosSemNf.length} título(s) sem NF — boleto bloqueado
+              </small>
+            )}
+            <button
+              type="button"
+              className="pa-btn-accent"
+              onClick={abreBoletoModal}
+              disabled={selecionadosSemNf.length > 0}
+              title={selecionadosSemNf.length > 0 ? "Selecione apenas títulos com NF emitida para gerar boleto" : undefined}
+            >
+              <i className="bi bi-receipt me-1" />Gerar Boleto
+            </button>
+            <button
+              type="button"
+              className="pa-btn-accent"
+              onClick={abreNfseModal}
+            >
+              <i className="bi bi-file-earmark-arrow-up me-1" />Anexar NFS-e
+            </button>
           </div>
-          <div className="pa-card-body">
-            {loadingTitulos ? (
-              <div className="text-center py-3">
-                <div className="spinner-border spinner-border-sm text-primary" role="status">
-                  <span className="visually-hidden">Carregando...</span>
+        </div>
+      )}
+          </>
+        )}
+
+        {aba === "boletos" && (
+          <div className="pa-card">
+            <div className="pa-card-header">
+              <strong><i className="bi bi-files me-2 text-primary" />Boletos Emitidos</strong>
+            </div>
+            <div className="pa-card-body">
+              {loadingTitulos ? (
+                <div className="text-center py-3">
+                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                    <span className="visually-hidden">Carregando...</span>
+                  </div>
                 </div>
-              </div>
-            ) : erroTitulos ? (
-              <div className="alert alert-danger">{erroTitulos}</div>
-            ) : titulos.length === 0 ? (
-              <div className="alert alert-info">
-                <i className="bi bi-info-circle me-2" />Nenhum título encontrado para este cliente.
-              </div>
-            ) : (
-              <div>
-                {/* ─── GRUPOS DE BOLETO ─── */}
-                {boletoGrupos.size > 0 && (
-                  <div className="mb-3">
-                    <h6 className="text-muted small mb-2">
-                      <i className="bi bi-receipt me-1" />Títulos com boleto emitido
-                    </h6>
+              ) : erroTitulos ? (
+                <div className="alert alert-danger">{erroTitulos}</div>
+              ) : boletoGrupos.size === 0 ? (
+                <div className="alert alert-info mb-0">
+                  <i className="bi bi-info-circle me-2" />Nenhum boleto emitido para os títulos em aberto deste cliente.
+                </div>
+              ) : (
+                <div>
                     {[...boletoGrupos.values()].map(({ boleto, titulos: tsBoleto }) => {
                       const totalBoleto = tsBoleto.reduce((s, t) => s + t.valor, 0);
                       const isPago = boleto.status === "pago";
@@ -1161,344 +1085,14 @@ export default function ClienteDetalhePage({
                         </div>
                       );
                     })}
-                  </div>
-                )}
-
-                {/* ─── TÍTULOS LIVRES (sem boleto) ─── */}
-                {titulosLivres.length === 0 && boletoGrupos.size > 0 ? null : (
-                  <div>
-                    {boletoGrupos.size > 0 && (
-                      <h6 className="text-muted small mb-2">
-                        <i className="bi bi-list-check me-1" />Títulos disponíveis
-                      </h6>
-                    )}
-                    <table className="pa-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: "40px" }}>
-                            <input type="checkbox" className="form-check-input"
-                              checked={allSelected} ref={checkboxRef} onChange={handleToggleAll} />
-                          </th>
-                          <th>Título</th>
-                          <th>Vencimento</th>
-                          <th>Valor</th>
-                          <th>NF</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {titulosLivres.map((titulo) => {
-                          const vencido = new Date(titulo.datavencimento) < new Date();
-                          return (
-                            <tr key={titulo.idcontareceber}>
-                              <td>
-                                <input type="checkbox" className="form-check-input"
-                                  checked={selectedIds.has(titulo.idcontareceber)}
-                                  onChange={() => handleToggle(titulo.idcontareceber)} />
-                              </td>
-                              <td className="small">{titulo.numerotitulo ?? "—"}</td>
-                              <td className={`small${vencido ? " text-danger fw-semibold" : ""}`}>
-                                {formatDate(titulo.datavencimento)}
-                              </td>
-                              <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
-                              <td>
-                                {titulo.tipoNf ? (
-                                  <span className="d-inline-flex align-items-center gap-1">
-                                    <span className={`badge ${badgeClassName(titulo.tipoNf)}`}
-                                      title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
-                                      {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
-                                    </span>
-                                    {titulo.nfseAtivo?.nfseEmitidaId && (
-                                      <a
-                                        href={`/api/cobranca/nfse/${titulo.nfseAtivo.nfseEmitidaId}/pdf`}
-                                        className="btn btn-link btn-sm p-0 text-success"
-                                        title="Baixar PDF da NFS-e"
-                                        style={{ lineHeight: 1 }}
-                                      >
-                                        <i className="bi bi-file-earmark-arrow-down" />
-                                      </a>
-                                    )}
-                                    {titulo.nfseAtivo && (
-                                      <button
-                                        type="button"
-                                        className="btn btn-link btn-sm p-0 text-danger"
-                                        title="Remover NFS-e do banco (permite novo anexo)"
-                                        style={{ lineHeight: 1 }}
-                                        onClick={async () => {
-                                          if (!confirm(`Remover registro da NFS-e #${titulo.nfseAtivo!.numeroNfse ?? titulo.nfseAtivo!.nfseEmitidaId} do banco?\n\nIsso NÃO cancela a nota na prefeitura, apenas libera o título para novo anexo.`)) return;
-                                          try {
-                                            const res = await fetch(`/api/cobranca/nfse/${titulo.nfseAtivo!.nfseEmitidaId}`, { method: "DELETE" });
-                                            if (!res.ok) {
-                                              const d = await res.json().catch(() => ({}));
-                                              alert((d as { error?: string }).error ?? "Erro ao remover NFS-e.");
-                                            } else {
-                                              setRefetchKey((k) => k + 1);
-                                              setNfseCarregada(false); // força reload da seção NFS-e Emitidas
-                                            }
-                                          } catch {
-                                            alert("Falha na conexão.");
-                                          }
-                                        }}
-                                      >
-                                        <i className="bi bi-x-circle" />
-                                      </button>
-                                    )}
-                                  </span>
-                                ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
-                              </td>
-                              <td>
-                                {vencido
-                                  ? <span className="badge bg-danger">VEN</span>
-                                  : <span className="badge bg-info text-dark">AVC</span>}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr className="table-secondary">
-                          <td colSpan={6} className="small text-muted">
-                            {selectedIds.size} título(s) selecionado(s) — Total: <strong>{formatBRL(totalSelecionado)}</strong>
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Cards de resumo do histórico */}
-          {!loadingHistorico && !erroHistorico && historico && (
-            <div className="pa-stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-              <div className="pa-card pa-stat">
-                <div className="pa-stat-icon">
-                  <i className="bi bi-cash-coin" />
                 </div>
-                <div className="pa-stat-body">
-                  <p className="pa-stat-label">Total Já Pago</p>
-                  <h4 className="pa-stat-value pa-stat-value-success">{formatBRL(historico.totalPago)}</h4>
-                  <small className="text-muted">{historico.titulosPagos} título(s) quitado(s)</small>
-                </div>
-              </div>
-              <div className="pa-card pa-stat">
-                <div className="pa-stat-icon">
-                  <i className="bi bi-calendar3" />
-                </div>
-                <div className="pa-stat-body">
-                  <p className="pa-stat-label">Mês de Maior Gasto</p>
-                  {historico.mesMaiorGasto ? (
-                    <>
-                      <h4 className="pa-stat-value pa-stat-value-accent">{formatMesAno(historico.mesMaiorGasto.mes)}</h4>
-                      <small className="text-muted">{formatBRL(historico.mesMaiorGasto.total)} — por data de pagamento</small>
-                    </>
-                  ) : (
-                    <h4 className="pa-stat-value pa-stat-value-accent">—</h4>
-                  )}
-                </div>
-              </div>
-              <div className="pa-card pa-stat">
-                <div className="pa-stat-icon">
-                  <i className="bi bi-tag" />
-                </div>
-                <div className="pa-stat-body">
-                  <p className="pa-stat-label">Item de Maior Gasto</p>
-                  {historico.itensPorValor.length > 0 ? (
-                    <>
-                      <h4 className="pa-stat-value pa-stat-value-accent">{historico.itensPorValor[0].descricao}</h4>
-                      <small className="text-muted">{formatBRL(historico.itensPorValor[0].valorTotal)}</small>
-                    </>
-                  ) : (
-                    <h4 className="pa-stat-value pa-stat-value-accent">—</h4>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Contas Pagas */}
-          <div className="pa-card mt-4">
-            <div className="pa-card-header">
-              <strong><i className="bi bi-check2-circle me-2 text-primary" />Contas Pagas</strong>
-            </div>
-            <div className="pa-card-body">
-            {loadingHistorico ? (
-              <div className="text-center py-3">
-                <div className="spinner-border spinner-border-sm text-primary" role="status">
-                  <span className="visually-hidden">Carregando...</span>
-                </div>
-              </div>
-            ) : erroHistorico ? (
-              <div className="pa-empty pa-empty-erro">{erroHistorico}</div>
-            ) : !historico || historico.pagos.length === 0 ? (
-              <div className="pa-empty">
-                <span><i className="bi bi-info-circle me-2" />Nenhuma conta paga encontrada para este cliente.</span>
-              </div>
-            ) : (
-              <div>
-                <table className="pa-table">
-                  <thead>
-                    <tr>
-                      <th>Título</th>
-                      <th>Vencimento</th>
-                      <th>Pagamento</th>
-                      <th>Valor</th>
-                      <th>Valor Pago</th>
-                      <th>Juros</th>
-                      <th>Desconto</th>
-                      <th>Pedido</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historico.pagos.map((p) => (
-                      <tr key={p.idcontareceber}>
-                        <td className="small">{p.numerotitulo ?? "—"}</td>
-                        <td className="small">{formatDate(p.datavencimento)}</td>
-                        <td className="small">{p.datapagamento ? formatDate(p.datapagamento) : "—"}</td>
-                        <td className="small">{formatBRL(p.valor)}</td>
-                        <td className="small fw-semibold">{formatBRL(p.valorpago)}</td>
-                        <td className="small">{formatBRL(p.juros)}</td>
-                        <td className="small">{formatBRL(p.desconto)}</td>
-                        <td className="small">{p.numeroordem ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="table-secondary">
-                      <td colSpan={8} className="small text-muted">
-                        {historico.titulosPagos} título(s) pago(s) — Total: <strong>{formatBRL(historico.totalPago)}</strong>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-                {historico.truncado && (
-                  <p className="small text-muted mb-0">
-                    Mostrando os 200 pagamentos mais recentes. O total acima considera todo o histórico.
-                  </p>
-                )}
-              </div>
-            )}
+              )}
             </div>
           </div>
+        )}
 
-          {/* Itens Mais Comprados */}
-          <div className="pa-card mt-4">
-            <div className="pa-card-header">
-              <strong><i className="bi bi-bag-check me-2 text-primary" />Itens Mais Comprados</strong>
-              <div className="pa-seg">
-                <button
-                  type="button"
-                  className={`pa-seg-btn${ordemItens === "valor" ? " pa-seg-btn-active" : ""}`}
-                  onClick={() => setOrdemItens("valor")}
-                >
-                  Por Valor
-                </button>
-                <button
-                  type="button"
-                  className={`pa-seg-btn${ordemItens === "quantidade" ? " pa-seg-btn-active" : ""}`}
-                  onClick={() => setOrdemItens("quantidade")}
-                >
-                  Por Quantidade
-                </button>
-              </div>
-            </div>
-            <div className="pa-card-body">
-            {loadingHistorico ? (
-              <div className="text-center py-3">
-                <div className="spinner-border spinner-border-sm text-primary" role="status">
-                  <span className="visually-hidden">Carregando...</span>
-                </div>
-              </div>
-            ) : erroHistorico ? (
-              <div className="pa-empty pa-empty-erro">{erroHistorico}</div>
-            ) : !historico ||
-              (ordemItens === "valor" ? historico.itensPorValor : historico.itensPorQuantidade).length === 0 ? (
-              <div className="pa-empty">
-                <span><i className="bi bi-info-circle me-2" />Não há itens de venda registrados para este cliente.</span>
-              </div>
-            ) : (
-              <div>
-                <table className="pa-table">
-                  <thead>
-                    <tr>
-                      <th>Produto</th>
-                      <th>Quantidade</th>
-                      <th>Compras</th>
-                      <th>Total Gasto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(ordemItens === "valor" ? historico.itensPorValor : historico.itensPorQuantidade).map((item) => (
-                      <tr key={item.idproduto}>
-                        <td className="small">{item.descricao}</td>
-                        <td className="small">{item.quantidade}</td>
-                        <td className="small">{item.compras}</td>
-                        <td className="small fw-semibold">{formatBRL(item.valorTotal)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            </div>
-          </div>
-
-          {/* Gasto por Mês */}
-          <div className="pa-card mt-4">
-            <div className="pa-card-header">
-              <strong><i className="bi bi-calendar3 me-2 text-primary" />Gasto por Mês</strong>
-            </div>
-            <div className="pa-card-body">
-            {loadingHistorico ? (
-              <div className="text-center py-3">
-                <div className="spinner-border spinner-border-sm text-primary" role="status">
-                  <span className="visually-hidden">Carregando...</span>
-                </div>
-              </div>
-            ) : erroHistorico ? (
-              <div className="pa-empty pa-empty-erro">{erroHistorico}</div>
-            ) : !historico || historico.meses.length === 0 ? (
-              <div className="pa-empty">
-                <span><i className="bi bi-info-circle me-2" />Nenhum pagamento registrado para calcular o gasto mensal.</span>
-              </div>
-            ) : (
-              <div>
-                <table className="pa-table">
-                  <thead>
-                    <tr>
-                      <th>Mês</th>
-                      <th>Títulos Pagos</th>
-                      <th>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historico.meses.slice(0, 12).map((m) => {
-                      const isPico = historico.mesMaiorGasto?.mes === m.mes;
-                      return (
-                        <tr key={m.mes} className={isPico ? "table-success" : undefined}>
-                          <td className="small">
-                            {formatMesAno(m.mes)}
-                            {isPico && <span className="badge bg-success ms-2">Pico</span>}
-                          </td>
-                          <td className="small">{m.titulos}</td>
-                          <td className="small fw-semibold">{formatBRL(m.total)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                {historico.meses.length > 12 && (
-                  <p className="small text-muted mb-0">
-                    Mostrando os 12 meses mais recentes. O card de resumo considera todo o histórico.
-                  </p>
-                )}
-              </div>
-            )}
-            </div>
-          </div>
-
+        {aba === "notas" && (
+          <>
         {/* ─── SEÇÃO NFS-e Emitidas ─── */}
         <div className="pa-card mt-4">
           <button
@@ -1597,7 +1191,7 @@ export default function ClienteDetalhePage({
                                       alert((d as { error?: string }).error ?? "Erro ao cancelar NFS-e.");
                                     } else {
                                       setNfseEmitidas((prev) => prev.filter((n) => n.id !== nfse.id));
-                                      setRefetchKey((k) => k + 1);
+                                      recarregar();
                                     }
                                   } catch {
                                     alert("Falha na conexão.");
@@ -1746,40 +1340,8 @@ export default function ClienteDetalhePage({
             </div>
           )}
         </div>
-
-        {/* Barra de ações — visível SOMENTE quando há seleção */}
-        {selectedIds.size > 0 && (
-        <div className="pa-actionbar d-flex align-items-center gap-3 flex-wrap">
-          <span className="text-muted small">
-            <strong>{selectedIds.size}</strong> título(s) selecionado(s) —{" "}
-            <strong>{formatBRL(totalSelecionado)}</strong>
-          </span>
-          <div className="ms-auto d-flex align-items-center gap-2">
-            {selecionadosSemNf.length > 0 && (
-              <small className="text-danger">
-                <i className="bi bi-exclamation-triangle me-1" />
-                {selecionadosSemNf.length} título(s) sem NF — boleto bloqueado
-              </small>
-            )}
-            <button
-              type="button"
-              className="pa-btn-accent"
-              onClick={abreBoletoModal}
-              disabled={selecionadosSemNf.length > 0}
-              title={selecionadosSemNf.length > 0 ? "Selecione apenas títulos com NF emitida para gerar boleto" : undefined}
-            >
-              <i className="bi bi-receipt me-1" />Gerar Boleto
-            </button>
-            <button
-              type="button"
-              className="pa-btn-accent"
-              onClick={abreNfseModal}
-            >
-              <i className="bi bi-file-earmark-arrow-up me-1" />Anexar NFS-e
-            </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
       </AdminShell>
 
       {/* Modal boleto — 4 estados */}
