@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import PasswordGate from "@/components/password-gate";
 import AdminShell from "./admin-shell";
 import ClienteAutocomplete from "./cliente-autocomplete";
 import { ResumoBoletos } from "./_componentes/boletos-consolidados";
 import RecursosBootstrap from "./_shared/recursos-bootstrap";
+import { lerOpcao, lerTexto } from "./_shared/filtros-url";
+import { formatBRL, formatDate, formatPercent } from "./_shared/formatadores";
+import { useFiltrosUrl } from "./_shared/use-filtros-url";
 
 interface DashboardSummary {
   total_a_receber: number;
@@ -66,18 +69,6 @@ interface IndicadoresContasReceber {
   truncado: boolean;
 }
 
-function formatBRL(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function formatPercent(value: number): string {
-  return `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
-
 function getDiasInativoPillClass(diasInativo: number | null): string {
   if (diasInativo === null) return "pa-pill pa-pill-secondary";
   if (diasInativo > 365) return "pa-pill pa-pill-danger";
@@ -99,6 +90,8 @@ function getBadgeLabel(dias: number | null): string {
 
 type StatusFiltro = "AVC" | "VEN" | "REC" | "CAN" | "";
 
+const STATUS_PERMITIDOS: readonly StatusFiltro[] = ["", "AVC", "VEN", "REC", "CAN"];
+
 const STATUS_OPTIONS: { value: StatusFiltro; label: string; cls: string }[] = [
   { value: "",    label: "Todos (abertos)", cls: "btn-outline-secondary" },
   { value: "AVC", label: "A Vencer",        cls: "btn-outline-info"      },
@@ -119,7 +112,17 @@ const CLIENTE_SORT_COLUMNS: { key: SortKey; label: string }[] = [
 export default function ContasReceberPage() {
   return (
     <PasswordGate title="Contas a Receber" description="Esta area exibe dados financeiros de clientes. Digite a senha de configuracoes para continuar.">
-      <ContasReceberDashboard />
+      <Suspense
+        fallback={
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Carregando...</span>
+            </div>
+          </div>
+        }
+      >
+        <ContasReceberDashboard />
+      </Suspense>
     </PasswordGate>
   );
 }
@@ -129,8 +132,9 @@ function ContasReceberDashboard() {
   const [clientes, setClientes] = useState<ClienteDevedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
-  const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("");
-  const [busca, setBusca] = useState("");
+  const { obter, definir } = useFiltrosUrl();
+  const statusFiltro = lerOpcao<StatusFiltro>(obter("status"), STATUS_PERMITIDOS, "");
+  const [busca, setBusca] = useState(() => lerTexto(obter("busca")));
   const [sortBy, setSortBy] = useState<SortKey>("total_atrasado");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -181,7 +185,12 @@ function ContasReceberDashboard() {
   useEffect(() => {
     void fetchDashboard(statusFiltro);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [statusFiltro]);
+
+  function alterarBusca(texto: string) {
+    setBusca(texto);
+    definir({ busca: lerTexto(texto) || null });
+  }
 
   function handleSort(key: SortKey) {
     if (sortBy === key) {
@@ -222,7 +231,7 @@ function ContasReceberDashboard() {
             <ClienteAutocomplete
               clientes={clientes}
               valor={busca}
-              onValorChange={setBusca}
+              onValorChange={alterarBusca}
               onSelecionar={(id) => {
                 window.location.href = `/contas-receber/${Number(id)}`;
               }}
@@ -233,10 +242,7 @@ function ContasReceberDashboard() {
                   key={opt.value}
                   type="button"
                   className={`pa-seg-btn${statusFiltro === opt.value ? " pa-seg-btn-active" : ""}`}
-                  onClick={() => {
-                    setStatusFiltro(opt.value);
-                    void fetchDashboard(opt.value);
-                  }}
+                  onClick={() => definir({ status: opt.value || null })}
                 >
                   {opt.label}
                 </button>
