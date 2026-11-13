@@ -1,6 +1,7 @@
-import { Controller, Get, Param, ParseIntPipe, Res } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Res } from "@nestjs/common";
 
 import { CobrancaNotasService } from "./cobranca-notas.service";
+import { BaixarNotasZipDto } from "./dto/baixar-notas-zip.dto";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
@@ -20,5 +21,16 @@ export class CobrancaNotasController {
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
     res.send(xml);
+  }
+
+  /** ZIP com PDF + XML das notas selecionadas (NFS-e e NF-e), com LEIA-ME.txt das pendencias. Maximo de 50 notas. */
+  @Post("notas/zip")
+  @HttpCode(HttpStatus.OK)
+  async gerarZip(@Body() dto: BaixarNotasZipDto, @Res() res: ExpressResponse) {
+    const { zip, nomeArquivo } = await this.notasService.gerarZipNotas(dto);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
+    res.setHeader("Content-Length", zip.length);
+    res.send(zip);
   }
 }

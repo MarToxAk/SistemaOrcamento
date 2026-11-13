@@ -1,10 +1,19 @@
-import { BadGatewayException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadGatewayException,
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import axios from "axios";
 
 import { PrismaService } from "../database/prisma.service";
 import { AthosService } from "../integrations/athos/athos.service";
+import { hojeSaoPaulo } from "../integrations/athos/athos-conta-receber-baixa.service";
 import { DanfePdfService } from "../integrations/nfse/danfe-pdf.service";
 import { CobrancaService } from "./cobranca.service";
+import { BaixarNotasZipDto } from "./dto/baixar-notas-zip.dto";
+import { EntradaZip, criarZipStore } from "./zip-store.util";
 
 /** Maximo de notas (NFS-e + NF-e) por arquivo ZIP. O frontend (plano 47-06) espelha este valor. */
 export const LIMITE_NOTAS_ZIP = 50;
@@ -81,6 +90,132 @@ export class CobrancaNotasService {
     }
 
     throw new NotFoundException(`XML indisponível para a NFS-e ${numero}: nenhum XML salvo.`);
+  }
+
+  /**
+   * ZIP com PDF + XML de cada nota selecionada (D-12). Sequencial (um await por vez) para nao
+   * sobrecarregar o renderizador de PDF. O que nao puder ser incluido vai para o LEIA-ME.txt;
+   * XML nunca e inventado (D-11): so o que a origem guardou.
+   */
+  async gerarZipNotas(dto: BaixarNotasZipDto): Promise<{ zip: Buffer; nomeArquivo: string }> {
+    const nfseIds = [...new Set(dto.nfseIds ?? [])];
+    const vistosNfe = new Set<string>();
+    const nfe = (dto.nfe ?? []).filter((n) => {
+      const chave = `${n.cobrancaBoletoId}:${n.numero}`;
+      if (vistosNfe.has(chave)) return false;
+      vistosNfe.add(chave);
+      return true;
+    });
+
+    const total = nfseIds.length + nfe.length;
+    if (total === 0) throw new BadRequestException("Selecione ao menos uma nota.");
+    if (total > LIMITE_NOTAS_ZIP) {
+      throw new BadRequestException(`Selecione no máximo ${LIMITE_NOTAS_ZIP} notas por arquivo ZIP.`);
+    }
+
+    const entradas: EntradaZip[] = [];
+    const pendencias: string[] = [];
+    const basesUsadas = new Map<string, number>();
+    let baseUnica: string | null = null;
+
+    // Reserva um nome-base unico (NFSe-239, NFSe-239-2, ...) para PDF e XML da mesma nota.
+    const reservarBase = (base: string): string => {
+      const usos = (basesUsadas.get(base) ?? 0) + 1;
+      basesUsadas.set(base, usos);
+      return usos === 1 ? base : `${base}-${usos}`;
+    };
+
+    for (const id of nfseIds) {
+      try {
+        const danfse = await this.cobrancaService.baixarDanfsePdf(id);
+        const numero = danfse.nomeArquivo.match(/^NFSe-(.+)\.pdf$/)?.[1] ?? String(id);
+        const base = reservarBase(`NFSe-${sanearNomeArquivo(numero)}`);
+        baseUnica = base;
+        entradas.push({ nome: `${base}.pdf`, conteudo: danfse.pdfBuffer });
+        if (danfse.xml) {
+          entradas.push({ nome: `${base}.xml`, conteudo: Buffer.from(danfse.xml, "utf8") });
+        } else {
+          pendencias.push(`NFS-e ${numero}: XML indisponível (a origem guardou só o PDF).`);
+        }
+      } catch (err) {
+        const mensagem = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`ZIP de notas: NFS-e ${id} não incluída: ${mensagem}`);
+        pendencias.push(`NFS-e id ${id}: ${mensagem}`);
+      }
+    }
+
+    // Cache por boleto: varias NF-e do mesmo boleto consultam o Athos uma vez so.
+    const notasPorBoleto = new Map<number, Array<{ numero: string; xml: string; cancelada: boolean }> | null>();
+    for (const item of nfe) {
+      try {
+        if (!notasPorBoleto.has(item.cobrancaBoletoId)) {
+          const boleto = await this.prisma.cobrancaBoleto.findUnique({
+            where: { id: item.cobrancaBoletoId },
+            include: { titulos: { select: { idcontareceber: true } } },
+          });
+          if (!boleto) {
+            notasPorBoleto.set(item.cobrancaBoletoId, null);
+          } else {
+            const idcontas = boleto.titulos.map((t) => t.idcontareceber);
+            const notas = idcontas.length
+              ? await this.athosService.buscarNotasFiscaisXmlPorTitulos(idcontas)
+              : [];
+            notasPorBoleto.set(item.cobrancaBoletoId, notas);
+          }
+        }
+        const notas = notasPorBoleto.get(item.cobrancaBoletoId);
+        if (notas === null || notas === undefined) {
+          pendencias.push(`NF-e ${item.numero}: boleto ${item.cobrancaBoletoId} não encontrado.`);
+          continue;
+        }
+        const nota = notas.find((n) => n.numero === item.numero);
+        if (!nota) {
+          pendencias.push(
+            `NF-e ${item.numero}: não encontrada entre as notas do boleto ${item.cobrancaBoletoId}.`,
+          );
+          continue;
+        }
+
+        const base = reservarBase(`NF-e-${sanearNomeArquivo(nota.numero)}`);
+        baseUnica = base;
+        let pdf: Buffer | null = null;
+        try {
+          pdf = await this.danfePdfService.gerarDanfe({ xml: nota.xml, cancelada: nota.cancelada });
+        } catch (err) {
+          this.logger.warn(
+            `ZIP de notas: DANFE da NF-e ${nota.numero} falhou: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          pendencias.push(`NF-e ${nota.numero}: PDF não pôde ser gerado; o XML foi incluído.`);
+        }
+        if (pdf) entradas.push({ nome: `${base}.pdf`, conteudo: pdf });
+        // XML exatamente como veio do Athos.
+        entradas.push({ nome: `${base}.xml`, conteudo: Buffer.from(nota.xml, "utf8") });
+      } catch (err) {
+        const mensagem = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `ZIP de notas: NF-e ${item.numero} (boleto ${item.cobrancaBoletoId}) não incluída: ${mensagem}`,
+        );
+        pendencias.push(`NF-e ${item.numero} (boleto ${item.cobrancaBoletoId}): ${mensagem}`);
+      }
+    }
+
+    if (entradas.length === 0) {
+      throw new NotFoundException("Nenhum arquivo disponível para as notas selecionadas.");
+    }
+
+    if (pendencias.length > 0) {
+      const texto = ["Itens não incluídos neste arquivo", "", ...pendencias.map((p) => `- ${p}`), ""].join("\n");
+      entradas.push({ nome: "LEIA-ME.txt", conteudo: Buffer.from(texto, "utf8") });
+    }
+
+    this.logger.log(
+      `ZIP de notas gerado: ${nfseIds.length} NFS-e e ${nfe.length} NF-e pedidas, ${entradas.length} arquivos, ${pendencias.length} pendências.`,
+    );
+
+    const zip = criarZipStore(entradas);
+    const nomeArquivo =
+      total === 1 && baseUnica ? `${baseUnica}.zip` : `notas-fiscais-${hojeSaoPaulo()}.zip`;
+    return { zip, nomeArquivo };
   }
 
   private async baixarXmlDoLink(link: string, id: number, numero: string): Promise<Buffer> {
