@@ -18,6 +18,7 @@ export const PA_NAV_ITEMS: PaNavItem[] = [
     filhos: [
       { href: "/contas-receber", label: "Resumo e Clientes", icon: "people" },
       { href: "/contas-receber/boletos", label: "Boletos", icon: "upc-scan" },
+      { href: "/contas-receber/notas", label: "Notas Fiscais", icon: "file-earmark-text" },
     ],
   },
   { href: "/orcamento", label: "Orçamentos", icon: "file-earmark-text" },
