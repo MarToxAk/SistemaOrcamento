@@ -33,6 +33,9 @@ no Athos e avisos NÃO mudam. Backend: apenas a rota nova de XML (e, se aprovado
 - D-11 XML: rota nova `GET /api/cobranca/nfse/:id/xml` (fonte `xmlNacional`, senão `linkNfse`); sem XML salvo → 404 com mensagem e a tela mostra "XML indisponível". Não inventar XML.
 - D-12 Lote: botão "Baixar PDF e XML" por nota e seleção de várias notas para ZIP.
 
+### Ampliação aprovada pelo usuário (2026-11-13, após plan-check)
+- D-13 Plano 47-03 pode criar rotas backend SOMENTE LEITURA: `GET boleto/:id/detalhe` (consulta a EFI para linha digitável/PIX, com cache em memória de 60 s), `GET cobranca/notas` e `AthosService.buscarNfeResumoPorTitulos` (SELECT compatível com PG 9.0.5, validado no clone `athos-teste`). Campo da EFI (`banking_billet.barcode`/`pix.qrcode`) é suposição: conferir com boleto real na verificação final.
+
 ### Claude's Discretion
 Nomes de componentes/arquivos, estilo visual dentro do design system existente (skill bom-custo-design), formato do ZIP, paginação.
 
