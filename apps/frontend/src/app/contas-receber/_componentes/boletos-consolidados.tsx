@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import BoletoDetalhe from "./boleto-detalhe";
 
 function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -180,6 +181,7 @@ export default function BoletosConsolidados() {
   const [boletosLoading, setBoletosLoading] = useState(true);
   const [boletosErro, setBoletosErro] = useState("");
   const [acaoEmAndamento, setAcaoEmAndamento] = useState<string | null>(null);
+  const [expandidoId, setExpandidoId] = useState<number | null>(null);
 
   async function fetchBoletosDashboard() {
     setBoletosLoading(true);
@@ -322,6 +324,7 @@ export default function BoletosConsolidados() {
           <table className="pa-table">
             <thead>
               <tr>
+                <th aria-label="Detalhes" />
                 <th>Cliente</th>
                 <th>Valor</th>
                 <th>Vencimento</th>
@@ -346,8 +349,21 @@ export default function BoletosConsolidados() {
                 const vencimentoSuffix = getVencimentoSuffix(boleto.diasParaVencer);
                 const situacaoPill = getSituacaoVencimentoPill(boleto);
                 const ultimoAviso = descreverUltimoAviso(boleto.ultimoAviso);
+                const expandido = expandidoId === boleto.id;
                 return (
-                  <tr key={boleto.id}>
+                  <Fragment key={boleto.id}>
+                  <tr>
+                    <td className="pa-td-chevron">
+                      <button
+                        type="button"
+                        className="pa-icon-btn"
+                        aria-expanded={expandido}
+                        aria-label={`Mostrar detalhes do boleto #${boleto.id}`}
+                        onClick={() => setExpandidoId(expandido ? null : boleto.id)}
+                      >
+                        <i className={`bi ${expandido ? "bi-chevron-up" : "bi-chevron-down"}`} />
+                      </button>
+                    </td>
                     <td className="pa-td-cliente">
                       <span className="pa-id-badge">#{boleto.idclienteAthos}</span>
                       <span className="text-truncate" title={boleto.nomeCliente}>
@@ -429,6 +445,19 @@ export default function BoletosConsolidados() {
                       </div>
                     </td>
                   </tr>
+                  {expandido && (
+                    <tr className="pa-row-detalhe">
+                      <td colSpan={8}>
+                        <BoletoDetalhe
+                          key={`${boleto.id}:${boleto.status}:${boleto.athosBaixaStatus ?? ""}`}
+                          cobrancaId={boleto.id}
+                          status={boleto.status}
+                          ultimoAviso={ultimoAviso}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
