@@ -7,6 +7,8 @@ import { CobrancaAvisoVencimentoJob } from "./cobranca-aviso-vencimento.job";
 import { CobrancaAvisoVencimentoService } from "./cobranca-aviso-vencimento.service";
 import { CobrancaBaixaAthosRetryJob } from "./cobranca-baixa-athos-retry.job";
 import { CobrancaBaixaAthosService } from "./cobranca-baixa-athos.service";
+import { CobrancaNotasController } from "./cobranca-notas.controller";
+import { CobrancaNotasService } from "./cobranca-notas.service";
 import { CobrancaReconciliationJob } from "./cobranca-reconciliation.job";
 import { CobrancaController } from "./cobranca.controller";
 import { CobrancaService } from "./cobranca.service";
@@ -14,9 +16,10 @@ import { EmailEnvioService } from "./email-envio.service";
 
 @Module({
   imports: [EfiModule, AthosModule, NfseModule],
-  controllers: [CobrancaController],
+  controllers: [CobrancaController, CobrancaNotasController],
   providers: [
     CobrancaService,
+    CobrancaNotasService,
     EmailEnvioService,
     CobrancaReconciliationJob,
     CobrancaBaixaAthosService,

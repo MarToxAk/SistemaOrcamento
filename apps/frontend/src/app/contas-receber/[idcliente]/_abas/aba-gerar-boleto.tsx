@@ -1,0 +1,1235 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { safeHttpUrl } from "@/lib/safe-url";
+import { formatBRL, formatDate } from "../../_shared/formatadores";
+import { badgeClassName, type DadosCliente, type TituloReceber } from "./compartilhado";
+import { EstilosModal } from "./estilos-modal";
+
+interface AbaGerarBoletoProps {
+  idcliente: string;
+  dadosCliente: DadosCliente | null;
+  titulos: TituloReceber[];
+  loadingTitulos: boolean;
+  erroTitulos: string;
+  onRecarregar: (mostrarCarregando?: boolean) => void;
+}
+
+/** Selecao de titulos livres, geracao de boleto e anexo/emissao de NFS-e (modais incluidos). */
+export function AbaGerarBoleto({
+  idcliente,
+  dadosCliente,
+  titulos,
+  loadingTitulos,
+  erroTitulos,
+  onRecarregar,
+}: AbaGerarBoletoProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Modal boleto states
+  const [boletoModalState, setBoletoModalState] = useState<
+    "idle" | "confirm" | "loading" | "success" | "error"
+  >("idle");
+  const [expireAt, setExpireAt] = useState("");
+  const [expireAtReadonly, setExpireAtReadonly] = useState(false);
+  const [observacaoBoleto, setObservacaoBoleto] = useState("");
+  const [erroDatasModal, setErroDatasModal] = useState("");
+  const [boletoResult, setBoletoResult] = useState<{
+    cobrancaId: number;
+    chargeId: number;
+    linkBoleto: string;
+    barcodeLinhaDigitavel: string;
+    valor: number;
+    expireAt: string;
+    nomeArquivo: string;
+  } | null>(null);
+  const [boletoErro, setBoletoErro] = useState("");
+  const [boletoErroDetalhe, setBoletoErroDetalhe] = useState("");
+  const [copiado, setCopiado] = useState(false);
+  const [boletoPreview, setBoletoPreview] = useState<{
+    nomeCliente: string; total: number;
+    itens: Array<{ nome: string; valor: number; quantidade?: number }>;
+  } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
+  // Modal NFS-e (anexo manual — emissão SOAP foi descontinuada pela prefeitura)
+  const [nfseModalState, setNfseModalState] = useState<"idle" | "confirm" | "loading" | "success" | "error">("idle");
+  const [nfseValor, setNfseValor] = useState("");
+  const [nfseAvisoFisico, setNfseAvisoFisico] = useState(false);
+  const [nfseFile, setNfseFile] = useState<File | null>(null);
+  const [nfseModoEmissao, setNfseModoEmissao] = useState<"manual" | "automatico">("manual");
+  const [nfseCodigoServico, setNfseCodigoServico] = useState("130501");
+  const [nfseDocumentoTomador, setNfseDocumentoTomador] = useState("");
+  const [nfseNomeTomador, setNfseNomeTomador] = useState("");
+  const [nfseIncluirIbsCbs, setNfseIncluirIbsCbs] = useState(false);
+  const [nfseEnderecoTomador, setNfseEnderecoTomador] = useState<string | null>(null);
+  const [nfseDescricaoServico, setNfseDescricaoServico] = useState("");
+  const [nfseItensServico, setNfseItensServico] = useState<Array<{ nome: string; quantidade: number; valor: number }>>([]);
+  const [nfseResult, setNfseResult] = useState<{
+    nfseEmitidaId: number;
+    numeroNfse: string;
+    valor: number;
+    linkNfse?: string | null;
+  } | null>(null);
+  const [nfseErro, setNfseErro] = useState("");
+  const [nfseErroDetalhe, setNfseErroDetalhe] = useState("");
+  const [nfseTitulosElegiveis, setNfseTitulosElegiveis] = useState<number[]>([]);
+
+  const checkboxRef = useRef<HTMLInputElement>(null);
+
+  const totalSelecionado = titulos
+    .filter((t) => selectedIds.has(t.idcontareceber))
+    .reduce((acc, t) => acc + t.valor, 0);
+
+  // Separar títulos: com boleto (agrupados) vs livres
+  const titulosLivres = titulos.filter((t) => !t.boletoAtivo);
+
+  const allSelected = titulosLivres.length > 0 && titulosLivres.every((t) => selectedIds.has(t.idcontareceber));
+  const someSelected = selectedIds.size > 0 && !titulosLivres.every((t) => selectedIds.has(t.idcontareceber));
+
+  useEffect(() => {
+    if (checkboxRef.current) {
+      checkboxRef.current.indeterminate = someSelected;
+    }
+  }, [someSelected]);
+
+  // ESC key handler for boleto modal
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && boletoModalState !== "loading") {
+        fecharBoletoModal();
+      }
+    }
+    if (boletoModalState !== "idle") {
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [boletoModalState]);
+
+  // ESC key handler for NFS-e modal
+  useEffect(() => {
+    function handleKeyDownNfse(e: KeyboardEvent) {
+      if (e.key === "Escape" && nfseModalState !== "loading") {
+        fecharNfseModal();
+      }
+    }
+    if (nfseModalState !== "idle") {
+      document.addEventListener("keydown", handleKeyDownNfse);
+      return () => document.removeEventListener("keydown", handleKeyDownNfse);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nfseModalState]);
+
+  function handleToggle(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function handleToggleAll() {
+    if (titulosLivres.every((t) => selectedIds.has(t.idcontareceber))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(titulosLivres.map((t) => t.idcontareceber)));
+    }
+  }
+
+  async function abreBoletoModal() {
+    const titulosSelecionados = titulos.filter((t) => selectedIds.has(t.idcontareceber));
+    const datas = new Set(titulosSelecionados.map((t) => t.datavencimento?.slice(0, 10)));
+    if (datas.size === 1) {
+      setExpireAt([...datas][0] ?? "");
+      setExpireAtReadonly(true);
+      setErroDatasModal("");
+    } else {
+      setExpireAt("");
+      setExpireAtReadonly(false);
+      setErroDatasModal(
+        "Os títulos selecionados possuem datas de vencimento diferentes. Informe a data de vencimento manualmente.",
+      );
+    }
+    setBoletoPreview(null);
+    setBoletoModalState("confirm");
+    setLoadingPreview(true);
+    try {
+      const res = await fetch("/api/cobranca/boleto/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idclienteAthos: Number(idcliente),
+          idcontasReceber: titulosSelecionados.map((t) => t.idcontareceber),
+        }),
+      });
+      if (res.ok) setBoletoPreview(await res.json());
+    } catch { /* silently ignore */ }
+    finally { setLoadingPreview(false); }
+  }
+
+  async function confirmarGerarBoleto() {
+    setBoletoModalState("loading");
+    const titulosSelecionados = titulos.filter((t) => selectedIds.has(t.idcontareceber));
+    try {
+      const res = await fetch("/api/cobranca/boleto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idclienteAthos: Number(idcliente),
+          idcontasReceber: titulosSelecionados.map((t) => t.idcontareceber),
+          expireAt,
+          ...(observacaoBoleto.trim() ? { observacao: observacaoBoleto.trim() } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
+      if (!res.ok) {
+        setBoletoErro(
+          (data as { message?: string; error?: string })?.message ??
+            (data as { message?: string; error?: string })?.error ??
+            "Não foi possível gerar o boleto. Verifique a conexão e tente novamente.",
+        );
+        setBoletoErroDetalhe(`HTTP ${res.status}`);
+        setBoletoModalState("error");
+      } else {
+        setBoletoResult(data as typeof boletoResult);
+        setBoletoModalState("success");
+      }
+    } catch (err) {
+      setBoletoErro(
+        "Não foi possível gerar o boleto. Verifique a conexão e tente novamente.",
+      );
+      setBoletoErroDetalhe(err instanceof Error ? err.message : "");
+      setBoletoModalState("error");
+    }
+  }
+
+  function fecharBoletoModal() {
+    setBoletoModalState("idle");
+    setBoletoResult(null);
+    setBoletoErro("");
+    setBoletoErroDetalhe("");
+    setCopiado(false);
+    setBoletoPreview(null);
+    setObservacaoBoleto("");
+  }
+
+  async function abreNfseModal() {
+    const titulosSel = titulos.filter((t) => selectedIds.has(t.idcontareceber));
+    setNfseAvisoFisico(false);
+    setNfseResult(null);
+    setNfseErro("");
+    setNfseErroDetalhe("");
+    setNfseFile(null);
+
+    // Buscar tipo-produto para cada idvenda único em paralelo
+    type ItemServico = { nome: string; quantidade: number; valor: number };
+    type TipoProduto = { temProdutoFisico: boolean; valorServicos: number | null; itensServico: ItemServico[] };
+    const vendasUnicas = [...new Set(titulosSel.map((t) => t.idvenda).filter((v): v is number => v != null))];
+    const tipoPorVenda = new Map<number, TipoProduto>();
+    await Promise.all(
+      vendasUnicas.map(async (idv) => {
+        try {
+          const res = await fetch(`/api/athos/venda/${idv}/tipo-produto`, { cache: "no-store" });
+          if (res.ok) {
+            const d = (await res.json()) as { temProdutoFisico?: boolean; valorServicos?: number | null; itensServico?: ItemServico[] };
+            tipoPorVenda.set(idv, {
+              temProdutoFisico: d.temProdutoFisico ?? false,
+              valorServicos: d.valorServicos ?? null,
+              itensServico: d.itensServico ?? [],
+            });
+          }
+        } catch { /* falha silenciosa */ }
+      }),
+    );
+
+    // Classificar cada título: elegível (serviço) ou excluído (100% físico)
+    let totalServicos = 0;
+    let temFisico = false;
+    const elegiveis: number[] = [];
+    const vendasElegiveis = new Set<number>();
+
+    for (const t of titulosSel) {
+      const tipo = t.idvenda != null ? tipoPorVenda.get(t.idvenda) : undefined;
+      if (tipo?.temProdutoFisico) {
+        temFisico = true;
+        if (!tipo.valorServicos || tipo.valorServicos <= 0) {
+          // 100% físico — exclui da NFS-e
+          continue;
+        }
+        // Misto — inclui com o valor da parcela de serviços
+        elegiveis.push(t.idcontareceber);
+        if (t.idvenda != null && !vendasElegiveis.has(t.idvenda)) {
+          totalServicos += tipo.valorServicos;
+          vendasElegiveis.add(t.idvenda);
+        }
+      } else {
+        // Sem idvenda ou 100% serviço — inclui com valor total do título
+        elegiveis.push(t.idcontareceber);
+        totalServicos += t.valor;
+        if (t.idvenda != null) vendasElegiveis.add(t.idvenda);
+      }
+    }
+
+    // Itens de serviço de todas as vendas elegíveis, para conferência antes de emitir
+    // (mesma ideia do iiBrasil: mostrar a descrição que vai para a nota).
+    const itensServico = [...vendasElegiveis].flatMap((idv) => tipoPorVenda.get(idv)?.itensServico ?? []);
+    setNfseItensServico(itensServico);
+    setNfseDescricaoServico(
+      itensServico.length > 0
+        ? itensServico.map((i) => `${i.quantidade}x ${i.nome}`).join("; ")
+        : "",
+    );
+    setNfseIncluirIbsCbs(false);
+
+    setNfseTitulosElegiveis(elegiveis);
+    setNfseAvisoFisico(temFisico);
+    setNfseValor(elegiveis.length > 0 ? totalServicos.toFixed(2) : "0");
+    setNfseModoEmissao("manual");
+    setNfseNomeTomador(dadosCliente?.nome_cliente ?? "");
+    setNfseDocumentoTomador("");
+    setNfseEnderecoTomador(null);
+    setNfseModalState("confirm");
+
+    // Resolve CPF/CNPJ e endereço do tomador direto do Athos (fonte oficial),
+    // para pre-preencher a emissão automática e evitar digitação divergente.
+    type TomadorApi = {
+      documento?: string | null;
+      nome?: string | null;
+      endereco?: { logradouro: string; numero: string; bairro: string; cep: string; uf: string } | null;
+    };
+    fetch(`/api/cobranca/nfse/tomador/${idcliente}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: TomadorApi | null) => {
+        if (data?.documento) setNfseDocumentoTomador(data.documento);
+        if (data?.nome) setNfseNomeTomador(data.nome);
+        if (data?.endereco) {
+          const e = data.endereco;
+          setNfseEnderecoTomador(`${e.logradouro}, ${e.numero} - ${e.bairro} - ${e.uf}, CEP ${e.cep}`);
+        }
+      })
+      .catch(() => {/* falha silenciosa — usuário preenche manualmente */});
+  }
+
+  // Emissão automática (SOAP) foi descontinuada pela prefeitura — a nota é
+  // emitida manualmente fora do sistema e o XML assinado é anexado aqui.
+  async function confirmarAnexarNfse() {
+    if (!nfseFile) {
+      setNfseErro("Selecione o arquivo XML da NFS-e.");
+      return;
+    }
+    setNfseModalState("loading");
+    try {
+      const formData = new FormData();
+      formData.append("idclienteAthos", String(Number(idcliente)));
+      formData.append("idcontasReceber", JSON.stringify(nfseTitulosElegiveis));
+      formData.append("file", nfseFile);
+      const res = await fetch("/api/cobranca/nfse", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
+      if (!res.ok) {
+        setNfseErro(
+          (data as { message?: string; error?: string })?.message ??
+            (data as { message?: string; error?: string })?.error ??
+            "Não foi possível anexar a NFS-e. Verifique o arquivo e tente novamente.",
+        );
+        setNfseErroDetalhe(`HTTP ${res.status}`);
+        setNfseModalState("error");
+      } else {
+        setNfseResult(data as typeof nfseResult);
+        setNfseModalState("success");
+      }
+    } catch (err) {
+      setNfseErro("Falha na conexão.");
+      setNfseErroDetalhe(err instanceof Error ? err.message : "");
+      setNfseModalState("error");
+    }
+  }
+
+  async function confirmarEmitirNfseAutomatica() {
+    const documento = nfseDocumentoTomador.replace(/\D/g, "");
+    if (documento.length !== 11 && documento.length !== 14) {
+      setNfseErro("Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido do tomador.");
+      return;
+    }
+    if (!nfseNomeTomador.trim()) {
+      setNfseErro("Informe o nome do tomador.");
+      return;
+    }
+    setNfseModalState("loading");
+    try {
+      const res = await fetch("/api/cobranca/nfse/emitir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idclienteAthos: Number(idcliente),
+          idcontasReceber: nfseTitulosElegiveis,
+          codigoServico: nfseCodigoServico,
+          nomeTomador: nfseNomeTomador,
+          valorServico: Number(nfseValor),
+          descricaoServico: nfseDescricaoServico || undefined,
+          incluirIbsCbs: nfseIncluirIbsCbs,
+          ...(documento.length === 14 ? { cnpjTomador: documento } : { cpfTomador: documento }),
+        }),
+      });
+      const data = await res.json().catch(() => ({ error: "Resposta inválida." }));
+      if (!res.ok) {
+        setNfseErro(
+          (data as { message?: string; error?: string })?.message ??
+            (data as { message?: string; error?: string })?.error ??
+            "Não foi possível emitir a NFS-e automaticamente.",
+        );
+        setNfseErroDetalhe(`HTTP ${res.status}`);
+        setNfseModalState("error");
+      } else {
+        setNfseResult(data as typeof nfseResult);
+        setNfseModalState("success");
+      }
+    } catch (err) {
+      setNfseErro("Falha na conexão.");
+      setNfseErroDetalhe(err instanceof Error ? err.message : "");
+      setNfseModalState("error");
+    }
+  }
+
+  function fecharNfseModal(withRefetch?: boolean) {
+    setNfseModalState("idle");
+    setNfseResult(null);
+    setNfseErro("");
+    setNfseErroDetalhe("");
+    setNfseFile(null);
+    setNfseModoEmissao("manual");
+    if (withRefetch) {
+      onRecarregar(true);
+    }
+  }
+
+  // Derived variables for the modal
+  const titulosSelecionadosParaBoleto = titulos.filter((t) => selectedIds.has(t.idcontareceber));
+  // Títulos de valor negativo (desconto/abatimento) não exigem NF própria.
+  const selecionadosSemNf = titulosSelecionadosParaBoleto.filter((t) => !t.tipoNf && t.valor >= 0);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const expireAtInvalido = !expireAt || expireAt < hoje;
+
+
+  return (
+    <>
+      <div className="pa-card">
+        <div className="pa-card-header">
+          <strong><i className="bi bi-upc-scan me-2 text-primary" />Títulos Disponíveis</strong>
+        </div>
+        <div className="pa-card-body">
+          {loadingTitulos ? (
+            <div className="text-center py-3">
+              <div className="spinner-border spinner-border-sm text-primary" role="status">
+                <span className="visually-hidden">Carregando...</span>
+              </div>
+            </div>
+          ) : erroTitulos ? (
+            <div className="alert alert-danger">{erroTitulos}</div>
+          ) : titulos.length === 0 ? (
+            <div className="alert alert-info">
+              <i className="bi bi-info-circle me-2" />Nenhum título encontrado para este cliente.
+            </div>
+          ) : (
+            <div>
+              {titulos.length > titulosLivres.length && (
+                <p className="small text-muted mb-3">
+                  <i className="bi bi-info-circle me-1" />
+                  {titulos.length - titulosLivres.length} título(s) já têm boleto emitido — veja a aba Boletos.
+                </p>
+              )}
+              {titulosLivres.length === 0 ? (
+                <div className="alert alert-info mb-0">
+                  <i className="bi bi-info-circle me-2" />Todos os títulos em aberto já têm boleto emitido.
+                </div>
+              ) : (
+              <table className="pa-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: "40px" }}>
+                      <input type="checkbox" className="form-check-input"
+                        checked={allSelected} ref={checkboxRef} onChange={handleToggleAll} />
+                    </th>
+                    <th>Título</th>
+                    <th>Vencimento</th>
+                    <th>Valor</th>
+                    <th>NF</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {titulosLivres.map((titulo) => {
+                    const vencido = new Date(titulo.datavencimento) < new Date();
+                    return (
+                      <tr key={titulo.idcontareceber}>
+                        <td>
+                          <input type="checkbox" className="form-check-input"
+                            checked={selectedIds.has(titulo.idcontareceber)}
+                            onChange={() => handleToggle(titulo.idcontareceber)} />
+                        </td>
+                        <td className="small">{titulo.numerotitulo ?? "—"}</td>
+                        <td className={`small${vencido ? " text-danger fw-semibold" : ""}`}>
+                          {formatDate(titulo.datavencimento)}
+                        </td>
+                        <td className="small fw-semibold">{formatBRL(titulo.valor)}</td>
+                        <td>
+                          {titulo.tipoNf ? (
+                            <span className="d-inline-flex align-items-center gap-1">
+                              <span className={`badge ${badgeClassName(titulo.tipoNf)}`}
+                                title={titulo.numeroNf ? `Nº ${titulo.numeroNf}` : titulo.tipoNf}>
+                                {titulo.tipoNf}{titulo.numeroNf ? ` #${titulo.numeroNf}` : ""}
+                              </span>
+                              {titulo.nfseAtivo?.nfseEmitidaId && (
+                                <a
+                                  href={`/api/cobranca/nfse/${titulo.nfseAtivo.nfseEmitidaId}/pdf`}
+                                  className="btn btn-link btn-sm p-0 text-success"
+                                  title="Baixar PDF da NFS-e"
+                                  style={{ lineHeight: 1 }}
+                                >
+                                  <i className="bi bi-file-earmark-arrow-down" />
+                                </a>
+                              )}
+                              {titulo.nfseAtivo && (
+                                <button
+                                  type="button"
+                                  className="btn btn-link btn-sm p-0 text-danger"
+                                  title="Remover NFS-e do banco (permite novo anexo)"
+                                  style={{ lineHeight: 1 }}
+                                  onClick={async () => {
+                                    if (!confirm(`Remover registro da NFS-e #${titulo.nfseAtivo!.numeroNfse ?? titulo.nfseAtivo!.nfseEmitidaId} do banco?\n\nIsso NÃO cancela a nota na prefeitura, apenas libera o título para novo anexo.`)) return;
+                                    try {
+                                      const res = await fetch(`/api/cobranca/nfse/${titulo.nfseAtivo!.nfseEmitidaId}`, { method: "DELETE" });
+                                      if (!res.ok) {
+                                        const d = await res.json().catch(() => ({}));
+                                        alert((d as { error?: string }).error ?? "Erro ao remover NFS-e.");
+                                      } else {
+                                        onRecarregar();
+                                      }
+                                    } catch {
+                                      alert("Falha na conexão.");
+                                    }
+                                  }}
+                                >
+                                  <i className="bi bi-x-circle" />
+                                </button>
+                              )}
+                            </span>
+                          ) : <span className="badge bg-secondary opacity-50">Sem NF</span>}
+                        </td>
+                        <td>
+                          {vencido
+                            ? <span className="badge bg-danger">VEN</span>
+                            : <span className="badge bg-info text-dark">AVC</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="table-secondary">
+                    <td colSpan={6} className="small text-muted">
+                      {selectedIds.size} título(s) selecionado(s) — Total: <strong>{formatBRL(totalSelecionado)}</strong>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+  {/* Barra de ações — visível SOMENTE quando há seleção */}
+  {selectedIds.size > 0 && (
+  <div className="pa-actionbar d-flex align-items-center gap-3 flex-wrap">
+    <span className="text-muted small">
+      <strong>{selectedIds.size}</strong> título(s) selecionado(s) —{" "}
+      <strong>{formatBRL(totalSelecionado)}</strong>
+    </span>
+    <div className="ms-auto d-flex align-items-center gap-2">
+      {selecionadosSemNf.length > 0 && (
+        <small className="text-danger">
+          <i className="bi bi-exclamation-triangle me-1" />
+          {selecionadosSemNf.length} título(s) sem NF — boleto bloqueado
+        </small>
+      )}
+      <button
+        type="button"
+        className="pa-btn-accent"
+        onClick={abreBoletoModal}
+        disabled={selecionadosSemNf.length > 0}
+        title={selecionadosSemNf.length > 0 ? "Selecione apenas títulos com NF emitida para gerar boleto" : undefined}
+      >
+        <i className="bi bi-receipt me-1" />Gerar Boleto
+      </button>
+      <button
+        type="button"
+        className="pa-btn-accent"
+        onClick={abreNfseModal}
+      >
+        <i className="bi bi-file-earmark-arrow-up me-1" />Anexar NFS-e
+      </button>
+    </div>
+  </div>
+)}
+
+      {/* Modal boleto — 4 estados */}
+      {boletoModalState !== "idle" && (
+        <div
+          className="boleto-modal-backdrop"
+          onClick={boletoModalState !== "loading" ? fecharBoletoModal : undefined}
+        >
+          <div
+            className="boleto-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Gerar Boleto Bancário"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* HEADER — visível em todos os estados */}
+            <div className="boleto-modal-header">
+              <h5 className="mb-0 fw-semibold" style={{ fontSize: "var(--fs-lg, 1.35rem)" }}>
+                <i className="bi bi-receipt me-2" />Gerar Boleto
+              </h5>
+              {boletoModalState !== "loading" && (
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={fecharBoletoModal}
+                  aria-label="Fechar"
+                />
+              )}
+            </div>
+
+            {/* ESTADO 1 — CONFIRMAÇÃO */}
+            {boletoModalState === "confirm" && (
+              <>
+                <div className="boleto-modal-body">
+                  <small className="text-muted d-block mb-3">
+                    {titulosSelecionadosParaBoleto.length} título(s) selecionado(s) —{" "}
+                    {formatBRL(totalSelecionado)}
+                  </small>
+
+                  {/* Resumo dos títulos */}
+                  <div className="card border-0 shadow-sm mb-3">
+                    <div className="card-body p-3">
+                      <div className="mb-2 text-muted small">Valor Total</div>
+                      <div
+                        className="fw-semibold mb-3"
+                        style={{ fontSize: "var(--fs-xl, 1.7rem)" }}
+                      >
+                        {formatBRL(totalSelecionado)}
+                      </div>
+                      <ul className="list-unstyled mb-0">
+                        {titulosSelecionadosParaBoleto.map((t) => (
+                          <li
+                            key={t.idcontareceber}
+                            className="d-flex justify-content-between small border-bottom pb-1 mb-1"
+                          >
+                            <span className="text-muted">
+                              {t.numerotitulo ?? `#${t.idcontareceber}`}
+                            </span>
+                            <span>{formatBRL(t.valor)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Preview itens EFI */}
+                  <div className="mb-3">
+                    <div className="text-muted small fw-semibold mb-1">Itens da cobrança (EFI)</div>
+                    {loadingPreview ? (
+                      <div className="text-center py-2">
+                        <div className="spinner-border spinner-border-sm text-secondary" role="status" />
+                      </div>
+                    ) : boletoPreview?.itens?.length ? (
+                      <ul className="list-group list-group-flush border rounded">
+                        {boletoPreview.itens.map((item, i) => (
+                          <li key={i} className="list-group-item d-flex justify-content-between px-3 py-2 small">
+                            <span className="text-muted">
+                              {item.nome}
+                              {item.quantidade && item.quantidade > 1 ? (
+                                <span className="text-secondary ms-1">×{item.quantidade}</span>
+                              ) : null}
+                            </span>
+                            <span className="fw-semibold">{formatBRL(item.valor)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+
+                  {/* Alert datas divergentes */}
+                  {erroDatasModal && (
+                    <div className="alert alert-danger d-flex gap-2 mb-3" role="alert">
+                      <i className="bi bi-exclamation-triangle-fill flex-shrink-0" />
+                      <span className="small">{erroDatasModal}</span>
+                    </div>
+                  )}
+
+                  {/* Campo de vencimento */}
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold small">
+                      Data de Vencimento do Boleto
+                    </label>
+                    <input
+                      type="date"
+                      className={`form-control${expireAt && expireAt < hoje ? " is-invalid" : ""}`}
+                      value={expireAt}
+                      min={hoje}
+                      readOnly={expireAtReadonly}
+                      onChange={(e) => !expireAtReadonly && setExpireAt(e.target.value)}
+                    />
+                    {expireAtReadonly && (
+                      <div className="mt-1">
+                        <span className="badge bg-info text-dark small">
+                          Preenchido automaticamente
+                        </span>
+                        <small className="text-muted ms-2">
+                          Preenchida automaticamente com a data dos títulos.
+                        </small>
+                      </div>
+                    )}
+                    {expireAt && expireAt < hoje && (
+                      <div className="invalid-feedback">
+                        A data de vencimento não pode ser no passado.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Campo de observação */}
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold small">
+                      Observação <span className="text-muted fw-normal">(opcional)</span>
+                    </label>
+                    <textarea
+                      className="form-control"
+                      rows={2}
+                      maxLength={255}
+                      placeholder="Ex: Ref. pedido 1234 — aparece no boleto"
+                      value={observacaoBoleto}
+                      onChange={(e) => setObservacaoBoleto(e.target.value)}
+                    />
+                    {observacaoBoleto.length > 0 && (
+                      <div className="text-end mt-1">
+                        <small className="text-muted">{observacaoBoleto.length}/255</small>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="boleto-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={fecharBoletoModal}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={confirmarGerarBoleto}
+                    disabled={expireAtInvalido}
+                  >
+                    <i className="bi bi-check-lg me-1" />Confirmar Geração
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ESTADO 2 — LOADING */}
+            {boletoModalState === "loading" && (
+              <div className="boleto-modal-body d-flex flex-column align-items-center justify-content-center py-5">
+                <div className="spinner-border text-primary" role="status">
+                  <span className="visually-hidden">Gerando boleto...</span>
+                </div>
+                <p className="mt-3 text-muted mb-0">Gerando boleto junto à EFI Bank…</p>
+              </div>
+            )}
+
+            {/* ESTADO 3 — SUCESSO */}
+            {boletoModalState === "success" && boletoResult && (
+              <>
+                <div className="boleto-modal-body" role="status" aria-live="polite">
+                  <div className="text-center mb-4">
+                    <i className="bi bi-check-circle-fill fs-1 text-success" />
+                    <h5 className="fw-semibold text-success mt-2">Boleto Gerado com Sucesso</h5>
+                  </div>
+                  <div className="card border-0 bg-light mb-3">
+                    <div className="card-body p-3">
+                      <div className="d-flex justify-content-between mb-2">
+                        <span className="text-muted small">Valor</span>
+                        <span
+                          className="fw-semibold"
+                          style={{ fontSize: "var(--fs-xl, 1.7rem)" }}
+                        >
+                          {formatBRL(boletoResult.valor)}
+                        </span>
+                      </div>
+                      <div className="d-flex justify-content-between">
+                        <span className="text-muted small">Vencimento</span>
+                        <span className="small">{formatDate(boletoResult.expireAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="form-label small fw-semibold">Linha Digitável</label>
+                  <div className="d-flex gap-2 align-items-start mb-3">
+                    <input
+                      type="text"
+                      className="form-control boleto-linha-digitavel"
+                      value={boletoResult.barcodeLinhaDigitavel}
+                      readOnly
+                      aria-label="Linha digitável do boleto"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm flex-shrink-0"
+                      style={{ minWidth: "44px", minHeight: "44px" }}
+                      onClick={() => {
+                        void navigator.clipboard.writeText(boletoResult!.barcodeLinhaDigitavel);
+                        setCopiado(true);
+                        setTimeout(() => setCopiado(false), 2000);
+                      }}
+                    >
+                      {copiado ? (
+                        "Copiado! ✔"
+                      ) : (
+                        <>
+                          <i className="bi bi-clipboard" /> Copiar
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div className="boleto-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={fecharBoletoModal}
+                  >
+                    Fechar
+                  </button>
+                  <a
+                    href={`/api/cobranca/boleto/${boletoResult.cobrancaId}/pdf`}
+                    download={boletoResult.nomeArquivo}
+                    className="btn btn-success"
+                  >
+                    <i className="bi bi-download me-1" />Baixar Boleto PDF
+                  </a>
+                  <a
+                    href={boletoResult.linkBoleto}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-outline-secondary btn-sm"
+                  >
+                    <i className="bi bi-box-arrow-up-right me-1" />Ver no EFI
+                  </a>
+                  {boletoResult.nomeArquivo && (
+                    <small className="text-muted d-block mt-1 text-center">
+                      {boletoResult.nomeArquivo}
+                    </small>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ESTADO 4 — ERRO */}
+            {boletoModalState === "error" && (
+              <>
+                <div className="boleto-modal-body" role="alert" aria-live="assertive">
+                  <div className="alert alert-danger d-flex gap-2">
+                    <i className="bi bi-exclamation-triangle-fill flex-shrink-0" />
+                    <div>
+                      <div>
+                        {boletoErro ||
+                          "Não foi possível gerar o boleto. Verifique a conexão e tente novamente."}
+                      </div>
+                      {boletoErroDetalhe && (
+                        <small className="text-muted d-block mt-1">{boletoErroDetalhe}</small>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="boleto-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={fecharBoletoModal}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-warning"
+                    onClick={() => {
+                      setBoletoErro("");
+                      setBoletoErroDetalhe("");
+                      setBoletoModalState("confirm");
+                    }}
+                  >
+                    Tentar Novamente
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal NFS-e — 4 estados */}
+      {nfseModalState !== "idle" && (
+        <div
+          className="nfse-modal-backdrop"
+          onClick={nfseModalState !== "loading" ? () => fecharNfseModal() : undefined}
+        >
+          <div
+            className="nfse-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Emitir Nota Fiscal de Serviço"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* HEADER — visível em todos os estados */}
+            <div className="nfse-modal-header">
+              <div>
+                <h5 className="mb-0 fw-semibold nfse-modal-title" style={{ fontSize: "var(--fs-lg, 1.35rem)" }}>
+                  <i className="bi bi-file-earmark-arrow-up me-1" />Anexar NFS-e
+                </h5>
+                <small className="text-muted">
+                  {titulos.filter((t) => selectedIds.has(t.idcontareceber)).length} título(s) selecionado(s)
+                </small>
+              </div>
+              {nfseModalState !== "loading" && (
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => fecharNfseModal()}
+                  aria-label="Fechar"
+                />
+              )}
+            </div>
+
+            {/* ESTADO 1 — CONFIRMAÇÃO */}
+            {nfseModalState === "confirm" && (() => {
+              const titulosSel = titulos.filter((t) => selectedIds.has(t.idcontareceber));
+              return (
+                <>
+                  <div className="nfse-modal-body">
+                    {/* Bloco de resumo */}
+                    <div className="card border-0 shadow-sm mb-3">
+                      <div className="card-body p-3">
+                        <div className="mb-2 text-muted small">Valor Total dos Títulos</div>
+                        <div className="fw-semibold mb-3" style={{ fontSize: "var(--fs-xl, 1.7rem)" }}>
+                          {formatBRL(titulosSel.reduce((acc, t) => acc + t.valor, 0))}
+                        </div>
+                        <ul className="list-unstyled mb-0">
+                          {titulosSel.map((t) => (
+                            <li
+                              key={t.idcontareceber}
+                              className="d-flex justify-content-between small border-bottom pb-1 mb-1"
+                            >
+                              <span className="text-muted">{(t.numerotitulo && t.numerotitulo !== "?") ? t.numerotitulo : `#${t.idcontareceber}`}</span>
+                              <span>{formatBRL(t.valor)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Valor esperado (referência — o valor real vem do XML anexado) */}
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold small" htmlFor="nfse-valor">
+                        Valor esperado dos serviços (R$)
+                      </label>
+                      <input
+                        id="nfse-valor"
+                        type="text"
+                        className="form-control-plaintext fw-semibold"
+                        value={nfseValor ? formatBRL(parseFloat(nfseValor)) : ""}
+                        readOnly
+                      />
+                      {nfseAvisoFisico && nfseValor === "0" && (
+                        <div className="text-danger small">
+                          Esta venda contém apenas produtos físicos. NFS-e só cobre serviços.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Modo de emissão */}
+                    <div className="btn-group w-100 mb-3" role="group">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${nfseModoEmissao === "manual" ? "btn-primary" : "btn-outline-primary"}`}
+                        onClick={() => setNfseModoEmissao("manual")}
+                      >
+                        Anexar XML manual
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${nfseModoEmissao === "automatico" ? "btn-warning" : "btn-outline-warning"}`}
+                        onClick={() => setNfseModoEmissao("automatico")}
+                      >
+                        <i className="bi bi-lightning-charge me-1" />Emitir automaticamente
+                      </button>
+                    </div>
+
+                    {nfseItensServico.length > 0 && (
+                      <div className="mb-3">
+                        <div className="text-muted small fw-semibold mb-1">Itens de serviço (compõem a descrição da nota)</div>
+                        <ul className="list-unstyled mb-0 small border rounded p-2">
+                          {nfseItensServico.map((item, idx) => (
+                            <li key={idx} className="d-flex justify-content-between border-bottom py-1">
+                              <span>{item.quantidade}x {item.nome}</span>
+                              <span className="text-muted">{formatBRL(item.valor)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {nfseModoEmissao === "manual" ? (
+                      <div className="mb-3">
+                        <label className="form-label fw-semibold small" htmlFor="nfse-xml">
+                          Arquivo XML da NFS-e (padrão nacional NBS)
+                        </label>
+                        <input
+                          id="nfse-xml"
+                          type="file"
+                          accept=".xml,application/xml,text/xml"
+                          className="form-control form-control-sm"
+                          onChange={(e) => setNfseFile(e.target.files?.[0] ?? null)}
+                        />
+                        <small className="text-muted d-block mt-1">
+                          Emita a nota fora do sistema e anexe aqui o XML assinado.
+                        </small>
+                      </div>
+                    ) : (
+                      <div className="mb-3">
+                        <div className="mb-2">
+                          <label className="form-label small">Serviço</label>
+                          <select
+                            className="form-select form-select-sm"
+                            value={nfseCodigoServico}
+                            onChange={(e) => setNfseCodigoServico(e.target.value)}
+                          >
+                            <option value="130501">13.05 — Composição gráfica / impressão</option>
+                            <option value="140801">14.08 — Encadernação e acabamento</option>
+                            <option value="240101">24.01 — Confecção de carimbos e sinalização</option>
+                          </select>
+                        </div>
+                        <div className="mb-2">
+                          <label className="form-label small">CPF ou CNPJ do tomador</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            value={nfseDocumentoTomador}
+                            onChange={(e) => setNfseDocumentoTomador(e.target.value)}
+                            placeholder="Somente números"
+                          />
+                        </div>
+                        <div className="mb-2">
+                          <label className="form-label small">Nome do tomador</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            value={nfseNomeTomador}
+                            onChange={(e) => setNfseNomeTomador(e.target.value)}
+                          />
+                        </div>
+                        {nfseEnderecoTomador && (
+                          <div className="mb-2">
+                            <label className="form-label small mb-0">Endereço (vindo do cadastro Athos)</label>
+                            <div className="small text-muted">{nfseEnderecoTomador}</div>
+                          </div>
+                        )}
+                        <div className="mb-2">
+                          <label className="form-label small">Descrição do serviço (vai na nota)</label>
+                          <textarea
+                            className="form-control form-control-sm"
+                            rows={2}
+                            value={nfseDescricaoServico}
+                            onChange={(e) => setNfseDescricaoServico(e.target.value)}
+                          />
+                        </div>
+                        <div className="form-check">
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
+                            id="nfse-ibscbs"
+                            checked={nfseIncluirIbsCbs}
+                            onChange={(e) => setNfseIncluirIbsCbs(e.target.checked)}
+                          />
+                          <label className="form-check-label small" htmlFor="nfse-ibscbs">
+                            Incluir grupo IBS/CBS (reforma tributária)
+                          </label>
+                          <small className="text-muted d-block">
+                            Ilhabela ainda não exige — o Sistema Nacional calcula o valor a partir da classificação
+                            declarada (não é uma alíquota escolhida aqui).
+                          </small>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dados do tomador */}
+                    {dadosCliente && nfseModoEmissao === "manual" && (
+                      <div className="mb-3">
+                        <div className="text-muted small fw-semibold mb-1">Tomador</div>
+                        <div className="text-muted small">{dadosCliente.nome_cliente}</div>
+                      </div>
+                    )}
+
+                    {/* Aviso produto físico */}
+                    {nfseAvisoFisico && (
+                      <div className="alert alert-warning d-flex gap-2 mb-3" role="note">
+                        <i className="bi bi-exclamation-triangle-fill flex-shrink-0" />
+                        <span className="small">
+                          Este título contém produtos físicos que precisam de NF-e de produto.
+                          A NFS-e cobrirá apenas os itens de serviço.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="nfse-modal-footer">
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      onClick={() => fecharNfseModal()}
+                    >
+                      Cancelar
+                    </button>
+                    {nfseModoEmissao === "manual" ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={confirmarAnexarNfse}
+                        disabled={!nfseFile}
+                      >
+                        <i className="bi bi-check-lg me-1" />Confirmar Anexo
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-warning"
+                        onClick={confirmarEmitirNfseAutomatica}
+                        disabled={!nfseNomeTomador.trim() || !nfseDocumentoTomador.trim()}
+                      >
+                        <i className="bi bi-lightning-charge me-1" />Emitir Automaticamente
+                      </button>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* ESTADO 2 — LOADING */}
+            {nfseModalState === "loading" && (
+              <div className="nfse-modal-body d-flex flex-column align-items-center justify-content-center py-5">
+                <div className="spinner-border text-primary" role="status">
+                  <span className="visually-hidden">Enviando XML...</span>
+                </div>
+                <p className="mt-3 text-muted mb-0">Enviando XML...</p>
+              </div>
+            )}
+
+            {/* ESTADO 3 — SUCESSO */}
+            {nfseModalState === "success" && nfseResult && (
+              <>
+                <div className="nfse-modal-body" role="status" aria-live="polite">
+                  <div className="text-center mb-4">
+                    <i className="bi bi-check-circle-fill fs-1 text-success" />
+                    <h5 className="fw-semibold text-success mt-2">NFS-e Anexada com Sucesso</h5>
+                  </div>
+                  <div className="card border-0 bg-light mb-3">
+                    <div className="card-body p-3">
+                      <div className="d-flex justify-content-between mb-2">
+                        <span className="text-muted small">Número da NFS-e</span>
+                        <span className="fw-semibold text-success" style={{ fontSize: "var(--fs-lg, 1.35rem)" }}>
+                          <i className="bi bi-hash" />{nfseResult.numeroNfse}
+                        </span>
+                      </div>
+                      <div className="d-flex justify-content-between">
+                        <span className="text-muted small">Valor</span>
+                        <span className="fw-semibold" style={{ fontSize: "var(--fs-xl, 1.7rem)" }}>
+                          {formatBRL(nfseResult.valor)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {nfseResult.linkNfse && (
+                    <div className="text-center">
+                      <a
+                        href={safeHttpUrl(nfseResult.linkNfse) ?? undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-outline-primary btn-sm"
+                      >
+                        <i className="bi bi-download me-1" />Baixar XML da NFS-e
+                      </a>
+                    </div>
+                  )}
+                </div>
+                <div className="nfse-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    onClick={() => fecharNfseModal(true)}
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ESTADO 4 — ERRO */}
+            {nfseModalState === "error" && (
+              <>
+                <div className="nfse-modal-body" role="alert" aria-live="assertive">
+                  <div className="alert alert-danger d-flex gap-2">
+                    <i className="bi bi-exclamation-triangle-fill flex-shrink-0" />
+                    <div>
+                      <div>
+                        {nfseErro ||
+                          "Não foi possível anexar a NFS-e. Verifique o arquivo e tente novamente."}
+                      </div>
+                      {nfseErroDetalhe && (
+                        <small className="text-muted d-block mt-1">{nfseErroDetalhe}</small>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="nfse-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => fecharNfseModal()}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-warning"
+                    onClick={() => {
+                      setNfseErro("");
+                      setNfseErroDetalhe("");
+                      setNfseModalState("confirm");
+                    }}
+                  >
+                    Tentar Novamente
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      <EstilosModal />
+    </>
+  );
+}
+
+export default AbaGerarBoleto;

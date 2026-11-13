@@ -7,14 +7,29 @@ export interface PaNavItem {
   href: string;
   label: string;
   icon: string;
+  filhos?: PaNavItem[];
 }
 
 export const PA_NAV_ITEMS: PaNavItem[] = [
-  { href: "/contas-receber", label: "Contas a Receber", icon: "cash-coin" },
+  {
+    href: "/contas-receber",
+    label: "Contas a Receber",
+    icon: "cash-coin",
+    filhos: [
+      { href: "/contas-receber", label: "Resumo e Clientes", icon: "people" },
+      { href: "/contas-receber/boletos", label: "Boletos", icon: "upc-scan" },
+      { href: "/contas-receber/notas", label: "Notas Fiscais", icon: "file-earmark-text" },
+    ],
+  },
   { href: "/orcamento", label: "Orçamentos", icon: "file-earmark-text" },
   { href: "/status", label: "Produção", icon: "kanban" },
   { href: "/configuracoes/templates", label: "Configurações", icon: "gear" },
 ];
+
+/** Item pai ativo quando a rota atual e igual ao href ou esta abaixo dele (href + "/..."). */
+export function navItemAtivo(href: string, activeHref: string): boolean {
+  return activeHref === href || activeHref.startsWith(`${href}/`);
+}
 
 interface AdminShellProps {
   activeHref: string;
@@ -45,17 +60,36 @@ export default function AdminShell({ activeHref, title, subtitle, actions, child
         <div className="pa-nav-label">Navegação</div>
         <nav className="pa-nav">
           {PA_NAV_ITEMS.map((item) => {
-            const ativo = item.href === activeHref;
+            const ativo = navItemAtivo(item.href, activeHref);
             return (
-              <a
-                key={item.href}
-                href={item.href}
-                className={`pa-nav-item${ativo ? " pa-nav-item-active" : ""}`}
-                aria-current={ativo ? "page" : undefined}
-              >
-                <i className={`bi bi-${item.icon}`} />
-                <span>{item.label}</span>
-              </a>
+              <div key={item.href} className="pa-nav-grupo">
+                <a
+                  href={item.href}
+                  className={`pa-nav-item${ativo ? " pa-nav-item-active" : ""}`}
+                  aria-current={item.href === activeHref ? "page" : undefined}
+                >
+                  <i className={`bi bi-${item.icon}`} />
+                  <span>{item.label}</span>
+                </a>
+                {item.filhos && (
+                  <div className="pa-subnav">
+                    {item.filhos.map((filho) => {
+                      const filhoAtivo = filho.href === activeHref;
+                      return (
+                        <a
+                          key={filho.href}
+                          href={filho.href}
+                          className={`pa-subnav-item${filhoAtivo ? " pa-subnav-item-active" : ""}`}
+                          aria-current={filhoAtivo ? "page" : undefined}
+                        >
+                          <i className={`bi bi-${filho.icon}`} />
+                          <span>{filho.label}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -177,6 +211,31 @@ export default function AdminShell({ activeHref, title, subtitle, actions, child
         }
         .pa-nav-item-active {
           background: var(--pa-sidebar-bg-hover);
+          color: var(--pa-sidebar-text-active);
+          border-left-color: var(--pa-accent);
+        }
+        .pa-subnav {
+          display: flex;
+          flex-direction: column;
+          gap: 0.1rem;
+          margin-top: 0.1rem;
+        }
+        .pa-subnav-item {
+          display: flex;
+          align-items: center;
+          gap: 0.55rem;
+          padding: 0.4rem 0.75rem 0.4rem 2.2rem;
+          border-radius: 6px;
+          color: var(--pa-sidebar-text);
+          text-decoration: none;
+          border-left: 3px solid transparent;
+          font-size: 0.84rem;
+        }
+        .pa-subnav-item:hover {
+          background: var(--pa-sidebar-bg-hover);
+          color: var(--pa-sidebar-text-active);
+        }
+        .pa-subnav-item-active {
           color: var(--pa-sidebar-text-active);
           border-left-color: var(--pa-accent);
         }

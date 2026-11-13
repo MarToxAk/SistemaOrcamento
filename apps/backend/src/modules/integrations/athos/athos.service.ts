@@ -2668,6 +2668,64 @@ export class AthosService {
   }
 
   /**
+   * Resumo (numero, data de emissao e valor) das NF-e por tras dos titulos, SEM trazer o XML.
+   * SOMENTE LEITURA (SELECT parametrizado, compativel com PostgreSQL 9.0.5). Reproduz exatamente os
+   * filtros de buscarNotasFiscaisXmlPorTitulos (XML e chave de acesso presentes, nao cancelada) para
+   * que toda NF-e listada seja baixavel pelo ZIP e pelo nfe/danfe (Fase 47, D-09).
+   * Diferente das consultas antigas, em erro LANCA ServiceUnavailableException: a lista de notas
+   * precisa distinguir "sem NF-e" de "Athos fora do ar" para avisar o usuario.
+   */
+  async buscarNfeResumoPorTitulos(
+    idcontasReceber: number[],
+  ): Promise<Array<{ idcontareceber: number; numero: string; dataemissao: string | null; valor: number }>> {
+    const ids = [...new Set(idcontasReceber.filter((id) => Number.isInteger(id) && id > 0))];
+    if (ids.length === 0) return [];
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        // Colunas conferidas no clone athos-teste: o valor da nota e nota.totalvalornota (nao existe
+        // nota.valornota) e dataemissao e "date"; to_char evita o deslocamento de fuso do tipo Date do pg.
+        `SELECT DISTINCT cr.idcontareceber, n.numero,
+                to_char(n.dataemissao, 'YYYY-MM-DD') AS dataemissao,
+                n.totalvalornota AS valornota
+         FROM conta_receber cr
+         JOIN venda_nota vn ON vn.idvenda = cr.idvenda
+         JOIN nota n ON n.idnota = vn.idnota
+         WHERE cr.idcontareceber = ANY($1)
+           AND n.xml IS NOT NULL
+           AND n.nfechaveacesso IS NOT NULL
+           AND COALESCE(n.cancelada, false) = false
+         ORDER BY n.numero`,
+        [ids],
+      );
+      const resumo: Array<{ idcontareceber: number; numero: string; dataemissao: string | null; valor: number }> = [];
+      for (const row of result.rows as Array<Record<string, unknown>>) {
+        const numero = String(row["numero"] ?? "").trim();
+        if (!numero) continue;
+        const dataemis = row["dataemissao"];
+        resumo.push({
+          idcontareceber: Number(row["idcontareceber"]),
+          numero,
+          dataemissao:
+            dataemis instanceof Date
+              ? dataemis.toISOString().slice(0, 10)
+              : typeof dataemis === "string" && dataemis.trim()
+              ? dataemis.trim()
+              : null,
+          valor: Number(row["valornota"] ?? 0),
+        });
+      }
+      return resumo;
+    } catch (err) {
+      this.logger.warn(`buscarNfeResumoPorTitulos: ${err instanceof Error ? err.message : String(err)}`);
+      throw new ServiceUnavailableException("Athos indisponível para consultar as NF-e.");
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Retorna TODOS os itens (produto físico + serviço) de uma venda, com flag tipoFisico.
    * Usado pelo boleto EFI para criar 1 item por venda_item.
    */

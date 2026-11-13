@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from "@nestjs/common";
 import axios from "axios";
 import { ConfigService } from "@nestjs/config";
@@ -21,6 +22,7 @@ import {
   calcularDiasParaVencer,
   classificarVencimento,
 } from "./cobranca-aviso-vencimento.util";
+import { DadosPagamentoEfi, chavesBoletoEfi, extrairDadosPagamentoEfi } from "./cobranca-efi-detalhe.util";
 import { AnexarNfseCobrancaDto } from "./dto/anexar-nfse-cobranca.dto";
 import { CriarBoletoDto } from "./dto/criar-boleto.dto";
 import { EmitirNfseCobrancaDto } from "./dto/emitir-nfse-cobranca.dto";
@@ -37,9 +39,32 @@ export interface CriarBoletoResponseDto {
   nomeArquivo: string;
 }
 
+export interface DetalheBoleto {
+  id: number;
+  status: string;
+  linhaDigitavel: string | null;
+  pixCopiaECola: string | null;
+  consultaEfi: "ok" | "sem_charge" | "falha";
+  avisoEfi: string | null;
+  titulos: Array<{ idcontareceber: number; valor: number }>;
+}
+
+/** Validade, em ms, dos dados de pagamento da EFI guardados em memoria por boleto (Fase 47, D-13). */
+const TTL_DETALHE_EFI_MS = 60_000;
+
 @Injectable()
 export class CobrancaService {
   private readonly logger = new Logger(CobrancaService.name);
+
+  /**
+   * Cache em memoria (por processo) da linha digitavel e do PIX lidos na EFI, 60 s por boleto.
+   * Evita bater na EFI a cada expansao de linha. So guarda leitura bem-sucedida COM linha digitavel;
+   * status e titulos nunca ficam em cache (sempre vem do banco).
+   */
+  private readonly cacheDetalheEfi = new Map<
+    number,
+    { expira: number; txidEfi: string; dados: DadosPagamentoEfi }
+  >();
 
   constructor(
     private readonly athosService: AthosService,
@@ -840,6 +865,85 @@ export class CobrancaService {
     } catch (err) {
       this.logger.error(`Erro ao verificar pagamento do boleto ${cobrancaId} na EFI: ${err instanceof Error ? err.message : String(err)}`);
       throw new InternalServerErrorException(`Erro ao verificar pagamento na EFI: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * Detalhe do boleto para a tela (Fase 47, D-06): linha digitavel e PIX copia e cola lidos na EFI
+   * (GET /v1/charge, somente leitura) e titulos com valor. NAO grava nada: nao atualiza status, nao
+   * dispara baixa no Athos (D-03) e nunca loga a linha digitavel nem o PIX. Falha da EFI vira
+   * consultaEfi "falha" com aviso, nunca erro HTTP.
+   */
+  async buscarDetalheBoleto(cobrancaId: number): Promise<DetalheBoleto> {
+    const cobranca = await this.prisma.cobrancaBoleto.findUnique({
+      where: { id: cobrancaId },
+      include: { titulos: { select: { idcontareceber: true, valor: true } } },
+    });
+    if (!cobranca) throw new NotFoundException(`Cobrança ${cobrancaId} não encontrada.`);
+
+    const base = {
+      id: cobranca.id,
+      status: cobranca.status,
+      titulos: cobranca.titulos.map((t) => ({ idcontareceber: t.idcontareceber, valor: Number(t.valor) })),
+    };
+    const semDados = { linhaDigitavel: null, pixCopiaECola: null };
+
+    if (!cobranca.txidEfi) {
+      return {
+        ...base,
+        ...semDados,
+        consultaEfi: "sem_charge",
+        avisoEfi: "Boleto sem identificador da EFI; linha digitável indisponível.",
+      };
+    }
+
+    const emCache = this.cacheDetalheEfi.get(cobrancaId);
+    if (emCache && emCache.txidEfi === cobranca.txidEfi && emCache.expira > Date.now()) {
+      return { ...base, ...emCache.dados, consultaEfi: "ok", avisoEfi: null };
+    }
+
+    try {
+      const baseUrl = this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
+      const basic = Buffer.from(`${this.getRequiredConfig("EFI_CLIENT_ID")}:${this.getRequiredConfig("EFI_CLIENT_SECRET")}`).toString("base64");
+      const cli = axios.create({ baseURL: baseUrl, timeout: 15_000 });
+      const authResp = await cli.post("/v1/authorize", { grant_type: "client_credentials" }, {
+        headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
+      });
+      const token: string = authResp.data?.access_token;
+      if (!token) throw new Error("Token não retornado pela EFI");
+
+      const resp = await cli.get(`/v1/charge/${cobranca.txidEfi}`, { headers: { Authorization: `Bearer ${token}` } });
+      const dados = extrairDadosPagamentoEfi(resp.data);
+
+      if (!dados.linhaDigitavel) {
+        // So os NOMES das chaves vao para o log: ajuda a achar o caminho real sem expor valores.
+        this.logger.warn(
+          `Detalhe do boleto ${cobrancaId}: EFI sem linha digitável; chaves de banking_billet: [${chavesBoletoEfi(resp.data).join(", ")}]`,
+        );
+        return {
+          ...base,
+          ...dados,
+          consultaEfi: "ok",
+          avisoEfi: "A EFI não devolveu a linha digitável deste boleto.",
+        };
+      }
+
+      const agora = Date.now();
+      for (const [id, entrada] of this.cacheDetalheEfi) {
+        if (entrada.expira <= agora) this.cacheDetalheEfi.delete(id);
+      }
+      this.cacheDetalheEfi.set(cobrancaId, { expira: agora + TTL_DETALHE_EFI_MS, txidEfi: cobranca.txidEfi, dados });
+      return { ...base, ...dados, consultaEfi: "ok", avisoEfi: null };
+    } catch (err) {
+      this.logger.warn(
+        `Detalhe do boleto ${cobrancaId}: consulta à EFI falhou: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return {
+        ...base,
+        ...semDados,
+        consultaEfi: "falha",
+        avisoEfi: "Não foi possível consultar a EFI agora. Tente novamente.",
+      };
     }
   }
 
