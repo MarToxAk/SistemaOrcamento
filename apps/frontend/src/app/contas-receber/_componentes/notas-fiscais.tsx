@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatBRL } from "../_shared/formatadores";
 import {
   LIMITE_NOTAS_ZIP,
@@ -27,6 +27,8 @@ interface NotasFiscaisProps {
   pagina?: number;
   onMudarPagina?: (pagina: number) => void;
   mostrarCliente?: boolean;
+  /** Acoes extras na coluna Acoes de cada NFS-e (ex.: Remover Anexo na aba do cliente). */
+  acoesExtrasNfse?: (nota: NotaNfseLista, recarregar: () => void) => ReactNode;
 }
 
 interface MensagemStatus {
@@ -59,6 +61,7 @@ export default function NotasFiscais({
   pagina = 1,
   onMudarPagina,
   mostrarCliente = true,
+  acoesExtrasNfse,
 }: NotasFiscaisProps) {
   const [dados, setDados] = useState<RespostaNotas | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -427,6 +430,7 @@ export default function NotasFiscais({
                                   <i className="bi bi-file-earmark-zip me-1" />
                                   {baixando === `zip:nfse:${nota.id}` ? "Baixando..." : "PDF e XML"}
                                 </button>
+                                {acoesExtrasNfse?.(nota, () => void carregar(true))}
                               </div>
                             </td>
                           </tr>
