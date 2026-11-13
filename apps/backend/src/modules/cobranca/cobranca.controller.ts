@@ -258,6 +258,12 @@ export class CobrancaController {
     return this.baixaAthosService.consultarStatus(id);
   }
 
+  /** Somente leitura - Fase 47 (D-06). AUTHED via guard global. Linha digitavel e PIX lidos na EFI + titulos do boleto. */
+  @Get("boleto/:id/detalhe")
+  async detalheBoleto(@Param("id", ParseIntPipe) id: number) {
+    return this.cobrancaService.buscarDetalheBoleto(id);
+  }
+
   /** Remove boleto do banco (cleanup — libera títulos) */
   @Delete("boleto/:id")
   async removerBoleto(@Param("id", ParseIntPipe) id: number) {
