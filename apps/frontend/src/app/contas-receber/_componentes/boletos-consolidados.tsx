@@ -1,11 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import BoletoDetalhe from "./boleto-detalhe";
-
-function formatBRL(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+import { filtrarBoletos, lerFiltrosBoletos, type FiltrosBoletos } from "../_shared/filtros-boletos";
+import { lerData, lerInteiroPositivo, lerTexto } from "../_shared/filtros-url";
+import { formatBRL } from "../_shared/formatadores";
+import { useFiltrosUrl } from "../_shared/use-filtros-url";
 
 export type NfseStatusBoleto = "completa" | "parcial" | "pendente";
 
@@ -177,14 +177,48 @@ export function paPillVariant(badgeClass: string): "success" | "warning" | "seco
 }
 
 export default function BoletosConsolidados() {
+  const { obter, definir } = useFiltrosUrl();
+  const filtros = lerFiltrosBoletos({
+    status: obter("status"),
+    situacao: obter("situacao"),
+    de: obter("de"),
+    ate: obter("ate"),
+    busca: obter("busca"),
+  });
+  const boletoAbertoId = lerInteiroPositivo(obter("boleto"), 0);
+
   const [boletos, setBoletos] = useState<BoletoDashboardItem[]>([]);
   const [boletosLoading, setBoletosLoading] = useState(true);
   const [boletosErro, setBoletosErro] = useState("");
   const [acaoEmAndamento, setAcaoEmAndamento] = useState<string | null>(null);
-  const [expandidoId, setExpandidoId] = useState<number | null>(null);
 
-  async function fetchBoletosDashboard() {
-    setBoletosLoading(true);
+  // A busca e digitada localmente e gravada na URL com atraso, para nao perder letras a cada router.replace.
+  const [buscaDigitada, setBuscaDigitada] = useState(filtros.busca);
+  const buscaGravada = useRef(filtros.busca);
+  const definirRef = useRef(definir);
+  definirRef.current = definir;
+
+  useEffect(() => {
+    // Mudanca externa da URL (voltar do navegador, link colado): reflete no campo.
+    if (filtros.busca !== buscaGravada.current) {
+      buscaGravada.current = filtros.busca;
+      setBuscaDigitada(filtros.busca);
+    }
+  }, [filtros.busca]);
+
+  useEffect(() => {
+    const alvo = lerTexto(buscaDigitada, 80);
+    if (alvo === buscaGravada.current) return;
+    const timer = setTimeout(() => {
+      buscaGravada.current = alvo;
+      definirRef.current({ busca: alvo || null });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [buscaDigitada]);
+
+  /** `silencioso` recarrega a lista sem trocar a tabela pelo spinner (mantem o detalhe aberto). */
+  async function fetchBoletosDashboard(silencioso = false) {
+    if (!silencioso) setBoletosLoading(true);
     setBoletosErro("");
     try {
       const res = await fetch("/api/cobranca/boleto/dashboard", { cache: "no-store" });
@@ -243,7 +277,7 @@ export default function BoletosConsolidados() {
       const dados = (await res.json().catch(() => null)) as (ResultadoBaixaEstornoAthos & ErroBackendAthos) | null;
       if (!res.ok) {
         alert(mensagemErroAthos(res.status, dados));
-        void fetchBoletosDashboard();
+        void fetchBoletosDashboard(true);
         return;
       }
       const qtd = dados?.detalhe?.titulos?.length ?? 0;
@@ -255,7 +289,7 @@ export default function BoletosConsolidados() {
       } else {
         alert(`Estorno concluído no Athos.\nTítulos: ${qtd}\nValor estornado: ${total}`);
       }
-      await fetchBoletosDashboard();
+      await fetchBoletosDashboard(true);
     } catch {
       alert("Falha na conexão.");
     } finally {
@@ -263,11 +297,92 @@ export default function BoletosConsolidados() {
     }
   }
 
+  /** Consulta a EFI (proxy existente) e mostra o status devolvido; recarrega a lista em seguida. */
+  async function verificarPagamento(boleto: BoletoDashboardItem) {
+    if (acaoEmAndamento !== null) return;
+    setAcaoEmAndamento(`${boleto.id}:verificar`);
+    try {
+      const res = await fetch(`/api/cobranca/boleto/${boleto.id}/verificar-pagamento`, { method: "POST" });
+      const dados = (await res.json().catch(() => null)) as
+        | ({ status?: string; atualizado?: boolean } & ErroBackendAthos)
+        | null;
+      if (!res.ok) {
+        alert(mensagemErroAthos(res.status, dados));
+        return;
+      }
+      const situacao = dados?.status ?? "desconhecido";
+      alert(
+        `Boleto #${boleto.id}: situação ${situacao}.${dados?.atualizado ? " O status foi atualizado." : " Sem alteração."}`,
+      );
+      await fetchBoletosDashboard(true);
+    } catch {
+      alert("Falha na conexão.");
+    } finally {
+      setAcaoEmAndamento(null);
+    }
+  }
+
+  /** Cancela o boleto nao pago (mesma confirmacao da aba Boletos do cliente); o backend recusa boleto ja baixado no Athos. */
+  async function cancelarBoleto(boleto: BoletoDashboardItem) {
+    if (acaoEmAndamento !== null) return;
+    if (
+      !confirm(
+        `Cancelar boleto #${boleto.id}? Os ${boleto.titulos.length} título(s) ficarão disponíveis para novo boleto.`,
+      )
+    ) {
+      return;
+    }
+    setAcaoEmAndamento(`${boleto.id}:cancelar`);
+    try {
+      const res = await fetch(`/api/cobranca/boleto/${boleto.id}/cancelar`, { method: "POST" });
+      const dados = (await res.json().catch(() => null)) as
+        | ({ ok?: boolean; mensagem?: string } & ErroBackendAthos)
+        | null;
+      if (!res.ok) {
+        alert(dados?.mensagem ?? mensagemErroAthos(res.status, dados));
+        void fetchBoletosDashboard(true);
+        return;
+      }
+      alert(dados?.mensagem ?? `Boleto #${boleto.id} cancelado.`);
+      await fetchBoletosDashboard(true);
+    } catch {
+      alert("Falha na conexão.");
+    } finally {
+      setAcaoEmAndamento(null);
+    }
+  }
+
+  function limparFiltros() {
+    buscaGravada.current = "";
+    setBuscaDigitada("");
+    definir({ status: null, situacao: null, de: null, ate: null, busca: null });
+  }
+
   const pendentes = boletos.filter((b) => b.status === "pendente");
   const totalAVencer = pendentes.filter(
     (b) => b.situacaoVencimento === "a_vencer" || b.situacaoVencimento === "vence_hoje",
   ).length;
   const totalAtrasados = pendentes.filter((b) => b.situacaoVencimento === "atrasado").length;
+
+  const visiveis = filtrarBoletos(boletos, filtros);
+  const temFiltro =
+    filtros.status !== "" ||
+    filtros.situacao !== "" ||
+    filtros.de !== "" ||
+    filtros.ate !== "" ||
+    filtros.busca !== "" ||
+    buscaDigitada !== "";
+
+  const opcoesStatus: Array<{ valor: FiltrosBoletos["status"]; rotulo: string }> = [
+    { valor: "", rotulo: "Todos" },
+    { valor: "pendente", rotulo: "Pendentes" },
+    { valor: "pago", rotulo: "Pagos" },
+  ];
+  const opcoesSituacao: Array<{ valor: FiltrosBoletos["situacao"]; rotulo: string }> = [
+    { valor: "", rotulo: "Todas" },
+    { valor: "a_vencer", rotulo: "A Vencer" },
+    { valor: "atrasado", rotulo: "Atrasados" },
+  ];
 
   return (
     <div className="pa-card">
@@ -294,7 +409,84 @@ export default function BoletosConsolidados() {
           <i className="bi bi-arrow-clockwise" />
         </button>
       </div>
-      <div className="pa-card-body pa-card-body-scroll">
+
+      <div className="pa-filtros">
+        <div className="pa-filtro">
+          <span className="pa-filtro-rotulo">Status</span>
+          <div className="pa-seg">
+            {opcoesStatus.map((opt) => (
+              <button
+                key={opt.valor || "todos"}
+                type="button"
+                className={`pa-seg-btn${filtros.status === opt.valor ? " pa-seg-btn-active" : ""}`}
+                onClick={() => definir({ status: opt.valor || null })}
+              >
+                {opt.rotulo}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="pa-filtro">
+          <span className="pa-filtro-rotulo">Situação</span>
+          <div className="pa-seg">
+            {opcoesSituacao.map((opt) => (
+              <button
+                key={opt.valor || "todas"}
+                type="button"
+                className={`pa-seg-btn${filtros.situacao === opt.valor ? " pa-seg-btn-active" : ""}`}
+                onClick={() => definir({ situacao: opt.valor || null })}
+              >
+                {opt.rotulo}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="pa-filtro">
+          <label className="pa-filtro-rotulo" htmlFor="filtro-boletos-de">
+            Vencimento De
+          </label>
+          <input
+            id="filtro-boletos-de"
+            type="date"
+            className="form-control form-control-sm"
+            value={filtros.de}
+            onChange={(e) => definir({ de: lerData(e.target.value) || null })}
+          />
+        </div>
+        <div className="pa-filtro">
+          <label className="pa-filtro-rotulo" htmlFor="filtro-boletos-ate">
+            Até
+          </label>
+          <input
+            id="filtro-boletos-ate"
+            type="date"
+            className="form-control form-control-sm"
+            value={filtros.ate}
+            onChange={(e) => definir({ ate: lerData(e.target.value) || null })}
+          />
+        </div>
+        <div className="pa-filtro pa-filtro-busca">
+          <label className="pa-filtro-rotulo" htmlFor="filtro-boletos-busca">
+            Buscar Cliente
+          </label>
+          <input
+            id="filtro-boletos-busca"
+            type="search"
+            className="form-control form-control-sm"
+            placeholder="Nome ou número do cliente"
+            maxLength={80}
+            value={buscaDigitada}
+            onChange={(e) => setBuscaDigitada(e.target.value)}
+          />
+        </div>
+        <div className="pa-filtro pa-filtro-limpar">
+          <button type="button" className="pa-link-btn bg-transparent text-nowrap" onClick={limparFiltros} disabled={!temFiltro}>
+            Limpar Filtros
+          </button>
+        </div>
+      </div>
+
+      <div className="pa-card-body pa-card-body-flush pa-tabela-scroll">
         {boletosLoading ? (
           <div className="text-center py-4">
             <div className="spinner-border text-primary" role="status">
@@ -321,149 +513,221 @@ export default function BoletosConsolidados() {
             </div>
           </div>
         ) : (
-          <table className="pa-table">
-            <thead>
-              <tr>
-                <th aria-label="Detalhes" />
-                <th>Cliente</th>
-                <th>Valor</th>
-                <th>Vencimento</th>
-                <th>Status</th>
-                <th>NFS-e</th>
-                <th>Athos</th>
-                <th>Ação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {boletos.map((boleto) => {
-                const nfseBadge = getNfseBadge(boleto.nfseStatus, boleto.titulos.length);
-                const athosPill = getAthosBaixaPill(boleto);
-                const podeBaixar =
-                  boleto.status === "pago" &&
-                  (boleto.athosBaixaStatus == null ||
-                    boleto.athosBaixaStatus === "pendente" ||
-                    boleto.athosBaixaStatus === "falha" ||
-                    boleto.athosBaixaStatus === "estornado");
-                const podeEstornar = boleto.status === "pago" && boleto.athosBaixaStatus === "baixado";
-                const ocupado = acaoEmAndamento !== null;
-                const vencimentoSuffix = getVencimentoSuffix(boleto.diasParaVencer);
-                const situacaoPill = getSituacaoVencimentoPill(boleto);
-                const ultimoAviso = descreverUltimoAviso(boleto.ultimoAviso);
-                const expandido = expandidoId === boleto.id;
-                return (
-                  <Fragment key={boleto.id}>
+          <>
+            <div className="pa-contagem small text-muted">
+              Mostrando {visiveis.length} de {boletos.length}
+            </div>
+            {visiveis.length === 0 ? (
+              <div className="pa-empty">
+                <span>Nenhum boleto para os filtros escolhidos.</span>
+                <button type="button" className="pa-link-btn bg-transparent mt-2" onClick={limparFiltros}>
+                  Limpar Filtros
+                </button>
+              </div>
+            ) : (
+              <table className="pa-table pa-table-boletos">
+                <thead>
                   <tr>
-                    <td className="pa-td-chevron">
-                      <button
-                        type="button"
-                        className="pa-icon-btn"
-                        aria-expanded={expandido}
-                        aria-label={`Mostrar detalhes do boleto #${boleto.id}`}
-                        onClick={() => setExpandidoId(expandido ? null : boleto.id)}
-                      >
-                        <i className={`bi ${expandido ? "bi-chevron-up" : "bi-chevron-down"}`} />
-                      </button>
-                    </td>
-                    <td className="pa-td-cliente">
-                      <span className="pa-id-badge">#{boleto.idclienteAthos}</span>
-                      <span className="text-truncate" title={boleto.nomeCliente}>
-                        {boleto.nomeCliente}
-                      </span>
-                    </td>
-                    <td className="text-nowrap fw-bold">{formatBRL(boleto.valor)}</td>
-                    <td className="text-nowrap small">
-                      {boleto.expireAt ?? "-"}
-                      {situacaoPill ? (
-                        <span className={`${situacaoPill.cls} ms-1`} title={situacaoPill.title}>
-                          {situacaoPill.label}
-                        </span>
-                      ) : (
-                        vencimentoSuffix && <span className="text-muted ms-1">({vencimentoSuffix})</span>
-                      )}
-                      {ultimoAviso && <small className={`d-block ${ultimoAviso.className}`}>{ultimoAviso.texto}</small>}
-                    </td>
-                    <td>
-                      <span className={`pa-pill pa-pill-${paPillVariant(getStatusBoletoBadgeClass(boleto.status))}`}>
-                        {boleto.status}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={`pa-pill pa-pill-${paPillVariant(nfseBadge.cls)}`}
-                        title={nfseBadge.title}
-                      >
-                        {nfseBadge.label}
-                      </span>
-                    </td>
-                    <td>
-                      {athosPill ? (
-                        <span className={`pa-pill pa-pill-${athosPill.variant}`} title={athosPill.title}>
-                          {athosPill.label}
-                        </span>
-                      ) : (
-                        <span className="text-muted">-</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="d-flex flex-wrap gap-1">
-                        <a href={`/contas-receber/${boleto.idclienteAthos}`} className="pa-link-btn text-nowrap">
-                          Ver Cliente
-                        </a>
-                        {podeBaixar && (
-                          <>
-                            <button
-                              type="button"
-                              className="pa-link-btn bg-transparent text-nowrap"
-                              disabled={ocupado}
-                              onClick={() => void executarAcaoAthos(boleto, "simular")}
-                              title="Confere o que seria baixado, sem gravar nada"
-                            >
-                              {acaoEmAndamento === `${boleto.id}:simular` ? "Simulando..." : "Simular"}
-                            </button>
-                            <button
-                              type="button"
-                              className="pa-link-btn bg-transparent text-nowrap"
-                              disabled={ocupado}
-                              onClick={() => void executarAcaoAthos(boleto, "baixar")}
-                              title="Grava a baixa no contas a receber do Athos"
-                            >
-                              {acaoEmAndamento === `${boleto.id}:baixar` ? "Baixando..." : "Baixar no Athos"}
-                            </button>
-                          </>
-                        )}
-                        {podeEstornar && (
-                          <button
-                            type="button"
-                            className="pa-link-btn bg-transparent text-nowrap"
-                            disabled={ocupado}
-                            onClick={() => void executarAcaoAthos(boleto, "estornar")}
-                            title="Desfaz a baixa gravada pelo Sistema no Athos"
-                          >
-                            {acaoEmAndamento === `${boleto.id}:estornar` ? "Estornando..." : "Estornar baixa"}
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                    <th className="pa-th-chevron" aria-label="Detalhes" />
+                    <th>Cliente</th>
+                    <th>Valor</th>
+                    <th>Vencimento</th>
+                    <th>Status</th>
+                    <th>Selos</th>
                   </tr>
-                  {expandido && (
-                    <tr className="pa-row-detalhe">
-                      <td colSpan={8}>
-                        <BoletoDetalhe
-                          key={`${boleto.id}:${boleto.status}:${boleto.athosBaixaStatus ?? ""}`}
-                          cobrancaId={boleto.id}
-                          status={boleto.status}
-                          ultimoAviso={ultimoAviso}
-                        />
-                      </td>
-                    </tr>
-                  )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {visiveis.map((boleto) => {
+                    const nfseBadge = getNfseBadge(boleto.nfseStatus, boleto.titulos.length);
+                    const athosPill = getAthosBaixaPill(boleto);
+                    const podeBaixar =
+                      boleto.status === "pago" &&
+                      (boleto.athosBaixaStatus == null ||
+                        boleto.athosBaixaStatus === "pendente" ||
+                        boleto.athosBaixaStatus === "falha" ||
+                        boleto.athosBaixaStatus === "estornado");
+                    const podeEstornar = boleto.status === "pago" && boleto.athosBaixaStatus === "baixado";
+                    const ocupado = acaoEmAndamento !== null;
+                    const vencimentoSuffix = getVencimentoSuffix(boleto.diasParaVencer);
+                    const situacaoPill = getSituacaoVencimentoPill(boleto);
+                    const expandido = boletoAbertoId === boleto.id;
+                    const alternar = () => definir({ boleto: expandido ? null : String(boleto.id) });
+                    return (
+                      <Fragment key={boleto.id}>
+                        <tr
+                          className={`pa-row-clicavel${expandido ? " pa-row-aberta" : ""}`}
+                          onClick={alternar}
+                        >
+                          <td className="pa-td-chevron">
+                            <button
+                              type="button"
+                              className="pa-icon-btn"
+                              aria-expanded={expandido}
+                              aria-label={`Mostrar detalhes do boleto #${boleto.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                alternar();
+                              }}
+                            >
+                              <i className={`bi ${expandido ? "bi-chevron-up" : "bi-chevron-down"}`} />
+                            </button>
+                          </td>
+                          <td className="pa-td-cliente">
+                            <span className="pa-id-badge">#{boleto.idclienteAthos}</span>
+                            <span className="text-truncate" title={boleto.nomeCliente}>
+                              {boleto.nomeCliente}
+                            </span>
+                          </td>
+                          <td className="text-nowrap fw-bold">{formatBRL(boleto.valor)}</td>
+                          <td className="text-nowrap small">
+                            {boleto.expireAt ?? "-"}
+                            {situacaoPill ? (
+                              <span className={`${situacaoPill.cls} ms-1`} title={situacaoPill.title}>
+                                {situacaoPill.label}
+                              </span>
+                            ) : (
+                              vencimentoSuffix && <span className="text-muted ms-1">({vencimentoSuffix})</span>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`pa-pill pa-pill-${paPillVariant(getStatusBoletoBadgeClass(boleto.status))}`}>
+                              {boleto.status}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="d-flex flex-wrap gap-1">
+                              <span
+                                className={`pa-pill pa-pill-${paPillVariant(nfseBadge.cls)}`}
+                                title={nfseBadge.title}
+                              >
+                                {nfseBadge.label}
+                              </span>
+                              {athosPill && (
+                                <span className={`pa-pill pa-pill-${athosPill.variant}`} title={athosPill.title}>
+                                  {athosPill.label}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {expandido && (
+                          <tr className="pa-row-detalhe">
+                            <td colSpan={6}>
+                              <BoletoDetalhe
+                                key={`${boleto.id}:${boleto.status}:${boleto.athosBaixaStatus ?? ""}`}
+                                cobrancaId={boleto.id}
+                                status={boleto.status}
+                                ultimoAviso={descreverUltimoAviso(boleto.ultimoAviso)}
+                                acoes={
+                                  <>
+                                    {boleto.linkBoleto && (
+                                      <a
+                                        href={`/api/cobranca/boleto/${boleto.id}/pdf`}
+                                        className="pa-link-btn text-nowrap"
+                                        title="Baixar PDF do boleto"
+                                      >
+                                        <i className="bi bi-download me-1" />
+                                        Baixar PDF
+                                      </a>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="pa-link-btn bg-transparent text-nowrap"
+                                      disabled={ocupado}
+                                      onClick={() => void verificarPagamento(boleto)}
+                                      title="Consulta a EFI e atualiza o status do boleto"
+                                    >
+                                      <i className="bi bi-arrow-clockwise me-1" />
+                                      {acaoEmAndamento === `${boleto.id}:verificar` ? "Verificando..." : "Verificar Pagamento"}
+                                    </button>
+                                    {boleto.status !== "pago" && (
+                                      <button
+                                        type="button"
+                                        className="pa-link-btn bg-transparent text-nowrap"
+                                        disabled={ocupado}
+                                        onClick={() => void cancelarBoleto(boleto)}
+                                        title="Cancela o boleto e libera os títulos"
+                                      >
+                                        <i className="bi bi-x-circle me-1" />
+                                        {acaoEmAndamento === `${boleto.id}:cancelar` ? "Cancelando..." : "Cancelar Boleto"}
+                                      </button>
+                                    )}
+                                    {podeBaixar && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          className="pa-link-btn bg-transparent text-nowrap"
+                                          disabled={ocupado}
+                                          onClick={() => void executarAcaoAthos(boleto, "simular")}
+                                          title="Confere o que seria baixado, sem gravar nada"
+                                        >
+                                          {acaoEmAndamento === `${boleto.id}:simular` ? "Simulando..." : "Simular"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="pa-link-btn bg-transparent text-nowrap"
+                                          disabled={ocupado}
+                                          onClick={() => void executarAcaoAthos(boleto, "baixar")}
+                                          title="Grava a baixa no contas a receber do Athos"
+                                        >
+                                          {acaoEmAndamento === `${boleto.id}:baixar` ? "Baixando..." : "Baixar no Athos"}
+                                        </button>
+                                      </>
+                                    )}
+                                    {podeEstornar && (
+                                      <button
+                                        type="button"
+                                        className="pa-link-btn bg-transparent text-nowrap"
+                                        disabled={ocupado}
+                                        onClick={() => void executarAcaoAthos(boleto, "estornar")}
+                                        title="Desfaz a baixa gravada pelo Sistema no Athos"
+                                      >
+                                        {acaoEmAndamento === `${boleto.id}:estornar` ? "Estornando..." : "Estornar baixa"}
+                                      </button>
+                                    )}
+                                    <a
+                                      href={`/contas-receber/${boleto.idclienteAthos}?aba=boletos`}
+                                      className="pa-link-btn text-nowrap"
+                                    >
+                                      Ver Cliente
+                                    </a>
+                                  </>
+                                }
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </div>
+
+      <style>{`
+        .pa-filtros {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: flex-end;
+          gap: 0.75rem 1rem;
+          padding: 0.8rem 1.1rem;
+          border-bottom: 1px solid var(--pa-border);
+        }
+        .pa-filtro { display: flex; flex-direction: column; gap: 0.2rem; }
+        .pa-filtro-rotulo { color: var(--pa-text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin: 0; }
+        .pa-filtro-busca { flex: 1 1 14rem; min-width: 12rem; }
+        .pa-filtro-limpar { margin-left: auto; }
+        .pa-contagem { padding: 0.5rem 1.1rem; }
+        .pa-tabela-scroll { overflow-x: auto; }
+        .pa-table-boletos .pa-th-chevron, .pa-table-boletos .pa-td-chevron { width: 2.5rem; padding-right: 0; }
+        .pa-row-clicavel { cursor: pointer; }
+        .pa-row-aberta { background: var(--pa-accent-soft); }
+        .pa-table tbody tr.pa-row-detalhe:hover { background: transparent; }
+        .pa-table tbody tr.pa-row-detalhe > td { padding: 0; }
+      `}</style>
     </div>
   );
 }

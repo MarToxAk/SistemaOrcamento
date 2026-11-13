@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import PasswordGate from "@/components/password-gate";
 import AdminShell from "../admin-shell";
 import BoletosConsolidados from "../_componentes/boletos-consolidados";
@@ -17,7 +18,17 @@ export default function BoletosPage() {
         title="Boletos"
         subtitle="Boletos consolidados de todos os clientes"
       >
-        <BoletosConsolidados />
+        <Suspense
+          fallback={
+            <div className="text-center py-5">
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Carregando...</span>
+              </div>
+            </div>
+          }
+        >
+          <BoletosConsolidados />
+        </Suspense>
       </AdminShell>
     </PasswordGate>
   );
