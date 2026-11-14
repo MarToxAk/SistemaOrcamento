@@ -108,3 +108,108 @@ caso("ordenarBoletos nao altera a lista de entrada", () => {
   o.ordenarBoletos(situacao, { ordem: "data", dir: "desc" });
   assert.deepEqual(ids(situacao), antes);
 });
+
+// ---- Notas e clientes (Tarefa 2) ----
+
+function nota(id, extra = {}) {
+  return { id, tipo: "NFS-e", numero: String(id), nomeCliente: "Cliente", dataEmissao: "2026-11-01", ...extra };
+}
+
+caso("ordenarNotas data desc: mais recente primeiro e sem data por ultimo", () => {
+  const lista = [
+    nota(1, { tipo: "NFS-e", dataEmissao: "2026-11-10T15:00:00.000Z" }),
+    nota(2, { tipo: "NF-e", dataEmissao: "2026-11-12" }),
+    nota(3, { tipo: "NFS-e", dataEmissao: "2026-10-01T12:00:00.000Z" }),
+    nota(4, { tipo: "NF-e", dataEmissao: null }),
+  ];
+  assert.deepEqual(ids(o.ordenarNotas(lista, { ordem: "data", dir: "desc" })), [2, 1, 3, 4]);
+  assert.deepEqual(ids(o.ordenarNotas(lista, { ordem: "data", dir: "asc" })), [3, 1, 2, 4]);
+});
+
+caso("ordenarNotas nome asc sem acento e empate pela emissao mais recente", () => {
+  const lista = [
+    nota(1, { nomeCliente: "Fabio" }),
+    nota(2, { nomeCliente: "Élcio", dataEmissao: "2026-10-01" }),
+    nota(3, { nomeCliente: "Danilo" }),
+    nota(4, { nomeCliente: "elcio", dataEmissao: "2026-11-05" }),
+  ];
+  assert.deepEqual(ids(o.ordenarNotas(lista, { ordem: "nome", dir: "asc" })), [3, 4, 2, 1]);
+  assert.deepEqual(ids(o.ordenarNotas(lista, { ordem: "nome", dir: "desc" })), [1, 4, 2, 3]);
+});
+
+caso("ordenarNotas nao altera a lista de entrada", () => {
+  const lista = [nota(2, { dataEmissao: "2026-11-02" }), nota(1, { dataEmissao: "2026-11-01" })];
+  o.ordenarNotas(lista, { ordem: "data", dir: "asc" });
+  assert.deepEqual(ids(lista), [2, 1]);
+});
+
+caso("notas nao tem pago nem nome na tela do cliente", () => {
+  assert.deepEqual(o.lerOrdenacao("pago", null, o.CONFIG_NOTAS), { ordem: "data", dir: "desc" });
+  assert.deepEqual(o.lerOrdenacao("nome", "asc", o.CONFIG_NOTAS_CLIENTE), { ordem: "data", dir: "desc" });
+  assert.deepEqual(o.lerOrdenacao("nome", null, o.CONFIG_NOTAS), { ordem: "nome", dir: "asc" });
+});
+
+function cliente(idcliente, extra = {}) {
+  return { idcliente, nome_cliente: `Cliente ${idcliente}`, total_devido: 0, total_atrasado: 0, total_pago: null, ...extra };
+}
+
+const idc = (lista) => lista.map((c) => c.idcliente);
+
+caso("ordenarClientes padrao atrasado desc reproduz a ordem do backend", () => {
+  const lista = [
+    cliente(1, { total_atrasado: 200, total_devido: 300 }),
+    cliente(2, { total_atrasado: 0, total_devido: 50 }),
+    cliente(3, { total_atrasado: 200, total_devido: 900 }),
+  ];
+  assert.deepEqual(idc(o.ordenarClientes(lista, o.CONFIG_CLIENTES.padrao)), [3, 1, 2]);
+});
+
+caso("ordenarClientes devido desempata por atrasado decrescente", () => {
+  const lista = [
+    cliente(1, { total_devido: 100, total_atrasado: 10 }),
+    cliente(2, { total_devido: 100, total_atrasado: 40 }),
+    cliente(3, { total_devido: 500, total_atrasado: 0 }),
+  ];
+  assert.deepEqual(idc(o.ordenarClientes(lista, { ordem: "devido", dir: "desc" })), [3, 2, 1]);
+  assert.deepEqual(idc(o.ordenarClientes(lista, { ordem: "devido", dir: "asc" })), [2, 1, 3]);
+});
+
+caso("ordenarClientes pago: quem pagou mais/menos, nulos por ultimo", () => {
+  const lista = [
+    cliente(1, { nome_cliente: "Beto", total_pago: 500 }),
+    cliente(2, { nome_cliente: "Ana", total_pago: null }),
+    cliente(3, { nome_cliente: "Caio", total_pago: 1200 }),
+    cliente(4, { nome_cliente: "Abel", total_pago: undefined }),
+  ];
+  assert.deepEqual(idc(o.ordenarClientes(lista, { ordem: "pago", dir: "desc" })), [3, 1, 4, 2]);
+  assert.deepEqual(idc(o.ordenarClientes(lista, { ordem: "pago", dir: "asc" })), [1, 3, 4, 2]);
+});
+
+caso("ordenarClientes nome ignora acento e maiuscula, empate por idcliente", () => {
+  const lista = [
+    cliente(5, { nome_cliente: "Zeca" }),
+    cliente(4, { nome_cliente: "álvaro" }),
+    cliente(2, { nome_cliente: "ALVARO" }),
+    cliente(3, { nome_cliente: "Bruno" }),
+  ];
+  assert.deepEqual(idc(o.ordenarClientes(lista, { ordem: "nome", dir: "asc" })), [2, 4, 3, 5]);
+  assert.deepEqual(idc(o.ordenarClientes(lista, { ordem: "nome", dir: "desc" })), [5, 3, 2, 4]);
+});
+
+caso("ordenarClientes nao altera a lista de entrada", () => {
+  const lista = [cliente(2, { total_atrasado: 1 }), cliente(1, { total_atrasado: 9 })];
+  o.ordenarClientes(lista, { ordem: "atrasado", dir: "desc" });
+  assert.deepEqual(idc(lista), [2, 1]);
+});
+
+caso("toda config tem rotulos e padrao coerentes", () => {
+  const configs = [o.CONFIG_BOLETOS, o.CONFIG_BOLETOS_CLIENTE, o.CONFIG_NOTAS, o.CONFIG_NOTAS_CLIENTE, o.CONFIG_CLIENTES];
+  for (const c of configs) {
+    assert.ok(c.permitidas.includes(c.padrao.ordem));
+    for (const ordem of c.permitidas) {
+      assert.ok(c.rotulos[ordem], `rotulo de ${ordem}`);
+      assert.ok(c.rotulosDirecao[ordem].asc && c.rotulosDirecao[ordem].desc, `direcoes de ${ordem}`);
+      assert.ok(c.direcaoInicial[ordem] === "asc" || c.direcaoInicial[ordem] === "desc");
+    }
+  }
+});
