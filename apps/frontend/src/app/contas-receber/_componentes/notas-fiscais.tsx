@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatBRL } from "../_shared/formatadores";
 import {
+  CONFIG_NOTAS,
+  CONFIG_NOTAS_CLIENTE,
+  ordenarNotas,
+  type OrdemNotas,
+  type Ordenacao,
+} from "../_shared/ordenacao";
+import {
   LIMITE_NOTAS_ZIP,
   NOTAS_POR_PAGINA,
   baixarArquivo,
@@ -17,6 +24,7 @@ import {
   type NotaSelecionavel,
   type RespostaNotas,
 } from "../_shared/notas-util";
+import SeletorOrdenacao, { ThOrdenavel } from "./seletor-ordenacao";
 
 interface NotasFiscaisProps {
   idclienteAthos?: number;
@@ -26,6 +34,9 @@ interface NotasFiscaisProps {
   busca?: string;
   pagina?: number;
   onMudarPagina?: (pagina: number) => void;
+  /** Ordem das notas (Fase 48). Sem a prop, usa o padrao (emissao mais recente primeiro) e guarda a escolha aqui dentro. */
+  ordenacao?: Ordenacao<OrdemNotas>;
+  onMudarOrdenacao?: (nova: Ordenacao<OrdemNotas>) => void;
   mostrarCliente?: boolean;
   /** Acoes extras na coluna Acoes de cada NFS-e (ex.: Remover Anexo na aba do cliente). */
   acoesExtrasNfse?: (nota: NotaNfseLista, recarregar: () => void) => ReactNode;
@@ -60,6 +71,8 @@ export default function NotasFiscais({
   busca = "",
   pagina = 1,
   onMudarPagina,
+  ordenacao,
+  onMudarOrdenacao,
   mostrarCliente = true,
   acoesExtrasNfse,
 }: NotasFiscaisProps) {
@@ -73,6 +86,13 @@ export default function NotasFiscais({
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   // Sem onMudarPagina (aba do cliente) a pagina e controlada aqui dentro.
   const [paginaInterna, setPaginaInterna] = useState(1);
+  // Na tela do cliente (um cliente so) o criterio Nome nao existe (D-03).
+  const config = mostrarCliente ? CONFIG_NOTAS : CONFIG_NOTAS_CLIENTE;
+  const [ordenacaoInterna, setOrdenacaoInterna] = useState<Ordenacao<OrdemNotas>>(config.padrao);
+  const ordenacaoPedida = ordenacao ?? ordenacaoInterna;
+  const ordenacaoAtual: Ordenacao<OrdemNotas> = config.permitidas.includes(ordenacaoPedida.ordem)
+    ? ordenacaoPedida
+    : config.padrao;
   const requisicao = useRef(0);
 
   const carregar = useCallback(
@@ -130,9 +150,18 @@ export default function NotasFiscais({
     return lista;
   }, [selecionadas, porChave]);
 
+  const { ordem: ordemAtual, dir: dirAtual } = ordenacaoAtual;
+  // Ordena a lista inteira filtrada ANTES de paginar: a ordem vale para todas as paginas (D-08).
   const filtradas = useMemo(
-    () => filtrarNotasExibicao<NotaNfseLista | NotaNfeLista>([...(dados?.nfse ?? []), ...(dados?.nfe ?? [])], { tipo, busca }),
-    [dados, tipo, busca],
+    () =>
+      ordenarNotas(
+        filtrarNotasExibicao<NotaNfseLista | NotaNfeLista>([...(dados?.nfse ?? []), ...(dados?.nfe ?? [])], {
+          tipo,
+          busca,
+        }),
+        { ordem: ordemAtual, dir: dirAtual },
+      ),
+    [dados, tipo, busca, ordemAtual, dirAtual],
   );
   const totalNfse = filtradas.filter(ehNfse).length;
   const totalNfe = filtradas.length - totalNfse;
@@ -145,6 +174,13 @@ export default function NotasFiscais({
   function mudarPagina(nova: number) {
     if (onMudarPagina) onMudarPagina(nova);
     else setPaginaInterna(nova);
+  }
+
+  function mudarOrdenacao(nova: Ordenacao<OrdemNotas>) {
+    // Mudar a ordem volta para a pagina 1 (quando a pagina vem da URL, quem controla zera junto com a ordem).
+    if (!onMudarPagina) setPaginaInterna(1);
+    if (onMudarOrdenacao) onMudarOrdenacao(nova);
+    else setOrdenacaoInterna(nova);
   }
 
   function alternar(chave: string) {
@@ -285,9 +321,17 @@ export default function NotasFiscais({
             ? `${filtradas.length} nota(s) fiscal(is) encontrada(s)`
             : " "}
         </span>
-        <button type="button" className="pa-icon-btn" onClick={() => void carregar()} title="Atualizar">
-          <i className="bi bi-arrow-clockwise" />
-        </button>
+        <div className="d-flex align-items-center gap-2">
+          <SeletorOrdenacao
+            id={mostrarCliente ? "ordenar-notas" : "ordenar-notas-cliente"}
+            config={config}
+            ordenacao={ordenacaoAtual}
+            onMudar={mudarOrdenacao}
+          />
+          <button type="button" className="pa-icon-btn" onClick={() => void carregar()} title="Atualizar">
+            <i className="bi bi-arrow-clockwise" />
+          </button>
+        </div>
       </div>
 
       {status && (
@@ -346,8 +390,10 @@ export default function NotasFiscais({
                           />
                         </th>
                         <th>Número</th>
-                        {mostrarCliente && <th>Cliente</th>}
-                        <th>Emissão</th>
+                        {mostrarCliente && (
+                          <ThOrdenavel ordem="nome" rotulo="Cliente" config={config} ordenacao={ordenacaoAtual} onMudar={mudarOrdenacao} />
+                        )}
+                        <ThOrdenavel ordem="data" rotulo="Emissão" config={config} ordenacao={ordenacaoAtual} onMudar={mudarOrdenacao} />
                         <th>Valor</th>
                         <th>Títulos</th>
                         <th>XML</th>
@@ -471,8 +517,10 @@ export default function NotasFiscais({
                           />
                         </th>
                         <th>Número</th>
-                        {mostrarCliente && <th>Cliente</th>}
-                        <th>Emissão</th>
+                        {mostrarCliente && (
+                          <ThOrdenavel ordem="nome" rotulo="Cliente" config={config} ordenacao={ordenacaoAtual} onMudar={mudarOrdenacao} />
+                        )}
+                        <ThOrdenavel ordem="data" rotulo="Emissão" config={config} ordenacao={ordenacaoAtual} onMudar={mudarOrdenacao} />
                         <th>Valor</th>
                         <th>Boleto</th>
                         <th>Ações</th>

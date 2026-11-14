@@ -1935,6 +1935,7 @@ export class AthosService {
       total_atrasado: number;
       titulos_pendentes: number;
       maior_atraso_dias: number | null;
+      total_pago: number | null;
     }>;
   }> {
     this.logger.log("buscarDashboardContasReceber: iniciando consulta agregada de contas a receber");
@@ -1989,6 +1990,8 @@ export class AthosService {
           titulos_pendentes: Number(row["titulos_pendentes"] ?? 0),
           maior_atraso_dias:
             row["maior_atraso_dias"] != null ? Number(row["maior_atraso_dias"]) : null,
+          // Preenchido pela 4a consulta (total pago historico); null = nao calculado.
+          total_pago: null as number | null,
         };
       });
 
@@ -2062,6 +2065,41 @@ export class AthosService {
           `buscarDashboardContasReceber: falha ao calcular recebido no mes — retornando zero. Causa: ${String(error)}`,
         );
         total_recebido_mes = 0;
+      }
+
+      // Total pago por cliente (mesma definicao do "Total pago" do historico do cliente: soma de
+      // conta_recebida.valorpago dos titulos do cliente, todo o periodo). SELECT fixo; os ids dos
+      // clientes ja carregados entram so como parametro. Falha vira null sem afetar o resto.
+      if (clientes.length > 0) {
+        const idsClientes = clientes
+          .map((c) => c.idcliente)
+          .filter((n) => Number.isInteger(n) && n > 0);
+        try {
+          const totalPagoResult = await client.query(
+            `
+            SELECT cr.idcliente, COALESCE(SUM(cre.valorpago), 0) AS total_pago
+            FROM conta_receber cr
+            JOIN conta_recebida cre ON cre.idcontareceber = cr.idcontareceber
+            WHERE cr.idcliente = ANY($1)
+            GROUP BY cr.idcliente
+          `,
+            [idsClientes],
+          );
+          const mapaTotalPago = new Map<number, number>();
+          for (const row of totalPagoResult.rows as Row[]) {
+            mapaTotalPago.set(Number(row["idcliente"]), Number(row["total_pago"] ?? 0));
+          }
+          for (const c of clientes) {
+            c.total_pago = mapaTotalPago.get(c.idcliente) ?? 0;
+          }
+        } catch (error) {
+          this.logger.warn(
+            `buscarDashboardContasReceber: falha ao calcular total_pago por cliente — retornando null. Causa: ${String(error)}`,
+          );
+          for (const c of clientes) {
+            c.total_pago = null;
+          }
+        }
       }
 
       const summary = {

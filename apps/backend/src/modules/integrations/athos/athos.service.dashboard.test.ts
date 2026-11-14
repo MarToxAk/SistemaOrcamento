@@ -186,7 +186,7 @@ describe("AthosService - buscarDashboardContasReceber (agregados fiscais D-02, D
     expect(Number.isFinite(result.summary.taxa_inadimplencia)).toBe(true);
   });
 
-  it("usa uma unica conexao para as tres consultas", async () => {
+  it("usa uma unica conexao para as quatro consultas", async () => {
     const { pool, client } = setupClient();
     (client.query as jest.Mock)
       .mockResolvedValueOnce({ rows: [CLIENTE_ROW] })
@@ -196,7 +196,7 @@ describe("AthosService - buscarDashboardContasReceber (agregados fiscais D-02, D
     await service.buscarDashboardContasReceber();
 
     expect(pool.connect).toHaveBeenCalledTimes(1);
-    expect(client.query).toHaveBeenCalledTimes(3);
+    expect(client.query).toHaveBeenCalledTimes(4);
     expect(client.release).toHaveBeenCalledTimes(1);
   });
 
@@ -223,7 +223,7 @@ describe("AthosService - buscarDashboardContasReceber (agregados fiscais D-02, D
     // a terceira consulta (recebido no mes) roda de forma independente e seu
     // resultado NAO e descartado pela falha da segunda consulta (CR-01)
     expect(result.summary.total_recebido_mes).toBe(999);
-    expect(client.query).toHaveBeenCalledTimes(3);
+    expect(client.query).toHaveBeenCalledTimes(4);
   });
 
   it("preserva aging/a_vencer/taxa validos quando apenas a consulta de recebido_mes falha (CR-01)", async () => {
@@ -257,6 +257,134 @@ describe("AthosService - buscarDashboardContasReceber (agregados fiscais D-02, D
 
     // apenas o campo cuja consulta falhou degrada para zero
     expect(result.summary.total_recebido_mes).toBe(0);
+    expect(client.query).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("AthosService - buscarDashboardContasReceber: total_pago por cliente (Fase 48)", () => {
+  let service: AthosService;
+
+  beforeAll(() => {
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos";
+    process.env.ATHOS_PG_USER = "user";
+    process.env.ATHOS_PG_PASS = "pass";
+    process.env.ATHOS_PG_PORT = "5432";
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AthosService, { provide: PrismaService, useValue: mockPrismaService }],
+    }).compile();
+    service = module.get<AthosService>(AthosService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  const CLIENTE_ROW_2 = { ...CLIENTE_ROW, idcliente: 2, nome_cliente: "Outro Cliente" };
+
+  it("preenche total_pago a partir da quarta consulta e zera o cliente sem pagamento", async () => {
+    const { client } = setupClient();
+    (client.query as jest.Mock)
+      .mockResolvedValueOnce({ rows: [CLIENTE_ROW, CLIENTE_ROW_2] })
+      .mockResolvedValueOnce({ rows: [agregadosRow()] })
+      .mockResolvedValueOnce({ rows: [{ total_recebido_mes: 0 }] })
+      .mockResolvedValueOnce({ rows: [{ idcliente: 1, total_pago: "1234.50" }] });
+
+    const result = await service.buscarDashboardContasReceber();
+
+    expect(result.clientes.map((c) => [c.idcliente, c.total_pago])).toEqual([
+      [1, 1234.5],
+      [2, 0],
+    ]);
+  });
+
+  it("a quarta consulta usa SQL fixo com os ids como parametro (array), sem interpolar", async () => {
+    const { client } = setupClient();
+    (client.query as jest.Mock)
+      .mockResolvedValueOnce({ rows: [CLIENTE_ROW, CLIENTE_ROW_2] })
+      .mockResolvedValueOnce({ rows: [agregadosRow()] })
+      .mockResolvedValueOnce({ rows: [{ total_recebido_mes: 0 }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await service.buscarDashboardContasReceber();
+
+    expect(client.query).toHaveBeenCalledTimes(4);
+    const [sql, params] = (client.query as jest.Mock).mock.calls[3];
+    expect(sql).toContain("conta_recebida");
+    expect(sql).toContain("cr.idcliente = ANY($1)");
+    expect(sql).toContain("GROUP BY cr.idcliente");
+    expect(params).toEqual([[1, 2]]);
+  });
+
+  it("falha da quarta consulta deixa total_pago null e o resto da resposta igual", async () => {
+    const { client } = setupClient();
+    const warn = jest.spyOn((service as any).logger, "warn").mockImplementation(() => undefined);
+    (client.query as jest.Mock)
+      .mockResolvedValueOnce({ rows: [CLIENTE_ROW, CLIENTE_ROW_2] })
+      .mockResolvedValueOnce({
+        rows: [
+          agregadosRow({
+            aging_1_30: 100,
+            a_vencer_7d: 10,
+            clientes_inadimplentes: 3,
+            clientes_com_titulo_aberto: 8,
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ total_recebido_mes: 999 }] })
+      .mockRejectedValueOnce(new Error("falha simulada em total_pago"));
+
+    const result = await service.buscarDashboardContasReceber();
+
+    expect(result.clientes.map((c) => c.total_pago)).toEqual([null, null]);
+    expect(result.clientes).toHaveLength(2);
+    expect(result.clientes[0].total_devido).toBe(500);
+    expect(result.summary.aging.d1_30).toBe(100);
+    expect(result.summary.a_vencer.d7).toBe(10);
+    expect(result.summary.taxa_inadimplencia).toBe(37.5);
+    expect(result.summary.total_recebido_mes).toBe(999);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("total_pago"));
+    expect(client.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem clientes a quarta consulta nao roda", async () => {
+    const { client } = setupClient();
+    (client.query as jest.Mock)
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [agregadosRow()] })
+      .mockResolvedValueOnce({ rows: [{ total_recebido_mes: 0 }] });
+
+    const result = await service.buscarDashboardContasReceber();
+
+    expect(result.clientes).toEqual([]);
     expect(client.query).toHaveBeenCalledTimes(3);
+  });
+
+  it("mantem os campos existentes de cada cliente", async () => {
+    const { client } = setupClient();
+    (client.query as jest.Mock)
+      .mockResolvedValueOnce({ rows: [CLIENTE_ROW] })
+      .mockResolvedValueOnce({ rows: [agregadosRow()] })
+      .mockResolvedValueOnce({ rows: [{ total_recebido_mes: 0 }] })
+      .mockResolvedValueOnce({ rows: [{ idcliente: 1, total_pago: 10 }] });
+
+    const result = await service.buscarDashboardContasReceber();
+
+    expect(result.clientes[0]).toEqual({
+      idcliente: 1,
+      nome_cliente: "Cliente Teste",
+      telefone_completo: "11999999999",
+      emailcliente: "cliente@teste.com",
+      emailcobrancacliente: null,
+      limitecredito: 1000,
+      bloqueaprazo: "N",
+      total_devido: 500,
+      total_atrasado: 200,
+      titulos_pendentes: 2,
+      maior_atraso_dias: 15,
+      total_pago: 10,
+    });
   });
 });

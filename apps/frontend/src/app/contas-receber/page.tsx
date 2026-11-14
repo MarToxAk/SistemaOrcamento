@@ -5,10 +5,19 @@ import PasswordGate from "@/components/password-gate";
 import AdminShell from "./admin-shell";
 import ClienteAutocomplete from "./cliente-autocomplete";
 import { ResumoBoletos } from "./_componentes/boletos-consolidados";
+import SeletorOrdenacao, { ThOrdenavel } from "./_componentes/seletor-ordenacao";
 import RecursosBootstrap from "./_shared/recursos-bootstrap";
 import { lerOpcao, lerTexto } from "./_shared/filtros-url";
 import { formatBRL, formatDate, formatPercent } from "./_shared/formatadores";
 import { useFiltrosUrl } from "./_shared/use-filtros-url";
+import {
+  CONFIG_CLIENTES,
+  lerOrdenacao,
+  ordenacaoParaUrl,
+  ordenarClientes,
+  type Ordenacao,
+  type OrdemClientes,
+} from "./_shared/ordenacao";
 
 interface DashboardSummary {
   total_a_receber: number;
@@ -41,6 +50,8 @@ interface ClienteDevedor {
   total_atrasado: number;
   titulos_pendentes: number;
   maior_atraso_dias: number | null;
+  // total já pago (histórico do Athos), Fase 48; null se o cálculo falhou
+  total_pago?: number | null;
 }
 
 interface TopItemVendido {
@@ -100,15 +111,6 @@ const STATUS_OPTIONS: { value: StatusFiltro; label: string; cls: string }[] = [
   { value: "CAN", label: "Cancelados",      cls: "btn-outline-dark"      },
 ];
 
-type SortKey = "nome" | "total_devido" | "total_atrasado";
-type SortDir = "asc" | "desc";
-
-const CLIENTE_SORT_COLUMNS: { key: SortKey; label: string }[] = [
-  { key: "nome",           label: "Cliente" },
-  { key: "total_devido",   label: "Total devido" },
-  { key: "total_atrasado", label: "Atrasado" },
-];
-
 export default function ContasReceberPage() {
   return (
     <PasswordGate title="Contas a Receber" description="Esta area exibe dados financeiros de clientes. Digite a senha de configuracoes para continuar.">
@@ -135,8 +137,7 @@ function ContasReceberDashboard() {
   const { obter, definir } = useFiltrosUrl();
   const statusFiltro = lerOpcao<StatusFiltro>(obter("status"), STATUS_PERMITIDOS, "");
   const [busca, setBusca] = useState(() => lerTexto(obter("busca")));
-  const [sortBy, setSortBy] = useState<SortKey>("total_atrasado");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const ordenacao = lerOrdenacao(obter("ordem"), obter("dir"), CONFIG_CLIENTES);
 
   const [indicadores, setIndicadores] = useState<IndicadoresContasReceber | null>(null);
   const [loadingIndicadores, setLoadingIndicadores] = useState(true);
@@ -192,13 +193,8 @@ function ContasReceberDashboard() {
     definir({ busca: lerTexto(texto) || null });
   }
 
-  function handleSort(key: SortKey) {
-    if (sortBy === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(key);
-      setSortDir("desc");
-    }
+  function mudarOrdenacao(nova: Ordenacao<OrdemClientes>) {
+    definir(ordenacaoParaUrl(nova, CONFIG_CLIENTES));
   }
 
   const buscaNormalizada = busca.trim().toLowerCase();
@@ -210,13 +206,7 @@ function ContasReceberDashboard() {
       )
     : clientes;
 
-  const clientesOrdenados = [...clientesFiltrados].sort((a, b) => {
-    const mult = sortDir === "asc" ? 1 : -1;
-    if (sortBy === "nome") {
-      return a.nome_cliente.localeCompare(b.nome_cliente, "pt-BR") * mult;
-    }
-    return (a[sortBy] - b[sortBy]) * mult;
-  });
+  const clientesOrdenados = ordenarClientes(clientesFiltrados, ordenacao);
 
   return (
     <>
@@ -382,20 +372,26 @@ function ContasReceberDashboard() {
               </div>
             ) : (
               <div className="pa-card">
+                <div className="pa-card-header">
+                  <div>
+                    <strong>Clientes</strong>
+                    <span className="pa-card-header-count">({clientesFiltrados.length})</span>
+                  </div>
+                  <SeletorOrdenacao
+                    id="ordenar-clientes"
+                    config={CONFIG_CLIENTES}
+                    ordenacao={ordenacao}
+                    onMudar={mudarOrdenacao}
+                  />
+                </div>
                 <div className="pa-card-body pa-card-body-flush">
                   <table className="pa-table">
                     <thead>
                       <tr>
-                        {CLIENTE_SORT_COLUMNS.map((col) => (
-                          <th key={col.key}>
-                            <button type="button" className="pa-th-sort" onClick={() => handleSort(col.key)}>
-                              {col.label}
-                              {sortBy === col.key && (
-                                <i className={`bi ${sortDir === "desc" ? "bi-sort-down" : "bi-sort-up"} ms-1`} />
-                              )}
-                            </button>
-                          </th>
-                        ))}
+                        <ThOrdenavel ordem="nome" rotulo="Cliente" config={CONFIG_CLIENTES} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
+                        <ThOrdenavel ordem="devido" rotulo="Total devido" config={CONFIG_CLIENTES} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
+                        <ThOrdenavel ordem="atrasado" rotulo="Atrasado" config={CONFIG_CLIENTES} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
+                        <ThOrdenavel ordem="pago" rotulo="Pago" config={CONFIG_CLIENTES} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
                         <th>Títulos</th>
                         <th>Limite de crédito</th>
                         <th>Atraso</th>
@@ -426,6 +422,13 @@ function ContasReceberDashboard() {
                                 <span style={{ color: "var(--pa-danger)" }} className="fw-semibold">
                                   {formatBRL(cliente.total_atrasado)}
                                 </span>
+                              ) : (
+                                <span className="text-muted">—</span>
+                              )}
+                            </td>
+                            <td className="text-nowrap" title="Total já pago pelo cliente (histórico do Athos)">
+                              {typeof cliente.total_pago === "number" ? (
+                                formatBRL(cliente.total_pago)
                               ) : (
                                 <span className="text-muted">—</span>
                               )}

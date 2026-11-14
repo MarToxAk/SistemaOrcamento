@@ -5,6 +5,7 @@ import PasswordGate from "@/components/password-gate";
 import AdminShell from "../admin-shell";
 import NotasFiscais from "../_componentes/notas-fiscais";
 import { lerData, lerInteiroPositivo, lerOpcao, lerTexto } from "../_shared/filtros-url";
+import { CONFIG_NOTAS, lerOrdenacao, ordenacaoParaUrl } from "../_shared/ordenacao";
 import RecursosBootstrap from "../_shared/recursos-bootstrap";
 import { useFiltrosUrl } from "../_shared/use-filtros-url";
 
@@ -17,7 +18,7 @@ const OPCOES_TIPO: Array<{ valor: TipoNota; rotulo: string }> = [
   { valor: "nfe", rotulo: "NF-e" },
 ];
 
-/** Filtros (tipo, periodo, busca e pagina) ficam na URL; mudar qualquer filtro volta para a pagina 1 (D-04). */
+/** Filtros (tipo, periodo, busca, ordem e pagina) ficam na URL; mudar filtro ou ordem volta para a pagina 1 (D-04, D-07). */
 function NotasComFiltros() {
   const { obter, definir } = useFiltrosUrl();
   const tipo = lerOpcao(obter("tipo"), TIPOS_NOTA, "");
@@ -25,6 +26,8 @@ function NotasComFiltros() {
   const ate = lerData(obter("ate"));
   const busca = lerTexto(obter("busca"), 80);
   const pagina = lerInteiroPositivo(obter("pagina"), 1);
+  // ordem=pago (notas nao tem "pago") ou valor desconhecido cai no padrao (emissao mais recente primeiro).
+  const ordenacao = lerOrdenacao(obter("ordem"), obter("dir"), CONFIG_NOTAS);
 
   // A busca e digitada localmente e gravada na URL com atraso, para nao perder letras a cada router.replace.
   const [buscaDigitada, setBuscaDigitada] = useState(busca);
@@ -134,6 +137,8 @@ function NotasComFiltros() {
         tipo={tipo}
         busca={busca}
         pagina={pagina}
+        ordenacao={ordenacao}
+        onMudarOrdenacao={(nova) => definir({ ...ordenacaoParaUrl(nova, CONFIG_NOTAS), pagina: null })}
         onMudarPagina={(nova) => definir({ pagina: nova > 1 ? String(nova) : null })}
       />
 

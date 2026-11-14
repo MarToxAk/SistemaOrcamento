@@ -331,3 +331,64 @@ describe("CobrancaService.buscarBoletosDashboard - situacao de vencimento e ulti
     expect(result[1].athosBaixaStatus).toBeNull();
   });
 });
+
+describe("CobrancaService.buscarBoletosDashboard - dataPagamento (Fase 48)", () => {
+  let service: CobrancaService;
+
+  beforeEach(() => {
+    service = Object.create(CobrancaService.prototype);
+    (service as any).logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    (service as any).prisma = {
+      cobrancaBoleto: { findMany: jest.fn() },
+      nfseEmitidaTitulo: { findMany: jest.fn() },
+    };
+    (service as any).athosService = {
+      buscarNomesClientes: jest.fn().mockResolvedValue([]),
+    };
+  });
+
+  function boleto(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      id: 1,
+      idclienteAthos: 10,
+      status: "pendente",
+      valor: 100,
+      expireAt: "2026-09-10",
+      linkBoleto: "http://example.com/boleto",
+      criadoEm: new Date("2026-09-01T00:00:00Z"),
+      titulos: [],
+      ...overrides,
+    };
+  }
+
+  it("boleto pago com data gravada devolve dataPagamento AAAA-MM-DD", async () => {
+    (service as any).prisma.cobrancaBoleto.findMany.mockResolvedValue([
+      boleto({ status: "pago", athosBaixaDataPagamento: "2026-11-10" }),
+    ]);
+
+    const result = await service.buscarBoletosDashboard();
+
+    expect(result[0].dataPagamento).toBe("2026-11-10");
+  });
+
+  it("boleto pago sem data gravada (antes da Fase 43) devolve dataPagamento null", async () => {
+    (service as any).prisma.cobrancaBoleto.findMany.mockResolvedValue([
+      boleto({ status: "pago", athosBaixaDataPagamento: null }),
+      boleto({ id: 2, status: "pago" }),
+    ]);
+
+    const result = await service.buscarBoletosDashboard();
+
+    expect(result.map((r) => r.dataPagamento)).toEqual([null, null]);
+  });
+
+  it("boleto pendente com a data preenchida devolve dataPagamento null", async () => {
+    (service as any).prisma.cobrancaBoleto.findMany.mockResolvedValue([
+      boleto({ status: "pendente", athosBaixaDataPagamento: "2026-11-10" }),
+    ]);
+
+    const result = await service.buscarBoletosDashboard();
+
+    expect(result[0].dataPagamento).toBeNull();
+  });
+});

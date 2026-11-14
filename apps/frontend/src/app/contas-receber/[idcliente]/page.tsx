@@ -125,7 +125,7 @@ function ClienteDetalheConteudo({ idcliente }: { idcliente: string }) {
 
         <AbasNavegacao
           abaAtual={aba}
-          onSelecionar={(id) => definir({ aba: id === "contas" ? null : id })}
+          onSelecionar={(id) => definir({ aba: id === "contas" ? null : id, ordem: null, dir: null })}
           contagens={{
             contas: titulos.length,
             "gerar-boleto": titulosLivres.length,

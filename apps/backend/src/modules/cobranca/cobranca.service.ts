@@ -707,6 +707,8 @@ export class CobrancaService {
     status: string;
     linkBoleto: string | null;
     nomeArquivo: string | null;
+    expireAt: string | null;
+    dataPagamento: string | null;
     ultimoEmail: {
       status: string;
       destinatario: string;
@@ -730,6 +732,8 @@ export class CobrancaService {
             status: true,
             linkBoleto: true,
             nomeArquivo: true,
+            expireAt: true,
+            athosBaixaDataPagamento: true,
             // Só o envio de e-mail mais recente — é só um indicador de leitura na tela, não histórico completo.
             emailEnvios: {
               orderBy: { enviadoEm: "desc" },
@@ -748,6 +752,10 @@ export class CobrancaService {
         status: r.cobrancaBoleto.status,
         linkBoleto: r.cobrancaBoleto.linkBoleto,
         nomeArquivo: r.cobrancaBoleto.nomeArquivo,
+        expireAt: r.cobrancaBoleto.expireAt ?? null,
+        // So boleto pago tem data de pagamento (AAAA-MM-DD resolvida na baixa do Athos; null em pagos antes da Fase 43).
+        dataPagamento:
+          r.cobrancaBoleto.status === "pago" ? (r.cobrancaBoleto.athosBaixaDataPagamento ?? null) : null,
         ultimoEmail: ultimo
           ? {
               status: ultimo.status,
@@ -1001,6 +1009,7 @@ export class CobrancaService {
     athosBaixaStatus: string | null;
     athosBaixaErroCodigo: string | null;
     athosBaixaErroMensagem: string | null;
+    dataPagamento: string | null;
   }>> {
     const boletos = await this.prisma.cobrancaBoleto.findMany({
       where: { status: { not: "cancelado" } },
@@ -1064,6 +1073,7 @@ export class CobrancaService {
         athosBaixaStatus: b.athosBaixaStatus ?? null,
         athosBaixaErroCodigo: b.athosBaixaErroCodigo ?? null,
         athosBaixaErroMensagem: b.athosBaixaErroMensagem ?? null,
+        dataPagamento: b.status === "pago" ? (b.athosBaixaDataPagamento ?? null) : null,
       };
     });
 
