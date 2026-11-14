@@ -2,9 +2,18 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import BoletoDetalhe from "./boleto-detalhe";
+import SeletorOrdenacao, { ThOrdenavel } from "./seletor-ordenacao";
 import { filtrarBoletos, lerFiltrosBoletos, type FiltrosBoletos } from "../_shared/filtros-boletos";
 import { lerData, lerInteiroPositivo, lerTexto } from "../_shared/filtros-url";
 import { formatBRL } from "../_shared/formatadores";
+import {
+  CONFIG_BOLETOS,
+  lerOrdenacao,
+  ordenacaoParaUrl,
+  ordenarBoletos,
+  type Ordenacao,
+  type OrdemBoletos,
+} from "../_shared/ordenacao";
 import { useFiltrosUrl } from "../_shared/use-filtros-url";
 
 export type NfseStatusBoleto = "completa" | "parcial" | "pendente";
@@ -26,6 +35,8 @@ export interface BoletoDashboardItem {
   status: string;
   valor: number;
   expireAt: string | null;
+  /** Data do pagamento (AAAA-MM-DD) quando status = pago; preenchido pelo backend (Fase 48-02). */
+  dataPagamento?: string | null;
   diasParaVencer: number | null;
   situacaoVencimento?: SituacaoVencimento | null;
   ultimoAviso?: UltimoAvisoBoleto | null;
@@ -186,6 +197,11 @@ export default function BoletosConsolidados() {
     busca: obter("busca"),
   });
   const boletoAbertoId = lerInteiroPositivo(obter("boleto"), 0);
+  const ordenacao = lerOrdenacao(obter("ordem"), obter("dir"), CONFIG_BOLETOS);
+
+  function mudarOrdenacao(nova: Ordenacao<OrdemBoletos>) {
+    definir(ordenacaoParaUrl(nova, CONFIG_BOLETOS));
+  }
 
   const [boletos, setBoletos] = useState<BoletoDashboardItem[]>([]);
   const [boletosLoading, setBoletosLoading] = useState(true);
@@ -364,7 +380,7 @@ export default function BoletosConsolidados() {
   ).length;
   const totalAtrasados = pendentes.filter((b) => b.situacaoVencimento === "atrasado").length;
 
-  const visiveis = filtrarBoletos(boletos, filtros);
+  const visiveis = ordenarBoletos(filtrarBoletos(boletos, filtros), ordenacao);
   const temFiltro =
     filtros.status !== "" ||
     filtros.situacao !== "" ||
@@ -515,7 +531,15 @@ export default function BoletosConsolidados() {
         ) : (
           <>
             <div className="pa-contagem small text-muted">
-              Mostrando {visiveis.length} de {boletos.length}
+              <span>
+                Mostrando {visiveis.length} de {boletos.length}
+              </span>
+              <SeletorOrdenacao
+                id="ordenar-boletos"
+                config={CONFIG_BOLETOS}
+                ordenacao={ordenacao}
+                onMudar={mudarOrdenacao}
+              />
             </div>
             {visiveis.length === 0 ? (
               <div className="pa-empty">
@@ -529,10 +553,10 @@ export default function BoletosConsolidados() {
                 <thead>
                   <tr>
                     <th className="pa-th-chevron" aria-label="Detalhes" />
-                    <th>Cliente</th>
+                    <ThOrdenavel ordem="nome" rotulo="Cliente" config={CONFIG_BOLETOS} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
                     <th>Valor</th>
-                    <th>Vencimento</th>
-                    <th>Status</th>
+                    <ThOrdenavel ordem="data" rotulo="Vencimento" config={CONFIG_BOLETOS} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
+                    <ThOrdenavel ordem="pago" rotulo="Status" config={CONFIG_BOLETOS} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
                     <th>Selos</th>
                   </tr>
                 </thead>
@@ -720,7 +744,7 @@ export default function BoletosConsolidados() {
         .pa-filtro-rotulo { color: var(--pa-text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin: 0; }
         .pa-filtro-busca { flex: 1 1 14rem; min-width: 12rem; }
         .pa-filtro-limpar { margin-left: auto; }
-        .pa-contagem { padding: 0.5rem 1.1rem; }
+        .pa-contagem { padding: 0.5rem 1.1rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem 1rem; flex-wrap: wrap; }
         .pa-tabela-scroll { overflow-x: auto; }
         .pa-table-boletos .pa-th-chevron, .pa-table-boletos .pa-td-chevron { width: 2.5rem; padding-right: 0; }
         .pa-row-clicavel { cursor: pointer; }
