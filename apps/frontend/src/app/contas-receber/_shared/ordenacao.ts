@@ -60,6 +60,47 @@ export const CONFIG_BOLETOS_CLIENTE: ConfigOrdenacao<OrdemBoletos> = {
   rotulosDirecao: ROTULOS_DIRECAO_BOLETOS,
 };
 
+const ROTULOS_NOTAS: Record<OrdemNotas, string> = { data: "Data de Emissão", nome: "Nome" };
+
+const ROTULOS_DIRECAO_NOTAS: Record<OrdemNotas, { asc: string; desc: string }> = {
+  data: { asc: "Mais Antiga Primeiro", desc: "Mais Recente Primeiro" },
+  nome: { asc: "A a Z", desc: "Z a A" },
+};
+
+const DIRECAO_INICIAL_NOTAS: Record<OrdemNotas, Direcao> = { data: "desc", nome: "asc" };
+
+/** Notas fiscais de /contas-receber/notas (D-01). Data = emissao; padrao: emissao mais recente primeiro. Sem "pago" (D-04). */
+export const CONFIG_NOTAS: ConfigOrdenacao<OrdemNotas> = {
+  permitidas: ["data", "nome"],
+  padrao: { ordem: "data", dir: "desc" },
+  direcaoInicial: DIRECAO_INICIAL_NOTAS,
+  rotulos: ROTULOS_NOTAS,
+  rotulosDirecao: ROTULOS_DIRECAO_NOTAS,
+};
+
+/** Aba Notas do cliente: um cliente so, sem "nome" (D-03). Mesmo tipo da lista geral. */
+export const CONFIG_NOTAS_CLIENTE: ConfigOrdenacao<OrdemNotas> = {
+  permitidas: ["data"],
+  padrao: { ordem: "data", dir: "desc" },
+  direcaoInicial: DIRECAO_INICIAL_NOTAS,
+  rotulos: ROTULOS_NOTAS,
+  rotulosDirecao: ROTULOS_DIRECAO_NOTAS,
+};
+
+/** Lista de clientes de /contas-receber (D-01). Padrao: total atrasado decrescente, como antes da Fase 48. */
+export const CONFIG_CLIENTES: ConfigOrdenacao<OrdemClientes> = {
+  permitidas: ["atrasado", "devido", "nome", "pago"],
+  padrao: { ordem: "atrasado", dir: "desc" },
+  direcaoInicial: { atrasado: "desc", devido: "desc", nome: "asc", pago: "desc" },
+  rotulos: { atrasado: "Atrasado", devido: "Total Devido", nome: "Nome", pago: "Pago" },
+  rotulosDirecao: {
+    atrasado: { asc: "Menor Primeiro", desc: "Maior Primeiro" },
+    devido: { asc: "Menor Primeiro", desc: "Maior Primeiro" },
+    nome: { asc: "A a Z", desc: "Z a A" },
+    pago: { asc: "Pagou Menos Primeiro", desc: "Pagou Mais Primeiro" },
+  },
+};
+
 /** Interpreta ?ordem=&dir= da URL: ordem invalida volta ao padrao inteiro; direcao invalida usa a inicial do criterio. */
 export function lerOrdenacao<O extends string>(
   ordem: string | null | undefined,
@@ -149,5 +190,80 @@ export function ordenarBoletos<
     const v = compararNuloUltimo(venc(a), venc(b), o.dir);
     if (v !== 0) return v;
     return a.id - b.id;
+  });
+}
+
+/** Numeros com null/undefined sempre por ultimo, nas duas direcoes. */
+function compararNumeroNuloUltimo(
+  a: number | null | undefined,
+  b: number | null | undefined,
+  dir: Direcao,
+): number {
+  const na = a === null || a === undefined ? null : a;
+  const nb = b === null || b === undefined ? null : b;
+  if (na === nb) return 0;
+  if (na === null) return 1;
+  if (nb === null) return -1;
+  const c = na < nb ? -1 : 1;
+  return dir === "asc" ? c : -c;
+}
+
+/**
+ * Ordena notas (copia). Data = dataEmissao como texto completo (ISO da NFS-e ou AAAA-MM-DD da NF-e), null por ultimo.
+ * Empates: tipo ("NFS-e" antes de "NF-e") e numero na data; emissao mais recente e numero no nome.
+ */
+export function ordenarNotas<
+  T extends { tipo: string; numero: string | null; nomeCliente: string; dataEmissao: string | null },
+>(lista: readonly T[], o: Ordenacao<string>): T[] {
+  const porNumero = (a: T, b: T) => compararTexto(a.numero ?? "", b.numero ?? "");
+  return [...lista].sort((a, b) => {
+    if (o.ordem === "nome") {
+      const c = aplicarDirecao(compararTexto(a.nomeCliente, b.nomeCliente), o.dir);
+      if (c !== 0) return c;
+      const e = compararNuloUltimo(a.dataEmissao, b.dataEmissao, "desc");
+      if (e !== 0) return e;
+      return porNumero(a, b);
+    }
+    const e = compararNuloUltimo(a.dataEmissao, b.dataEmissao, o.dir);
+    if (e !== 0) return e;
+    if (a.tipo !== b.tipo) return a.tipo === "NFS-e" ? -1 : b.tipo === "NFS-e" ? 1 : compararTexto(a.tipo, b.tipo);
+    return porNumero(a, b);
+  });
+}
+
+/**
+ * Ordena clientes devedores (copia). "atrasado" e "devido" desempatam pelo outro total (decrescente), depois nome e id,
+ * o que reproduz a ordem do backend no padrao. "pago" deixa total_pago null/undefined por ultimo.
+ */
+export function ordenarClientes<
+  T extends {
+    idcliente: number;
+    nome_cliente: string;
+    total_devido: number;
+    total_atrasado: number;
+    total_pago?: number | null;
+  },
+>(lista: readonly T[], o: Ordenacao<string>): T[] {
+  const nomeEId = (a: T, b: T) => {
+    const n = compararTexto(a.nome_cliente, b.nome_cliente);
+    return n !== 0 ? n : a.idcliente - b.idcliente;
+  };
+  return [...lista].sort((a, b) => {
+    if (o.ordem === "nome") {
+      const c = aplicarDirecao(compararTexto(a.nome_cliente, b.nome_cliente), o.dir);
+      return c !== 0 ? c : a.idcliente - b.idcliente;
+    }
+    if (o.ordem === "pago") {
+      const c = compararNumeroNuloUltimo(a.total_pago, b.total_pago, o.dir);
+      return c !== 0 ? c : nomeEId(a, b);
+    }
+    const [campo, outro] =
+      o.ordem === "devido"
+        ? (["total_devido", "total_atrasado"] as const)
+        : (["total_atrasado", "total_devido"] as const);
+    const c = aplicarDirecao(a[campo] - b[campo], o.dir);
+    if (c !== 0) return c;
+    const d = b[outro] - a[outro];
+    return d !== 0 ? d : nomeEId(a, b);
   });
 }
