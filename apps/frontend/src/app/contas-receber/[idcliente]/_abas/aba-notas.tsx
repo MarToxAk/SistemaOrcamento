@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import NotasFiscais from "../../_componentes/notas-fiscais";
 import { formatBRL, formatDate } from "../../_shared/formatadores";
+import { CONFIG_NOTAS_CLIENTE, lerOrdenacao, ordenacaoParaUrl } from "../../_shared/ordenacao";
+import { useFiltrosUrl } from "../../_shared/use-filtros-url";
 import type { NotaFiscalAthos } from "./compartilhado";
 
 interface AbaNotasProps {
@@ -15,6 +17,10 @@ export function AbaNotas({ idcliente, onRecarregar }: AbaNotasProps) {
   // Sem id valido nao ha filtro: a lista geral nunca pode aparecer na tela de um cliente.
   const idClienteAthos = Number(idcliente);
   const idValido = Number.isInteger(idClienteAthos) && idClienteAthos > 0;
+
+  // Ordem das notas na URL da tela do cliente: so por data de emissao (sem Nome, D-03); ordem=nome ou pago cai no padrao.
+  const { obter, definir } = useFiltrosUrl();
+  const ordenacao = lerOrdenacao(obter("ordem"), obter("dir"), CONFIG_NOTAS_CLIENTE);
 
   // Notas Fiscais Athos
   const [nfatCarregada, setNfatCarregada] = useState(false);
@@ -96,6 +102,8 @@ export function AbaNotas({ idcliente, onRecarregar }: AbaNotasProps) {
         <NotasFiscais
           idclienteAthos={idClienteAthos}
           mostrarCliente={false}
+          ordenacao={ordenacao}
+          onMudarOrdenacao={(nova) => definir(ordenacaoParaUrl(nova, CONFIG_NOTAS_CLIENTE))}
           acoesExtrasNfse={(nota, recarregar) => (
             <button
               type="button"
