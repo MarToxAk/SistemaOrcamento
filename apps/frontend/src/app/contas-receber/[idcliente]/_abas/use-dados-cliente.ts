@@ -68,6 +68,8 @@ export function useDadosCliente(idcliente: string) {
                           status: b.status,
                           linkBoleto: b.linkBoleto,
                           nomeArquivo: b.nomeArquivo,
+                          expireAt: b.expireAt ?? null,
+                          dataPagamento: b.dataPagamento ?? null,
                           ultimoEmail: b.ultimoEmail ?? null,
                         },
                       ]),

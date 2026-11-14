@@ -45,6 +45,9 @@ export interface TituloReceber {
     status: string;
     linkBoleto: string | null;
     nomeArquivo: string | null;
+    /** AAAA-MM-DD do titulos-em-uso (Fase 48); ausente antes do deploy do backend. */
+    expireAt?: string | null;
+    dataPagamento?: string | null;
     ultimoEmail?: {
       status: string;
       destinatario: string;

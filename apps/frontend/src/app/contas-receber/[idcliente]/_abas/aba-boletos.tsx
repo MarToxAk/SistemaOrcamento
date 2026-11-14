@@ -2,7 +2,18 @@
 
 import { useRef, useState } from "react";
 import BoletoDetalhe from "../../_componentes/boleto-detalhe";
+import SeletorOrdenacao from "../../_componentes/seletor-ordenacao";
 import { formatBRL, formatDate } from "../../_shared/formatadores";
+import { formatarDataEmissao } from "../../_shared/notas-util";
+import {
+  CONFIG_BOLETOS_CLIENTE,
+  lerOrdenacao,
+  ordenacaoParaUrl,
+  ordenarBoletos,
+  type OrdemBoletos,
+  type Ordenacao,
+} from "../../_shared/ordenacao";
+import { useFiltrosUrl } from "../../_shared/use-filtros-url";
 import {
   EMAIL_CC_MAX,
   EMAIL_CC_PADRAO_TIMEOUT_MS,
@@ -24,6 +35,13 @@ interface AbaBoletosProps {
 
 /** Boletos emitidos agrupados, com PDF, verificar pagamento, cancelar e envio por e-mail com CC. */
 export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, erroTitulos }: AbaBoletosProps) {
+  // Ordem dos boletos na URL (?ordem=&dir=), Fase 48; sem Nome (um cliente so, D-03).
+  const { obter, definir } = useFiltrosUrl();
+  const ordenacao = lerOrdenacao(obter("ordem"), obter("dir"), CONFIG_BOLETOS_CLIENTE);
+  function mudarOrdenacao(nova: Ordenacao<OrdemBoletos>) {
+    definir(ordenacaoParaUrl(nova, CONFIG_BOLETOS_CLIENTE));
+  }
+
   // ─── Envio de e-mail (boleto + NFS-e + NF-e XML) ───
   const [emailModalState, setEmailModalState] = useState<
     "idle" | "confirm" | "loading" | "success" | "error"
@@ -63,6 +81,16 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
       boletoGrupos.get(id)!.titulos.push(t);
     }
   }
+  const gruposOrdenados = ordenarBoletos(
+    [...boletoGrupos.values()].map((g) => ({
+      id: g.boleto.cobrancaId,
+      status: g.boleto.status,
+      expireAt: g.boleto.expireAt ?? null,
+      dataPagamento: g.boleto.dataPagamento ?? null,
+      grupo: g,
+    })),
+    ordenacao,
+  ).map((x) => x.grupo);
 
   function abreEmailModal(
     boleto: NonNullable<(typeof titulos)[0]["boletoAtivo"]>,
@@ -206,8 +234,16 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
   return (
     <>
       <div className="pa-card">
-        <div className="pa-card-header">
+        <div className="pa-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
           <strong><i className="bi bi-files me-2 text-primary" />Boletos Emitidos</strong>
+          {boletoGrupos.size > 0 && (
+            <SeletorOrdenacao
+              id="ordenar-boletos-cliente"
+              config={CONFIG_BOLETOS_CLIENTE}
+              ordenacao={ordenacao}
+              onMudar={mudarOrdenacao}
+            />
+          )}
         </div>
         <div className="pa-card-body">
           {loadingTitulos ? (
@@ -224,7 +260,7 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
             </div>
           ) : (
             <div>
-                {[...boletoGrupos.values()].map(({ boleto, titulos: tsBoleto }) => {
+                {gruposOrdenados.map(({ boleto, titulos: tsBoleto }) => {
                   const totalBoleto = tsBoleto.reduce((s, t) => s + t.valor, 0);
                   const isPago = boleto.status === "pago";
                   const pillVariante = isPago ? "success" : boleto.status === "cancelado" ? "secondary" : "warning";
@@ -239,6 +275,12 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                           </span>
                           <span className="small fw-semibold">{formatBRL(totalBoleto)}</span>
                           <span className="small text-muted">({tsBoleto.length} título{tsBoleto.length > 1 ? "s" : ""})</span>
+                          {boleto.expireAt && (
+                            <span className="small text-muted">Venc. {formatarDataEmissao(boleto.expireAt)}</span>
+                          )}
+                          {isPago && boleto.dataPagamento && (
+                            <span className="small text-muted">Pago em {formatarDataEmissao(boleto.dataPagamento)}</span>
+                          )}
                           <StatusEmailBadge ultimoEmail={boleto.ultimoEmail} />
                         </div>
                         <div className="d-flex gap-2">
