@@ -50,6 +50,8 @@ interface ClienteDevedor {
   total_atrasado: number;
   titulos_pendentes: number;
   maior_atraso_dias: number | null;
+  // total já pago (histórico do Athos), Fase 48; null se o cálculo falhou
+  total_pago?: number | null;
 }
 
 interface TopItemVendido {
@@ -389,6 +391,7 @@ function ContasReceberDashboard() {
                         <ThOrdenavel ordem="nome" rotulo="Cliente" config={CONFIG_CLIENTES} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
                         <ThOrdenavel ordem="devido" rotulo="Total devido" config={CONFIG_CLIENTES} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
                         <ThOrdenavel ordem="atrasado" rotulo="Atrasado" config={CONFIG_CLIENTES} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
+                        <ThOrdenavel ordem="pago" rotulo="Pago" config={CONFIG_CLIENTES} ordenacao={ordenacao} onMudar={mudarOrdenacao} />
                         <th>Títulos</th>
                         <th>Limite de crédito</th>
                         <th>Atraso</th>
@@ -419,6 +422,13 @@ function ContasReceberDashboard() {
                                 <span style={{ color: "var(--pa-danger)" }} className="fw-semibold">
                                   {formatBRL(cliente.total_atrasado)}
                                 </span>
+                              ) : (
+                                <span className="text-muted">—</span>
+                              )}
+                            </td>
+                            <td className="text-nowrap" title="Total já pago pelo cliente (histórico do Athos)">
+                              {typeof cliente.total_pago === "number" ? (
+                                formatBRL(cliente.total_pago)
                               ) : (
                                 <span className="text-muted">—</span>
                               )}
