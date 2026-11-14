@@ -227,12 +227,16 @@ Plans:
 ### Phase 48: Contas a receber: escolher a ordenação (data, nome, pago)
 
 **Goal:** Permitir escolher a ordem das listas de contas a receber (boletos consolidados, lista de clientes e boletos/notas da tela do cliente) por data, nome e pago/situação de pagamento, com direção crescente/decrescente, guardada na URL.
-**Requirements**: TBD
+**Requirements**: ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06 (IDs locais da fase — definidos em 48-01-PLAN.md)
 **Depends on:** Phase 47
-**Plans:** 0 plans
+**Plans:** 5 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 48 to break down)
+- [ ] 48-01-PLAN.md — Wave 1 · Frontend tracer: _shared/ordenacao.ts (funções puras + configs), seletor "Ordenar Por" + ThOrdenavel, checar-ordenacao.mjs e /contas-receber/boletos ordenável por data/nome/pago com ?ordem=&dir= (D-02..D-08; ORD-01, 02, 03, 06)
+- [ ] 48-02-PLAN.md — Wave 1 · Backend somente leitura: dataPagamento no boleto/dashboard, expireAt + dataPagamento no titulos-em-uso, total_pago por cliente no contas-receber/dashboard, com Jest (D-02, D-04, D-08; ORD-03, 05, 06)
+- [ ] 48-03-PLAN.md — Wave 2 · Clientes: ordem na URL (padrão total atrasado desc como hoje), seletor, cabeçalhos e coluna/critério Pago (D-01, D-03..D-07; ORD-01, 02, 05, 06)
+- [ ] 48-04-PLAN.md — Wave 2 · Notas: /contas-receber/notas por emissão/nome e aba Notas do cliente por emissão, ordenando antes da paginação (D-02..D-08; ORD-01, 02, 04, 06)
+- [ ] 48-05-PLAN.md — Wave 2 · Aba Boletos do cliente por vencimento/pago na URL e troca de aba limpando a ordem (D-02..D-07; ORD-01, 02, 03, 06)
 
 ---
 
