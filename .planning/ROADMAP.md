@@ -38,6 +38,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 45: Aviso de boletos a vencer e atrasados (alerta interno + e-mail automatico)**
 - [ ] **Phase 46: Mensagem de orçamento ao cliente com desconto e acréscimo corretos**
 - [ ] **Phase 47: Contas a receber: páginas separadas, boletos e notas fiscais PDF/XML**
+- [ ] **Phase 48: Contas a receber: escolher a ordenação (data, nome, pago)**
 
 ### Phase Details
 
@@ -222,6 +223,16 @@ Plans:
 - [ ] 47-04-PLAN.md — Wave 2 · Frontend: tela do cliente em abas na URL (?aba=) — Contas em Aberto, Gerar Boleto, Boletos, Notas Fiscais em arquivos próprios, page.tsx <= 350 linhas, PasswordGate (D-02, D-03, D-04; REC-01, 02, 07)
 - [ ] 47-05-PLAN.md — Wave 3 · Frontend: boletos em tabela compacta com linha expansível (linha digitável/PIX copiáveis, títulos, último aviso, histórico de baixa), ações reunidas e filtros na URL; botão Detalhes na aba do cliente (D-05..D-08; REC-01, 03, 07)
 - [ ] 47-06-PLAN.md — Wave 3 · Frontend: /contas-receber/notas e aba Notas do cliente com PDF (DANFSe/DANFE), XML, "PDF e XML" e ZIP em lote, filtros na URL (D-01, D-04, D-09..D-12; REC-01, 04, 05, 06, 07)
+
+### Phase 48: Contas a receber: escolher a ordenação (data, nome, pago)
+
+**Goal:** Permitir escolher a ordem das listas de contas a receber (boletos consolidados, lista de clientes e boletos/notas da tela do cliente) por data, nome e pago/situação de pagamento, com direção crescente/decrescente, guardada na URL.
+**Requirements**: TBD
+**Depends on:** Phase 47
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 48 to break down)
 
 ---
 

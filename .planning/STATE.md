@@ -282,6 +282,9 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ### Roadmap Evolution
 
+- Phase 48 added (2026-11-14): Contas a receber — escolher a ordenação das listas (data, nome, pago). Executar via `/gsd-autonomous --only 48`.
+- Phase 47 added (2026-11-13): Contas a receber — páginas separadas e mais funcionais (lista geral, visão por cliente com geração de boletos), melhor visualização dos boletos e download de notas fiscais em PDF e XML. Executar via `/gsd-autonomous --only 47`.
+- Phase 46 added (2026-11-12): Mensagem de orçamento ao cliente com desconto e acréscimo corretos — corrige valor absurdo ao alterar preço unitário no Balcão (valordesconto do Athos é total da linha), desconto geral/acréscimo no total e na cobrança PIX, mensagem com desconto + Copia e Cola; testes no clone athos-teste. Executar via `/gsd-autonomous --only 46`.
 - Phase 45 added (2026-11-10): Aviso de boletos a vencer (3d e 1d antes) e atrasados (2d, 7d, 14d depois) — alerta interno na tela + e-mail automatico ao cliente e CC (Fase 42), sem envio duplicado. Executar via `/gsd-autonomous`.
 - Phase 44 added (2026-11-09): API de criação de orçamento no Athos para IA — endpoint para agente de IA criar orçamento real no Athos (orcamento/orcamento_item/orcamento_forma_pagamento) a partir da captura pktmon do Balcao.exe; testes só no clone athos-teste.
 - Phase 41 added (2026-09-04): Contas a Pagar: Layout, Paineis Fiscais e Fix EFI — bug do EFI que nao atualiza pagamento sozinho + painel de monitoramento de pagamento + painel de boletos a receber + funcionalidades fiscais para clientes a prazo. Escopo ainda a discutir (`/gsd-discuss-phase 41`).
