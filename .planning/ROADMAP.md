@@ -39,6 +39,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 46: Mensagem de orçamento ao cliente com desconto e acréscimo corretos**
 - [ ] **Phase 47: Contas a receber: páginas separadas, boletos e notas fiscais PDF/XML**
 - [ ] **Phase 48: Contas a receber: escolher a ordenação (data, nome, pago)**
+- [ ] **Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa**
 
 ### Phase Details
 
@@ -237,6 +238,16 @@ Plans:
 - [ ] 48-03-PLAN.md — Wave 2 · Clientes: ordem na URL (padrão total atrasado desc como hoje), seletor, cabeçalhos e coluna/critério Pago (D-01, D-03..D-07; ORD-01, 02, 05, 06)
 - [ ] 48-04-PLAN.md — Wave 2 · Notas: /contas-receber/notas por emissão/nome e aba Notas do cliente por emissão, ordenando antes da paginação (D-02..D-08; ORD-01, 02, 04, 06)
 - [ ] 48-05-PLAN.md — Wave 2 · Aba Boletos do cliente por vencimento/pago na URL e troca de aba limpando a ordem (D-02..D-07; ORD-01, 02, 03, 06)
+
+### Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 48
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 49 to break down)
 
 ---
 
