@@ -52,6 +52,12 @@ const statusLabels = {
   CANCELADO: "Cancelado",
 } as Record<QuoteStatus, string>;
 
+// Fase 49 (D-02): opcoes de changeStatus. notificarCliente ausente vale true; false silencia
+// qualquer mensagem publica ao cliente (a nota privada de registro continua).
+export interface ChangeStatusOptions {
+  notificarCliente?: boolean;
+}
+
 // Bloco de relacoes usado por findQuoteByIdentifier — extraido para constante
 // unica (era repetido literalmente 3x) para eliminar duplicacao ao consumir
 // buildQuoteIdentifierWhereCandidates.
@@ -908,7 +914,13 @@ export class QuotesService {
     }
   }
 
-  async changeStatus(identifier: string, newStatusInput: string, changedBy: string) {
+  async changeStatus(
+    identifier: string,
+    newStatusInput: string,
+    changedBy: string,
+    opcoes: ChangeStatusOptions = {},
+  ) {
+    const notificarCliente = opcoes.notificarCliente !== false;
     const quote = await this.findQuoteByIdentifier(identifier);
     if (!quote) {
       throw new NotFoundException("Orcamento nao encontrado");
@@ -1008,7 +1020,12 @@ export class QuotesService {
             mensagem = `ℹ️ Olá, ${clienteNome}. O orçamento #${numero} foi cancelado. Se tiver dúvidas ou quiser refazer o pedido, é só falar com a gente.`;
           }
           if (mensagem) {
-            await this.chatwootService.sendOutgoingMessage(convId, mensagem);
+            // Fase 49 D-02: notificarCliente=false troca a mensagem publica por nota privada (mesmo texto).
+            if (notificarCliente) {
+              await this.chatwootService.sendOutgoingMessage(convId, mensagem);
+            } else {
+              await this.chatwootService.postConversationNote(convId, mensagem);
+            }
           }
         }
       } catch (err) {

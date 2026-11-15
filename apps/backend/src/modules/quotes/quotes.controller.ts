@@ -77,7 +77,9 @@ export class QuotesController {
 
   @Patch(":id/status")
   updateStatus(@Param("id") id: string, @Body() payload: UpdateStatusDto) {
-    return this.quotesService.changeStatus(id, payload.newStatus, payload.changedBy);
+    return this.quotesService.changeStatus(id, payload.newStatus, payload.changedBy, {
+      notificarCliente: payload.notificarCliente !== false,
+    });
   }
 
   @Throttle({ default: THROTTLE_SENSITIVE })

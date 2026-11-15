@@ -69,7 +69,7 @@ const buildProviders = () => {
       { provide: AthosService, useValue: { buscarOrcamentoPorNumero: jest.fn(), testarConexao: jest.fn(), verificarPagamentoPorOrcamento: jest.fn().mockResolvedValue({ paid: false, idVenda: null, valor: 0 }), buscarRelacaoOrcamentoVenda: jest.fn().mockResolvedValue({ idvenda: null }) } },
       { provide: QuotesPdfStorageService, useValue: { generateAndUploadPdf: jest.fn() } },
       { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(undefined) } },
-      { provide: ChatwootService, useValue: { sendOutgoingMessage: jest.fn(), sendAttachment: jest.fn() } },
+      { provide: ChatwootService, useValue: { sendOutgoingMessage: jest.fn(), sendAttachment: jest.fn(), postConversationNote: jest.fn().mockResolvedValue({ enabled: true, sent: true }) } },
       { provide: EfiService, useValue: { createCharge: jest.fn(), getChargeStatus: jest.fn() } },
     ],
   };
@@ -298,6 +298,64 @@ describe("QuotesService - approveByToken", () => {
     const updateCalls = (mockPrisma.quote.update.mock.calls as any[]);
     const tokenNullCall = updateCalls.find((call: any[]) => call[0]?.data?.approvalToken === null);
     expect(tokenNullCall).toBeDefined();
+  });
+});
+
+describe("QuotesService - changeStatus — notificarCliente (Fase 49, D-02)", () => {
+  let service: QuotesService;
+  let mockPrisma: ReturnType<typeof buildProviders>["mockPrismaService"];
+  let chatwootMock: { sendOutgoingMessage: jest.Mock; sendAttachment: jest.Mock; postConversationNote: jest.Mock };
+
+  const cliente = { id: "cus1", fullName: "João Silva", isAssociated: true, phone: null, email: null };
+
+  // Prepara o quote atual (statusAtual) e o quote atualizado (novoStatus) com conversationId 42.
+  const preparar = (statusAtual: string, novoStatus: string) => {
+    mockPrisma.quote.findFirst.mockResolvedValue(
+      makeQuote({ status: statusAtual, approved: true, conversationId: BigInt(42), customer: cliente }),
+    );
+    mockPrisma.quote.update.mockResolvedValue(
+      makeQuote({ status: novoStatus, conversationId: BigInt(42), customer: cliente }),
+    );
+  };
+
+  beforeEach(async () => {
+    const { mockPrismaService, providers } = buildProviders();
+    mockPrisma = mockPrismaService;
+    const module: TestingModule = await Test.createTestingModule({ providers }).compile();
+    service = module.get<QuotesService>(QuotesService);
+    chatwootMock = module.get(ChatwootService) as any;
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it("PRONTO_PARA_ENTREGA com notificarCliente false: so nota privada e status gravado", async () => {
+    preparar("EM_PRODUCAO", "PRONTO_PARA_ENTREGA");
+    await service.changeStatus("quote-001", "PRONTO_PARA_ENTREGA", "test", { notificarCliente: false });
+    expect(chatwootMock.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(chatwootMock.postConversationNote).toHaveBeenCalledWith("42", expect.stringContaining("pronto para retirada"));
+    const data = mockPrisma.quote.update.mock.calls[0][0].data;
+    expect(data.status).toBe("PRONTO_PARA_ENTREGA");
+    expect(data.statusHistory.create.changedByName).toBe("test");
+  });
+
+  it.each([
+    ["APROVADO", "EM_PRODUCAO", "entrou em produção"],
+    ["PRONTO_PARA_ENTREGA", "ENTREGUE", "foi entregue"],
+    ["ENVIADO", "CANCELADO", "foi cancelado"],
+  ])("%s -> %s com notificarCliente false: so nota privada", async (atual, novo, trecho) => {
+    preparar(atual, novo);
+    await service.changeStatus("quote-001", novo, "test", { notificarCliente: false });
+    expect(chatwootMock.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(chatwootMock.postConversationNote).toHaveBeenCalledWith("42", expect.stringContaining(trecho));
+  });
+
+  it("postConversationNote rejeitando nao desfaz nem lanca", async () => {
+    preparar("EM_PRODUCAO", "PRONTO_PARA_ENTREGA");
+    chatwootMock.postConversationNote.mockRejectedValue(new Error("timeout"));
+    await expect(
+      service.changeStatus("quote-001", "PRONTO_PARA_ENTREGA", "test", { notificarCliente: false }),
+    ).resolves.toBeDefined();
   });
 });
 
