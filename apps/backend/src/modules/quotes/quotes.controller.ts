@@ -3,6 +3,7 @@ import { Throttle } from "@nestjs/throttler";
 
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { UpdateStatusDto } from "./dto/update-status.dto";
+import { UpdateStatusLoteDto } from "./dto/update-status-lote.dto";
 import { QuotesService } from "./quotes.service";
 import { MergeDuplicatesDto } from "./dto/merge-duplicates.dto";
 import { Public } from "../security/public.decorator";
@@ -75,9 +76,18 @@ export class QuotesController {
     return this.quotesService.mergeDuplicates(payload);
   }
 
+  // Fase 49 (D-03): troca de status em lote, sempre silenciosa. Declarado antes de ":id/status".
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @Patch("status/lote")
+  updateStatusLote(@Body() payload: UpdateStatusLoteDto) {
+    return this.quotesService.changeStatusLote(payload.ids, payload.newStatus, payload.changedBy);
+  }
+
   @Patch(":id/status")
   updateStatus(@Param("id") id: string, @Body() payload: UpdateStatusDto) {
-    return this.quotesService.changeStatus(id, payload.newStatus, payload.changedBy);
+    return this.quotesService.changeStatus(id, payload.newStatus, payload.changedBy, {
+      notificarCliente: payload.notificarCliente !== false,
+    });
   }
 
   @Throttle({ default: THROTTLE_SENSITIVE })

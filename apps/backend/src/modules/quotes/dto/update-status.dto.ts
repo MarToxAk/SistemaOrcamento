@@ -1,4 +1,4 @@
-import { IsString } from "class-validator";
+import { IsBoolean, IsOptional, IsString } from "class-validator";
 
 export class UpdateStatusDto {
   @IsString()
@@ -6,4 +6,9 @@ export class UpdateStatusDto {
 
   @IsString()
   changedBy!: string;
+
+  // Fase 49 (D-02): false silencia qualquer mensagem publica ao cliente; ausente vale true.
+  @IsOptional()
+  @IsBoolean()
+  notificarCliente?: boolean;
 }

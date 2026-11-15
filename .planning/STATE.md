@@ -282,6 +282,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ### Roadmap Evolution
 
+- Phase 49 added (2026-11-15): Status ao cliente só no "pronto" (demais mudanças viram nota privada no Chatwoot) e API para mudar status sem enviar mensagem (mudança em massa sem risco de ban no WhatsApp).
 - Phase 48 added (2026-11-14): Contas a receber — escolher a ordenação das listas (data, nome, pago). Executar via `/gsd-autonomous --only 48`.
 - Phase 47 added (2026-11-13): Contas a receber — páginas separadas e mais funcionais (lista geral, visão por cliente com geração de boletos), melhor visualização dos boletos e download de notas fiscais em PDF e XML. Executar via `/gsd-autonomous --only 47`.
 - Phase 46 added (2026-11-12): Mensagem de orçamento ao cliente com desconto e acréscimo corretos — corrige valor absurdo ao alterar preço unitário no Balcão (valordesconto do Athos é total da linha), desconto geral/acréscimo no total e na cobrança PIX, mensagem com desconto + Copia e Cola; testes no clone athos-teste. Executar via `/gsd-autonomous --only 46`.

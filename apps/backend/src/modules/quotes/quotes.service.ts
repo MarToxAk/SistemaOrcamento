@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException, Inject, forwardRef } from "@nestjs/common";
+﻿import { BadRequestException, HttpException, Injectable, InternalServerErrorException, Logger, NotFoundException, Inject, forwardRef } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { AthosService } from "../integrations/athos/athos.service";
@@ -8,6 +8,7 @@ import { PriceSource, Prisma, QuoteStatus } from "@prisma/client";
 
 import { PrismaService } from "../database/prisma.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
+import { LIMITE_STATUS_LOTE } from "./dto/update-status-lote.dto";
 import { buildQuoteIdentifierWhereCandidates } from "./quote-identifier.util";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
 import { resolveQuoteTotal } from "./quote-totals.util";
@@ -51,6 +52,28 @@ const statusLabels = {
   ENVIADO: "Enviado",
   CANCELADO: "Cancelado",
 } as Record<QuoteStatus, string>;
+
+// Fase 49 (D-01): unico status cuja troca envia mensagem publica ao cliente (reduz risco de ban
+// no WhatsApp). Os demais de statusesToNotify viram nota privada com o mesmo texto.
+const statusComAvisoPublico: QuoteStatus[] = ["PRONTO_PARA_ENTREGA"];
+
+// Fase 49 (D-02): opcoes de changeStatus. notificarCliente ausente vale true; false silencia
+// qualquer mensagem publica ao cliente (a nota privada de registro continua).
+export interface ChangeStatusOptions {
+  notificarCliente?: boolean;
+}
+
+// Fase 49 (D-03): resultado por orcamento do PATCH /quotes/status/lote.
+export type ResultadoStatusLoteItem =
+  | { id: string; ok: true; quoteId: string; statusKey: QuoteStatus; statusLabel: string }
+  | { id: string; ok: false; codigo: number; erro: string };
+
+export interface ResultadoStatusLote {
+  total: number;
+  sucesso: number;
+  falha: number;
+  resultados: ResultadoStatusLoteItem[];
+}
 
 // Bloco de relacoes usado por findQuoteByIdentifier — extraido para constante
 // unica (era repetido literalmente 3x) para eliminar duplicacao ao consumir
@@ -908,7 +931,13 @@ export class QuotesService {
     }
   }
 
-  async changeStatus(identifier: string, newStatusInput: string, changedBy: string) {
+  async changeStatus(
+    identifier: string,
+    newStatusInput: string,
+    changedBy: string,
+    opcoes: ChangeStatusOptions = {},
+  ) {
+    const notificarCliente = opcoes.notificarCliente !== false;
     const quote = await this.findQuoteByIdentifier(identifier);
     if (!quote) {
       throw new NotFoundException("Orcamento nao encontrado");
@@ -1008,7 +1037,13 @@ export class QuotesService {
             mensagem = `ℹ️ Olá, ${clienteNome}. O orçamento #${numero} foi cancelado. Se tiver dúvidas ou quiser refazer o pedido, é só falar com a gente.`;
           }
           if (mensagem) {
-            await this.chatwootService.sendOutgoingMessage(convId, mensagem);
+            // Fase 49: so statusComAvisoPublico (D-01) e com notificarCliente (D-02) vai ao cliente;
+            // nos demais casos o mesmo texto fica como nota privada na conversa.
+            if (notificarCliente && statusComAvisoPublico.includes(newStatus)) {
+              await this.chatwootService.sendOutgoingMessage(convId, mensagem);
+            } else {
+              await this.chatwootService.postConversationNote(convId, mensagem);
+            }
           }
         }
       } catch (err) {
@@ -1017,6 +1052,43 @@ export class QuotesService {
     }
 
     return this.mapQuoteBody(updated);
+  }
+
+  /**
+   * Fase 49 (D-03): troca o status de varios orcamentos de uma vez, sempre em silencio (nenhuma
+   * mensagem publica ao cliente; a nota privada de registro continua). Cada orcamento passa por
+   * changeStatus, um de cada vez, e o resultado e individual: um erro nao interrompe os demais.
+   */
+  async changeStatusLote(ids: string[], newStatusInput: string, changedBy: string): Promise<ResultadoStatusLote> {
+    // Validacao previa (defesa para chamadas internas; o DTO ja barra no HTTP): nada muda se falhar.
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > LIMITE_STATUS_LOTE) {
+      throw new BadRequestException(`O lote deve ter de 1 a ${LIMITE_STATUS_LOTE} orcamentos`);
+    }
+    const statusAlvo = this.normalizeStatus(newStatusInput);
+
+    const resultados: ResultadoStatusLoteItem[] = [];
+    let sucesso = 0;
+    let falha = 0;
+
+    for (const id of ids) {
+      try {
+        const r = await this.changeStatus(id, statusAlvo, changedBy, { notificarCliente: false });
+        resultados.push({ id, ok: true, quoteId: r.id, statusKey: r.statusKey, statusLabel: r.statusLabel });
+        sucesso += 1;
+      } catch (err) {
+        falha += 1;
+        if (err instanceof HttpException) {
+          resultados.push({ id, ok: false, codigo: err.getStatus(), erro: err.message });
+        } else {
+          // Detalhe interno so no log; a resposta leva mensagem generica.
+          const detalhe = err instanceof Error ? err.message : String(err);
+          this.logger.error(`Falha inesperada no lote de status (id=${id}): ${detalhe}`);
+          resultados.push({ id, ok: false, codigo: 500, erro: "Falha inesperada ao mudar o status" });
+        }
+      }
+    }
+
+    return { total: ids.length, sucesso, falha, resultados };
   }
 
   async generatePdf(identifier: string) {

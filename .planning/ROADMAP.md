@@ -39,6 +39,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 46: Mensagem de orçamento ao cliente com desconto e acréscimo corretos**
 - [ ] **Phase 47: Contas a receber: páginas separadas, boletos e notas fiscais PDF/XML**
 - [ ] **Phase 48: Contas a receber: escolher a ordenação (data, nome, pago)**
+- [ ] **Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa**
 
 ### Phase Details
 
@@ -237,6 +238,17 @@ Plans:
 - [ ] 48-03-PLAN.md — Wave 2 · Clientes: ordem na URL (padrão total atrasado desc como hoje), seletor, cabeçalhos e coluna/critério Pago (D-01, D-03..D-07; ORD-01, 02, 05, 06)
 - [ ] 48-04-PLAN.md — Wave 2 · Notas: /contas-receber/notas por emissão/nome e aba Notas do cliente por emissão, ordenando antes da paginação (D-02..D-08; ORD-01, 02, 04, 06)
 - [ ] 48-05-PLAN.md — Wave 2 · Aba Boletos do cliente por vencimento/pago na URL e troca de aba limpando a ordem (D-02..D-07; ORD-01, 02, 03, 06)
+
+### Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa
+
+**Goal:** Reduzir as mensagens de mudança de status enviadas ao cliente no WhatsApp (via Chatwoot): só "pronto para retirada" vai ao cliente, os demais status viram nota privada com o mesmo texto, e o operador pode mudar status sem avisar o cliente, inclusive em lote, para evitar risco de ban.
+**Requirements**: STA-01, STA-02, STA-03, STA-04, STA-05 (IDs locais da fase — definidos em 49-01-PLAN.md)
+**Depends on:** Phase 48
+**Plans:** 2 plans
+
+Plans:
+- [ ] 49-01-PLAN.md — Wave 1 · changeStatus com opção notificarCliente (DTO + controller do PATCH :id/status) e regra padrão: só PRONTO_PARA_ENTREGA público, EM_PRODUCAO/ENTREGUE/CANCELADO como nota privada; chamadas internas e outras mensagens iguais (D-01, D-02, D-04; STA-01, 02, 05)
+- [ ] 49-02-PLAN.md — Wave 2 · PATCH /quotes/status/lote sempre silencioso, sequencial, com resultado por orçamento, até 50 ids validados e status inválido barrado antes de mudar qualquer um; rota sem colisão com :id/status (D-03; STA-03, 04, 05)
 
 ---
 
