@@ -166,6 +166,34 @@ describe("PATCH /quotes/status/lote (Fase 49, D-03)", () => {
     expect(changeStatusLote).not.toHaveBeenCalled();
   });
 
+  it("50 ids validos -> 200", async () => {
+    const ids = Array.from({ length: 50 }, (_, i) => `q${i}`);
+    const { status } = await patchCaminho("status/lote", { ...corpoLote, ids });
+    expect(status).toBe(200);
+    expect(changeStatusLote).toHaveBeenCalledTimes(1);
+  });
+
+  const casosInvalidos: Array<[string, () => Record<string, unknown>]> = [
+    ["ids vazio", () => ({ ...corpoLote, ids: [] })],
+    ["51 ids", () => ({ ...corpoLote, ids: Array.from({ length: 51 }, (_, i) => `q${i}`) })],
+    ["ids duplicados", () => ({ ...corpoLote, ids: ["a1", "a1"] })],
+    ["id com espaco", () => ({ ...corpoLote, ids: ["a b"] })],
+    ["id com ../", () => ({ ...corpoLote, ids: ["../x"] })],
+    ["id com 65 caracteres", () => ({ ...corpoLote, ids: ["a".repeat(65)] })],
+    ["ids como string", () => ({ ...corpoLote, ids: "a1" })],
+    ["changedBy vazio", () => ({ ...corpoLote, changedBy: "" })],
+    ["changedBy com 121 caracteres", () => ({ ...corpoLote, changedBy: "x".repeat(121) })],
+    ["newStatus ausente", () => ({ ids: corpoLote.ids, changedBy: "Painel" })],
+    ["notificarCliente true", () => ({ ...corpoLote, notificarCliente: true })],
+    ["notificarCliente false", () => ({ ...corpoLote, notificarCliente: false })],
+  ];
+
+  it.each(casosInvalidos)("%s -> 400 e servico nao chamado", async (_nome, montar) => {
+    const { status } = await patchCaminho("status/lote", montar());
+    expect(status).toBe(400);
+    expect(changeStatusLote).not.toHaveBeenCalled();
+  });
+
   it("sem x-internal-api-key -> 401 e servico nao chamado", async () => {
     const { status } = await patchCaminho("status/lote", corpoLote, null);
     expect(status).toBe(401);

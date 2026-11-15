@@ -11,6 +11,7 @@ import { AthosService } from "../integrations/athos/athos.service";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
 import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
 import { EfiService } from "../integrations/efi/efi.service";
+import { LIMITE_STATUS_LOTE } from "./dto/update-status-lote.dto";
 
 const makeQuote = (overrides: Record<string, unknown> = {}) => ({
   id: "quote-001",
@@ -150,5 +151,69 @@ describe("QuotesService - changeStatusLote (Fase 49, D-03)", () => {
     expect(r.sucesso).toBe(1);
     expect(r.resultados[0]).toMatchObject({ id: "quote-001", ok: true, statusKey: "PRONTO_PARA_ENTREGA" });
     expect(prisma.quote.update.mock.calls[0][0].data.statusHistory.create.changedByName).toBe("Painel");
+  });
+
+  describe("lote misto e limites", () => {
+    it("nao para no primeiro erro e traduz cada falha (400, 404, 500 generico)", async () => {
+      const logger = jest.spyOn((service as any).logger, "error").mockImplementation(() => undefined);
+      const ok = { id: "uuid-ok", statusKey: "ENTREGUE", statusLabel: "Entregue" } as any;
+      const espiao = jest.spyOn(service, "changeStatus").mockImplementation((async (id: string) => {
+        if (id === "trans") throw new BadRequestException("Transicao de status invalida: Entregue -> Em producao");
+        if (id === "nf") throw new NotFoundException("Orcamento nao encontrado");
+        if (id === "boom") throw new Error("connection reset");
+        return ok;
+      }) as any);
+
+      const r = await service.changeStatusLote(["ok1", "trans", "nf", "boom", "ok2"], "ENTREGUE", "Painel");
+
+      expect(espiao).toHaveBeenCalledTimes(5);
+      expect(r.total).toBe(5);
+      expect(r.sucesso).toBe(2);
+      expect(r.falha).toBe(3);
+      expect(r.resultados.map((x) => x.id)).toEqual(["ok1", "trans", "nf", "boom", "ok2"]);
+      expect(r.resultados[0]).toMatchObject({ ok: true });
+      expect(r.resultados[1]).toEqual({
+        id: "trans",
+        ok: false,
+        codigo: 400,
+        erro: "Transicao de status invalida: Entregue -> Em producao",
+      });
+      expect(r.resultados[2]).toEqual({ id: "nf", ok: false, codigo: 404, erro: "Orcamento nao encontrado" });
+      expect(r.resultados[3]).toEqual({
+        id: "boom",
+        ok: false,
+        codigo: 500,
+        erro: "Falha inesperada ao mudar o status",
+      });
+      expect(r.resultados[4]).toMatchObject({ ok: true });
+      expect(JSON.stringify(r)).not.toContain("connection reset");
+      expect(logger).toHaveBeenCalledWith(expect.stringContaining("boom"));
+    });
+
+    it("status invalido rejeita o pedido inteiro antes de mudar qualquer orcamento", async () => {
+      const espiao = jest.spyOn(service, "changeStatus");
+      await expect(service.changeStatusLote(["a", "b"], "STATUS_INVALIDO", "Painel")).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(espiao).not.toHaveBeenCalled();
+    });
+
+    it("alias de status e normalizado uma vez antes do loop", async () => {
+      const espiao = jest
+        .spyOn(service, "changeStatus")
+        .mockResolvedValue({ id: "u", statusKey: "ENTREGUE", statusLabel: "Entregue" } as any);
+      await service.changeStatusLote(["a"], "entregue", "Painel");
+      expect(espiao).toHaveBeenCalledWith("a", "ENTREGUE", "Painel", { notificarCliente: false });
+    });
+
+    it("lote vazio ou acima do limite e recusado sem chamar changeStatus", async () => {
+      const espiao = jest.spyOn(service, "changeStatus");
+      await expect(service.changeStatusLote([], "ENTREGUE", "Painel")).rejects.toBeInstanceOf(BadRequestException);
+      const muitos = Array.from({ length: LIMITE_STATUS_LOTE + 1 }, (_, i) => `id${i}`);
+      await expect(service.changeStatusLote(muitos, "ENTREGUE", "Painel")).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(espiao).not.toHaveBeenCalled();
+    });
   });
 });

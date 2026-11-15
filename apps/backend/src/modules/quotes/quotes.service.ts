@@ -8,6 +8,7 @@ import { PriceSource, Prisma, QuoteStatus } from "@prisma/client";
 
 import { PrismaService } from "../database/prisma.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
+import { LIMITE_STATUS_LOTE } from "./dto/update-status-lote.dto";
 import { buildQuoteIdentifierWhereCandidates } from "./quote-identifier.util";
 import { QuotesPdfStorageService } from "./quotes-pdf-storage.service";
 import { resolveQuoteTotal } from "./quote-totals.util";
@@ -1059,13 +1060,19 @@ export class QuotesService {
    * changeStatus, um de cada vez, e o resultado e individual: um erro nao interrompe os demais.
    */
   async changeStatusLote(ids: string[], newStatusInput: string, changedBy: string): Promise<ResultadoStatusLote> {
+    // Validacao previa (defesa para chamadas internas; o DTO ja barra no HTTP): nada muda se falhar.
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > LIMITE_STATUS_LOTE) {
+      throw new BadRequestException(`O lote deve ter de 1 a ${LIMITE_STATUS_LOTE} orcamentos`);
+    }
+    const statusAlvo = this.normalizeStatus(newStatusInput);
+
     const resultados: ResultadoStatusLoteItem[] = [];
     let sucesso = 0;
     let falha = 0;
 
     for (const id of ids) {
       try {
-        const r = await this.changeStatus(id, newStatusInput, changedBy, { notificarCliente: false });
+        const r = await this.changeStatus(id, statusAlvo, changedBy, { notificarCliente: false });
         resultados.push({ id, ok: true, quoteId: r.id, statusKey: r.statusKey, statusLabel: r.statusLabel });
         sucesso += 1;
       } catch (err) {
