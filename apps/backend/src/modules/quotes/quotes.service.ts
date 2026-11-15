@@ -52,6 +52,10 @@ const statusLabels = {
   CANCELADO: "Cancelado",
 } as Record<QuoteStatus, string>;
 
+// Fase 49 (D-01): unico status cuja troca envia mensagem publica ao cliente (reduz risco de ban
+// no WhatsApp). Os demais de statusesToNotify viram nota privada com o mesmo texto.
+const statusComAvisoPublico: QuoteStatus[] = ["PRONTO_PARA_ENTREGA"];
+
 // Fase 49 (D-02): opcoes de changeStatus. notificarCliente ausente vale true; false silencia
 // qualquer mensagem publica ao cliente (a nota privada de registro continua).
 export interface ChangeStatusOptions {
@@ -1020,8 +1024,9 @@ export class QuotesService {
             mensagem = `ℹ️ Olá, ${clienteNome}. O orçamento #${numero} foi cancelado. Se tiver dúvidas ou quiser refazer o pedido, é só falar com a gente.`;
           }
           if (mensagem) {
-            // Fase 49 D-02: notificarCliente=false troca a mensagem publica por nota privada (mesmo texto).
-            if (notificarCliente) {
+            // Fase 49: so statusComAvisoPublico (D-01) e com notificarCliente (D-02) vai ao cliente;
+            // nos demais casos o mesmo texto fica como nota privada na conversa.
+            if (notificarCliente && statusComAvisoPublico.includes(newStatus)) {
               await this.chatwootService.sendOutgoingMessage(convId, mensagem);
             } else {
               await this.chatwootService.postConversationNote(convId, mensagem);
