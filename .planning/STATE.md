@@ -4,17 +4,17 @@ milestone: v2.5
 milestone_name: API de Produtos Compostos (Kits) no Athos
 current_phase: 50
 current_phase_name: "Contas a receber: boleto atualizado com juros e multa"
-status: executing
-stopped_at: Completed_50-06-PLAN.md
-last_updated: "2026-11-17T14:01:05.988Z"
+status: verifying
+stopped_at: Completed 50-07-PLAN.md
+last_updated: "2026-11-17T14:08:46.745Z"
 last_activity: 2026-11-17
 last_activity_desc: Phase 50 execution started
-state_head: 4b1d47ad58883d78323a289e036d4dfa303bd474
+state_head: 2ada51737f0fccb14b030e434c931e5739cdaa21
 progress:
   total_phases: 12
   completed_phases: 3
   total_plans: 45
-  completed_plans: 44
+  completed_plans: 45
   percent: 25
 ---
 
@@ -30,7 +30,7 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 Phase: 50 (Contas a receber: boleto atualizado com juros e multa) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-17 — Phase 50 execution started
 
 Progress: [███░░░░░░░] 25% (2/2 phases complete)
@@ -323,11 +323,12 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 50 P04 | 14min | 2 tasks | 9 files |
 | Phase 50 P05 | 12min | 2 tasks | 5 files |
 | Phase 50 P06 | 14min | 2 tasks | 6 files |
+| Phase 50 P07 | n/a | 3 tasks | 1 files |
 
 ## Session
 
-**Last session:** 2026-11-17T14:00:56.608Z
-**Stopped at:** Completed_50-06-PLAN.md
+**Last session:** 2026-11-17T14:08:45.708Z
+**Stopped at:** Completed 50-07-PLAN.md
 **Resume file:** None
 
 ## Decisions
@@ -364,6 +365,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase 50]: 50-05: alerta D-15 apenas por log WARN (sem escrita, sem cancelar boleto atualizado); alertaPagamentoDuplicado = original pago OU (este pago E sucessor ativo)
 - [Phase 50]: 50-06: campos de taxa como texto com inputMode decimal para aceitar virgula; o modal nao constroi datas, so formata strings do servidor
 - [Phase 50]: 50-06: proxies de previa e atualizar usam backendFetch com requireAdminSession e repassam so data e taxas
+- [Phase 50]: 50-07: homologacao D-17 aprovada; liberacao em producao decidida (liberar), deploy feito pelo usuario; A3/A5/A5b nao confirmadas formalmente (risco aceito)
 
 ## Deferred Verification
 
