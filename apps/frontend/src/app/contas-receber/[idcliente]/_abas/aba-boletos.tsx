@@ -24,6 +24,7 @@ import {
   type TituloReceber,
 } from "./compartilhado";
 import { EstilosModal } from "./estilos-modal";
+import { ModalBoletoAtualizado } from "./modal-boleto-atualizado";
 
 interface AbaBoletosProps {
   idcliente: string;
@@ -71,6 +72,10 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
   const [emailErro, setEmailErro] = useState("");
   // Boleto cujo detalhe (linha digitavel, PIX, titulos, historico de baixa) esta aberto (D-06).
   const [detalheAbertoId, setDetalheAbertoId] = useState<number | null>(null);
+  // Boleto cujo modal de "Atualizar" (juros e multa, Fase 50) esta aberto; ao seguir para o e-mail do boleto novo,
+  // a lista so recarrega quando o modal de e-mail fecha (D-10).
+  const [atualizarBoletoId, setAtualizarBoletoId] = useState<number | null>(null);
+  const recarregarAoFecharEmail = useRef(false);
 
   // Boletos ativos agrupados por cobranca
   const boletoGrupos = new Map<number, { boleto: NonNullable<typeof titulos[0]["boletoAtivo"]>; titulos: typeof titulos }>();
@@ -124,6 +129,15 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
     setEmailResult(null);
     setEmailModalState("confirm");
     void carregarCcPadrao(principal);
+  }
+
+  /** Fecha o modal de e-mail; se ele veio do boleto atualizado, recarrega a lista para mostrar o boleto novo. */
+  function fecharModalEmail() {
+    setEmailModalState("idle");
+    if (recarregarAoFecharEmail.current) {
+      recarregarAoFecharEmail.current = false;
+      window.location.reload();
+    }
   }
 
   /** Pre-preenche o CC com a lista fixa do cliente (D-01). Falha vira aviso e segue com a lista vazia. */
@@ -311,6 +325,13 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                             onClick={() => abreEmailModal(boleto, tsBoleto)}>
                             <i className="bi bi-envelope me-1" />E-mail
                           </button>
+                          {boleto.status === "pendente" && (
+                            <button type="button" className="btn btn-sm btn-outline-warning"
+                              title="Gerar boleto atualizado com juros e multa"
+                              onClick={() => setAtualizarBoletoId(boleto.cobrancaId)}>
+                              <i className="bi bi-arrow-repeat me-1" />Atualizar
+                            </button>
+                          )}
                           {!isPago && (
                             <button type="button" className="btn btn-sm btn-outline-danger"
                               title="Cancelar boleto e liberar títulos"
@@ -379,11 +400,31 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
         </div>
       </div>
 
+      {/* Modal do boleto atualizado com juros e multa (Fase 50) */}
+      {atualizarBoletoId !== null && (
+        <ModalBoletoAtualizado
+          cobrancaId={atualizarBoletoId}
+          onFechar={() => setAtualizarBoletoId(null)}
+          onEnviarEmail={(novoId) => {
+            const origem = boletoGrupos.get(atualizarBoletoId);
+            setAtualizarBoletoId(null);
+            if (!origem) {
+              window.location.reload();
+              return;
+            }
+            recarregarAoFecharEmail.current = true;
+            // Mesmos titulos e NFS-e do original; so o id do boleto muda.
+            abreEmailModal({ ...origem.boleto, cobrancaId: novoId }, origem.titulos);
+          }}
+          onConcluido={() => window.location.reload()}
+        />
+      )}
+
       {/* Modal envio de e-mail — 4 estados */}
       {emailModalState !== "idle" && emailCtx && (
         <div
           className="boleto-modal-backdrop"
-          onClick={emailModalState !== "loading" ? () => setEmailModalState("idle") : undefined}
+          onClick={emailModalState !== "loading" ? fecharModalEmail : undefined}
         >
           <div
             className="boleto-modal-card"
@@ -400,7 +441,7 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                 <button
                   type="button"
                   className="btn-close"
-                  onClick={() => setEmailModalState("idle")}
+                  onClick={fecharModalEmail}
                   aria-label="Fechar"
                 />
               )}
@@ -512,7 +553,7 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                   <button
                     type="button"
                     className="btn btn-outline-secondary"
-                    onClick={() => setEmailModalState("idle")}
+                    onClick={fecharModalEmail}
                   >
                     Cancelar
                   </button>
@@ -576,7 +617,7 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                   <button
                     type="button"
                     className="btn btn-outline-secondary"
-                    onClick={() => setEmailModalState("idle")}
+                    onClick={fecharModalEmail}
                   >
                     Fechar
                   </button>
@@ -596,7 +637,7 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                   <button
                     type="button"
                     className="btn btn-outline-secondary"
-                    onClick={() => setEmailModalState("idle")}
+                    onClick={fecharModalEmail}
                   >
                     Cancelar
                   </button>
