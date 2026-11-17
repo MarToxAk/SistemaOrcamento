@@ -36,6 +36,16 @@ Na área de Contas a Receber, o operador gera um **boleto atualizado** (EFI) par
 ### Envio ao cliente
 - D-10: Enviar pelo **fluxo de e-mail de boleto já existente** (com CC padrão — `email-envio.service.ts`, `CobrancaEmailCcPadrao`).
 
+### Decisões pós-research (2026-11-17)
+- D-11: Juros e multa entram no boleto como **itens/linhas de cobrança a mais** ("Juros de mora", "Multa por atraso") somados ao principal — valor explícito para o cliente (o cálculo automático da EFI não mostra o valor, só cobra).
+- D-12: Novo boleto é emitido COM `configurations.fine/interest` da EFI (mesmas taxas padrão) valendo **somente após o novo vencimento** — se o cliente atrasar de novo, incide juros e multa sobre o valor atualizado. **Mensagem informativa obrigatória** na observação/mensagem do boleto (campo `message` da EFI) **e no e-mail enviado**, ex.: "Valor atualizado com juros de R$ X e multa de R$ Y referentes ao vencimento original DD/MM. Em caso de novo atraso apos DD/MM, incidirao juros de 0,99% a.m. e multa de 2% sobre o valor atualizado."
+- D-13 (A1): Vencimento original = `datavencimento` de **cada título no Athos**; cálculo por título.
+- D-14: Ordem = **criar novo → persistir → cancelar original** (cancelamento estrito, sem apagar registro, marca `cancelado`).
+- D-15: Pagamento do boleto original já cancelado → **apenas alerta** (log/aviso interno), sem cancelar o novo automaticamente.
+- D-16: Editáveis = **taxas** (% juros a.m. e % multa); valores em R$ derivados. **Tetos de validação: juros ≤ 1% a.m., multa ≤ 2%** (backend e frontend; também na tela de configuração).
+- D-17: Incluir **checkpoint humano de homologação** antes de produção: gerar boleto real de valor baixo na EFI e validar baixa no clone `athos-teste` (NUNCA no Athos de produção).
+- D-18: `/configuracoes` não existe → criar `/configuracoes/cobranca` (PasswordGate/AdminShell) e item de menu.
+
 ### Claude's Discretion
 - Arredondamento (centavos, 2 casas, half-up), exibição do detalhamento (valor original, dias, juros, multa, total) na tela antes de confirmar.
 - Se o boleto já estiver pago/cancelado, bloquear geração.
