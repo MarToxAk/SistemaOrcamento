@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PasswordGate from "@/components/password-gate";
 import AdminShell from "../../contas-receber/admin-shell";
 import RecursosBootstrap from "../../contas-receber/_shared/recursos-bootstrap";
@@ -14,6 +14,13 @@ interface RespostaEncargos {
 }
 
 const MSG_SESSAO = "Sessão expirada. Recarregue a página e digite a senha.";
+
+/** Aceita virgula ou ponto como separador decimal; devolve NaN para vazio ou texto invalido. */
+function lerNumero(texto: string): number {
+  const t = texto.trim().replace(",", ".");
+  if (!/^-?\d*\.?\d*$/.test(t)) return Number.NaN;
+  return t === "" ? Number.NaN : Number(t);
+}
 
 function formatarDataHora(iso: string): string {
   const d = new Date(iso);
@@ -36,11 +43,12 @@ function Formulario() {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [ok, setOk] = useState("");
+  const emEnvio = useRef(false);
 
   function aplicar(r: RespostaEncargos) {
     setDados(r);
-    setJuros(String(r.taxaJurosMes));
-    setMulta(String(r.multaPercentual));
+    setJuros(String(r.taxaJurosMes).replace(".", ","));
+    setMulta(String(r.multaPercentual).replace(".", ","));
   }
 
   useEffect(() => {
@@ -72,29 +80,30 @@ function Formulario() {
 
   const tetoJuros = dados?.tetos.taxaJurosMes ?? 1;
   const tetoMulta = dados?.tetos.multaPercentual ?? 2;
-  const jurosNum = Number(juros);
-  const multaNum = Number(multa);
+  const jurosNum = lerNumero(juros);
+  const multaNum = lerNumero(multa);
   const erroJuros =
-    juros === "" || !Number.isFinite(jurosNum)
+    !Number.isFinite(jurosNum)
       ? "Informe um número."
       : jurosNum < 0
         ? "Não pode ser negativo."
         : jurosNum > tetoJuros
-          ? `Máximo de ${tetoJuros}% ao mês.`
+          ? `Máximo de ${String(tetoJuros).replace(".", ",")}% ao mês.`
           : "";
   const erroMulta =
-    multa === "" || !Number.isFinite(multaNum)
+    !Number.isFinite(multaNum)
       ? "Informe um número."
       : multaNum < 0
         ? "Não pode ser negativo."
         : multaNum > tetoMulta
-          ? `Máximo de ${tetoMulta}%.`
+          ? `Máximo de ${String(tetoMulta).replace(".", ",")}%.`
           : "";
   const bloqueado = carregando || salvando || !dados || Boolean(erroJuros) || Boolean(erroMulta);
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
-    if (bloqueado) return;
+    if (bloqueado || emEnvio.current) return;
+    emEnvio.current = true;
     setErro("");
     setOk("");
     setSalvando(true);
@@ -122,6 +131,7 @@ function Formulario() {
     } catch {
       setErro("Falha ao conectar no backend.");
     } finally {
+      emEnvio.current = false;
       setSalvando(false);
     }
   }
@@ -144,10 +154,9 @@ function Formulario() {
             </label>
             <input
               id="enc-juros"
-              type="number"
-              step="0.01"
-              min={0}
-              max={tetoJuros}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               className={`form-control${erroJuros ? " is-invalid" : ""}`}
               value={juros}
               onChange={(ev) => {
@@ -164,10 +173,9 @@ function Formulario() {
             </label>
             <input
               id="enc-multa"
-              type="number"
-              step="0.01"
-              min={0}
-              max={tetoMulta}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               className={`form-control${erroMulta ? " is-invalid" : ""}`}
               value={multa}
               onChange={(ev) => {
@@ -196,7 +204,7 @@ function Formulario() {
           <p className="text-muted small mt-3 mb-1">Última alteração: {formatarDataHora(dados.atualizadoEm)}</p>
         )}
         <p className="text-muted small mb-0">
-          Limites: juros até {tetoJuros}% ao mês e multa até {tetoMulta}%.
+          Limites: juros até {String(tetoJuros).replace(".", ",")}% ao mês e multa até {String(tetoMulta).replace(".", ",")}%.
         </p>
       </div>
     </div>
