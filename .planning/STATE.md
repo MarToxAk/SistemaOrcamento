@@ -2,38 +2,38 @@
 gsd_state_version: "1.0"
 milestone: v2.5
 milestone_name: API de Produtos Compostos (Kits) no Athos
-current_phase: 44
-current_phase_name: API de criação de orçamento no Athos para IA
-status: executing
-stopped_at: Completed 43-04-PLAN.md
-last_updated: "2026-11-09T14:23:38.429Z"
-last_activity: 2026-11-09
-last_activity_desc: Phase 44 execution started
-state_head: ab4b32507edcd5323a0e4ba417ded0ddefc3bed9
+current_phase: 43 — Baixa automática de contas a receber no Athos
+current_phase_name: Baixa automática de contas a receber no Athos
+status: verifying
+stopped_at: Phase 50 complete, ready to verify Phase 43
+last_updated: "2026-11-17T14:15:41.979Z"
+last_activity: 2026-11-17
+last_activity_desc: Phase 50 complete, transitioned to Phase 43
+state_head: 118444add139f4ebb46a08d0e0b051b0c3fc0c98
 progress:
-  total_phases: 6
-  completed_phases: 3
-  total_plans: 17
-  completed_plans: 13
-  percent: 50
+  total_phases: 12
+  completed_phases: 4
+  total_plans: 45
+  completed_plans: 45
+  percent: 33
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-09-04 — Fase 40 verificada retroativamente (código já implementado em commit 5d5270d); milestone v2.5 completo
-Current phase: 44
+Current phase: 43 — Baixa automática de contas a receber no Athos
 Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
 
 ## Current Position
 
-Phase: 44 (API de criação de orçamento no Athos para IA) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 44
-Last activity: 2026-11-09 — Phase 44 execution started
+Phase: 50 (Contas a receber: boleto atualizado com juros e multa) — EXECUTING
+Plan: 4
+Status: Phase complete — ready for verification
+Last activity: 2026-11-17 — Phase 50 complete, transitioned to Phase 43
 
-Progress: [█████░░░░░] 50% (2/2 phases complete)
+Progress: [███░░░░░░░] 33% (2/2 phases complete)
 
 ## Project Status
 
@@ -282,6 +282,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ### Roadmap Evolution
 
+- Phase 50 added (2026-11-17): Contas a receber — boleto atualizado com juros (0,99% a.m.) e multa (2%) calculados desde o vencimento original; novo vencimento so hoje ou amanha; taxas padrao configuraveis em tela.
 - Phase 49 added (2026-11-15): Status ao cliente só no "pronto" (demais mudanças viram nota privada no Chatwoot) e API para mudar status sem enviar mensagem (mudança em massa sem risco de ban no WhatsApp).
 - Phase 48 added (2026-11-14): Contas a receber — escolher a ordenação das listas (data, nome, pago). Executar via `/gsd-autonomous --only 48`.
 - Phase 47 added (2026-11-13): Contas a receber — páginas separadas e mais funcionais (lista geral, visão por cliente com geração de boletos), melhor visualização dos boletos e download de notas fiscais em PDF e XML. Executar via `/gsd-autonomous --only 47`.
@@ -316,11 +317,18 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 43 P02 | 40min | 3 tasks | 11 files |
 | Phase 43 P03 | ~40min | 3 tasks | 13 files |
 | Phase 43 P04 | ~40min | 3 tasks | 11 files |
+| Phase 50 P01 | 15 min | 2 tasks | 12 files |
+| Phase 50 P02 | 10min | 2 tasks | 7 files |
+| Phase 50 P03 | 12 min | 2 tasks | 5 files |
+| Phase 50 P04 | 14min | 2 tasks | 9 files |
+| Phase 50 P05 | 12min | 2 tasks | 5 files |
+| Phase 50 P06 | 14min | 2 tasks | 6 files |
+| Phase 50 P07 | n/a | 3 tasks | 1 files |
 
 ## Session
 
-**Last session:** 2026-11-06T15:37:13.352Z
-**Stopped at:** Completed 43-04-PLAN.md
+**Last session:** 2026-11-17T14:08:45.708Z
+**Stopped at:** Phase 50 complete, ready to verify Phase 43
 **Resume file:** None
 
 ## Decisions
@@ -348,6 +356,16 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase 43]: 43-02: formula de juros (taxa diaria 3 casas, meio para cima) reproduz so 2 casos; multa por ATHOS_BAIXA_MULTA_PERCENTUAL; validacao real pendente
 - [Phase 43]: 43-03: data/valor da EFI persistidos antes do Athos e reutilizados nas retentativas; flag ATHOS_BAIXA_AUTO=false deixa o boleto pendente; mensagem de erro persistida so de BaixaAthosError (300 chars)
 - [Phase 43]: 43-04: estorno apaga somente pares (idcontareceber, idcontarecebida) da trilha de baixa; cartao preferencial por regex com fronteira numerica
+- [Phase 50]: 50-01: configurations fine/interest e texto de novo atraso usam as taxas padrao configuradas (D-12), mesmo com taxas do calculo editadas
+- [Phase 50]: 50-01: CobrancaBoletoTitulo.valor continua sendo o principal; total fica em CobrancaBoleto.valor
+- [Phase 50]: 50-02: baixa do boleto atualizado usa encargos fixos do snapshot (sem conf_financeiro); so o principal e VALOR_INCOMPATIVEL; pagamento apos novo vencimento aceito ate teto pos-vencimento com rateio exato
+- [Phase 50]: 50-03: com boleto atualizado ativo e original pendente, gerar() vira retentativa (so repete o cancelamento estrito, sem nova emissao); original pago -> 409 pagamento em dobro
+- [Phase 50]: 50-03: falha ao gravar o boleto novo cancela o charge NOVO na EFI (compensacao); mutex por boleto por processo, 4600210 como barreira final
+- [Phase 50]: 50-04: tela de taxas usa input texto com virgula decimal e useRef contra envio duplo; tetos aplicados em tela, proxy, DTO e servico
+- [Phase 50]: 50-05: alerta D-15 apenas por log WARN (sem escrita, sem cancelar boleto atualizado); alertaPagamentoDuplicado = original pago OU (este pago E sucessor ativo)
+- [Phase 50]: 50-06: campos de taxa como texto com inputMode decimal para aceitar virgula; o modal nao constroi datas, so formata strings do servidor
+- [Phase 50]: 50-06: proxies de previa e atualizar usam backendFetch com requireAdminSession e repassam so data e taxas
+- [Phase 50]: 50-07: homologacao D-17 aprovada; liberacao em producao decidida (liberar), deploy feito pelo usuario; A3/A5/A5b nao confirmadas formalmente (risco aceito)
 
 ## Deferred Verification
 

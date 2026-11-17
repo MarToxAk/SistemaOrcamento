@@ -836,3 +836,63 @@ describe("CobrancaBaixaAthosService.estornarBaixa (plano 43-04)", () => {
     expect(baixaService.baixarTitulos).toHaveBeenCalledTimes(1);
   });
 });
+
+/** Fase 50 / plano 50-02 (D-09): o orquestrador repassa o snapshot do boleto atualizado. */
+describe("CobrancaBaixaAthosService - boleto atualizado (encargos fixos)", () => {
+  const ATUALIZADO = {
+    id: 42,
+    status: "pago",
+    idclienteAthos: 2641,
+    boletoOrigemId: 41,
+    expireAt: "2026-11-18",
+    taxaJurosMesPosVencimento: "0.9900",
+    multaPercentualPosVencimento: "2.0000",
+    titulos: [{ idcontareceber: 1363, valor: "1000.00", juros: "2.64", multa: "20.00", diasAtraso: 8 }],
+  };
+  const FIXOS = [{ idcontareceber: 1363, valorEsperado: 1000, encargosFixos: { juros: 2.64, multa: 20, atraso: 8 } }];
+  const POS = { vencimento: "2026-11-18", taxaJurosMes: 0.99, multaPercentual: 2 };
+
+  it("C1. boleto atualizado -> encargosFixos numericos e posVencimento", async () => {
+    const { service, baixaService } = montar({}, ATUALIZADO);
+    await service.executarAposPagamento(42, { origem: "webhook" });
+    const arg = baixaService.baixarTitulos.mock.calls[0][0];
+    expect(arg.titulos).toEqual(FIXOS);
+    expect(arg.posVencimento).toEqual(POS);
+  });
+
+  it("C2. boleto comum -> titulos exatamente { idcontareceber, valorEsperado } e sem a chave posVencimento", async () => {
+    const { service, baixaService } = montar({}, {
+      id: 7,
+      status: "pago",
+      idclienteAthos: 2641,
+      boletoOrigemId: null,
+      titulos: [{ idcontareceber: 1363, valor: "29.00", juros: null, multa: null, diasAtraso: null }],
+    });
+    await service.executarAposPagamento(7, { origem: "webhook" });
+    const arg = baixaService.baixarTitulos.mock.calls[0][0];
+    expect(arg.titulos).toEqual([{ idcontareceber: 1363, valorEsperado: 29 }]);
+    expect("posVencimento" in arg).toBe(false);
+  });
+
+  it("C3. baixarManual (com e sem ignorarValorEfi, e simular) repassa encargosFixos e posVencimento", async () => {
+    for (const input of [{}, { ignorarValorEfi: true }, { simular: true }]) {
+      const { service, baixaService } = montar({}, ATUALIZADO);
+      await service.baixarManual(42, input);
+      const arg = baixaService.baixarTitulos.mock.calls[0][0];
+      expect(arg.titulos).toEqual(FIXOS);
+      expect(arg.posVencimento).toEqual(POS);
+    }
+  });
+
+  it("C4. boletoOrigemId sem taxas pos-vencimento -> sem posVencimento, mas com encargosFixos", async () => {
+    const { service, baixaService } = montar({}, {
+      ...ATUALIZADO,
+      taxaJurosMesPosVencimento: null,
+      multaPercentualPosVencimento: null,
+    });
+    await service.executarAposPagamento(42, { origem: "webhook" });
+    const arg = baixaService.baixarTitulos.mock.calls[0][0];
+    expect(arg.titulos).toEqual(FIXOS);
+    expect("posVencimento" in arg).toBe(false);
+  });
+});

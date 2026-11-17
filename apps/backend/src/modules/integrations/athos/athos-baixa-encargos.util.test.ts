@@ -241,3 +241,97 @@ describe("athos-baixa-encargos.util", () => {
     });
   });
 });
+
+import { PosVencimentoBoleto, TituloEncargosFixos, decidirValoresBaixaFixos } from "./athos-baixa-encargos.util";
+
+/** Fase 50 / plano 50-02 (D-09, D-12): baixa do boleto atualizado com encargos fixos. */
+describe("decidirValoresBaixaFixos", () => {
+  const T1: TituloEncargosFixos = { idcontareceber: 1363, principal: 1000, juros: 2.64, multa: 20, atraso: 8 };
+  const T2: TituloEncargosFixos = { idcontareceber: 1364, principal: 457, juros: 1.51, multa: 9.14, atraso: 10 };
+  const POS: PosVencimentoBoleto = { vencimento: "2026-11-18", taxaJurosMes: 0.99, multaPercentual: 2 };
+
+  it("F1. valorPagoEfi nulo -> snapshot", () => {
+    const r = decidirValoresBaixaFixos({ titulos: [T1], dataPagamento: "2026-11-18", valorPagoEfi: null });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.modo).toBe("com_encargos");
+    expect(r.valorTotal).toBe(1022.64);
+    expect(r.titulos[0]).toEqual({ idcontareceber: 1363, principal: 1000, juros: 2.64, multa: 20, atraso: 8, valorPago: 1022.64 });
+  });
+
+  it("F2. dentro da tolerancia de 0,10 -> snapshot; acima sem pos-vencimento -> VALOR_INCOMPATIVEL", () => {
+    for (const efi of [1022.64, 1022.73, 1022.55]) {
+      const r = decidirValoresBaixaFixos({ titulos: [T1], dataPagamento: "2026-11-18", valorPagoEfi: efi });
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.valorTotal).toBe(1022.64);
+    }
+    const r = decidirValoresBaixaFixos({ titulos: [T1], dataPagamento: "2026-11-18", valorPagoEfi: 1022.75 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.codigo).toBe("VALOR_INCOMPATIVEL");
+  });
+
+  it("F3. so o principal -> VALOR_INCOMPATIVEL (nao existe modo nominal)", () => {
+    const r = decidirValoresBaixaFixos({ titulos: [T1], dataPagamento: "2026-11-18", valorPagoEfi: 1000, posVencimento: POS });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.codigo).toBe("VALOR_INCOMPATIVEL");
+  });
+
+  it("F4. pago 2 dias apos o novo vencimento com EFI 1043,76 -> juros 3,31, multa 40,45, atraso 10", () => {
+    const r = decidirValoresBaixaFixos({ titulos: [T1], dataPagamento: "2026-11-20", valorPagoEfi: 1043.76, posVencimento: POS });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.modo).toBe("com_encargos");
+    expect(r.titulos[0]).toEqual({ idcontareceber: 1363, principal: 1000, juros: 3.31, multa: 40.45, atraso: 10, valorPago: 1043.76 });
+    expect(r.valorTotal).toBe(1043.76);
+  });
+
+  it("F5. acima do teto pos-vencimento -> VALOR_INCOMPATIVEL citando o valor da EFI", () => {
+    const r = decidirValoresBaixaFixos({ titulos: [T1], dataPagamento: "2026-11-20", valorPagoEfi: 1100, posVencimento: POS });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.codigo).toBe("VALOR_INCOMPATIVEL");
+      expect(r.mensagem).toContain("1100.00");
+    }
+  });
+
+  it("F6. excedente sem posVencimento ou no proprio dia do vencimento -> VALOR_INCOMPATIVEL", () => {
+    const a = decidirValoresBaixaFixos({ titulos: [T1], dataPagamento: "2026-11-20", valorPagoEfi: 1043.76 });
+    expect(a.ok).toBe(false);
+    const b = decidirValoresBaixaFixos({ titulos: [T1], dataPagamento: "2026-11-18", valorPagoEfi: 1043.76, posVencimento: POS });
+    expect(b.ok).toBe(false);
+    if (!b.ok) expect(b.codigo).toBe("VALOR_INCOMPATIVEL");
+  });
+
+  it("F7. dois titulos: excedente rateado, soma exata, ultimo recebe o resto, atraso acrescido", () => {
+    const base = 149029; // 1022,64 + 467,65 em centavos
+    const multaMax = Math.floor((base * 200 + 5000) / 10000);
+    const jurosMax = Math.floor((base * 33 * 2 + 50000) / 100000);
+    const efi = (base + multaMax + jurosMax) / 100;
+    const r = decidirValoresBaixaFixos({ titulos: [T1, T2], dataPagamento: "2026-11-20", valorPagoEfi: efi, posVencimento: POS });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const soma = r.titulos.reduce((s, t) => s + Math.round(t.valorPago * 100), 0);
+    expect(soma).toBe(Math.round(efi * 100));
+    expect(r.valorTotal).toBe(efi);
+    expect(r.titulos[0].juros).toBeGreaterThanOrEqual(T1.juros);
+    expect(r.titulos[0].multa).toBeGreaterThanOrEqual(T1.multa);
+    expect(r.titulos[1].juros).toBeGreaterThanOrEqual(T2.juros);
+    expect(r.titulos[1].multa).toBeGreaterThanOrEqual(T2.multa);
+    expect(r.titulos.map((t) => t.atraso)).toEqual([10, 12]);
+    const multaExtraTotal = r.titulos.reduce((s, t, i) => s + Math.round((t.multa - [T1, T2][i].multa) * 100), 0);
+    const jurosExtraTotal = r.titulos.reduce((s, t, i) => s + Math.round((t.juros - [T1, T2][i].juros) * 100), 0);
+    expect(multaExtraTotal).toBe(multaMax);
+    expect(jurosExtraTotal).toBe(jurosMax);
+  });
+
+  it("F8. taxa NaN no pos-vencimento nao lanca: excedente vira VALOR_INCOMPATIVEL", () => {
+    const r = decidirValoresBaixaFixos({
+      titulos: [T1],
+      dataPagamento: "2026-11-20",
+      valorPagoEfi: 1043.76,
+      posVencimento: { vencimento: "2026-11-18", taxaJurosMes: Number.NaN, multaPercentual: 2 },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.codigo).toBe("VALOR_INCOMPATIVEL");
+  });
+});

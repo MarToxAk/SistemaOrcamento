@@ -7,6 +7,10 @@ import { CobrancaAvisoVencimentoJob } from "./cobranca-aviso-vencimento.job";
 import { CobrancaAvisoVencimentoService } from "./cobranca-aviso-vencimento.service";
 import { CobrancaBaixaAthosRetryJob } from "./cobranca-baixa-athos-retry.job";
 import { CobrancaBaixaAthosService } from "./cobranca-baixa-athos.service";
+import { CobrancaBoletoAtualizadoController } from "./cobranca-boleto-atualizado.controller";
+import { CobrancaBoletoAtualizadoService } from "./cobranca-boleto-atualizado.service";
+import { CobrancaEncargosConfigController } from "./cobranca-encargos-config.controller";
+import { CobrancaEncargosConfigService } from "./cobranca-encargos-config.service";
 import { CobrancaNotasController } from "./cobranca-notas.controller";
 import { CobrancaNotasService } from "./cobranca-notas.service";
 import { CobrancaReconciliationJob } from "./cobranca-reconciliation.job";
@@ -16,7 +20,7 @@ import { EmailEnvioService } from "./email-envio.service";
 
 @Module({
   imports: [EfiModule, AthosModule, NfseModule],
-  controllers: [CobrancaController, CobrancaNotasController],
+  controllers: [CobrancaController, CobrancaNotasController, CobrancaBoletoAtualizadoController, CobrancaEncargosConfigController],
   providers: [
     CobrancaService,
     CobrancaNotasService,
@@ -26,6 +30,8 @@ import { EmailEnvioService } from "./email-envio.service";
     CobrancaBaixaAthosRetryJob,
     CobrancaAvisoVencimentoService,
     CobrancaAvisoVencimentoJob,
+    CobrancaBoletoAtualizadoService,
+    CobrancaEncargosConfigService,
   ],
 })
 export class CobrancaModule {}

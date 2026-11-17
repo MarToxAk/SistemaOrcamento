@@ -247,3 +247,101 @@ describe("CobrancaService - boleto baixado no Athos (plano 43-03)", () => {
     expect(dois).toMatchObject({ athosBaixaStatus: null, athosBaixaErroCodigo: null, athosBaixaErroMensagem: null });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Plano 50-05 - alerta de pagamento do boleto original ja cancelado (D-15)
+// ---------------------------------------------------------------------------
+
+describe("CobrancaService - pagamento de boleto cancelado e substituido (plano 50-05, D-15)", () => {
+  const CANCELADO = { id: 41, status: "cancelado", txidEfi: "9001" };
+
+  function montarCancelado(opts: {
+    sucessor?: { id: number; status: string } | null | Error;
+    cobrancaEfi?: unknown;
+    notificacao?: { charge_id?: number; status?: string };
+  }) {
+    const ctx = montar({
+      boleto: CANCELADO,
+      cobrancaEfi: opts.cobrancaEfi ?? { status: "paid" },
+      notificacao: opts.notificacao,
+    });
+    const findFirst = ctx.prisma.cobrancaBoleto.findFirst as jest.Mock;
+    findFirst.mockReset();
+    // Webhook: 1a chamada acha o boleto pelo txid; 2a procura o sucessor ativo. Verificar: so o sucessor.
+    findFirst.mockResolvedValueOnce(CANCELADO);
+    if (opts.sucessor instanceof Error) findFirst.mockRejectedValueOnce(opts.sucessor);
+    else findFirst.mockResolvedValueOnce(opts.sucessor === undefined ? null : opts.sucessor);
+    return ctx;
+  }
+
+  function avisos(logger: Record<string, jest.Mock>): string {
+    return logger.warn.mock.calls.map((c) => String(c[0])).join("\n");
+  }
+
+  it("D1. webhook paid em boleto cancelado com sucessor ativo: grava pago so no original, alerta e baixa normal", async () => {
+    const { service, prisma, baixaAthos, logger } = montarCancelado({
+      sucessor: { id: 42, status: "pendente" },
+    });
+
+    await service.processarNotificacaoEFI("tok");
+
+    expect(prisma.cobrancaBoleto.update).toHaveBeenCalledTimes(1);
+    expect(prisma.cobrancaBoleto.update).toHaveBeenCalledWith({ where: { id: 41 }, data: { status: "pago" } });
+    expect(baixaAthos.executarAposPagamento).toHaveBeenCalledTimes(1);
+    expect(baixaAthos.executarAposPagamento.mock.calls[0][0]).toBe(41);
+    const warn = avisos(logger);
+    expect(warn).toContain("41");
+    expect(warn).toContain("42");
+    expect(warn).toContain("ALERTA pagamento em dobro possivel");
+    const consultaSucessor = (prisma.cobrancaBoleto.findFirst as jest.Mock).mock.calls[1][0];
+    expect(consultaSucessor.where).toEqual({ boletoOrigemId: 41, status: { not: "cancelado" } });
+  });
+
+  it("D2. Verificar: status local cancelado e EFI paid -> pago, alerta emitido e gancho chamado", async () => {
+    const { service, prisma, baixaAthos, logger } = montar({
+      boleto: CANCELADO,
+      cobrancaEfi: { status: "paid" },
+    });
+    (prisma.cobrancaBoleto.findFirst as jest.Mock).mockReset().mockResolvedValue({ id: 42, status: "pendente" });
+
+    const r = await service.verificarPagamentoBoleto(41);
+
+    expect(r).toEqual({ status: "pago", atualizado: true });
+    expect(prisma.cobrancaBoleto.update).toHaveBeenCalledTimes(1);
+    expect(baixaAthos.executarAposPagamento).toHaveBeenCalledTimes(1);
+    expect(avisos(logger)).toContain("reconciliacao");
+    expect(avisos(logger)).toContain("42");
+  });
+
+  it("D3. original cancelado pago SEM sucessor ativo: sem aviso de pagamento em dobro", async () => {
+    const { service, baixaAthos, logger } = montarCancelado({ sucessor: null });
+
+    await service.processarNotificacaoEFI("tok");
+
+    expect(baixaAthos.executarAposPagamento).toHaveBeenCalledTimes(1);
+    expect(avisos(logger)).not.toContain("pagamento em dobro");
+  });
+
+  it("D3b. boleto pendente pago (caso comum) nao consulta sucessor nem alerta", async () => {
+    const { service, prisma, logger } = montar({ cobrancaEfi: {} });
+
+    await service.processarNotificacaoEFI("tok");
+
+    expect(prisma.cobrancaBoleto.findFirst).toHaveBeenCalledTimes(1);
+    expect(avisos(logger)).not.toContain("pagamento em dobro");
+  });
+
+  it("D4. consulta do sucessor rejeita: webhook resolve, pago gravado, baixa chamada e erro logado", async () => {
+    const { service, prisma, baixaAthos, logger } = montarCancelado({
+      sucessor: new Error("banco fora"),
+    });
+
+    await expect(service.processarNotificacaoEFI("tok")).resolves.toBeUndefined();
+
+    expect(prisma.cobrancaBoleto.update).toHaveBeenCalledWith({ where: { id: 41 }, data: { status: "pago" } });
+    expect(baixaAthos.executarAposPagamento).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalled();
+    const erro = logger.error.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
+    expect(erro).toContain("41");
+  });
+});

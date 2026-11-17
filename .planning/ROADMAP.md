@@ -40,6 +40,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 47: Contas a receber: páginas separadas, boletos e notas fiscais PDF/XML**
 - [ ] **Phase 48: Contas a receber: escolher a ordenação (data, nome, pago)**
 - [ ] **Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa**
+- [x] **Phase 50: Contas a receber: boleto atualizado com juros e multa** (completed 2026-11-17)
 
 ### Phase Details
 
@@ -249,6 +250,22 @@ Plans:
 Plans:
 - [ ] 49-01-PLAN.md — Wave 1 · changeStatus com opção notificarCliente (DTO + controller do PATCH :id/status) e regra padrão: só PRONTO_PARA_ENTREGA público, EM_PRODUCAO/ENTREGUE/CANCELADO como nota privada; chamadas internas e outras mensagens iguais (D-01, D-02, D-04; STA-01, 02, 05)
 - [ ] 49-02-PLAN.md — Wave 2 · PATCH /quotes/status/lote sempre silencioso, sequencial, com resultado por orçamento, até 50 ids validados e status inválido barrado antes de mudar qualquer um; rota sem colisão com :id/status (D-03; STA-03, 04, 05)
+
+### Phase 50: Contas a receber: boleto atualizado com juros e multa
+
+**Goal:** Na parte de Contas a Receber, o operador gera um boleto atualizado (com juros e multa) de um titulo vencido para enviar ao cliente. O novo vencimento so pode ser hoje ou amanha (ex.: hoje 17/11 -> maximo 18/11; data maior e bloqueada). Juros e multa sao calculados a partir do vencimento original registrado no sistema (ex.: venc. 10/11) ate o novo vencimento. Padrao: juros 0,99% ao mes e multa 2%, editaveis no momento da geracao, com uma tela de configuracao para alterar o padrao futuramente.
+**Requirements**: BA-01, BA-02, BA-03, BA-04, BA-05, BA-06, BA-07, BA-08, BA-09, BA-10, BA-11 (IDs locais da fase — definidos em 50-VALIDATION.md)
+**Depends on:** Phase 49
+**Plans:** 7/7 plans complete
+
+Plans:
+- [x] 50-01-PLAN.md — Wave 1 · Tracer [BLOCKING schema]: POST /cobranca/boleto/:id/atualizar ponta a ponta (schema + migration aditiva, util de datas/cálculo/mensagem, config padrão, EFI one-step com linhas de juros e multa + configurations, vínculo e snapshot, cancelamento estrito do original) + regras puras completas (D-01..D-05, D-08, D-11..D-14, D-16; BA-01, 02, 05, 09)
+- [x] 50-02-PLAN.md — Wave 1 · Baixa Athos do título original com juros/multa do snapshot sem ler conf_financeiro, pagamento atrasado até o teto pós-vencimento, regressão do boleto comum (D-09, D-12; BA-06, 09)
+- [x] 50-03-PLAN.md — Wave 2 · Prévia sem EFI e sem gravação (taxas editáveis, datas do servidor) + geração segura de repetir: recusas, sucessor ativo/retentativa, mutex, compensação, 4600210 (D-01, D-06, D-14, D-16; BA-01, 03, 05, 08)
+- [x] 50-04-PLAN.md — Wave 2 · /configuracoes/cobranca (PasswordGate/AdminShell) com GET/PUT AdminOnly das taxas padrão, tetos em todas as camadas, menu Configurações em grupo e redirecionamento (D-07, D-16, D-18; BA-04)
+- [x] 50-05-PLAN.md — Wave 2 · E-mail existente com CC leva a mensagem do boleto atualizado + alerta de pagamento do original cancelado (log e consulta) + titulos-em-uso com total, vínculo, juros/multa e ordem (D-10, D-12, D-15; BA-07, 10)
+- [x] 50-06-PLAN.md — Wave 3 · Aba Boletos: botão Atualizar -> modal com prévia -> geração -> modal de e-mail existente; lista com total, marca de substituição, juros/multa por título e alerta de pagamento em dobro (D-01, D-06, D-10, D-15, D-16; BA-01, 03, 07, 08, 10)
+- [x] 50-07-PLAN.md — Wave 4 · Gates + migration validada em Postgres descartável + roteiro + homologação humana D-17 (boleto real de valor baixo; baixa só no clone athos-teste) + decisão de liberação em produção (D-17; BA-11)
 
 ---
 

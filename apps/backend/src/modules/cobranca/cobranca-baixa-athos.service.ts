@@ -13,10 +13,11 @@ import {
   BaixaAthosError,
   BaixaConstantes,
   BaixarTitulosResultado,
+  EncargosFixosTitulo,
   EstornarBaixaResultado,
   hojeSaoPaulo,
 } from "../integrations/athos/athos-conta-receber-baixa.service";
-import { PERCENTUAL_MULTA_PADRAO } from "../integrations/athos/athos-baixa-encargos.util";
+import { PERCENTUAL_MULTA_PADRAO, PosVencimentoBoleto } from "../integrations/athos/athos-baixa-encargos.util";
 import { PrismaService } from "../database/prisma.service";
 
 /**
@@ -223,7 +224,19 @@ type BoletoComTitulos = {
   id: number;
   status: string;
   idclienteAthos: number;
-  titulos?: Array<{ idcontareceber: number; valor: unknown }> | null;
+  titulos?: Array<{
+    idcontareceber: number;
+    valor: unknown;
+    /** snapshot do boleto atualizado (Fase 50): so presente quando o boleto cobrou juros e multa */
+    juros?: unknown;
+    multa?: unknown;
+    diasAtraso?: number | null;
+  }> | null;
+  /** boleto atualizado (Fase 50): vinculo, novo vencimento e taxas cobradas apos ele */
+  boletoOrigemId?: number | null;
+  expireAt?: string | null;
+  taxaJurosMesPosVencimento?: unknown;
+  multaPercentualPosVencimento?: unknown;
   athosBaixaStatus?: string | null;
   athosBaixaDataPagamento?: string | null;
   athosBaixaValorPagoEfi?: unknown;
@@ -380,6 +393,7 @@ export class CobrancaBaixaAthosService {
           constantes: cfg.constantes,
           valorPagoEfi,
           simular: true,
+          ...this.posVencimentoOpcional(boleto),
         });
         return { simulado: true, status: detalhe.resultado, detalhe };
       } catch (err) {
@@ -600,11 +614,37 @@ export class CobrancaBaixaAthosService {
   // Internos
   // ---------------------------------------------------------------------------
 
-  private titulosParaBaixa(boleto: BoletoComTitulos): Array<{ idcontareceber: number; valorEsperado: number }> {
-    return (boleto.titulos ?? []).map((t) => ({
-      idcontareceber: t.idcontareceber,
-      valorEsperado: Number(String(t.valor)),
-    }));
+  /**
+   * Titulos da baixa. Boleto atualizado (snapshot juros/multa gravado): acrescenta `encargosFixos` (D-09);
+   * boleto comum continua exatamente `{ idcontareceber, valorEsperado }`.
+   */
+  private titulosParaBaixa(
+    boleto: BoletoComTitulos,
+  ): Array<{ idcontareceber: number; valorEsperado: number; encargosFixos?: EncargosFixosTitulo }> {
+    return (boleto.titulos ?? []).map((t) => {
+      const juros = numeroOuNull(t.juros);
+      const multa = numeroOuNull(t.multa);
+      return {
+        idcontareceber: t.idcontareceber,
+        valorEsperado: Number(String(t.valor)),
+        ...(juros !== null && multa !== null ? { encargosFixos: { juros, multa, atraso: t.diasAtraso ?? 0 } } : {}),
+      };
+    });
+  }
+
+  /** Espalhamento condicional: a chave `posVencimento` so existe em boleto atualizado com taxas gravadas. */
+  private posVencimentoOpcional(boleto: BoletoComTitulos): { posVencimento?: PosVencimentoBoleto } {
+    const posVencimento = this.posVencimentoParaBaixa(boleto);
+    return posVencimento ? { posVencimento } : {};
+  }
+
+  /** Encargos pos-vencimento da EFI do boleto atualizado (D-12); null em boleto comum ou sem taxas gravadas. */
+  private posVencimentoParaBaixa(boleto: BoletoComTitulos): PosVencimentoBoleto | null {
+    if (boleto.boletoOrigemId === null || boleto.boletoOrigemId === undefined || !boleto.expireAt) return null;
+    const taxaJurosMes = numeroOuNull(boleto.taxaJurosMesPosVencimento);
+    const multaPercentual = numeroOuNull(boleto.multaPercentualPosVencimento);
+    if (taxaJurosMes === null || multaPercentual === null) return null;
+    return { vencimento: boleto.expireAt, taxaJurosMes, multaPercentual };
   }
 
   /**
@@ -667,6 +707,7 @@ export class CobrancaBaixaAthosService {
         dataPagamento: p.dataPagamento,
         constantes: p.constantes,
         valorPagoEfi: p.valorPagoEfi,
+        ...this.posVencimentoOpcional(boleto),
       });
 
       this.logger.log(

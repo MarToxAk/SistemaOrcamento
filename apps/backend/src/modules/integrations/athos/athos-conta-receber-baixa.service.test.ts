@@ -869,3 +869,93 @@ describe("AthosContaReceberBaixaService.estornarBaixa", () => {
     }
   });
 });
+
+/** Fase 50 / plano 50-02 (D-09): encargos fixos do boleto atualizado. */
+describe("AthosContaReceberBaixaService - encargos fixos (boleto atualizado)", () => {
+  const envOriginal2 = { ...process.env };
+  let service: AthosContaReceberBaixaService;
+  const FIXOS = { juros: 2.64, multa: 20, atraso: 8 };
+
+  beforeEach(() => {
+    process.env.NODE_ENV = "test";
+    process.env.ATHOS_PG_HOST = "localhost";
+    process.env.ATHOS_PG_DB = "athos_mock";
+    process.env.ATHOS_PG_USER = "usuario_mock";
+    process.env.ATHOS_PG_PASS = "senha_mock";
+    process.env.ATHOS_PG_PORT = "5432";
+    mPool.connect.mockClear();
+    mPool.connect.mockResolvedValue(mClient);
+    service = new AthosContaReceberBaixaService();
+    (service as any).logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+  });
+
+  afterAll(() => {
+    process.env = envOriginal2;
+  });
+
+  function entradaFixos(ids: number[], extra: Partial<BaixarTitulosInput> = {}): BaixarTitulosInput {
+    return {
+      idclienteAthos: 2641,
+      titulos: ids.map((id) => ({ idcontareceber: id, valorEsperado: 1000, encargosFixos: FIXOS })),
+      dataPagamento: HOJE,
+      hoje: HOJE,
+      constantes: CONSTANTES,
+      ...extra,
+    };
+  }
+
+  const vencido = { valor: "1000.00", datavencimento: "2026-10-29", statusconta: "VEN" };
+
+  it("B1. todos os titulos com encargosFixos -> sem consulta a conf_financeiro; INSERT com o snapshot", async () => {
+    prepararPg([linha(1, vencido)]);
+    const r = await service.baixarTitulos(entradaFixos([1]));
+    expect(r.resultado).toBe("baixado");
+    expect(tipos()).not.toContain("LER_CONF");
+    expect(chamadas("INS_CR")[0][1]).toEqual([
+      1,
+      formatarValorAthos(1022.64),
+      `${HOJE} 00:00:00`,
+      formatarValorAthos(2.64),
+      8,
+      CONSTANTES.idFuncionario,
+      CONSTANTES.idFormaPagamento,
+      formatarValorAthos(20),
+    ]);
+  });
+
+  it("B2. encargos fixos em so um de dois titulos -> CONFIG_INVALIDA sem abrir conexao", async () => {
+    prepararPg([linha(1, vencido), linha(2, vencido)]);
+    const ent = entradaFixos([1, 2]);
+    delete ent.titulos[1].encargosFixos;
+    expect(await codigoDoErro(service.baixarTitulos(ent))).toBe("CONFIG_INVALIDA");
+    expect(mPool.connect).not.toHaveBeenCalled();
+  });
+
+  it("B3. fixos com EFI divergente -> VALOR_INCOMPATIVEL, ROLLBACK e nenhum INSERT", async () => {
+    prepararPg([linha(1, vencido)]);
+    const codigo = await codigoDoErro(service.baixarTitulos(entradaFixos([1], { valorPagoEfi: 1000 })));
+    expect(codigo).toBe("VALOR_INCOMPATIVEL");
+    nenhumaEscrita();
+    expect(tipos()).toContain("ROLLBACK");
+    expect(tipos()).not.toContain("COMMIT");
+  });
+
+  it("B4. um titulo ja REC + outro com fixos -> REC vira ja_baixado e o outro nao e comparado com a EFI", async () => {
+    prepararPg([linha(1, { statusconta: "REC" }), linha(2, vencido)]);
+    const r = await service.baixarTitulos(entradaFixos([1, 2], { valorPagoEfi: 5 }));
+    expect(r.resultado).toBe("baixado");
+    expect(r.titulos.find((t) => t.idcontareceber === 1)?.acao).toBe("ja_baixado");
+    expect(r.titulos.find((t) => t.idcontareceber === 2)?.valorPago).toBe(1022.64);
+    expect(chamadas("INS_CR")).toHaveLength(1);
+    expect(tipos()).not.toContain("LER_CONF");
+  });
+
+  it("B5. simular com fixos -> nenhuma escrita e resultado com o snapshot", async () => {
+    prepararPg([linha(1, vencido)]);
+    const r = await service.baixarTitulos(entradaFixos([1], { simular: true }));
+    expect(r.simulado).toBe(true);
+    expect(r.titulos[0]).toMatchObject({ juros: 2.64, multa: 20, atraso: 8, valorPago: 1022.64 });
+    nenhumaEscrita();
+    expect(tipos()).not.toContain("LER_CONF");
+  });
+});

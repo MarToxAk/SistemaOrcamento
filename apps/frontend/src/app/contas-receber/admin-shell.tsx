@@ -23,7 +23,15 @@ export const PA_NAV_ITEMS: PaNavItem[] = [
   },
   { href: "/orcamento", label: "Orçamentos", icon: "file-earmark-text" },
   { href: "/status", label: "Produção", icon: "kanban" },
-  { href: "/configuracoes/templates", label: "Configurações", icon: "gear" },
+  {
+    href: "/configuracoes",
+    label: "Configurações",
+    icon: "gear",
+    filhos: [
+      { href: "/configuracoes/templates", label: "Templates de PDF", icon: "file-earmark-richtext" },
+      { href: "/configuracoes/cobranca", label: "Juros e multa", icon: "percent" },
+    ],
+  },
 ];
 
 /** Item pai ativo quando a rota atual e igual ao href ou esta abaixo dele (href + "/..."). */
