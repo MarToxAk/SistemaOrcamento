@@ -291,4 +291,103 @@ describe("CobrancaBoletoAtualizadoController POST boleto/:id/atualizar (HTTP)", 
     expect(efi.put).not.toHaveBeenCalled();
     expect(prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
   });
+  async function previa(corpo: unknown, chaveInterna: string | null = CHAVE_INTERNA, id = 41) {
+    const h: Record<string, string> = { "content-type": "application/json" };
+    if (chaveInterna) h["x-internal-api-key"] = chaveInterna;
+    const res = await fetch(`${base}/api/cobranca/boleto/${id}/atualizacao/previa`, {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify(corpo),
+    });
+    const json = (await res.json()) as Record<string, any>;
+    return { status: res.status, json };
+  }
+
+  function semEfiNemGravacao() {
+    expect(cobrancaService.prepararEmissaoEfi).not.toHaveBeenCalled();
+    expect(cobrancaService.verificarPagamentoBoleto).not.toHaveBeenCalled();
+    expect(efi.post).not.toHaveBeenCalled();
+    expect(efi.put).not.toHaveBeenCalled();
+    expect(prisma.cobrancaBoleto.create).not.toHaveBeenCalled();
+    expect(prisma.cobrancaBoleto.update).not.toHaveBeenCalled();
+  }
+
+  it("P1 previa padrao: datas, taxas, tetos, detalhamento, totais e mensagem; sem EFI e sem gravacao", async () => {
+    const { status, json } = await previa({});
+    expect(status).toBe(200);
+    expect(json).toMatchObject({
+      cobrancaIdOriginal: 41,
+      hoje: "2026-11-17",
+      vencimentosPermitidos: ["2026-11-17", "2026-11-18"],
+      novoVencimento: "2026-11-18",
+      taxaJurosMes: 0.99,
+      multaPercentual: 2,
+      taxaJurosMesPadrao: 0.99,
+      multaPercentualPadrao: 2,
+      tetos: { taxaJurosMes: 1, multaPercentual: 2 },
+      principal: 1000,
+      juros: 2.64,
+      multa: 20,
+      total: 1022.64,
+      sucessorAtivoId: null,
+    });
+    expect(json.titulos).toEqual([
+      {
+        idcontareceber: 1363,
+        numerotitulo: "1363/1",
+        vencimentoOriginal: "2026-11-10",
+        diasAtraso: 8,
+        principal: 1000,
+        juros: 2.64,
+        multa: 20,
+        total: 1022.64,
+      },
+    ]);
+    expect(json.mensagem).toHaveLength(4);
+    semEfiNemGravacao();
+  });
+
+  it("P2 previa com taxas editadas e data de hoje recalcula no servidor; mensagem cita taxas padrao (D-12)", async () => {
+    const { status, json } = await previa({ novoVencimento: "2026-11-17", taxaJurosMes: 0.5, multaPercentual: 1 });
+    expect(status).toBe(200);
+    expect(json).toMatchObject({
+      novoVencimento: "2026-11-17",
+      taxaJurosMes: 0.5,
+      multaPercentual: 1,
+      taxaJurosMesPadrao: 0.99,
+      multaPercentualPadrao: 2,
+      juros: 1.17,
+      multa: 10,
+      total: 1011.17,
+    });
+    expect(json.titulos[0].diasAtraso).toBe(7);
+    const linhaAtraso = (json.mensagem as string[]).join(" ");
+    expect(linhaAtraso).toContain("0,99%");
+    expect(linhaAtraso).toContain("2%");
+    semEfiNemGravacao();
+  });
+
+  it("P3 entradas invalidas na previa: data fora da regra, taxa acima do teto, campo desconhecido -> 400; sem chave -> 401", async () => {
+    expect((await previa({ novoVencimento: "2026-11-19" })).status).toBe(400);
+    expect((await previa({ taxaJurosMes: 1.5 })).status).toBe(400);
+    expect((await previa({ total: 1 })).status).toBe(400);
+    expect((await previa({}, null)).status).toBe(401);
+    semEfiNemGravacao();
+  });
+
+  it("P4 titulo ainda nao vencido no novo vencimento -> 422", async () => {
+    athos.buscarTitulosClienteContasReceber.mockResolvedValue([{ ...titulosAthos[0], datavencimento: "2026-11-20" }]);
+    const { status, json } = await previa({});
+    expect(status).toBe(422);
+    expect(String(json.message)).toContain("Nenhum título vencido");
+    semEfiNemGravacao();
+  });
+
+  it("P5 boleto pago -> 409; boleto inexistente -> 404", async () => {
+    prisma.cobrancaBoleto.findUnique.mockResolvedValue({ ...original, status: "pago" });
+    expect((await previa({})).status).toBe(409);
+    prisma.cobrancaBoleto.findUnique.mockResolvedValue(null);
+    expect((await previa({})).status).toBe(404);
+    semEfiNemGravacao();
+  });
 });
