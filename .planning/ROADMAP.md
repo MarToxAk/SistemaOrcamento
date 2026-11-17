@@ -40,6 +40,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 47: Contas a receber: páginas separadas, boletos e notas fiscais PDF/XML**
 - [ ] **Phase 48: Contas a receber: escolher a ordenação (data, nome, pago)**
 - [ ] **Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa**
+- [ ] **Phase 50: Contas a receber: boleto atualizado com juros e multa**
 
 ### Phase Details
 
@@ -249,6 +250,16 @@ Plans:
 Plans:
 - [ ] 49-01-PLAN.md — Wave 1 · changeStatus com opção notificarCliente (DTO + controller do PATCH :id/status) e regra padrão: só PRONTO_PARA_ENTREGA público, EM_PRODUCAO/ENTREGUE/CANCELADO como nota privada; chamadas internas e outras mensagens iguais (D-01, D-02, D-04; STA-01, 02, 05)
 - [ ] 49-02-PLAN.md — Wave 2 · PATCH /quotes/status/lote sempre silencioso, sequencial, com resultado por orçamento, até 50 ids validados e status inválido barrado antes de mudar qualquer um; rota sem colisão com :id/status (D-03; STA-03, 04, 05)
+
+### Phase 50: Contas a receber: boleto atualizado com juros e multa
+
+**Goal:** Na parte de Contas a Receber, o operador gera um boleto atualizado (com juros e multa) de um titulo vencido para enviar ao cliente. O novo vencimento so pode ser hoje ou amanha (ex.: hoje 17/11 -> maximo 18/11; data maior e bloqueada). Juros e multa sao calculados a partir do vencimento original registrado no sistema (ex.: venc. 10/11) ate o novo vencimento. Padrao: juros 0,99% ao mes e multa 2%, editaveis no momento da geracao, com uma tela de configuracao para alterar o padrao futuramente.
+**Requirements**: TBD
+**Depends on:** Phase 49
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 50 to break down)
 
 ---
 
