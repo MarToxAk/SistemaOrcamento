@@ -190,11 +190,15 @@ export class EmailEnvioService {
     }
 
     let nfeNumeros: string[] = [];
+    let mensagemAtualizacao: string | null = null;
     if (input.cobrancaBoletoId) {
       const boleto = await this.prisma.cobrancaBoleto.findUnique({
         where: { id: input.cobrancaBoletoId },
         include: { titulos: { select: { idcontareceber: true } } },
       });
+      // D-12: boleto atualizado leva ao cliente a mensagem informativa gravada no boleto.
+      const msg = boleto?.mensagemAtualizacao;
+      mensagemAtualizacao = typeof msg === "string" && msg.trim() ? msg : null;
       const idcontas = boleto?.titulos.map((t) => t.idcontareceber) ?? [];
       const notasXml = idcontas.length
         ? await this.athosService.buscarNotasFiscaisXmlPorTitulos(idcontas)
@@ -259,6 +263,7 @@ export class EmailEnvioService {
       documentosResumo,
       confirmUrl,
       pixelUrl,
+      mensagemAtualizacao,
     });
     const text = this.montarCorpoTexto({
       nomeCliente,
@@ -267,6 +272,7 @@ export class EmailEnvioService {
       empresaEmail,
       documentosResumo,
       confirmUrl,
+      mensagemAtualizacao,
     });
 
     const transport = this.buildTransport();
@@ -553,9 +559,28 @@ export class EmailEnvioService {
     documentosResumo: { label: string; formatos: string[] }[];
     confirmUrl: string;
     pixelUrl: string;
+    mensagemAtualizacao?: string | null;
   }): string {
     const esc = escapeHtml;
     const cor = /^#[0-9a-f]{3,8}$/i.test(input.empresaCor) ? input.empresaCor : "#0d6efd";
+
+    // D-12: quadro do boleto atualizado (linhas escapadas, unidas por <br>); ausente em boleto comum.
+    const mensagemLinhas = (input.mensagemAtualizacao ?? "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const quadroAtualizadoHtml = mensagemLinhas.length
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff8e6;border-radius:8px;margin:0 0 24px;overflow:hidden">
+              <tr>
+                <td width="4" style="background:${cor};font-size:0;line-height:0">&nbsp;</td>
+                <td style="padding:12px 16px">
+                  <div style="font-size:14px;font-weight:700;color:#212529;margin-bottom:4px">Boleto atualizado</div>
+                  <div style="font-size:13px;line-height:1.5;color:#495057">${mensagemLinhas.map((l) => esc(l)).join("<br>")}</div>
+                </td>
+              </tr>
+            </table>
+            `
+      : "";
 
     const cabecalhoHtml = input.empresaLogoUrl
       ? `<img src="${esc(input.empresaLogoUrl)}" alt="${esc(input.empresaNome)}" height="40" style="display:block;max-height:40px;width:auto;border:0">`
@@ -600,7 +625,7 @@ export class EmailEnvioService {
             <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#495057">
               Segue em anexo a sua cobrança da <strong>${esc(input.empresaNome)}</strong>. Confira os documentos abaixo e clique no botão para confirmar o recebimento.
             </p>
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa;border-radius:8px;margin:0 0 28px;overflow:hidden">
+            ${quadroAtualizadoHtml}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa;border-radius:8px;margin:0 0 28px;overflow:hidden">
               ${documentosHtml}
             </table>
             <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 8px">
@@ -637,17 +662,25 @@ export class EmailEnvioService {
     empresaEmail?: string;
     documentosResumo: { label: string; formatos: string[] }[];
     confirmUrl: string;
+    mensagemAtualizacao?: string | null;
   }): string {
     const listaDocumentos = input.documentosResumo
       .map((d) => `- ${d.label} (${d.formatos.join(" + ")})`)
       .join("\n");
     const rodapeText = [input.empresaTelefones, input.empresaEmail].filter(Boolean).join("\n");
+    const mensagemLinhas = (input.mensagemAtualizacao ?? "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const blocoAtualizado = mensagemLinhas.length
+      ? `Boleto atualizado:\n${mensagemLinhas.join("\n")}\n\n`
+      : "";
 
     return `Olá, ${input.nomeCliente},
 
 Segue em anexo a sua cobrança da ${input.empresaNome}:
 
-${listaDocumentos}
+${blocoAtualizado}${listaDocumentos}
 
 Confirmar recebimento: ${input.confirmUrl}
 
