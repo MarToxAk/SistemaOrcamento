@@ -5,16 +5,16 @@ milestone_name: API de Produtos Compostos (Kits) no Athos
 current_phase: 50
 current_phase_name: "Contas a receber: boleto atualizado com juros e multa"
 status: executing
-stopped_at: Completed 50-01-PLAN.md
-last_updated: "2026-11-17T13:19:39.373Z"
+stopped_at: Completed 50-02-PLAN.md
+last_updated: "2026-11-17T13:24:26.925Z"
 last_activity: 2026-11-17
 last_activity_desc: Phase 50 execution started
-state_head: aeb1252659f7faf9d1a466df1b2e3a75750b0b06
+state_head: 98641bbd5b1a1472bda167737dcc76bbbb8ff34a
 progress:
   total_phases: 12
   completed_phases: 3
   total_plans: 45
-  completed_plans: 39
+  completed_plans: 40
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 ## Current Position
 
 Phase: 50 (Contas a receber: boleto atualizado com juros e multa) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-11-17 — Phase 50 execution started
 
@@ -318,11 +318,12 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 43 P03 | ~40min | 3 tasks | 13 files |
 | Phase 43 P04 | ~40min | 3 tasks | 11 files |
 | Phase 50 P01 | 15 min | 2 tasks | 12 files |
+| Phase 50 P02 | 10min | 2 tasks | 7 files |
 
 ## Session
 
-**Last session:** 2026-11-17T13:19:38.437Z
-**Stopped at:** Completed 50-01-PLAN.md
+**Last session:** 2026-11-17T13:24:25.818Z
+**Stopped at:** Completed 50-02-PLAN.md
 **Resume file:** None
 
 ## Decisions
@@ -352,6 +353,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase 43]: 43-04: estorno apaga somente pares (idcontareceber, idcontarecebida) da trilha de baixa; cartao preferencial por regex com fronteira numerica
 - [Phase 50]: 50-01: configurations fine/interest e texto de novo atraso usam as taxas padrao configuradas (D-12), mesmo com taxas do calculo editadas
 - [Phase 50]: 50-01: CobrancaBoletoTitulo.valor continua sendo o principal; total fica em CobrancaBoleto.valor
+- [Phase 50]: 50-02: baixa do boleto atualizado usa encargos fixos do snapshot (sem conf_financeiro); so o principal e VALOR_INCOMPATIVEL; pagamento apos novo vencimento aceito ate teto pos-vencimento com rateio exato
 
 ## Deferred Verification
 
