@@ -186,6 +186,7 @@ Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 261117-g03 | Data de vencimento do boleto editavel no modal Gerar boleto | 2026-11-17 | ed03050 | [261117-g03-vencimento-boleto-editavel](./quick/261117-g03-vencimento-boleto-editavel/) |
 | 260506-001 | Front-end nao tem nenhuma representacao visual do pagamento nem numero do pedido aparecendo | 2026-05-06 | n/a | [260506-001-frontend-pagamento-pedido-visual](./quick/260506-001-frontend-pagamento-pedido-visual/) |
 | 260506-002 | Front-end nao mostra icone de pago no caixa nem numero do pedido (numeroordem) na pagina de detalhe do orcamento | 2026-05-06 | n/a | [260506-002-frontend-pago-no-caixa-numeroordem](./quick/260506-002-frontend-pago-no-caixa-numeroordem/) |
 | 260506-003 | Exibir numero do pedido na lista de orcamentos com cor diferente para pagamento confirmado | 2026-05-06 | n/a | [260506-003-lista-orcamento-numero-pedido-pagamento](./quick/260506-003-lista-orcamento-numero-pedido-pagamento/) |

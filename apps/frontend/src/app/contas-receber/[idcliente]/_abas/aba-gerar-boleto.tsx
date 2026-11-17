@@ -681,8 +681,7 @@ export function AbaGerarBoleto({
                       className={`form-control${expireAt && expireAt < hoje ? " is-invalid" : ""}`}
                       value={expireAt}
                       min={hoje}
-                      readOnly={expireAtReadonly}
-                      onChange={(e) => !expireAtReadonly && setExpireAt(e.target.value)}
+                      onChange={(e) => setExpireAt(e.target.value)}
                     />
                     {expireAtReadonly && (
                       <div className="mt-1">
@@ -690,7 +689,7 @@ export function AbaGerarBoleto({
                           Preenchido automaticamente
                         </span>
                         <small className="text-muted ms-2">
-                          Preenchida automaticamente com a data dos títulos.
+                          Sugerida pela data dos títulos. Você pode alterar.
                         </small>
                       </div>
                     )}
