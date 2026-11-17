@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import axios from "axios";
+import axios, { AxiosInstance } from "axios";
 import { ConfigService } from "@nestjs/config";
 
 import { AthosService } from "../integrations/athos/athos.service";
@@ -37,6 +37,15 @@ export interface CriarBoletoResponseDto {
   valor: number;
   expireAt: string;
   nomeArquivo: string;
+}
+
+/** Contexto compartilhado para emitir cobranca na EFI (Fase 50): cliente autenticado, customer e webhook. */
+export interface ContextoEmissaoEfi {
+  cli: AxiosInstance;
+  token: string;
+  customer: Record<string, unknown>;
+  nomeCliente: string;
+  notificationUrl?: string;
 }
 
 export interface DetalheBoleto {
@@ -1195,7 +1204,7 @@ export class CobrancaService {
    * Resultado: Map<numeroNF, item>, agregando o mesmo número que apareça em vários títulos.
    * Garante Σ valueCentavos == round(totalValor * 100) aplicando delta de arredondamento no último item.
    */
-  private async montarItensEfiPorVendaItem(
+  async montarItensEfiPorVendaItem(
     titulos: Array<{ idcontareceber: number; idvenda: number | null; valor: number }>,
     totalValor: number,
   ): Promise<Map<string, { name: string; valueCentavos: number; amount: number }>> {
@@ -1382,6 +1391,70 @@ export class CobrancaService {
     this.logger.log(`[SPLIT-BOLETO-FINAL] Itens do boleto: ${JSON.stringify([...itemMap.values()])}`);
 
     return itemMap;
+  }
+
+  /**
+   * Fase 50: prepara a emissao de uma cobranca na EFI (autenticacao, customer PF/PJ e notification_url),
+   * com a mesma regra de criarBoleto. Nao altera criarBoleto.
+   */
+  async prepararEmissaoEfi(idclienteAthos: number): Promise<ContextoEmissaoEfi> {
+    const dadosCliente = await this.athosService.buscarDadosClienteContasReceber(idclienteAthos);
+    const nomeCliente = dadosCliente?.nome_cliente ?? `Cliente ${idclienteAthos}`;
+
+    let cpfOuCnpj: Record<string, unknown> = {};
+    try {
+      const clienteCompleto = await this.athosService.buscarClientePorId(idclienteAthos);
+      const doc = clienteCompleto?.documento;
+      if (doc) {
+        const digitsOnly = doc.replace(/\D/g, "");
+        if (digitsOnly.length === 11) {
+          cpfOuCnpj = { cpf: digitsOnly };
+        } else if (digitsOnly.length === 14) {
+          cpfOuCnpj = { juridical_person: { corporate_name: nomeCliente.slice(0, 80), cnpj: digitsOnly } };
+        }
+      }
+    } catch (err: unknown) {
+      this.logger.warn(`Não foi possível buscar documento do cliente ${idclienteAthos}: ${String(err)}`);
+    }
+    const customer: Record<string, unknown> =
+      "juridical_person" in cpfOuCnpj ? cpfOuCnpj : { name: nomeCliente.slice(0, 80), ...cpfOuCnpj };
+
+    const baseUrl =
+      this.config.get<string>("EFI_COBRANCA_BASE_URL") ?? "https://cobrancas-h.api.efipay.com.br";
+    const clientId = this.getRequiredConfig("EFI_CLIENT_ID");
+    const clientSecret = this.getRequiredConfig("EFI_CLIENT_SECRET");
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    const cli = axios.create({ baseURL: baseUrl, timeout: 15_000 });
+
+    let token: string;
+    try {
+      const authResp = await cli.post(
+        "/v1/authorize",
+        { grant_type: "client_credentials" },
+        { headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" } },
+      );
+      token = authResp.data?.access_token;
+      if (!token) throw new Error("Token não retornado pela EFI");
+    } catch (e: unknown) {
+      const detail =
+        (e as { response?: { data?: unknown }; message?: string })?.response?.data ??
+        (e as { message?: string })?.message;
+      this.logger.error(`Falha ao autenticar na API Cobranças EFI: ${JSON.stringify(detail)}`);
+      throw new InternalServerErrorException("Não foi possível autenticar na API Cobranças EFI.");
+    }
+
+    // Mesma regra de URL publica de criarBoleto (APP_BASE_URL e o que o container recebe em producao).
+    const webhookBase =
+      this.config.get<string>("APP_BASE_URL") ??
+      process.env["WEBHOOK_BASE_URL"] ??
+      process.env["APP_URL"] ??
+      "";
+    const isPublicUrl = webhookBase.length > 0 && !/localhost|127\.0\.0\.1/.test(webhookBase);
+    const notificationUrl = isPublicUrl
+      ? `${webhookBase.replace(/\/$/, "")}/api/cobranca/boleto/notificacao`
+      : undefined;
+
+    return { cli, token, customer, nomeCliente, notificationUrl };
   }
 
   private getRequiredConfig(key: string): string {

@@ -253,7 +253,21 @@ model CobrancaBoleto {
   athosBaixaDataPagamento String?   // YYYY-MM-DD resolvida na 1a tentativa (America/Sao_Paulo)
   athosBaixaValorPagoEfi  Decimal?  @db.Decimal(12, 2)
 
+  // Fase 50 (D-08, D-11, D-12, D-14): boleto atualizado com juros e multa
+  boletoOrigemId               Int?
+  boletoOrigem                 CobrancaBoleto?  @relation("BoletoAtualizacao", fields: [boletoOrigemId], references: [id], onDelete: SetNull)
+  boletosAtualizados           CobrancaBoleto[] @relation("BoletoAtualizacao")
+  valorPrincipal               Decimal?         @db.Decimal(12, 2)
+  valorJuros                   Decimal?         @db.Decimal(12, 2)
+  valorMulta                   Decimal?         @db.Decimal(12, 2)
+  taxaJurosMesAplicada         Decimal?         @db.Decimal(7, 4)
+  multaPercentualAplicada      Decimal?         @db.Decimal(7, 4)
+  taxaJurosMesPosVencimento    Decimal?         @db.Decimal(7, 4)
+  multaPercentualPosVencimento Decimal?         @db.Decimal(7, 4)
+  mensagemAtualizacao          String?
+
   @@index([athosBaixaStatus])
+  @@index([boletoOrigemId])
 }
 
 /// Trilha append-only das tentativas de baixa e estorno no Athos - Fase 43. Sem FK: preserva a auditoria se o boleto local for removido.
@@ -329,6 +343,12 @@ model CobrancaBoletoTitulo {
   idcontareceber   Int
   valor            Decimal        @db.Decimal(12, 2)
   cobrancaBoleto   CobrancaBoleto @relation(fields: [cobrancaBoletoId], references: [id])
+
+  // Fase 50 (D-11, D-13): snapshot dos encargos por titulo (valor continua sendo o PRINCIPAL)
+  juros              Decimal? @db.Decimal(12, 2)
+  multa              Decimal? @db.Decimal(12, 2)
+  diasAtraso         Int?
+  vencimentoOriginal String?
 
   @@index([cobrancaBoletoId])
   @@index([idcontareceber])
@@ -424,6 +444,14 @@ model ChatwootAutomationConfig {
   mensagemPedidoPendente String   @db.Text
   updatedAt              DateTime @updatedAt
   updatedBy              String?
+}
+
+/// Fase 50 (D-07): taxas padrao do boleto atualizado (singleton id "default").
+model CobrancaEncargosConfig {
+  id              String   @id @default("default")
+  taxaJurosMes    Decimal  @default(0.99) @db.Decimal(7, 4)
+  multaPercentual Decimal  @default(2) @db.Decimal(7, 4)
+  atualizadoEm    DateTime @updatedAt
 }
 
 // Registro de mensagens de automacao enviadas por conversa (ex.: evita reenviar a
