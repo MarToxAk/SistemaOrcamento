@@ -2,26 +2,26 @@
 gsd_state_version: "1.0"
 milestone: v2.5
 milestone_name: API de Produtos Compostos (Kits) no Athos
-current_phase: 50
-current_phase_name: "Contas a receber: boleto atualizado com juros e multa"
+current_phase: 43 — Baixa automática de contas a receber no Athos
+current_phase_name: Baixa automática de contas a receber no Athos
 status: verifying
-stopped_at: Completed 50-07-PLAN.md
-last_updated: "2026-11-17T14:08:46.745Z"
+stopped_at: Phase 50 complete, ready to verify Phase 43
+last_updated: "2026-11-17T14:15:41.979Z"
 last_activity: 2026-11-17
-last_activity_desc: Phase 50 execution started
-state_head: 2ada51737f0fccb14b030e434c931e5739cdaa21
+last_activity_desc: Phase 50 complete, transitioned to Phase 43
+state_head: 118444add139f4ebb46a08d0e0b051b0c3fc0c98
 progress:
   total_phases: 12
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 45
   completed_plans: 45
-  percent: 25
+  percent: 33
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-09-04 — Fase 40 verificada retroativamente (código já implementado em commit 5d5270d); milestone v2.5 completo
-Current phase: 50
+Current phase: 43 — Baixa automática de contas a receber no Athos
 Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
@@ -29,11 +29,11 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 ## Current Position
 
 Phase: 50 (Contas a receber: boleto atualizado com juros e multa) — EXECUTING
-Plan: 7 of 7
+Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-11-17 — Phase 50 execution started
+Last activity: 2026-11-17 — Phase 50 complete, transitioned to Phase 43
 
-Progress: [███░░░░░░░] 25% (2/2 phases complete)
+Progress: [███░░░░░░░] 33% (2/2 phases complete)
 
 ## Project Status
 
@@ -328,7 +328,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 ## Session
 
 **Last session:** 2026-11-17T14:08:45.708Z
-**Stopped at:** Completed 50-07-PLAN.md
+**Stopped at:** Phase 50 complete, ready to verify Phase 43
 **Resume file:** None
 
 ## Decisions

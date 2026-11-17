@@ -40,7 +40,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 47: Contas a receber: páginas separadas, boletos e notas fiscais PDF/XML**
 - [ ] **Phase 48: Contas a receber: escolher a ordenação (data, nome, pago)**
 - [ ] **Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa**
-- [ ] **Phase 50: Contas a receber: boleto atualizado com juros e multa**
+- [x] **Phase 50: Contas a receber: boleto atualizado com juros e multa** (completed 2026-11-17)
 
 ### Phase Details
 
@@ -256,7 +256,7 @@ Plans:
 **Goal:** Na parte de Contas a Receber, o operador gera um boleto atualizado (com juros e multa) de um titulo vencido para enviar ao cliente. O novo vencimento so pode ser hoje ou amanha (ex.: hoje 17/11 -> maximo 18/11; data maior e bloqueada). Juros e multa sao calculados a partir do vencimento original registrado no sistema (ex.: venc. 10/11) ate o novo vencimento. Padrao: juros 0,99% ao mes e multa 2%, editaveis no momento da geracao, com uma tela de configuracao para alterar o padrao futuramente.
 **Requirements**: BA-01, BA-02, BA-03, BA-04, BA-05, BA-06, BA-07, BA-08, BA-09, BA-10, BA-11 (IDs locais da fase — definidos em 50-VALIDATION.md)
 **Depends on:** Phase 49
-**Plans:** 7/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 - [x] 50-01-PLAN.md — Wave 1 · Tracer [BLOCKING schema]: POST /cobranca/boleto/:id/atualizar ponta a ponta (schema + migration aditiva, util de datas/cálculo/mensagem, config padrão, EFI one-step com linhas de juros e multa + configurations, vínculo e snapshot, cancelamento estrito do original) + regras puras completas (D-01..D-05, D-08, D-11..D-14, D-16; BA-01, 02, 05, 09)
