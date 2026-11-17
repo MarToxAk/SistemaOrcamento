@@ -48,6 +48,21 @@ export interface TituloReceber {
     /** AAAA-MM-DD do titulos-em-uso (Fase 48); ausente antes do deploy do backend. */
     expireAt?: string | null;
     dataPagamento?: string | null;
+    // Boleto atualizado com juros e multa (Fase 50) - origem: titulos-em-uso; ausentes antes do deploy do backend.
+    /** Valor total cobrado no boleto (com juros e multa, no boleto atualizado). */
+    valorBoleto?: number | null;
+    /** Id do boleto original que este boleto atualizado substitui. */
+    boletoOrigemId?: number | null;
+    valorJuros?: number | null;
+    valorMulta?: number | null;
+    /** Juros e multa deste titulo no boleto atualizado, e dias de atraso usados no calculo. */
+    jurosTitulo?: number | null;
+    multaTitulo?: number | null;
+    diasAtrasoTitulo?: number | null;
+    /** Outro boleto do par original/atualizado (D-15). */
+    boletoRelacionadoId?: number | null;
+    /** True quando o original cancelado tambem foi pago e o atualizado segue ativo (pagamento em dobro). */
+    alertaPagamentoDuplicado?: boolean;
     ultimoEmail?: {
       status: string;
       destinatario: string;

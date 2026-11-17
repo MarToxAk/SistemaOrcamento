@@ -275,7 +275,9 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
           ) : (
             <div>
                 {gruposOrdenados.map(({ boleto, titulos: tsBoleto }) => {
-                  const totalBoleto = tsBoleto.reduce((s, t) => s + t.valor, 0);
+                  // O boleto atualizado cobra juros e multa: o total vem do servidor (valorBoleto), nao da soma dos titulos.
+                  const totalBoleto = boleto.valorBoleto ?? tsBoleto.reduce((s, t) => s + t.valor, 0);
+                  const atualizado = boleto.boletoOrigemId != null;
                   const isPago = boleto.status === "pago";
                   const pillVariante = isPago ? "success" : boleto.status === "cancelado" ? "secondary" : "warning";
                   const detalheAberto = detalheAbertoId === boleto.cobrancaId;
@@ -288,6 +290,18 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                             <i className="bi bi-receipt me-1" />Boleto #{boleto.cobrancaId} — {boleto.status}
                           </span>
                           <span className="small fw-semibold">{formatBRL(totalBoleto)}</span>
+                          {atualizado && (
+                            <span className="pa-pill pa-pill-secondary"
+                              title="Boleto atualizado com juros e multa; o original foi cancelado na EFI">
+                              <i className="bi bi-arrow-repeat me-1" />Atualizado - substitui #{boleto.boletoOrigemId}
+                            </span>
+                          )}
+                          {boleto.alertaPagamentoDuplicado && (
+                            <span className="pa-pill pa-pill-danger"
+                              title="O boleto original cancelado foi pago na EFI e o boleto atualizado continua ativo. Verifique com o cliente; nada foi cancelado automaticamente.">
+                              <i className="bi bi-exclamation-triangle-fill me-1" />Pagamento em dobro? Boleto #{boleto.boletoRelacionadoId} também foi pago
+                            </span>
+                          )}
                           <span className="small text-muted">({tsBoleto.length} título{tsBoleto.length > 1 ? "s" : ""})</span>
                           {boleto.expireAt && (
                             <span className="small text-muted">Venc. {formatarDataEmissao(boleto.expireAt)}</span>
@@ -356,6 +370,13 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                               <th>Título</th>
                               <th>Vencimento</th>
                               <th>Valor</th>
+                              {atualizado && (
+                                <>
+                                  <th>Juros</th>
+                                  <th>Multa</th>
+                                  <th>Total</th>
+                                </>
+                              )}
                               <th>NF</th>
                             </tr>
                           </thead>
@@ -367,6 +388,15 @@ export function AbaBoletos({ idcliente, dadosCliente, titulos, loadingTitulos, e
                                   <td className="small">{t.numerotitulo ?? "—"}</td>
                                   <td className={`small${vencido ? " text-danger" : ""}`}>{formatDate(t.datavencimento)}</td>
                                   <td className="small fw-semibold">{formatBRL(t.valor)}</td>
+                                  {atualizado && (
+                                    <>
+                                      <td className="small">{formatBRL(t.boletoAtivo?.jurosTitulo ?? 0)}</td>
+                                      <td className="small">{formatBRL(t.boletoAtivo?.multaTitulo ?? 0)}</td>
+                                      <td className="small fw-semibold">
+                                        {formatBRL(t.valor + (t.boletoAtivo?.jurosTitulo ?? 0) + (t.boletoAtivo?.multaTitulo ?? 0))}
+                                      </td>
+                                    </>
+                                  )}
                                   <td>
                                     {t.tipoNf ? (
                                       <span className="d-inline-flex align-items-center gap-1">
