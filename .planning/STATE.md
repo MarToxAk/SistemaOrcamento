@@ -5,16 +5,16 @@ milestone_name: API de Produtos Compostos (Kits) no Athos
 current_phase: 50
 current_phase_name: "Contas a receber: boleto atualizado com juros e multa"
 status: executing
-stopped_at: Completed 50-04-PLAN.md
-last_updated: "2026-11-17T13:50:42.614Z"
+stopped_at: Completed 50-05-PLAN.md
+last_updated: "2026-11-17T13:54:33.867Z"
 last_activity: 2026-11-17
 last_activity_desc: Phase 50 execution started
-state_head: 12a7038b2c5bca8cc312ba9e0d4aabbc41f251ad
+state_head: eb6890c4252f71df7fd2ca3edb6ede971f2da37f
 progress:
   total_phases: 12
   completed_phases: 3
   total_plans: 45
-  completed_plans: 42
+  completed_plans: 43
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 ## Current Position
 
 Phase: 50 (Contas a receber: boleto atualizado com juros e multa) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-11-17 — Phase 50 execution started
 
@@ -321,11 +321,12 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 50 P02 | 10min | 2 tasks | 7 files |
 | Phase 50 P03 | 12 min | 2 tasks | 5 files |
 | Phase 50 P04 | 14min | 2 tasks | 9 files |
+| Phase 50 P05 | 12min | 2 tasks | 5 files |
 
 ## Session
 
-**Last session:** 2026-11-17T13:50:41.685Z
-**Stopped at:** Completed 50-04-PLAN.md
+**Last session:** 2026-11-17T13:54:32.977Z
+**Stopped at:** Completed 50-05-PLAN.md
 **Resume file:** None
 
 ## Decisions
@@ -359,6 +360,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase 50]: 50-03: com boleto atualizado ativo e original pendente, gerar() vira retentativa (so repete o cancelamento estrito, sem nova emissao); original pago -> 409 pagamento em dobro
 - [Phase 50]: 50-03: falha ao gravar o boleto novo cancela o charge NOVO na EFI (compensacao); mutex por boleto por processo, 4600210 como barreira final
 - [Phase 50]: 50-04: tela de taxas usa input texto com virgula decimal e useRef contra envio duplo; tetos aplicados em tela, proxy, DTO e servico
+- [Phase 50]: 50-05: alerta D-15 apenas por log WARN (sem escrita, sem cancelar boleto atualizado); alertaPagamentoDuplicado = original pago OU (este pago E sucessor ativo)
 
 ## Deferred Verification
 
