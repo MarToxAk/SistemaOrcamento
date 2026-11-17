@@ -682,11 +682,14 @@ export class CobrancaService {
         this.logger.log(`Webhook EFI: boleto ${boleto.id} já marcado como pago — idempotência OK.`);
         return;
       }
+      const estavaCancelado = boleto.status === "cancelado";
       await this.prisma.cobrancaBoleto.update({
         where: { id: boleto.id },
         data: { status: "pago" },
       });
       this.logger.log(`Webhook EFI: boleto ${boleto.id} (chargeId=${chargeId}) marcado como pago.`);
+      // D-15: o cliente pagou um original que ja foi substituido pelo boleto atualizado. So alerta.
+      if (estavaCancelado) await this.alertarPagamentoBoletoSubstituido(boleto.id, "webhook");
 
       // D-03: busca a cobranca para obter a data real do pagamento (campo do payload EFI).
       // Falha aqui so deixa a data indefinida (a baixa usa hoje em America/Sao_Paulo).
@@ -710,6 +713,31 @@ export class CobrancaService {
     }
   }
 
+  /**
+   * D-15 (Fase 50): boleto original ja cancelado e substituido pelo atualizado foi pago na EFI
+   * (o cliente imprimiu antes). Apenas alerta em log (ids e status, sem dados do cliente): nada e
+   * cancelado nem alterado. Nunca lanca, para nao derrubar o webhook (a EFI retentaria).
+   */
+  private async alertarPagamentoBoletoSubstituido(
+    boletoId: number,
+    origem: "webhook" | "reconciliacao",
+  ): Promise<void> {
+    try {
+      const sucessor = await this.prisma.cobrancaBoleto.findFirst({
+        where: { boletoOrigemId: boletoId, status: { not: "cancelado" } },
+        select: { id: true, status: true },
+      });
+      if (!sucessor) return;
+      this.logger.warn(
+        `ALERTA pagamento em dobro possivel: boleto original ${boletoId} (cancelado e substituido pelo boleto atualizado ${sucessor.id}, status ${sucessor.status}) foi pago na EFI (origem ${origem}). Nada foi cancelado automaticamente; verifique com o cliente.`,
+      );
+    } catch (e: unknown) {
+      this.logger.error(
+        `Falha ao montar o alerta de pagamento do boleto cancelado ${boletoId}: ${e instanceof Error ? e.name : "erro"}`,
+      );
+    }
+  }
+
   async buscarTitulosComBoletoAtivo(idcontasReceber: number[]): Promise<Array<{
     idcontareceber: number;
     cobrancaId: number;
@@ -718,6 +746,18 @@ export class CobrancaService {
     nomeArquivo: string | null;
     expireAt: string | null;
     dataPagamento: string | null;
+    /** CobrancaBoleto.valor (no boleto atualizado inclui juros e multa). */
+    valorBoleto: number | null;
+    boletoOrigemId: number | null;
+    valorJuros: number | null;
+    valorMulta: number | null;
+    jurosTitulo: number | null;
+    multaTitulo: number | null;
+    diasAtrasoTitulo: number | null;
+    /** D-15: original pago OU (este pago E sucessor nao cancelado). */
+    alertaPagamentoDuplicado: boolean;
+    /** O outro boleto do alerta (original ou sucessor). */
+    boletoRelacionadoId: number | null;
     ultimoEmail: {
       status: string;
       destinatario: string;
@@ -733,8 +773,13 @@ export class CobrancaService {
         idcontareceber: { in: idcontasReceber },
         cobrancaBoleto: { status: { in: ["pendente", "pago"] } },
       },
+      // Mais novo por ultimo: o mapa da tela fica com o boleto atualizado por titulo (Pitfall 6).
+      orderBy: { cobrancaBoletoId: "asc" },
       select: {
         idcontareceber: true,
+        juros: true,
+        multa: true,
+        diasAtraso: true,
         cobrancaBoleto: {
           select: {
             id: true,
@@ -743,6 +788,15 @@ export class CobrancaService {
             nomeArquivo: true,
             expireAt: true,
             athosBaixaDataPagamento: true,
+            valor: true,
+            boletoOrigemId: true,
+            valorJuros: true,
+            valorMulta: true,
+            boletoOrigem: { select: { id: true, status: true } },
+            boletosAtualizados: {
+              where: { status: { not: "cancelado" } },
+              select: { id: true, status: true },
+            },
             // Só o envio de e-mail mais recente — é só um indicador de leitura na tela, não histórico completo.
             emailEnvios: {
               orderBy: { enviadoEm: "desc" },
@@ -753,9 +807,29 @@ export class CobrancaService {
         },
       },
     });
+    // Conversao defensiva: null/undefined -> null; Decimal/string -> number finito (nunca NaN).
+    const num = (v: unknown): number | null => {
+      if (v === null || v === undefined) return null;
+      const n = Number(String(v));
+      return Number.isFinite(n) ? n : null;
+    };
     return rows.map((r) => {
-      const ultimo = r.cobrancaBoleto.emailEnvios[0];
+      const b = r.cobrancaBoleto;
+      const ultimo = b.emailEnvios[0];
+      const origem = b.boletoOrigem ?? null;
+      const sucessor = (b.boletosAtualizados ?? [])[0] ?? null;
+      const origemPaga = origem?.status === "pago";
+      const sucessorAtivoComEstePago = b.status === "pago" && sucessor !== null;
       return {
+        valorBoleto: num(b.valor),
+        boletoOrigemId: b.boletoOrigemId ?? null,
+        valorJuros: num(b.valorJuros),
+        valorMulta: num(b.valorMulta),
+        jurosTitulo: num(r.juros),
+        multaTitulo: num(r.multa),
+        diasAtrasoTitulo: num(r.diasAtraso),
+        alertaPagamentoDuplicado: origemPaga || sucessorAtivoComEstePago,
+        boletoRelacionadoId: origemPaga ? (origem?.id ?? null) : sucessorAtivoComEstePago ? sucessor.id : null,
         idcontareceber: r.idcontareceber,
         cobrancaId: r.cobrancaBoleto.id,
         status: r.cobrancaBoleto.status,
@@ -868,6 +942,9 @@ export class CobrancaService {
 
       if (novoStatus !== cobranca.status) {
         await this.prisma.cobrancaBoleto.update({ where: { id: cobrancaId }, data: { status: novoStatus } });
+        if (novoStatus === "pago" && cobranca.status === "cancelado") {
+          await this.alertarPagamentoBoletoSubstituido(cobrancaId, "reconciliacao");
+        }
         if (novoStatus === "pago") {
           const dadosCobranca = resp.data?.data;
           await this.dispararBaixaAthos(
