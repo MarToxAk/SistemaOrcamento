@@ -248,3 +248,143 @@ export function decidirValoresBaixa(input: {
       `(${brl(somaComEncargos)}) nem com o principal (${brl(somaPrincipal)}).`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Fase 50 / plano 50-02 (D-09, D-12): baixa do boleto atualizado com encargos FIXOS
+// ---------------------------------------------------------------------------
+
+/** Titulo cujo juros/multa/atraso ja foram cobrados no boleto atualizado (snapshot de 50-01). */
+export interface TituloEncargosFixos {
+  idcontareceber: number;
+  principal: number;
+  juros: number;
+  multa: number;
+  atraso: number;
+}
+
+/** Encargos que a EFI cobra se o boleto atualizado for pago depois do novo vencimento (D-12). */
+export interface PosVencimentoBoleto {
+  /** novo vencimento do boleto atualizado (YYYY-MM-DD) */
+  vencimento: string;
+  /** % ao mes (0.99 = 0,99%) */
+  taxaJurosMes: number;
+  /** % de multa (2 = 2%) */
+  multaPercentual: number;
+}
+
+function posVencimentoValido(p: PosVencimentoBoleto | null | undefined): p is PosVencimentoBoleto {
+  return (
+    !!p &&
+    Number.isFinite(utcDeIso(p.vencimento)) &&
+    Number.isFinite(p.taxaJurosMes) &&
+    p.taxaJurosMes >= 0 &&
+    Number.isFinite(p.multaPercentual) &&
+    p.multaPercentual >= 0
+  );
+}
+
+/** Reparte `total` proporcionalmente a `pesos`; o ultimo recebe o resto (soma exata). */
+function ratear(total: number, pesos: number[]): number[] {
+  const soma = pesos.reduce((s, p) => s + p, 0);
+  const partes: number[] = [];
+  let acumulado = 0;
+  pesos.forEach((peso, i) => {
+    if (i === pesos.length - 1) {
+      partes.push(total - acumulado);
+    } else {
+      const parte = soma > 0 ? Math.round((total * peso) / soma) : 0;
+      partes.push(parte);
+      acumulado += parte;
+    }
+  });
+  return partes;
+}
+
+/**
+ * Decide os valores da baixa quando juros e multa JA foram cobrados no boleto (snapshot), sem consultar
+ * conf_financeiro do Athos (que usa taxa/carencia proprias e recusaria o valor).
+ *  1. EFI sem valor: snapshot;
+ *  2. EFI ~ principal + juros + multa do snapshot (tolerancia): snapshot;
+ *  3. pago DEPOIS do novo vencimento com valor acima do snapshot: excedente aceito ate o teto dos
+ *     encargos pos-vencimento (multa + juros diarios + tolerancia), somado como multa (ate a multa
+ *     teorica) e juros, rateado pelo valor atualizado de cada titulo; atraso += dias apos o vencimento;
+ *  4. qualquer outro caso: VALOR_INCOMPATIVEL (nada deve ser escrito). Nunca lanca.
+ */
+export function decidirValoresBaixaFixos(input: {
+  titulos: TituloEncargosFixos[];
+  dataPagamento: string;
+  valorPagoEfi: number | null;
+  posVencimento?: PosVencimentoBoleto | null;
+  tolerancia?: number;
+}): DecisaoValoresBaixa {
+  const base = input.titulos.map((t) => ({
+    id: t.idcontareceber,
+    principal: paraCentavos(t.principal),
+    juros: paraCentavos(t.juros),
+    multa: paraCentavos(t.multa),
+    atraso: t.atraso,
+  }));
+  const baseItem = (b: (typeof base)[number]): number => b.principal + b.juros + b.multa;
+  const somaBase = base.reduce((s, b) => s + baseItem(b), 0);
+
+  const snapshot = (): DecisaoValoresBaixa => ({
+    ok: true,
+    modo: "com_encargos",
+    valorTotal: deCentavos(somaBase),
+    titulos: base.map((b) => ({
+      idcontareceber: b.id,
+      principal: deCentavos(b.principal),
+      juros: deCentavos(b.juros),
+      multa: deCentavos(b.multa),
+      atraso: b.atraso,
+      valorPago: deCentavos(baseItem(b)),
+    })),
+  });
+
+  if (input.valorPagoEfi === null || input.valorPagoEfi === undefined) return snapshot();
+
+  const efi = paraCentavos(input.valorPagoEfi);
+  const tol = paraCentavos(input.tolerancia ?? TOLERANCIA_PAGAMENTO_PADRAO);
+  if (Math.abs(efi - somaBase) <= tol) return snapshot();
+
+  const pos = input.posVencimento;
+  let tetoTexto = "";
+  if (posVencimentoValido(pos) && efi > somaBase) {
+    const dias = diasEntre(pos.vencimento, input.dataPagamento);
+    if (Number.isFinite(dias) && dias > 0) {
+      const multaMax = Math.floor((somaBase * Math.round(pos.multaPercentual * 100) + 5_000) / 10_000);
+      const taxaDiariaMilesimos = Math.round((pos.taxaJurosMes * 1000) / 30);
+      const jurosMax = Math.floor((somaBase * taxaDiariaMilesimos * dias + 50_000) / 100_000);
+      const excedente = efi - somaBase;
+      if (excedente <= multaMax + jurosMax + tol) {
+        const multaExtra = Math.min(excedente, multaMax);
+        const jurosExtra = excedente - multaExtra;
+        const pesos = base.map(baseItem);
+        const multas = ratear(multaExtra, pesos);
+        const juros = ratear(jurosExtra, pesos);
+        const titulos = base.map((b, i) => {
+          const j = b.juros + juros[i];
+          const m = b.multa + multas[i];
+          return {
+            idcontareceber: b.id,
+            principal: deCentavos(b.principal),
+            juros: deCentavos(j),
+            multa: deCentavos(m),
+            atraso: b.atraso + dias,
+            valorPago: deCentavos(b.principal + j + m),
+          };
+        });
+        return { ok: true, modo: "com_encargos", titulos, valorTotal: deCentavos(efi) };
+      }
+      tetoTexto = ` nem com o teto pos-vencimento (${brl(somaBase + multaMax + jurosMax)})`;
+    }
+  }
+
+  return {
+    ok: false,
+    codigo: "VALOR_INCOMPATIVEL",
+    mensagem:
+      `Valor pago informado pela EFI (${brl(efi)}) nao confere com o valor do boleto atualizado ` +
+      `(${brl(somaBase)})${tetoTexto}.`,
+  };
+}

@@ -6,7 +6,9 @@ import {
   ConfFinanceiroEncargos,
   ModoValorBaixa,
   PERCENTUAL_MULTA_PADRAO,
+  PosVencimentoBoleto,
   decidirValoresBaixa,
+  decidirValoresBaixaFixos,
 } from "./athos-baixa-encargos.util";
 
 /**
@@ -60,10 +62,20 @@ export interface BaixaConstantes {
   percentualMulta?: number;
 }
 
+/** Juros/multa/atraso ja cobrados no boleto atualizado (snapshot, Fase 50 D-09). */
+export interface EncargosFixosTitulo {
+  juros: number;
+  multa: number;
+  atraso: number;
+}
+
 export interface BaixarTitulosInput {
   idclienteAthos: number;
-  /** valorEsperado = CobrancaBoletoTitulo.valor (snapshot da emissao do boleto) */
-  titulos: Array<{ idcontareceber: number; valorEsperado: number }>;
+  /**
+   * valorEsperado = CobrancaBoletoTitulo.valor (snapshot da emissao do boleto).
+   * encargosFixos (boleto atualizado, D-09): grava exatamente esses juros/multa/atraso, sem conf_financeiro.
+   */
+  titulos: Array<{ idcontareceber: number; valorEsperado: number; encargosFixos?: EncargosFixosTitulo }>;
   /** YYYY-MM-DD, calendario America/Sao_Paulo */
   dataPagamento: string;
   /** injetavel nos testes; padrao hojeSaoPaulo() */
@@ -76,6 +88,8 @@ export interface BaixarTitulosInput {
    * quando TODOS os titulos da chamada serao baixados.
    */
   valorPagoEfi?: number | null;
+  /** boleto atualizado: encargos que a EFI cobra se pago depois do novo vencimento (D-12) */
+  posVencimento?: PosVencimentoBoleto | null;
 }
 
 export interface BaixaTituloResultado {
@@ -410,6 +424,37 @@ export class AthosContaReceberBaixaService {
     }
     const ids = [...esperados.keys()];
 
+    // encargos fixos (boleto atualizado): todos os titulos ou nenhum; numeros finitos e nao negativos
+    const fixos = new Map<number, EncargosFixosTitulo>();
+    for (const t of input.titulos) {
+      if (t.encargosFixos === undefined || t.encargosFixos === null) continue;
+      const { juros, multa, atraso } = t.encargosFixos;
+      if (![juros, multa, atraso].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) {
+        throw new BaixaAthosError("CONFIG_INVALIDA", "Encargos fixos do titulo invalidos.");
+      }
+      if (!fixos.has(t.idcontareceber)) fixos.set(t.idcontareceber, t.encargosFixos);
+    }
+    if (fixos.size > 0 && fixos.size !== ids.length) {
+      throw new BaixaAthosError(
+        "CONFIG_INVALIDA",
+        "Encargos fixos informados para apenas parte dos titulos do boleto.",
+      );
+    }
+    const pv = input.posVencimento;
+    if (
+      pv !== undefined &&
+      pv !== null &&
+      (!dataValida(pv.vencimento) ||
+        typeof pv.taxaJurosMes !== "number" ||
+        !Number.isFinite(pv.taxaJurosMes) ||
+        pv.taxaJurosMes < 0 ||
+        typeof pv.multaPercentual !== "number" ||
+        !Number.isFinite(pv.multaPercentual) ||
+        pv.multaPercentual < 0)
+    ) {
+      throw new BaixaAthosError("CONFIG_INVALIDA", "Encargos pos-vencimento do boleto invalidos.");
+    }
+
     this.assertHostPermitido();
 
     const retroativa = input.dataPagamento < hoje;
@@ -478,7 +523,8 @@ export class AthosContaReceberBaixaService {
         carenciaDias: 0,
         percentualMulta: multaPct,
       };
-      if (pendentes.some((v) => vencimentoDe(v) < input.dataPagamento)) {
+      const usaFixos = pendentes.length > 0 && pendentes.every((v) => fixos.has(Number(v.linha.idcontareceber)));
+      if (!usaFixos && pendentes.some((v) => vencimentoDe(v) < input.dataPagamento)) {
         const confLida = await client.query<LinhaConf>(SQL_LER_CONF_FINANCEIRO);
         const taxa = numeroConf(confLida.rows[0]?.taxajurosmes);
         const carencia = numeroConf(confLida.rows[0]?.carenciadias);
@@ -492,7 +538,27 @@ export class AthosContaReceberBaixaService {
       }
 
       let decisaoOk: Extract<ReturnType<typeof decidirValoresBaixa>, { ok: true }> | null = null;
-      if (pendentes.length > 0) {
+      if (usaFixos) {
+        // boleto atualizado (D-09): juros/multa/atraso ja cobrados; conf_financeiro nao e lido
+        const decisaoFixa = decidirValoresBaixaFixos({
+          titulos: pendentes.map((v) => {
+            const id = Number(v.linha.idcontareceber);
+            const f = fixos.get(id) as EncargosFixosTitulo;
+            return {
+              idcontareceber: id,
+              principal: v.principalCentavos / 100,
+              juros: f.juros,
+              multa: f.multa,
+              atraso: f.atraso,
+            };
+          }),
+          dataPagamento: input.dataPagamento,
+          valorPagoEfi: pendentes.length === validados.length ? (input.valorPagoEfi ?? null) : null,
+          posVencimento: input.posVencimento ?? null,
+        });
+        if (!decisaoFixa.ok) throw new BaixaAthosError(decisaoFixa.codigo, decisaoFixa.mensagem);
+        decisaoOk = decisaoFixa;
+      } else if (pendentes.length > 0) {
         let decisao: ReturnType<typeof decidirValoresBaixa>;
         try {
           decisao = decidirValoresBaixa({
