@@ -5,16 +5,16 @@ milestone_name: API de Produtos Compostos (Kits) no Athos
 current_phase: 50
 current_phase_name: "Contas a receber: boleto atualizado com juros e multa"
 status: executing
-stopped_at: Completed 50-02-PLAN.md
-last_updated: "2026-11-17T13:24:26.925Z"
+stopped_at: Completed 50-03-PLAN.md
+last_updated: "2026-11-17T13:31:58.055Z"
 last_activity: 2026-11-17
 last_activity_desc: Phase 50 execution started
-state_head: 98641bbd5b1a1472bda167737dcc76bbbb8ff34a
+state_head: 5e93c608dab46c21b2615624ae5960a08d427d8a
 progress:
   total_phases: 12
   completed_phases: 3
   total_plans: 45
-  completed_plans: 40
+  completed_plans: 41
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 ## Current Position
 
 Phase: 50 (Contas a receber: boleto atualizado com juros e multa) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-11-17 — Phase 50 execution started
 
@@ -319,11 +319,12 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 43 P04 | ~40min | 3 tasks | 11 files |
 | Phase 50 P01 | 15 min | 2 tasks | 12 files |
 | Phase 50 P02 | 10min | 2 tasks | 7 files |
+| Phase 50 P03 | 12 min | 2 tasks | 5 files |
 
 ## Session
 
-**Last session:** 2026-11-17T13:24:25.818Z
-**Stopped at:** Completed 50-02-PLAN.md
+**Last session:** 2026-11-17T13:31:57.087Z
+**Stopped at:** Completed 50-03-PLAN.md
 **Resume file:** None
 
 ## Decisions
@@ -354,6 +355,8 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase 50]: 50-01: configurations fine/interest e texto de novo atraso usam as taxas padrao configuradas (D-12), mesmo com taxas do calculo editadas
 - [Phase 50]: 50-01: CobrancaBoletoTitulo.valor continua sendo o principal; total fica em CobrancaBoleto.valor
 - [Phase 50]: 50-02: baixa do boleto atualizado usa encargos fixos do snapshot (sem conf_financeiro); so o principal e VALOR_INCOMPATIVEL; pagamento apos novo vencimento aceito ate teto pos-vencimento com rateio exato
+- [Phase 50]: 50-03: com boleto atualizado ativo e original pendente, gerar() vira retentativa (so repete o cancelamento estrito, sem nova emissao); original pago -> 409 pagamento em dobro
+- [Phase 50]: 50-03: falha ao gravar o boleto novo cancela o charge NOVO na EFI (compensacao); mutex por boleto por processo, 4600210 como barreira final
 
 ## Deferred Verification
 
