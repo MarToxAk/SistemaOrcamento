@@ -732,3 +732,74 @@ describe("EmailEnvioService - aviso de vencimento (Fase 45)", () => {
     expect(out.anexouPdf).toBe(false);
   });
 });
+
+describe("EmailEnvioService.enviarBoletoENotas - boleto atualizado (Fase 50, D-10/D-12)", () => {
+  const MENSAGEM = [
+    "Valor atualizado com juros de R$ 2,64 e multa de R$ 20,00",
+    "referentes ao vencimento original 10/11/2026.",
+    "Em caso de novo atraso apos 18/11/2026, incidirao juros de 0,99% a.m.",
+    "e multa de 2% sobre o valor atualizado.",
+  ].join("\n");
+
+  function comMensagem(mensagemAtualizacao: string | null) {
+    const ctx = makeService();
+    ((ctx.service as any).prisma.cobrancaBoleto.findUnique as jest.Mock).mockResolvedValue({
+      id: 42,
+      mensagemAtualizacao,
+      titulos: [{ idcontareceber: 501 }],
+    });
+    return ctx;
+  }
+
+  it("M1 boleto atualizado: html e texto trazem o quadro com a mensagem e o CC segue", async () => {
+    const { service, sendMail } = comMensagem(MENSAGEM);
+
+    await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 42,
+      destinatario: "cli@x.com",
+      cc: ["copia@x.com"],
+    });
+
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.subject).toBe("Financeiro Bom Custo — Boleto e Nota Fiscal");
+    expect(mail.cc).toEqual(["copia@x.com"]);
+    expect(mail.html).toContain("Boleto atualizado");
+    expect(mail.html).toContain("R$ 2,64");
+    expect(mail.html).toContain("R$ 20,00");
+    expect(mail.html).toContain("10/11/2026");
+    expect(mail.html).toContain("18/11/2026");
+    expect(mail.html).toContain(MENSAGEM.split("\n").join("<br>"));
+    expect(mail.text).toContain("Boleto atualizado:");
+    for (const linha of MENSAGEM.split("\n")) expect(mail.text).toContain(linha);
+  });
+
+  it("M2 mensagem com HTML e escapada", async () => {
+    const { service, sendMail } = comMensagem("<script>alert(1)</script>");
+
+    await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 42,
+      destinatario: "cli@x.com",
+    });
+
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.html).not.toContain("<script>");
+    expect(mail.html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  });
+
+  it("M3 boleto comum (mensagem nula): sem quadro no html nem no texto", async () => {
+    const { service, sendMail } = comMensagem(null);
+
+    await service.enviarBoletoENotas({
+      idclienteAthos: 1,
+      cobrancaBoletoId: 42,
+      destinatario: "cli@x.com",
+    });
+
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.html).not.toContain("Boleto atualizado");
+    expect(mail.text).not.toContain("Boleto atualizado");
+  });
+});
