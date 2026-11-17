@@ -22,3 +22,25 @@ export class GerarBoletoAtualizadoDto {
   @Max(TETO_MULTA_PERCENTUAL, { message: `multaPercentual acima do limite de ${TETO_MULTA_PERCENTUAL}%.` })
   multaPercentual?: number;
 }
+
+/**
+ * Corpo do POST /cobranca/boleto/:id/atualizacao/previa (Fase 50, D-06): mesmos campos e tetos da geracao,
+ * todos opcionais (sem data: proximo dia util; sem taxas: as configuradas).
+ */
+export class PreviaBoletoAtualizadoDto {
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "novoVencimento deve estar no formato YYYY-MM-DD." })
+  novoVencimento?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 4 }, { message: "taxaJurosMes deve ser um número com até 4 casas decimais." })
+  @Min(0, { message: "taxaJurosMes não pode ser negativa." })
+  @Max(TETO_JUROS_MES, { message: `taxaJurosMes acima do limite de ${TETO_JUROS_MES}% ao mês.` })
+  taxaJurosMes?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 4 }, { message: "multaPercentual deve ser um número com até 4 casas decimais." })
+  @Min(0, { message: "multaPercentual não pode ser negativa." })
+  @Max(TETO_MULTA_PERCENTUAL, { message: `multaPercentual acima do limite de ${TETO_MULTA_PERCENTUAL}%.` })
+  multaPercentual?: number;
+}

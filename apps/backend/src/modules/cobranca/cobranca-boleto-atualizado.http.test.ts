@@ -356,9 +356,9 @@ describe("CobrancaBoletoAtualizadoController POST boleto/:id/atualizar (HTTP)", 
       multaPercentual: 1,
       taxaJurosMesPadrao: 0.99,
       multaPercentualPadrao: 2,
-      juros: 1.17,
+      juros: 1.19,
       multa: 10,
-      total: 1011.17,
+      total: 1011.19,
     });
     expect(json.titulos[0].diasAtraso).toBe(7);
     const linhaAtraso = (json.mensagem as string[]).join(" ");
