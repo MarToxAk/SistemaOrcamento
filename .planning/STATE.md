@@ -2,38 +2,38 @@
 gsd_state_version: "1.0"
 milestone: v2.5
 milestone_name: API de Produtos Compostos (Kits) no Athos
-current_phase: 44
-current_phase_name: API de criação de orçamento no Athos para IA
+current_phase: 50
+current_phase_name: "Contas a receber: boleto atualizado com juros e multa"
 status: executing
-stopped_at: Completed 43-04-PLAN.md
-last_updated: "2026-11-09T14:23:38.429Z"
-last_activity: 2026-11-09
-last_activity_desc: Phase 44 execution started
-state_head: ab4b32507edcd5323a0e4ba417ded0ddefc3bed9
+stopped_at: Completed 50-01-PLAN.md
+last_updated: "2026-11-17T13:19:39.373Z"
+last_activity: 2026-11-17
+last_activity_desc: Phase 50 execution started
+state_head: aeb1252659f7faf9d1a466df1b2e3a75750b0b06
 progress:
-  total_phases: 6
+  total_phases: 12
   completed_phases: 3
-  total_plans: 17
-  completed_plans: 13
-  percent: 50
+  total_plans: 45
+  completed_plans: 39
+  percent: 25
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-09-04 — Fase 40 verificada retroativamente (código já implementado em commit 5d5270d); milestone v2.5 completo
-Current phase: 44
+Current phase: 50
 Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
 
 ## Current Position
 
-Phase: 44 (API de criação de orçamento no Athos para IA) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 44
-Last activity: 2026-11-09 — Phase 44 execution started
+Phase: 50 (Contas a receber: boleto atualizado com juros e multa) — EXECUTING
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-11-17 — Phase 50 execution started
 
-Progress: [█████░░░░░] 50% (2/2 phases complete)
+Progress: [███░░░░░░░] 25% (2/2 phases complete)
 
 ## Project Status
 
@@ -317,11 +317,12 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 | Phase 43 P02 | 40min | 3 tasks | 11 files |
 | Phase 43 P03 | ~40min | 3 tasks | 13 files |
 | Phase 43 P04 | ~40min | 3 tasks | 11 files |
+| Phase 50 P01 | 15 min | 2 tasks | 12 files |
 
 ## Session
 
-**Last session:** 2026-11-06T15:37:13.352Z
-**Stopped at:** Completed 43-04-PLAN.md
+**Last session:** 2026-11-17T13:19:38.437Z
+**Stopped at:** Completed 50-01-PLAN.md
 **Resume file:** None
 
 ## Decisions
@@ -349,6 +350,8 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 - [Phase 43]: 43-02: formula de juros (taxa diaria 3 casas, meio para cima) reproduz so 2 casos; multa por ATHOS_BAIXA_MULTA_PERCENTUAL; validacao real pendente
 - [Phase 43]: 43-03: data/valor da EFI persistidos antes do Athos e reutilizados nas retentativas; flag ATHOS_BAIXA_AUTO=false deixa o boleto pendente; mensagem de erro persistida so de BaixaAthosError (300 chars)
 - [Phase 43]: 43-04: estorno apaga somente pares (idcontareceber, idcontarecebida) da trilha de baixa; cartao preferencial por regex com fronteira numerica
+- [Phase 50]: 50-01: configurations fine/interest e texto de novo atraso usam as taxas padrao configuradas (D-12), mesmo com taxas do calculo editadas
+- [Phase 50]: 50-01: CobrancaBoletoTitulo.valor continua sendo o principal; total fica em CobrancaBoleto.valor
 
 ## Deferred Verification
 
