@@ -9,6 +9,7 @@ import { CobrancaBaixaAthosRetryJob } from "./cobranca-baixa-athos-retry.job";
 import { CobrancaBaixaAthosService } from "./cobranca-baixa-athos.service";
 import { CobrancaBoletoAtualizadoController } from "./cobranca-boleto-atualizado.controller";
 import { CobrancaBoletoAtualizadoService } from "./cobranca-boleto-atualizado.service";
+import { CobrancaEncargosConfigController } from "./cobranca-encargos-config.controller";
 import { CobrancaEncargosConfigService } from "./cobranca-encargos-config.service";
 import { CobrancaNotasController } from "./cobranca-notas.controller";
 import { CobrancaNotasService } from "./cobranca-notas.service";
@@ -19,7 +20,7 @@ import { EmailEnvioService } from "./email-envio.service";
 
 @Module({
   imports: [EfiModule, AthosModule, NfseModule],
-  controllers: [CobrancaController, CobrancaNotasController, CobrancaBoletoAtualizadoController],
+  controllers: [CobrancaController, CobrancaNotasController, CobrancaBoletoAtualizadoController, CobrancaEncargosConfigController],
   providers: [
     CobrancaService,
     CobrancaNotasService,
