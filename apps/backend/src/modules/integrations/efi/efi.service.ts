@@ -72,6 +72,27 @@ export class EfiService implements OnModuleInit {
   }
 
   /**
+   * Fase 51 (D-03): apos o commit do webhook, alinha as etiquetas da conversa do Chatwoot com o novo
+   * status. Nunca lanca e nao bloqueia: sem conversationId nao faz nada; tolera QuotesService sem o
+   * metodo (mock antigo); falha vira warn com so o id da cotacao e err.message (jamais token ou
+   * objeto de erro do axios). Chamar SEMPRE depois do $transaction, nunca dentro dele.
+   */
+  private dispararEtiquetasChatwoot(quote: { id: string; conversationId?: unknown } | null | undefined): void {
+    if (!quote?.conversationId) return;
+    const registrar = (err: unknown) => {
+      this.logger.warn(
+        `Falha ao disparar etiquetas do Chatwoot quoteId=${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    };
+    try {
+      if (typeof this.quotesService?.sincronizarEtiquetasChatwoot !== "function") return;
+      Promise.resolve(this.quotesService.sincronizarEtiquetasChatwoot(quote.id)).catch(registrar);
+    } catch (err) {
+      registrar(err);
+    }
+  }
+
+  /**
    * Carrega um PEM a partir de trÃªs fontes em ordem de prioridade:
    *   1. Texto PEM direto na variÃ¡vel (ex: EFI_CERT_PEM) â€” suporta \n literal
    *   2. Base64 do arquivo PEM (ex: EFI_CERT_BASE64)
@@ -663,6 +684,9 @@ export class EfiService implements OnModuleInit {
         return { transaction, quoteUpdate };
       });
 
+      // Fase 51 (D-03): etiquetas da conversa, depois do commit e so quando o status mudou.
+      if (nextStatus !== quote.status) this.dispararEtiquetasChatwoot(quote);
+
       // Envio de mensagem automatica ao cliente via Chatwoot com dados do orcamento
       try {
         const mapped = await this.quotesService.getById(quote.id);
@@ -853,6 +877,9 @@ export class EfiService implements OnModuleInit {
 
       return { transaction, quoteUpdate };
     });
+
+    // Fase 51 (D-03): etiquetas da conversa, depois do commit e so quando o status mudou.
+    if (nextStatus !== quote.status) this.dispararEtiquetasChatwoot(quote);
 
     // Envio de mensagem automatica ao cliente via Chatwoot com dados do orcamento
     try {
