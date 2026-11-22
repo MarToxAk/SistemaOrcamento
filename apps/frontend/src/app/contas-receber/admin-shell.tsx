@@ -23,6 +23,7 @@ export const PA_NAV_ITEMS: PaNavItem[] = [
   },
   { href: "/orcamento", label: "Orçamentos", icon: "file-earmark-text" },
   { href: "/status", label: "Produção", icon: "kanban" },
+  { href: "/cupons", label: "Cupons", icon: "ticket-perforated" },
   {
     href: "/configuracoes",
     label: "Configurações",
@@ -30,6 +31,7 @@ export const PA_NAV_ITEMS: PaNavItem[] = [
     filhos: [
       { href: "/configuracoes/templates", label: "Templates de PDF", icon: "file-earmark-richtext" },
       { href: "/configuracoes/cobranca", label: "Juros e multa", icon: "percent" },
+      { href: "/configuracoes/pesquisa", label: "Pesquisa e recompensa", icon: "star-half" },
     ],
   },
 ];
