@@ -42,11 +42,18 @@ export function sortearVariante(modo: string, rnd: () => number = Math.random): 
   return "ESTRELAS";
 }
 
-/** Troca `{nome}` pelas variaveis recebidas (so essas chaves); chave ausente vira "". Sem logica. */
+/**
+ * Troca `{nome}` pelas variaveis recebidas (so essas chaves); a chave e comparada sem diferenciar
+ * maiusculas de minusculas (`{LINK}`, `{Link}` e `{link}` sao a mesma variavel) e chave ausente do
+ * mapa vira "". Sem logica.
+ */
 export function renderizarTexto(modelo: string, variaveis: Record<string, string>): string {
-  return modelo.replace(/\{([a-z_][a-z0-9_]*)\}/gi, (_trecho, chave: string) =>
-    Object.prototype.hasOwnProperty.call(variaveis, chave) ? variaveis[chave] : "",
-  );
+  return modelo.replace(/\{([a-z_][a-z0-9_]*)\}/gi, (_trecho, chave: string) => {
+    const chaveNormalizada = chave.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(variaveis, chaveNormalizada)
+      ? variaveis[chaveNormalizada]
+      : "";
+  });
 }
 
 function paraNumero(valor: number | string): number {
