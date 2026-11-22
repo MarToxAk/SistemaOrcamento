@@ -62,12 +62,14 @@ deste contrato e do código existente.
 | Icon library | Bootstrap Icons 1.11.1 (CDN, `bootstrap-icons.css`). Os nomes novos (`emoji-*`, `star*`, `ticket-perforated`, `copy`, `shop`, `box-arrow-up-right`, `whatsapp`, `google`) foram conferidos no CSS 1.11.1 |
 | Font | Stack de sistema: `--font-ui` de `colors_and_type.css` (`system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`). Sem webfont. Mulish do tema Painel NÃO é carregado. |
 
-**Não há inventário de componentes**, porque o projeto não tem pacote de design system. A seção "Reuso de padrões
-existentes" lista o que deve ser reaproveitado.
+Não há inventário de componentes porque o projeto não tem pacote de design system. A seção "Reuso de padrões
+existentes" lista o que deve ser reaproveitado, com a procedência indicada no início da seção.
 
 ---
 
 ## Reuso de padrões existentes
+
+Could not enumerate: nao ha pacote de design system (Tool: none); lista compilada pela leitura dos arquivos citados no cabecalho, nao exaustiva.
 
 Estes itens já existem no código. Reaproveitar, não recriar. Caminhos são relativos a `apps/frontend/src/`.
 
@@ -77,7 +79,7 @@ Estes itens já existem no código. Reaproveitar, não recriar. Caminhos são re
 | `PasswordGate` (title, description) | `components/password-gate.tsx` | Aba de configuração (igual a `configuracoes/cobranca`) e tela Cupons. Mesmo cookie `orcamento_admin_session` |
 | Classes `pa-card`, `pa-card-header`, `pa-card-body`, `pa-card-body-scroll` | `admin-shell.tsx` (bloco `<style>`) | Cards de seção |
 | `pa-table`, `pa-th-sort`, `pa-td-cliente`, `pa-row-critico` | idem | Tabelas de respostas e cupons |
-| `pa-pill`, `pa-pill-success`, `pa-pill-warning`, `pa-pill-secondary`, `pa-pill-danger` | idem | Situação de cupom e de resposta (ver Color, pílula de sucesso) |
+| `pa-pill`, `pa-pill-success`, `pa-pill-warning`, `pa-pill-secondary`, `pa-pill-danger` | idem | Situação de cupom e de resposta. As telas novas usam `pesquisa-pill-ok`, `pesquisa-pill-neutral` e `pesquisa-pill-danger` (ver Color) |
 | `pa-stat-grid`, `pa-stat`, `pa-stat-icon`, `pa-stat-value`, `pa-stat-value-*` | idem | Cartões do painel de resultados |
 | `pa-seg`, `pa-seg-btn`, `pa-seg-btn-active` | idem | Abas "Configuração / Resultados" e filtro de situação |
 | `pa-progress`, `pa-progress-bar-*` | idem | Gasto real vs teto mensal |
@@ -95,7 +97,8 @@ Estes itens já existem no código. Reaproveitar, não recriar. Caminhos são re
 
 ## Spacing Scale
 
-Valores declarados (todos múltiplos de 4 px):
+Valores declarados para o conteúdo novo (múltiplos de 4 px). As exceções herdadas dos `pa-*` existentes estão
+listadas logo abaixo da tabela:
 
 | Token | Value | Usage |
 |-------|-------|-------|
@@ -117,14 +120,15 @@ Exceções:
 
 ## Typography
 
-Quatro tamanhos e dois pesos para o conteúdo novo. Pesos: 400 e 600.
+Quatro tamanhos (0,8rem, 1rem, 1,25rem e 2rem) e dois pesos (400 e 600) para o conteúdo novo. Não há outro tamanho
+no contrato desta fase, em nenhuma largura de tela.
 
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Caption | 0.8rem (12,8px) | 400 | 1.4 | Ajuda de campo, contador de caracteres, rótulos de nota, rodapé de LGPD e opt-out |
-| Body | 1rem (16px) | 400 | 1.5 | Texto da página pública, campos de formulário (16px evita zoom automático no iOS), descrição de cards |
-| Label / Heading | 1.25rem (20px) em títulos, 1rem com peso 600 em rótulos | 600 | 1.2 | Títulos de card, títulos da página pública, rótulos visíveis dos campos |
-| Display | 2rem (32px) mobile 1.75rem | 600 | 1.1 | Código do cupom, nota média no painel |
+| Body | 1rem (16px) | 400 | 1.5 | Texto da página pública, campos de formulário (16px evita zoom automático no iOS), descrição de cards. Rótulos visíveis usam este tamanho com peso 600 |
+| Heading | 1.25rem (20px) | 600 | 1.2 | Títulos de card e título da página pública |
+| Display | 2rem (32px) em todas as larguras | 600 | 1.1 | Código do cupom, nota média no painel |
 
 Exceções herdadas (não são novos tamanhos ou pesos):
 
@@ -144,7 +148,7 @@ Exceções herdadas (não são novos tamanhos ou pesos):
 | Dominant (60%) | Admin `#f4f6fa` (`--pa-bg`) no fundo de página. Público `#ffffff` | Fundo de página |
 | Secondary (30%) | Admin `#ffffff` em cards, `#1b2431` na sidebar. Público `#f4f6fa` no cupom e na faixa do Google | Cards, sidebar, blocos de apoio |
 | Accent (10%) | Admin `#3d42df` (`--pa-accent`). Público `var(--cor-primaria)` (padrão `#0d6efd`) | Ver lista abaixo |
-| Destructive | Texto de erro `#b02a37` (6,49:1). Ícone e borda de erro `#e5484d`. Não há ação destrutiva nesta fase | Somente erro e estado de falha |
+| Destructive | Texto de erro `#b02a37` (6,49:1). Ícone e borda de erro `#e5484d`. Não há exclusão nem cancelamento nesta fase | Somente erro e estado de falha (cancelado, falha de envio, teto atingido) |
 
 **Accent reservado para (lista exaustiva):**
 
@@ -158,6 +162,21 @@ Exceções herdadas (não são novos tamanhos ou pesos):
 
 Accent NÃO é usado em: títulos, valores de desconto, barras de progresso, pílulas de status e fundos.
 
+**Tratamento visual de "Confirmar uso" (irreversível, não destrutivo):** o painel de confirmação tem borda esquerda
+de 4px `#f7a600` (`--pa-warning`), fundo `#fff8e6`, texto `#8a5a00` (5,59:1 sobre o fundo) e ícone
+`bi-exclamation-triangle-fill` na mesma cor de texto. O botão "Confirmar uso" usa a cor accent, não vermelho. O
+vermelho fica reservado a erro.
+
+**Pílulas novas (classes criadas na página, com estes valores exatos):**
+
+- `pesquisa-pill-ok`: texto `#177333` sobre o fundo `rgba(30,181,100,0.14)`, que sobre branco vira cerca de `#e0f5e9`.
+- `pesquisa-pill-danger`: texto `#b02a37` sobre o fundo `rgba(229,72,77,0.14)`, que sobre branco vira cerca de `#fbe5e6`.
+- `pesquisa-pill-neutral`: texto `#5b6778` sobre `#f4f6fa` (mesmo fundo de `pa-pill-secondary`).
+- Aviso de teto e pílula de atenção continuam com `pa-pill-warning` (texto `#8a5a00`).
+
+**Bordas de campo novos:** `#8a94a3` (3,07:1 sobre branco). Os campos novos das telas admin sobrescrevem a borda do
+Bootstrap (`#ced4da`, ~1,5:1) pela classe `pesquisa-campo`. Campos herdados não são alterados nesta fase.
+
 **Contraste verificado** (razão WCAG 2.x calculada sobre os hex listados):
 
 | Par | Razão | Resultado |
@@ -165,7 +184,13 @@ Accent NÃO é usado em: títulos, valores de desconto, barras de progresso, pí
 | `#6b7a90` sobre `#ffffff` (muted atual de `pa-stat-label` e `pa-topbar-subtitle`) | 4,36:1 | Falha para texto pequeno. Não usar nas telas novas |
 | `#5b6778` sobre `#ffffff` (muted novo) | 5,74:1 | Passa. Usar para texto secundário |
 | `#1eb564` sobre `#ffffff` (`pa-pill-success` atual) | 2,67:1 | Falha. Não usar em texto novo |
-| `#1a7f37` sobre `#ffffff` (`--success`) | 5,08:1 | Passa. Texto da pílula de sucesso nas telas novas |
+| `#1a7f37` sobre `#ffffff` (`--success`) | 5,08:1 | Passa sobre branco, mas cai para 4,45:1 sobre o fundo tingido da pílula. Não usar em pílula |
+| `#177333` sobre fundo tingido da pílula de sucesso (~`#e0f5e9`) | 5,20:1 | Passa. Texto de `pesquisa-pill-ok` |
+| `#b02a37` sobre fundo tingido da pílula de erro (~`#fbe5e6`) | 5,40:1 | Passa. Texto de `pesquisa-pill-danger` |
+| `#5b6778` sobre `#f4f6fa` (fundo da `pa-pill-secondary`) | 5,31:1 | Passa. Texto de `pesquisa-pill-neutral` |
+| `#6b7a90` sobre `#f4f6fa` (`pa-pill-secondary` atual) | 4,03:1 | Falha. Não usar em pílula nova |
+| `#8a5a00` sobre `#fff8e6` (painel de confirmação) | 5,59:1 | Passa |
+| `#8a5a00` sobre fundo tingido da `pa-pill-warning` (~`#fef1d6`) | 5,26:1 | Passa |
 | `#e5484d` sobre `#ffffff` | 3,91:1 | Só para ícone e borda (exige 3:1) |
 | `#c92a2a` sobre `#ffffff` | 5,46:1 | Alternativa para texto de erro admin (preferir `#b02a37` na página pública) |
 | `#b02a37` sobre `#ffffff` | 6,49:1 | Texto de erro (ambas as superfícies) |
@@ -175,9 +200,9 @@ Accent NÃO é usado em: títulos, valores de desconto, barras de progresso, pí
 | `#8a94a3` sobre `#ffffff` (borda de campo na página pública) | 3,07:1 | Passa para limite de componente de interface (3:1) |
 | `#ced4da` (borda padrão do Bootstrap nos campos admin) | ~1,5:1 | Herdado. Anotado como pendência de acessibilidade, não alterado nesta fase |
 
-Regras de uso: pílula de sucesso com texto `#1a7f37` sobre o fundo `rgba(30,181,100,0.14)` (que já existe no
-`pa-pill-success`). A classe nova `pesquisa-pill-ok` usa `#1a7f37` como texto. A `pa-pill-success` atual fica como está,
-com correção em tarefa separada.
+Regras de uso: as pílulas das telas novas usam as classes `pesquisa-pill-ok`, `pesquisa-pill-danger` e
+`pesquisa-pill-neutral` (valores acima). A `pa-pill-success` atual (texto `#1eb564`, 2,67:1) e a `pa-pill-danger`
+atual (texto `#e5484d`, sobre o fundo tingido abaixo de 4,5:1) ficam como estão, com correção em tarefa separada.
 
 Barra de progresso de teto: `pa-progress-bar-success` até 69%, `pa-progress-bar-warning` de 70% a 99%,
 `pa-progress-bar-danger` a partir de 100%. O texto ao lado (valor e situação) carrega a informação, não só a cor.
@@ -339,7 +364,7 @@ Validações de campo (pt-BR, reaproveitando o padrão de `lerNumero`):
 | Arredondamento | Desconto arredondado para baixo, no centavo. |
 | Confirmação (título) | Confirmar uso do cupom {código}? |
 | Confirmação (botão) | Confirmar uso |
-| Voltar | Voltar |
+| Voltar | Voltar ao valor da compra |
 | Sucesso | Cupom marcado como usado. Lance o desconto de R$ {valor} no Athos ou no PDV. |
 | Já usado (409) | Este cupom já foi usado. Atualize a busca. |
 | Suspenso ao resgatar | Teto mensal atingido. Este cupom só pode ser usado a partir de {01/mm/aaaa}. |
@@ -364,6 +389,8 @@ percentuais sem casa decimal quando inteiros.
 **Arquitetura da página:** rota Next.js com proxy server-side ao backend (`backendFetch`), no padrão de
 `/cobranca/confirmar/[token]`. O estado inicial (pesquisa válida, respondida ou inválida) é resolvido no servidor. O
 cliente recebe a página já renderizada e só o formulário é Client Component.
+
+**Ponto focal:** o controle de nota, que é a primeira ação da página. Na tela de agradecimento, o cartão do cupom.
 
 **Layout (mobile-first, 360 px de largura mínima):**
 
@@ -419,12 +446,14 @@ gravada na pesquisa. Recarregar a página mostra a mesma variante.
   (`.btn`, `.btn-primary` em terracota, `.card`, `.label`, `.value`, `.grid`, `.hero`, `.shell`) que colidiriam com
   nomes curtos. Também pinta o `body` com gradiente creme. Por isso o wrapper da página tem `background: #ffffff`,
   `min-height: 100dvh` (com fallback `100vh`).
-- CSS da página é local (no próprio componente), sem Bootstrap CSS. Carrega só `bootstrap-icons.css` (um arquivo, CDN, 1.11.1).
+- CSS da página é local (no próprio componente), sem Bootstrap CSS. Carrega só `bootstrap-icons.css` (CDN, 1.11.1, com `integrity` e `crossOrigin`, ver Registry Safety).
 
 ### 2. Configuração — `/configuracoes/pesquisa` (aba "Configuração")
 
 **Estrutura:** `AdminShell` com `activeHref="/configuracoes/pesquisa"`, dentro de `PasswordGate` (igual a
 `configuracoes/cobranca`). Abas no topo do conteúdo: `pa-seg` com "Configuração" e "Resultados", estado em `?aba=`.
+
+**Ponto focal:** a barra de salvar (sticky), que concentra a ação principal da tela.
 
 **Blocos (cards `pa-card`, empilhados, largura máxima 720px):**
 
@@ -458,6 +487,8 @@ não faz isso; esta fase cria o padrão.)
 **Filtro de período:** `pa-seg` ou select no topo, valor na URL (`?periodo=mes|30d|tudo`). Padrão: mês atual
 (fuso `America/Sao_Paulo`). O gasto sempre é do mês atual, independente do filtro.
 
+**Ponto focal:** os cartões de resumo do topo (nota média e gasto contra o teto).
+
 **Estrutura (de cima para baixo):**
 
 1. `pa-stat-grid` com 4 cartões: nota média, taxa de resposta, cupons emitidos, gasto real no mês (com barra de teto).
@@ -474,11 +505,13 @@ não faz isso; esta fase cria o padrão.)
   junto da porcentagem, para não parecer maior que é.
 - Comparativo A/B: se alguma variante tiver menos de 30 respostas, mostrar a mensagem "Amostra pequena" e não destacar vencedor.
 - Pílulas da coluna Cupom: Emitido → `pa-pill-warning`; Usado → `pesquisa-pill-ok`; Vencido e Sem cupom (teto ou
-  intervalo) → `pa-pill-secondary`; Cancelado → `pa-pill-danger`.
+  intervalo) → `pesquisa-pill-neutral`; Cancelado → `pesquisa-pill-danger`.
 - Nomes de cliente aparecem só como telefone mascarado `(dd) *****-1234`. Nome do Chatwoot não é exibido nesta tela.
 - Link "Ver relatório no Chatwoot" aparece só se houver URL configurada (a origem do link fica para o plano).
 
 ### 4. Cupons — `/cupons`
+
+**Ponto focal:** o campo de código na busca e, depois da busca, o cartão de resultado com a situação e o valor.
 
 **Estrutura:** `AdminShell` com `activeHref="/cupons"`, dentro de `PasswordGate` (ver UI-D12). Três blocos:
 
@@ -491,7 +524,7 @@ não faz isso; esta fase cria o padrão.)
 1. Campo "Valor da compra (R$)", `inputMode="decimal"`, rótulo visível, ajuda "Valor antes do desconto."
 2. Resumo ao vivo (sem botão de calcular): subtotal, desconto, total com desconto. Desconto = `min(valor × desconto%, teto)`, arredondado para baixo no centavo (UI-D10). Se o teto limitar, aparece "Limitado ao teto de R$ X."
 3. Se o valor for menor que a compra mínima, aparece o erro "Compra mínima de R$ X não atingida..." e o botão fica desabilitado. O erro é visível, não silencioso.
-4. Botão "Marcar cupom como usado" habilitado só com valor válido. Ao clicar, abre o painel de confirmação inline (não um modal de tela cheia), com título, corpo com o valor do desconto e dois botões ("Confirmar uso", "Voltar").
+4. Botão "Marcar cupom como usado" habilitado só com valor válido. Ao clicar, abre o painel de confirmação inline (não um modal de tela cheia), com título, corpo com o valor do desconto e dois botões ("Confirmar uso", "Voltar ao valor da compra"). O painel usa o tratamento visual de aviso descrito em Color.
 5. Ao confirmar: chamada ao backend, depois recarrega o cupom do servidor (não atualiza otimisticamente). Mostra alerta de sucesso com o valor a lançar no Athos ou no PDV.
 6. Erros: 409 ("Este cupom já foi usado. Atualize a busca."), 422 (compra mínima), suspenso (teto mensal), rede ou 5xx (mensagem de erro com a instrução de não lançar o desconto antes de confirmar).
 
@@ -499,12 +532,12 @@ não faz isso; esta fase cria o padrão.)
 
 | Situação | Condição | Pílula | Resgate |
 |----------|----------|--------|---------|
-| Disponível | `EMITIDO`, válido, dentro do teto mensal | `pesquisa-pill-ok` (fundo do `pa-pill-success`, texto `#1a7f37`) | Sim |
+| Disponível | `EMITIDO`, válido, dentro do teto mensal | `pesquisa-pill-ok` (texto `#177333`) | Sim |
 | Vencido | `EMITIDO` e `validade` passada | `pa-pill-warning` | Não |
 | Suspenso | `EMITIDO`, válido, mas teto mensal atingido | `pa-pill-warning` | Não, até o dia 1 do mês seguinte |
-| Já usado | `USADO` | `pa-pill-secondary` | Não |
-| Cancelado | `CANCELADO` | `pa-pill-danger` | Não |
-| Expirado no banco | `EXPIRADO` | `pa-pill-secondary` | Não |
+| Já usado | `USADO` | `pesquisa-pill-neutral` | Não |
+| Cancelado | `CANCELADO` | `pesquisa-pill-danger` | Não |
+| Expirado no banco | `EXPIRADO` | `pesquisa-pill-neutral` | Não |
 
 A situação "Suspenso" não está no enum de status do contexto. Ela é derivada (UI-D09). Ver pendências.
 
@@ -584,7 +617,7 @@ Viewport: o Next.js já inclui `width=device-width, initial-scale=1` por padrão
 | Regiões de status | Confirmação de nota (polite), erros de envio (`role="alert"`), sucesso (`role="status"`), loading com `aria-busy` |
 | Tabelas | Com `<caption>` visível ou `aria-label`. Cabeçalhos com `<th scope="col">` |
 | Movimento | `prefers-reduced-motion` respeitado |
-| Pendência herdada | Bordas de campo do Bootstrap (~1,5:1) nas telas admin. Herdado, anotado, não alterado nesta fase |
+| Bordas de campo | Campos novos usam `#8a94a3` (3,07:1). Campos herdados do Bootstrap (`#ced4da`, ~1,5:1) ficam como estão nesta fase; pendência anotada |
 
 ---
 
@@ -629,15 +662,40 @@ Applicable state considerations resolved: 21 covered, 3 backstop, 2 unresolved
 |----------|-------------|-------------|
 | shadcn official | nenhum (projeto sem shadcn) | não aplicável |
 | third-party | nenhum bloco declarado | não aplicável |
-| CDN (já em uso) | Bootstrap 5.3.2 (CSS e JS), Bootstrap Icons 1.11.1 (CSS) | versões fixas no URL. A página pública carrega só o CSS do Bootstrap Icons |
+| CDN jsdelivr, versões fixas no URL (já em uso) | Bootstrap 5.3.2 (CSS e JS, telas admin); Bootstrap Icons 1.11.1 (CSS, admin e pública; fontes carregadas pelo CSS) | Evidência de SRI abaixo: hash calculado sobre os bytes baixados em 2026-11-22 |
 
-Nenhum bloco de terceiros entra nesta fase. A etapa de vetting de registry não se aplica.
+Nenhum bloco de design system de terceiros entra nesta fase. Os arquivos da CDN são o único código externo, e cada um
+tem evidência abaixo.
+
+**Evidência de vetting (CDN).** Cada arquivo foi baixado do URL pinado em 2026-11-22 e hasheado com
+`curl -sS -o ARQUIVO URL && openssl dgst -sha384 -binary ARQUIVO | openssl base64 -A`. A varredura por padrões de
+risco (`fetch(`, `XMLHttpRequest`, `sendBeacon`, `process.env`, `eval(`, construtor `Function`) foi feita nos mesmos bytes.
+
+| Arquivo (URL pinado, base `https://cdn.jsdelivr.net/npm/`) | Usado em | Bytes | sha384 (SRI) | Varredura |
+|------------------------------------------------------------|----------|-------|--------------|-----------|
+| `bootstrap@5.3.2/dist/css/bootstrap.min.css` | `RecursosBootstrap` (admin) | 232948 | `sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN` | Sem padrão de risco |
+| `bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js` | `RecursosBootstrap` (admin) | 80663 | `sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL` | Sem `eval(`, `fetch(`, `XMLHttpRequest`, `sendBeacon`, `process.env`. As ocorrências de `Function(` são nomes de método (`_resolvePossibleFunction(`); nenhum construtor `new Function` |
+| `bootstrap-icons@1.11.1/font/bootstrap-icons.css` | admin e pública | 98255 | `sha384-4LISF5TTJX/fLmGSxO53rV4miRxdg84mZsxmO8Rx5jGtp/LbrixFETvWa5a6sESd` | Sem JS. Referencia as fontes abaixo por caminho relativo |
+| `bootstrap-icons@1.11.1/font/fonts/bootstrap-icons.woff2` | via CSS (admin e pública) | 130608 | `sha384-vfm3MokvtD0jWUdbAKWvXfBG2HQolJqzVvkQRsCNQA/ngKEcmSgSL3kLGeTkorRS` | Magic bytes `wOF2` (fonte, sem código) |
+| `bootstrap-icons@1.11.1/font/fonts/bootstrap-icons.woff` | via CSS (admin e pública) | 176200 | `sha384-1NBO/7XR3j+iVlnJp2Nyx8HpeGi0QhK5QcXmkZQVZHO1fYhH+32ZuWGgr4T7VT64` | Magic bytes `wOFF` (fonte, sem código) |
+| `bootstrap-icons@1.11.1/font/bootstrap-icons.js` | `RecursosBootstrap` atual (admin) | não pinado | não aplicável | **HTTP 404** ("Couldn't find the requested file"). Não é usado: os ícones são só CSS. Remover (requisito 2) |
+
+**Requisitos de implementação (executor):**
+
+1. Todo `<link>` e `<script>` vindo da CDN leva `integrity="sha384-..."` e `crossOrigin="anonymous"`. Vale para
+   `RecursosBootstrap` (telas admin) e para a página pública, que carrega só o CSS de ícones. `next/script` aceita as
+   props `integrity` e `crossOrigin`.
+2. Remover `bootstrap-icons.js` de `RecursosBootstrap`. O arquivo responde 404 hoje e não é necessário.
+3. Antes de implantar, repetir o comando de hash. Se um hash mudar, parar e reportar. Não atualizar o SRI em silêncio.
+4. Risco residual aceito: o SRI não cobre as fontes `woff`/`woff2` referenciadas pelo CSS. Fontes são dados e não
+   executam código, e o caminho está pinado na versão 1.11.1. Os hashes acima ficam registrados para verificação manual.
+5. Fora do escopo desta fase, anotado: `orcamento/[id]/approve/page.tsx` carrega o mesmo Bootstrap sem SRI.
 
 ---
 
 ## Decisões de design
 
-Cada decisão tem motivo e custo de reversão. Confirmar as marcadas como "confirmar" na seção de pendências.
+Cada decisão tem motivo e custo de reversão. Os itens marcados como "Confirmar" foram respondidos pelo usuário (ver a seção final "Confirmacoes do usuario").
 
 | ID | Decisão | Motivo | Reversibilidade |
 |----|---------|--------|-----------------|
@@ -661,21 +719,6 @@ Cada decisão tem motivo e custo de reversão. Confirmar as marcadas como "confi
 
 ---
 
-## Pendências para confirmação
-
-Estas perguntas vão ao usuário em texto numerado, pelo orquestrador (sem AskUserQuestion):
-
-1. **Tema do admin (UI-D01):** manter o `AdminShell` atual (indigo, recomendado) ou aplicar o tema Painel teal do SKILL.md?
-2. **Já respondida (UI-D06):** não reexibir o código (recomendado) ou reexibir?
-3. **WhatsApp (UI-D08):** dois envios separados, cupom sem link e convite Google com link (recomendado), ou uma mensagem só?
-4. **Suspenso (UI-D09):** cupom com teto mensal atingido fica suspenso até o dia 1 do mês seguinte (recomendado) ou é cancelado?
-5. **Arredondamento (UI-D10):** para baixo no centavo (recomendado) ou arredondamento comercial?
-6. **Senha na tela Cupons (UI-D12):** exigir a mesma senha das outras áreas admin (recomendado) ou aberta?
-7. **Limites propostos (UI-D15):** aceitar 1 a 50% de desconto, 1 a 180 dias de validade e 30 respostas para comparar variantes (UI-D13)?
-8. **Padrões por empresa:** Box 10% / R$2 / R$6 e Bom Custo 10% / R$5 / R$30, vindos de env por instância ou preenchidos no primeiro acesso (planner escolhe, mas o valor precisa estar confirmado)?
-
----
-
 ## Checker Sign-Off
 
 - [ ] Dimension 1 Copywriting: PASS
@@ -684,6 +727,19 @@ Estas perguntas vão ao usuário em texto numerado, pelo orquestrador (sem AskUs
 - [ ] Dimension 4 Typography: PASS
 - [ ] Dimension 5 Spacing: PASS
 - [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS (não se aplica: `Tool: none`, sem seção de inventário)
+- [ ] Dimension 7 Inventory Provenance: PASS
 
 **Approval:** pending
+
+## Confirmacoes do usuario (2026-11-22)
+
+O usuario instruiu "se tiver mais alguma pergunta usa o recomendado". Pendencias do researcher resolvidas com a recomendacao:
+
+1. Tema do admin: manter AdminShell indigo atual (UI-D01).
+2. Pagina "ja respondida": nao reexibir o codigo do cupom (UI-D06).
+3. WhatsApp pos-resposta: dois envios separados — cupom sem link; convite Google com um link (UI-D08).
+4. Teto mensal atingido: cupom suspenso ate o dia 1 do mes seguinte (UI-D09).
+5. Arredondamento do desconto: para baixo no centavo.
+6. Tela Cupons protegida pela mesma senha das demais areas admin.
+7. Limites: desconto 1-50%, validade do cupom 1-180 dias, minimo de 30 respostas por variante para comparar A/B.
+8. Defaults por empresa (Box 10% / teto R$2 / minimo R$6; Bom Custo 10% / teto R$5 / minimo R$30): mecanismo (env por instancia ou preenchimento no primeiro acesso) a criterio do planner; valores confirmados.
