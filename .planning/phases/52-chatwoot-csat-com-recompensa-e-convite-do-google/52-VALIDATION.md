@@ -89,6 +89,12 @@ Task IDs are assigned by the planner; this table maps CONTEXT decisions to the v
 
 ---
 
+## Accepted Gaps
+
+- Frontend sem runner de testes (decisao registrada no CONTEXT): tarefas de frontend usam `tsc --noEmit` + `npm --workspace @orcamento/frontend run build` no verify; regras puras do frontend (validarConfigCliente, linkGoogleSeguro, renderizarPrevia, mensagemErroEnvio) cobertas por build + passos do roteiro de homologacao. Backstops de UI (320 px, barra de gasto vs teto, paginacao > 50 cupons) tem passo dedicado no roteiro de 52-11.
+
+---
+
 ## Manual-Only Verifications
 
 | Behavior | Requirement | Why Manual | Test Instructions |

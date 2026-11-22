@@ -657,65 +657,65 @@ Obrigatorio (security_enforcement nao esta desligado; config absente = ativo).
 | A11 | Volume de pesquisas (dezenas por dia) torna o risco de limite compartilhado baixo | P8 | Baixo a medio: confirmar pelo historico de fechamentos |
 | A12 | Ambiente de homologacao com Chatwoot de teste pode ser criado | Q1 | Alto: sem ele, nao ha validacao segura |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 Apresentadas como lista numerada em texto (sem AskUserQuestion, conforme memoria do projeto). Cada item traz a recomendacao padrao.
 
-1. **Onde validar a cadeia completa sem enviar a clientes reais?**
+1. **Onde validar a cadeia completa sem enviar a clientes reais?** **RESOLVED:** Chatwoot de teste local; checkpoint manual do roteiro (CONTEXT, Decisoes pos-research).
    - O que sabemos: nenhum `CHATWOOT_BASE_URL` esta configurado no ambiente de homologacao (`orcamento-homolog-fase50`). Os dois Chatwoots de producao nao devem receber escrita de teste.
    - O que falta: um Chatwoot de teste (conta, inbox de API, contato de teste com numero da equipe) ou uma instancia clonada.
    - Recomendacao: criar uma conta de teste em um Chatwoot local (mesmo padrao do `athos-teste`), com inbox `Channel::Api` e um numero de teste. Sem isso, o tracer nao sai.
 
-2. **Uma pesquisa com registro no Chatwoot por conversa?**
+2. **Uma pesquisa com registro no Chatwoot por conversa?** **RESOLVED:** Sim, uma input_csat por conversa (CONTEXT pos-research).
    - O que sabemos: o PUT grava na primeira `input_csat` (Achado 1). O CONTEXT pede "unique por conversa na pesquisa".
    - Recomendacao: sim. Pesquisas seguintes na mesma conversa geram token, nota, cupom e etiqueta do nosso lado, mas nao criam `input_csat` no Chatwoot (`chatwootCsat = NAO_APLICAVEL`). Isso preserva o relatorio nativo sem misturar respostas.
 
-3. **Desligar o CSAT nativo: automatico ou manual?**
+3. **Desligar o CSAT nativo: automatico ou manual?** **RESOLVED:** Manual no roteiro com verificacao somente leitura (CONTEXT pos-research).
    - O que sabemos: a API permite (`PATCH inboxes`, `csat_survey_enabled` permitido em inboxes_controller.rb:195). O CONTEXT pede passo manual no roteiro.
    - Recomendacao: manual, com verificacao de leitura no roteiro (SELECT ou GET inbox). Automatizar muda a configuracao de producao sem revisao.
 
-4. **Teto mensal: rigido ou flexivel no resgate?**
+4. **Teto mensal: rigido ou flexivel no resgate?** **RESOLVED:** Rigido: bloquear quando usado+desconto > teto (CONTEXT pos-research).
    - Opcao A (UI-SPEC atual): teto verificado na emissao; resgate bloqueado so quando o mes ja esta suspenso. Excesso de no maximo um cupom.
    - Opcao B: resgate bloqueado se `usado_no_mes + desconto > teto` (teto nunca ultrapassado).
    - Recomendacao: opcao B. O custo e uma mensagem de erro extra no balcao, e o teto vira garantia, nao estimativa.
 
-5. **Mes de referencia do teto e do "suspenso ate dia 1":**
+5. **Mes de referencia do teto e do "suspenso ate dia 1":** **RESOLVED:** America/Sao_Paulo (CONTEXT pos-research).
    - Recomendacao: `America/Sao_Paulo`, igual a `getHoraSaoPaulo`.
 
-6. **Normalizacao de telefone:**
+6. **Normalizacao de telefone:** **RESOLVED:** 55 + DDD + numero, sem casar numero sem o 9 (CONTEXT pos-research).
    - Recomendacao: regra `55` + DDD + numero (10 ou 11 digitos), sem tentar casar numero sem o 9. Aceitar o risco residual (A10) e registrar casos de divergencia no log.
 
-7. **Labels `avaliou` e `csat-baixo`: criar nas contas?**
+7. **Labels `avaliou` e `csat-baixo`: criar nas contas?** **RESOLVED:** Sim, criadas com token de administrador no roteiro (CONTEXT pos-research).
    - O que sabemos: nao e obrigatorio (Achado 9). Criar exige administrador e corpo aninhado (Achado 10).
    - Recomendacao: criar no roteiro (uma vez por conta, com o token de administrador), para aparecerem na barra lateral. Codigo tolerante a "ja existe" (422 ou 400).
 
-8. **Ciclo de vida das labels de pesquisa:**
+8. **Ciclo de vida das labels de pesquisa:** **RESOLVED:** Mesclar avaliou/csat-baixo no fechamento (CONTEXT pos-research).
    - O que sabemos: o fechamento seguinte zera a lista (P6).
    - Recomendacao: mesclar no fechamento para preservar `avaliou` e `csat-baixo`, e atualizar `csat-baixo` a cada nova resposta (remove se a nota for 3 a 5). Mudanca de comportamento frente ao D-06 da fase 51, que remove etiquetas manuais: essas duas nao sao manuais, sao da pesquisa. Confirmar.
 
-9. **"SAIR" reabrindo conversa resolvida:**
+9. **"SAIR" reabrindo conversa resolvida:** **RESOLVED:** Aceitar e documentar (CONTEXT pos-research).
    - Recomendacao: aceitar (efeito nativo). Opcional: nota privada automatica "Cliente pediu para sair das pesquisas" para o atendente nao ignorar.
 
-10. **Autenticacao do webhook de SAIR:**
+10. **Autenticacao do webhook de SAIR:** **RESOLVED:** HMAC com secret por instancia + janela de timestamp (CONTEXT pos-research).
     - Recomendacao: HMAC com `secret` da conta, guardado em env por instancia (`CHATWOOT_WEBHOOK_SECRET`), mais janela de timestamp. Alternativa: token no path (padrao atual), mas o token fica em URL e logs.
 
-11. **Compliance (LGPD, opt-out, base legal, retencao):**
+11. **Compliance (LGPD, opt-out, base legal, retencao):** **RESOLVED:** Parecer juridico antes de ligar em producao; nao bloqueia desenvolvimento (CONTEXT pos-research).
     - Recomendacao: parecer do Legal Compliance Checker antes de ativar em producao. Pontos: base legal para oferta de desconto pos-venda, prazo de processamento do SAIR, anonimizacao aos 12 meses.
 
-12. **Dominios permitidos para o link do Google:**
+12. **Dominios permitidos para o link do Google:** **RESOLVED:** Allowlist https g.page, search.google.com, maps.google.com, business.google.com (CONTEXT pos-research).
     - Recomendacao: `g.page`, `search.google.com`, `maps.google.com` e `business.google.com`, com https. Confirmar com o usuario se ha outro link.
 
-13. **Defaults por empresa (Box e Bom Custo):**
+13. **Defaults por empresa (Box e Bom Custo):** **RESOLVED:** Defaults por env por instancia, valores do CONTEXT (criterio do planner; UI-SPEC confirmacao 8).
     - O que sabemos: instancias separadas; defaults diferentes (CONTEXT).
     - Recomendacao: env por instancia (`PESQUISA_PERCENTUAL_PADRAO`, `PESQUISA_TETO_PADRAO`, `PESQUISA_COMPRA_MINIMA_PADRAO`, `PESQUISA_TETO_MENSAL_PADRAO`) usada apenas para criar a linha singleton na primeira leitura, como `getConfig()` da fase 51. Depois, a tela manda.
 
-14. **Ordem: input_csat antes ou depois do texto com link?**
+14. **Ordem: input_csat antes ou depois do texto com link?** **RESOLVED:** input_csat criada depois do sendOutgoingMessage ok (planos 52-01/52-05; recomendado).
     - Recomendacao: depois do envio bem-sucedido. Se o envio falhar, nao ha pesquisa para o cliente e nao sobra mensagem privada.
 
-15. **Retencao: anonimizar ou apagar?**
+15. **Retencao: anonimizar ou apagar?** **RESOLVED:** Anonimizar (mantem agregados); job desligado por padrao ate parecer juridico (recomendado).
     - Recomendacao: anonimizar telefone, comentario e contactId; manter nota, data e variante para o painel historico. Apagar o cupom usado so se o financeiro aceitar.
 
-16. **Textos do UI-SPEC que contrariam o CONTEXT:**
+16. **Textos do UI-SPEC que contrariam o CONTEXT:** **RESOLVED:** Decisoes do UI-SPEC confirmadas pelo usuario prevalecem (UI-D08 etc.).
     - CONTEXT: "uma mensagem no WhatsApp com o codigo do cupom e o convite do Google". UI-SPEC (UI-D08, confirmado pelo usuario em 2026-11-22 com "use o recomendado"): duas mensagens.
     - Resolvido pela confirmacao do usuario. Registrar que o CONTEXT esta desatualizado nesse ponto.
 

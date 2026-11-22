@@ -69,6 +69,9 @@ Fora do escopo: integracao de cupom com Athos/PDV (Athos nao tem sistema de cupo
 - Link do Google: aceitar so https em g.page, search.google.com, maps.google.com, business.google.com.
 - Corrigir o re-check herdado da fase 51 (avaliarRespostaDoCliente) para usar GET .../messages?after=<id>, porque GET conversation so traz a ultima mensagem.
 - Pre-condicao de deploy: PR #75 (envs CHATWOOT_AUTOMATION_*) mesclado em main.
+- Revogacao (checker plano, rev. 1; recomendado): acao admin "Revogar pesquisa" anula o token (rota publica passa a responder INDISPONIVEL, corpo generico) e, se houver cupom EMITIDO vinculado, marca CANCELADO; coberta por teste. E o unico escritor do status CANCELADO.
+- Interpretacao registrada: idempotencia = no maximo uma pesquisa ABERTA por conversa (novas pesquisas em fechamentos futuros sao permitidas; so a primeira tem input_csat). O cupom e emitido quando o cliente RESPONDE a pesquisa (nao no envio do link).
+- Frontend sem runner de testes: cada plano de frontend roda `next build` no verify; funcoes puras de validacao/formatacao do frontend ficam cobertas por build + roteiro (lacuna aceita em VALIDATION.md).
 
 ### Decided autonomously
 - [Arquitetura] Q: 'Como suportar Box e Bom Custo?' -> Selected: 'Mesmo codigo, uma instancia por empresa (deploys box-backend e orcamento-backend ja separados); config singleton por instancia; sem refatoracao multi-Chatwoot' — segue o modelo de deploy atual (fase 51 D-14/D-24).
