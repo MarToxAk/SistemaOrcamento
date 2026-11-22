@@ -575,7 +575,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
               : String(prismaErro.meta?.target ?? "");
             if (alvo.includes("pesquisaId")) {
               const ja = await this.prisma.cupomRecompensa.findUnique({ where: { pesquisaId: pesquisa.id } });
-              return ja ? this.cupomPublico(ja) : null;
+              return ja && ja.status === "EMITIDO" ? this.cupomPublico(ja) : null;
             }
             if (alvo.includes("codigo") && tentativa < 5) continue;
           }

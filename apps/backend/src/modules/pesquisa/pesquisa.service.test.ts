@@ -270,6 +270,21 @@ describe("PesquisaService - recompensa (Fase 52, plano 52-03)", () => {
     expect(cupons).toHaveLength(1);
   });
 
+  it("cupom unico por pesquisa: P2002 em pesquisaId com cupom nao EMITIDO nao devolve o cupom (IN-01)", async () => {
+    const existente = cupomExistente({ pesquisaId: "pes-1", codigo: "BC-CANC22", status: "CANCELADO" });
+    const { service, prisma } = montar({ config: { intervaloDias: 0 }, cupons: [existente] });
+    prisma.cupomRecompensa.findUnique.mockResolvedValueOnce(null);
+    prisma.cupomRecompensa.create.mockRejectedValueOnce(
+      Object.assign(new Error("duplicado"), { code: "P2002", meta: { target: ["pesquisaId"] } }),
+    );
+
+    const resultado = await service.responder(TOKEN, 4);
+
+    expect(resultado.tipo).toBe("OK");
+    if (resultado.tipo !== "OK") throw new Error("esperado OK");
+    expect(resultado.resposta.cupom).toBeNull();
+  });
+
   it("cupom unico por pesquisa: colisao de codigo tenta de novo ate 5 vezes e devolve cupom nulo", async () => {
     const { service, prisma } = montar({ config: { intervaloDias: 0 } });
     prisma.cupomRecompensa.create.mockRejectedValue(
