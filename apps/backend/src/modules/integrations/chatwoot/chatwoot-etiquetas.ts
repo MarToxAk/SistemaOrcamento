@@ -41,6 +41,15 @@ export const ETIQUETAS_DE_FASE: readonly string[] = Object.values(ETIQUETA_FASE_
 /** Conjunto que a sincronizacao de status controla. "finalizado" fica FORA de proposito. */
 export const ETIQUETAS_GERENCIADAS: readonly string[] = [...ETIQUETAS_DE_FASE, ETIQUETA_CLIENTE_FREQUENTE];
 
+/**
+ * Fase 52 (D-14/D-34): etiquetas da pesquisa de satisfacao. Ficam FORA de ETIQUETAS_GERENCIADAS de
+ * proposito: a sincronizacao por status do orcamento nunca as remove e o fechamento (POST de labels
+ * substitui a lista inteira) as preserva, para que reflitam a ultima pesquisa.
+ */
+export const ETIQUETA_AVALIOU = "avaliou";
+export const ETIQUETA_CSAT_BAIXO = "csat-baixo";
+export const ETIQUETAS_PESQUISA: readonly string[] = [ETIQUETA_AVALIOU, ETIQUETA_CSAT_BAIXO];
+
 /** Etiqueta da fase para um status; null quando o status e nulo, vazio ou desconhecido. */
 export function etiquetaDaFase(status: QuoteStatus | null | undefined): string | null {
   if (!status) return null;
@@ -58,6 +67,17 @@ export function mesclarEtiquetas(
 ): string[] {
   const manuais = atuais.filter((etiqueta) => !gerenciadas.includes(etiqueta));
   return [...new Set([...manuais, ...desejadas])];
+}
+
+/**
+ * Fase 52 (D-34): mescla para o fechamento da conversa. O POST de labels substitui a lista inteira,
+ * entao o fechamento preserva apenas as etiquetas de pesquisa (avaliou e csat-baixo) e grava as
+ * desejadas (finalizado + cliente-frequente quando for o caso). Ordem: desejadas primeiro, depois as
+ * de pesquisa na ordem em que estavam, sem duplicata. As demais etiquetas (fase e manuais) seguem
+ * sendo substituidas, como na fase 51.
+ */
+export function mesclarEtiquetasFechamento(atuais: string[], desejadas: string[]): string[] {
+  return [...new Set([...desejadas, ...atuais.filter((etiqueta) => ETIQUETAS_PESQUISA.includes(etiqueta))])];
 }
 
 /** Compara duas listas de etiquetas ignorando ordem e duplicatas. */
@@ -340,6 +360,11 @@ function criadaEmMs(valor: unknown): number | null {
 
 export function avaliarRespostaDoCliente(mensagens: unknown, resolvidaEmMs: number): AvaliacaoRespostaCliente {
   if (!Array.isArray(mensagens)) return "indeterminado";
+
+  // D-40 (guarda que fecha): o `after` devolve no maximo 100 mensagens em ordem ascendente. Uma lista
+  // nesse limite pode estar truncada (pode haver mensagens fora da pagina), entao a despedida e
+  // descartada para nao sair por cima de uma conversa viva.
+  if (mensagens.length >= 100) return "indeterminado";
 
   let indeterminado = false;
   for (const item of mensagens) {

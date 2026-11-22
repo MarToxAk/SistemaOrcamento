@@ -13,12 +13,16 @@ import {
   STATUS_PEDIDO_CONCRETIZADO,
   ETIQUETA_CLIENTE_FREQUENTE,
   ETIQUETA_FINALIZADO,
+  ETIQUETA_AVALIOU,
+  ETIQUETA_CSAT_BAIXO,
+  ETIQUETAS_PESQUISA,
   ETIQUETAS_DE_FASE,
   ETIQUETAS_GERENCIADAS,
   etiquetaDaFase,
   etiquetasAtivas,
   etiquetasIguais,
   mesclarEtiquetas,
+  mesclarEtiquetasFechamento,
   type EtiquetasApi,
 } from "./chatwoot-etiquetas";
 
@@ -51,6 +55,40 @@ describe("chatwoot-etiquetas - conjunto gerenciado", () => {
     for (const etiqueta of ETIQUETAS_DE_FASE) expect(ETIQUETAS_GERENCIADAS).toContain(etiqueta);
     expect(ETIQUETAS_GERENCIADAS).toContain(ETIQUETA_CLIENTE_FREQUENTE);
     expect(ETIQUETAS_GERENCIADAS).not.toContain(ETIQUETA_FINALIZADO);
+  });
+});
+
+describe("chatwoot-etiquetas - etiquetas de pesquisa (D-14, D-34)", () => {
+  it("ETIQUETAS_PESQUISA = [avaliou, csat-baixo] e ficam fora do conjunto gerenciado e das de fase", () => {
+    expect(ETIQUETA_AVALIOU).toBe("avaliou");
+    expect(ETIQUETA_CSAT_BAIXO).toBe("csat-baixo");
+    expect([...ETIQUETAS_PESQUISA]).toEqual(["avaliou", "csat-baixo"]);
+    for (const etiqueta of ETIQUETAS_PESQUISA) {
+      expect(ETIQUETAS_GERENCIADAS).not.toContain(etiqueta);
+      expect(ETIQUETAS_DE_FASE).not.toContain(etiqueta);
+    }
+  });
+
+  it("mesclarEtiquetasFechamento preserva so as de pesquisa e poe as desejadas primeiro", () => {
+    expect(mesclarEtiquetasFechamento(["orcamento-pendente", "manual-x", "avaliou"], ["finalizado"])).toEqual([
+      "finalizado",
+      "avaliou",
+    ]);
+    expect(mesclarEtiquetasFechamento(["csat-baixo", "avaliou"], ["finalizado", "cliente-frequente"])).toEqual([
+      "finalizado",
+      "cliente-frequente",
+      "csat-baixo",
+      "avaliou",
+    ]);
+  });
+
+  it("mesclarEtiquetasFechamento nao duplica e atuais vazio devolve so as desejadas", () => {
+    expect(mesclarEtiquetasFechamento(["avaliou", "csat-baixo"], ["finalizado", "avaliou"])).toEqual([
+      "finalizado",
+      "avaliou",
+      "csat-baixo",
+    ]);
+    expect(mesclarEtiquetasFechamento([], ["finalizado"])).toEqual(["finalizado"]);
   });
 });
 

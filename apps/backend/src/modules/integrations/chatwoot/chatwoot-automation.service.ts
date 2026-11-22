@@ -16,6 +16,7 @@ import {
   enfileirarPorConversa,
   etiquetaDaFase,
   lerAtrasoFechamentoS,
+  mesclarEtiquetasFechamento,
   sortearAtrasoHumanoMs,
 } from "./chatwoot-etiquetas";
 import { ChatwootService } from "./chatwoot.service";
@@ -25,7 +26,7 @@ export type ChatwootAutomationWebhookPayload = {
   id: number | string;
   inbox_id?: number;
   contact_inbox?: { inbox_id?: number };
-  messages?: Array<{ account_id?: number; content?: string }>;
+  messages?: Array<{ id?: number; account_id?: number; content?: string }>;
 };
 
 const DEFAULT_PROMPT_FECHAMENTO =
@@ -232,7 +233,11 @@ export class ChatwootAutomationService implements OnModuleDestroy {
 
     const { minS, maxS } = lerAtrasoFechamentoS((chave) => this.config.get<string>(chave));
     const atrasoMs = sortearAtrasoHumanoMs(minS, maxS);
-    const contexto = { resolvidaEmMs, status: quote?.status ?? null, customerId };
+    // D-40: guarda o id da ultima mensagem conhecida no webhook para o re-check por GET .../messages.
+    const idUltimaMensagem = payload.messages?.[0]?.id;
+    const ultimaMensagemId =
+      typeof idUltimaMensagem === "number" && Number.isFinite(idUltimaMensagem) ? idUltimaMensagem : undefined;
+    const contexto = { resolvidaEmMs, status: quote?.status ?? null, customerId, ultimaMensagemId };
     agendarEnvioFechamento(conversationId, atrasoMs, () => this.enviarMensagemFechamento(conversationId, contexto));
     this.logger.log(`Mensagem de fechamento agendada conversationId=${conversationId} atrasoMs=${atrasoMs}`);
 
@@ -251,8 +256,17 @@ export class ChatwootAutomationService implements OnModuleDestroy {
           this.logger.warn(`Falha ao contar cliente frequente conversationId=${conversationId}: ${msg}`);
         }
       }
-      const etiquetas = [ETIQUETA_FINALIZADO, ...(frequente ? [ETIQUETA_CLIENTE_FREQUENTE] : [])];
-      await this.chatwoot.addConversationLabels(conversationId, etiquetas);
+      const desejadas = [ETIQUETA_FINALIZADO, ...(frequente ? [ETIQUETA_CLIENTE_FREQUENTE] : [])];
+      // D-34: o POST de labels substitui a lista inteira; preservar avaliou e csat-baixo da ultima
+      // pesquisa. Falha na leitura nao impede o finalizado: grava so as desejadas e registra warn.
+      let atuais: string[] = [];
+      try {
+        atuais = await this.chatwoot.getConversationLabels(conversationId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Falha ao ler etiquetas do fechamento conversationId=${conversationId}: ${msg}`);
+      }
+      await this.chatwoot.addConversationLabels(conversationId, mesclarEtiquetasFechamento(atuais, desejadas));
     }).catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Falha ao gravar etiquetas de fechamento conversationId=${conversationId}: ${msg}`);
@@ -267,7 +281,7 @@ export class ChatwootAutomationService implements OnModuleDestroy {
    */
   private async enviarMensagemFechamento(
     conversationId: string,
-    contexto: { resolvidaEmMs: number; status: QuoteStatus | null; customerId: string | null },
+    contexto: { resolvidaEmMs: number; status: QuoteStatus | null; customerId: string | null; ultimaMensagemId?: number },
   ): Promise<void> {
     try {
       let conversa: Awaited<ReturnType<ChatwootService["getConversation"]>>;
@@ -289,7 +303,18 @@ export class ChatwootAutomationService implements OnModuleDestroy {
         return;
       }
 
-      const avaliacao = avaliarRespostaDoCliente(conversa.messages, contexto.resolvidaEmMs);
+      // D-40: o re-check le o historico recente por GET .../messages. O campo `messages` do GET da
+      // conversa so traz a ultima mensagem, e uma atividade posterior esconderia a resposta do cliente.
+      let mensagens: unknown = null;
+      try {
+        mensagens = await this.chatwoot.listMessagesAfter(conversationId, contexto.ultimaMensagemId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Mensagem de fechamento nao enviada conversationId=${conversationId} motivo=falha_recheck: ${msg}`);
+        return;
+      }
+
+      const avaliacao = avaliarRespostaDoCliente(mensagens, contexto.resolvidaEmMs);
       if (avaliacao === "resposta_nova") {
         this.logger.log(`Mensagem de fechamento nao enviada conversationId=${conversationId} motivo=resposta_nova`);
         return;
