@@ -293,18 +293,31 @@ Plans:
 **Plans:** 12 plans
 
 Plans:
+**Wave 1**
 - [ ] 52-01-PLAN.md — tracer: schema e migracao (provada em Postgres descartavel), fechamento com link, rota publica, resposta e PUT no CSAT nativo
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 52-02-PLAN.md — pagina publica /pesquisa/[token] (formulario de nota, agradecimento com cupom, bloco Google)
 - [ ] 52-03-PLAN.md — regras puras, config singleton com padroes por empresa e emissao de cupom (intervalo e teto mensal)
 - [ ] 52-04-PLAN.md — cliente Chatwoot (mensagens, atributos, etiqueta de conta), re-check por GET messages e fechamento que preserva avaliou e csat-baixo
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 52-05-PLAN.md — efeitos no Chatwoot (nota privada, atributos, etiquetas), WhatsApp do cupom e convite do Google, re-tentativa
-- [ ] 52-06-PLAN.md — webhook de SAIR com HMAC, job de re-tentativa e job de retencao de 12 meses
 - [ ] 52-07-PLAN.md — servicos de config (gravar), cupons (resgate atomico, teto rigido) e resultados do painel
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 52-12-PLAN.md — controller admin (config, resultados, cupons, resgate, etiquetas) e revogacao de pesquisa
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 52-06-PLAN.md — webhook de SAIR com HMAC, job de re-tentativa e job de retencao de 12 meses
 - [ ] 52-08-PLAN.md — menu, SRI do CDN, lib compartilhada, proxy e formulario de configuracao
+
+**Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 52-09-PLAN.md — pagina /configuracoes/pesquisa com abas, painel de resultados e acao Revogar pesquisa
 - [ ] 52-10-PLAN.md — tela /cupons (busca, resgate em dois passos, lista paginada)
+
+**Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 52-11-PLAN.md — envs de deploy e roteiro de homologacao/ativacao (inclui backstops de UI e revogacao)
-- [ ] 52-12-PLAN.md — controller admin (config, resultados, cupons, resgate, etiquetas) e revogacao de pesquisa
 
 ---
 
