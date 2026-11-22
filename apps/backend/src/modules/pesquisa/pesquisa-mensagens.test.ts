@@ -1101,6 +1101,35 @@ describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano
     expect(r2.falhas).toBe(1);
   });
 
+  it("reenvio IN-07: falha do convite nao consome o orcamento enquanto o cupom esta em aberto", async () => {
+    const erroHttp = jest.fn(async () => {
+      throw Object.assign(new Error("500"), { response: { status: 500 } });
+    });
+    const comCupomEmAberto = montar({
+      pesquisas: [respondidaEm(10 * MINUTO, { chatwootCsat: "OK", envioConviteStatus: "FALHA" })],
+      // Reserva recente (5 min): o cupom nao e tentado neste ciclo, mas continua em aberto.
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIANDO", envioCupomReservadoEm: new Date(Date.now() - 5 * MINUTO) })],
+      chatwoot: { sendOutgoingMessage: erroHttp },
+    });
+
+    const r1 = await comCupomEmAberto.service.reenviarPendentes();
+
+    expect(r1).toMatchObject({ candidatos: 1, cupons: 0, convites: 0, falhas: 1 });
+    expect(comCupomEmAberto.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+    // O convite falhou, mas o cupom segue em aberto: a tentativa compartilhada NAO e consumida.
+    expect(comCupomEmAberto.pesquisas[0].tentativasEnvio).toBe(0);
+
+    const semCupomEmAberto = montar({
+      pesquisas: [respondidaEm(10 * MINUTO, { chatwootCsat: "OK", envioConviteStatus: "FALHA" })],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+      chatwoot: { sendOutgoingMessage: erroHttp },
+    });
+    const r2 = await semCupomEmAberto.service.reenviarPendentes();
+    expect(r2.falhas).toBe(1);
+    // Sem cupom em aberto, a falha do convite volta a contar para o limite de re-tentativas.
+    expect(semCupomEmAberto.pesquisas[0].tentativasEnvio).toBe(1);
+  });
+
   it("reenvio: dois ciclos simultaneos enviam a mesma mensagem uma unica vez (reserva)", async () => {
     const ctx = montar({
       pesquisas: [respondidaEm(10 * MINUTO, { envioConviteStatus: "ENVIADA" })],

@@ -945,7 +945,8 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   /**
    * D-47: re-tenta cupom, convite e CSAT nativo pendentes. Nunca toca itens com menos de 5 minutos,
    * com 3 dias ou mais, ou com 6 tentativas; nunca toca pesquisa anonimizada ou revogada; incrementa
-   * `tentativasEnvio` UMA vez por pesquisa por ciclo e nunca lanca por causa de uma pesquisa.
+   * `tentativasEnvio` UMA vez por pesquisa por ciclo (IN-07: a falha do convite nao consome o
+   * orcamento enquanto o cupom ainda estiver em aberto) e nunca lanca por causa de uma pesquisa.
    */
   async reenviarPendentes(
     agora: Date = new Date(),
@@ -989,6 +990,8 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
 
         resultado.candidatos += 1;
         let falhou = false;
+        let falhouCupomOuCsat = false;
+        let falhouConvite = false;
 
         if (cupomPendente) {
           const envio = await this.enviarCupomWhatsApp(
@@ -997,7 +1000,10 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
             agora,
           );
           if (envio === "ENVIADA") resultado.cupons += 1;
-          else if (envio === "FALHA" || envio === "PENDENTE") falhou = true;
+          else if (envio === "FALHA" || envio === "PENDENTE") {
+            falhou = true;
+            falhouCupomOuCsat = true;
+          }
         }
 
         if (convitePendente) {
@@ -1007,24 +1013,42 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
             agora,
           );
           if (envio === "ENVIADA") resultado.convites += 1;
-          else if (envio === "FALHA" || envio === "PENDENTE") falhou = true;
+          else if (envio === "FALHA" || envio === "PENDENTE") {
+            falhou = true;
+            falhouConvite = true;
+          }
         }
 
         if (csatPendente) {
           const estado = await this.reconciliarCsatNativo(pesquisa, agora);
           if (estado === "OK") resultado.csat += 1;
-          else if (estado === "FALHA" || estado === "PENDENTE") falhou = true;
+          else if (estado === "FALHA" || estado === "PENDENTE") {
+            falhou = true;
+            falhouCupomOuCsat = true;
+          }
         }
 
         if (falhou) {
           resultado.falhas += 1;
-          try {
-            await this.prisma.pesquisaSatisfacao.update({
-              where: { id: pesquisa.id },
-              data: { tentativasEnvio: pesquisa.tentativasEnvio + 1 },
-            });
-          } catch (err) {
-            this.logger.warn(`Falha ao incrementar tentativasEnvio pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+          // IN-07: `tentativasEnvio` e um orcamento unico por pesquisa. Enquanto o cupom (a recompensa
+          // financeira) ainda estiver em aberto, uma falha do convite nao pode consumi-lo: um convite que
+          // falha sempre esgotaria o limite de 6 e o cupom (inclusive uma reserva ENVIANDO a confirmar)
+          // nunca mais seria reenviado. O convite so conta quando nao ha cupom em aberto.
+          const cupomEmAberto =
+            cupom !== null &&
+            (cupom.envioCupomStatus === "PENDENTE" ||
+              cupom.envioCupomStatus === "FALHA" ||
+              cupom.envioCupomStatus === "ENVIANDO");
+          const consumirTentativa = falhouCupomOuCsat || !falhouConvite || !cupomEmAberto;
+          if (consumirTentativa) {
+            try {
+              await this.prisma.pesquisaSatisfacao.update({
+                where: { id: pesquisa.id },
+                data: { tentativasEnvio: pesquisa.tentativasEnvio + 1 },
+              });
+            } catch (err) {
+              this.logger.warn(`Falha ao incrementar tentativasEnvio pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+            }
           }
         }
       }
