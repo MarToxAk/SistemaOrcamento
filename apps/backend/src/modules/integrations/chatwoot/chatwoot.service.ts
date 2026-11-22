@@ -102,8 +102,27 @@ export class ChatwootService {
     }
 
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/labels`;
-    const response = await axios.post(url, { labels }, { headers: { api_access_token: token } });
+    const response = await axios.post(url, { labels }, { headers: { api_access_token: token }, timeout: 10000 });
     return { enabled: true, response: response.data };
+  }
+
+  /**
+   * Fase 51: etiquetas atuais da conversa (GET .../labels). Necessario porque o POST de labels
+   * substitui a lista inteira. Sem configuracao devolve lista vazia; erro do axios propaga.
+   */
+  async getConversationLabels(conversationId: string): Promise<string[]> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return [];
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/labels`;
+    const response = await axios.get(url, { headers: { api_access_token: token }, timeout: 10000 });
+    const payload = response.data?.payload;
+    return Array.isArray(payload) ? payload.filter((etiqueta): etiqueta is string => typeof etiqueta === "string") : [];
   }
 
   async sendAttachment(conversationId: string, buffer: Buffer, fileName: string, contentType: string) {
