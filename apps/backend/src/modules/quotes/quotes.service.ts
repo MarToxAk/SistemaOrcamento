@@ -5,7 +5,10 @@ import { AthosService } from "../integrations/athos/athos.service";
 import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
 import {
   aplicarEtiquetasGerenciadas,
+  clienteEhFrequente,
   ENV_ETIQUETAS_ATIVAS,
+  ETIQUETA_CLIENTE_FREQUENTE,
+  enfileirarPorConversa,
   etiquetaDaFase,
   etiquetasAtivas,
 } from "../integrations/chatwoot/chatwoot-etiquetas";
@@ -938,10 +941,13 @@ export class QuotesService {
   }
 
   /**
-   * Fase 51 (D-01/D-02/D-04/D-15): alinha as etiquetas da conversa do Chatwoot com a fase atual do
-   * orcamento. Le a cotacao, le as etiquetas atuais (GET), mescla preservando as manuais e so grava
-   * (POST) quando a lista mudou. NUNCA lanca: falhas viram warn com quoteId e so a mensagem do erro
-   * (jamais token, headers ou config do axios). Sem conversationId nao faz nenhuma chamada HTTP.
+   * Fase 51 (D-01/D-02/D-04/D-09/D-15/D-16): alinha as etiquetas da conversa do Chatwoot com a fase atual
+   * do orcamento e com o criterio de cliente frequente. As gravacoes sao serializadas por conversa
+   * (enfileirarPorConversa) com leitura FRESCA do banco e do Chatwoot dentro da fila: a fase e o cliente
+   * vem da cotacao atualizada mais recentemente da conversa (R2), mesma regra do fechamento. Le as
+   * etiquetas atuais (GET), mescla preservando as manuais e so grava (POST) quando a lista mudou.
+   * NUNCA lanca: falhas viram warn com quoteId e so a mensagem do erro (jamais token, headers ou config
+   * do axios). Sem conversationId nao faz nenhuma chamada HTTP. Nao consulta o Athos.
    */
   async sincronizarEtiquetasChatwoot(quoteId: string): Promise<void> {
     try {
@@ -952,8 +958,30 @@ export class QuotesService {
         select: { status: true, conversationId: true },
       });
       if (!quote || !quote.conversationId) return;
-      const fase = etiquetaDaFase(quote.status);
-      await aplicarEtiquetasGerenciadas(this.chatwootService, String(quote.conversationId), fase ? [fase] : []);
+      const conversationId = quote.conversationId;
+      await enfileirarPorConversa(String(conversationId), async () => {
+        const maisRecente = await this.prisma.quote.findFirst({
+          where: { conversationId },
+          orderBy: { updatedAt: "desc" },
+          select: { status: true, customerId: true },
+        });
+        if (!maisRecente) return;
+        const fase = etiquetaDaFase(maisRecente.status);
+        const frequente = maisRecente.customerId
+          ? await clienteEhFrequente(this.prisma, maisRecente.customerId, (chave) =>
+              this.configService.get<string>(chave),
+            )
+          : false;
+        const desejadas = [...(fase ? [fase] : []), ...(frequente ? [ETIQUETA_CLIENTE_FREQUENTE] : [])];
+        const { alterou } = await aplicarEtiquetasGerenciadas(
+          this.chatwootService,
+          String(conversationId),
+          desejadas,
+        );
+        this.logger.log(
+          `Etiquetas do Chatwoot sincronizadas quoteId=${quoteId} conversationId=${String(conversationId)} alterou=${alterou}`,
+        );
+      });
     } catch (err) {
       this.logger.warn(
         `Falha ao sincronizar etiquetas do Chatwoot quoteId=${quoteId}: ${err instanceof Error ? err.message : String(err)}`,

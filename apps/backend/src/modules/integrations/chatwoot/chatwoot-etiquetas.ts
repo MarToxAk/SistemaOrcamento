@@ -101,3 +101,124 @@ export async function aplicarEtiquetasGerenciadas(
   await api.addConversationLabels(conversationId, mescladas);
   return { alterou: true, etiquetas: mescladas };
 }
+
+/**
+ * Fase 51 (plano 51-02): cliente frequente (D-09, D-11, D-16).
+ *
+ * Criterio: o cliente (Quote.customerId) tem N ou mais orcamentos "concretizados" criados nos ultimos
+ * M meses. Recalculado a cada sincronizacao; N e M vem de env com padrao 3 e 6.
+ */
+export const ENV_CLIENTE_FREQUENTE_MIN = "CHATWOOT_CLIENTE_FREQUENTE_MIN";
+export const ENV_CLIENTE_FREQUENTE_MESES = "CHATWOOT_CLIENTE_FREQUENTE_MESES";
+export const CLIENTE_FREQUENTE_MIN_PADRAO = 3;
+export const CLIENTE_FREQUENTE_MESES_PADRAO = 6;
+
+/**
+ * D-16: so estes status contam como pedido. ENVIADO, PENDENTE, PAGAMENTO_PARCIAL e CANCELADO ficam
+ * de fora. Risco aceito (T-51-10): APROVADO por link, sem pagamento, ja conta.
+ */
+export const STATUS_PEDIDO_CONCRETIZADO: readonly QuoteStatus[] = [
+  "APROVADO",
+  "EM_PRODUCAO",
+  "PRONTO_PARA_ENTREGA",
+  "ENTREGUE",
+];
+
+function inteiroPositivo(valor: string | undefined, padrao: number): number {
+  const texto = (valor ?? "").trim();
+  if (!/^\d+$/.test(texto)) return padrao;
+  const numero = Number(texto);
+  return Number.isSafeInteger(numero) && numero >= 1 ? numero : padrao;
+}
+
+/** Limiares por env; valor ausente, nao inteiro ou menor que 1 volta ao padrao. */
+export function lerLimiaresClienteFrequente(get: (chave: string) => string | undefined): { min: number; meses: number } {
+  return {
+    min: inteiroPositivo(get(ENV_CLIENTE_FREQUENTE_MIN), CLIENTE_FREQUENTE_MIN_PADRAO),
+    meses: inteiroPositivo(get(ENV_CLIENTE_FREQUENTE_MESES), CLIENTE_FREQUENTE_MESES_PADRAO),
+  };
+}
+
+/** Inicio da janela: "agora" menos N meses, no mesmo horario (calculo em UTC, independe do fuso do servidor). */
+export function inicioJanelaClienteFrequente(meses: number, agora: Date = new Date()): Date {
+  const inicio = new Date(agora.getTime());
+  inicio.setUTCMonth(inicio.getUTCMonth() - meses);
+  return inicio;
+}
+
+/**
+ * Uma unica contagem no Prisma (nunca no Athos). A janela usa createdAt de proposito: updatedAt e
+ * alterado por leituras que gravam e inflaria a contagem. Sem indice novo (T-51-09, volume pequeno).
+ */
+export async function clienteEhFrequente(
+  prisma: { quote: { count(args: any): Promise<number> } },
+  customerId: string,
+  get: (chave: string) => string | undefined,
+  agora: Date = new Date(),
+): Promise<boolean> {
+  const { min, meses } = lerLimiaresClienteFrequente(get);
+  const total = await prisma.quote.count({
+    where: {
+      customerId,
+      status: { in: [...STATUS_PEDIDO_CONCRETIZADO] },
+      createdAt: { gte: inicioJanelaClienteFrequente(meses, agora) },
+    },
+  });
+  return total >= min;
+}
+
+/**
+ * Fila por conversa (R1, R4): tarefas da MESMA conversa rodam em serie, na ordem de chegada; conversas
+ * diferentes rodam em paralelo, com teto global de MAX_CONCORRENCIA_CHATWOOT execucoes (lote de 50 nao
+ * gera rajada). So promises (sem setTimeout/setImmediate): funciona sob jest.useFakeTimers.
+ * Limitacao residual (T-51-06): vale por processo; o deploy atual e instancia unica.
+ */
+export const MAX_CONCORRENCIA_CHATWOOT = 3;
+
+const caudasPorConversa = new Map<string, Promise<void>>();
+let execucoesAtivas = 0;
+const esperaSemaforo: Array<() => void> = [];
+
+function adquirirSemaforo(): Promise<void> {
+  if (execucoesAtivas < MAX_CONCORRENCIA_CHATWOOT) {
+    execucoesAtivas++;
+    return Promise.resolve();
+  }
+  // A vaga e transferida diretamente por liberarSemaforo (contador nao muda).
+  return new Promise<void>((resolver) => esperaSemaforo.push(resolver));
+}
+
+function liberarSemaforo(): void {
+  const proximo = esperaSemaforo.shift();
+  if (proximo) proximo();
+  else execucoesAtivas--;
+}
+
+export function enfileirarPorConversa<T>(conversationId: string, tarefa: () => Promise<T>): Promise<T> {
+  const anterior = caudasPorConversa.get(conversationId) ?? Promise.resolve();
+  const resultado = anterior.then(async () => {
+    await adquirirSemaforo();
+    try {
+      return await tarefa();
+    } finally {
+      liberarSemaforo();
+    }
+  });
+  // A cauda nunca rejeita: a falha de uma tarefa nao trava a proxima da mesma conversa.
+  const cauda = resultado.then(
+    () => undefined,
+    () => undefined,
+  );
+  caudasPorConversa.set(conversationId, cauda);
+  void cauda.then(() => {
+    if (caudasPorConversa.get(conversationId) === cauda) caudasPorConversa.delete(conversationId);
+  });
+  return resultado;
+}
+
+/** Resolve quando a fila esvaziar (uso em testes); ignora rejeicoes. */
+export async function aguardarFilaEtiquetas(): Promise<void> {
+  while (caudasPorConversa.size > 0) {
+    await Promise.all([...caudasPorConversa.values()]);
+  }
+}

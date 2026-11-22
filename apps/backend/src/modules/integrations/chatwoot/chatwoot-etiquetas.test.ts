@@ -1,7 +1,16 @@
 import { QuoteStatus } from "@prisma/client";
 
 import {
+  aguardarFilaEtiquetas,
   aplicarEtiquetasGerenciadas,
+  clienteEhFrequente,
+  enfileirarPorConversa,
+  ENV_CLIENTE_FREQUENTE_MESES,
+  ENV_CLIENTE_FREQUENTE_MIN,
+  inicioJanelaClienteFrequente,
+  lerLimiaresClienteFrequente,
+  MAX_CONCORRENCIA_CHATWOOT,
+  STATUS_PEDIDO_CONCRETIZADO,
   ETIQUETA_CLIENTE_FREQUENTE,
   ETIQUETA_FINALIZADO,
   ETIQUETAS_DE_FASE,
@@ -146,5 +155,196 @@ describe("chatwoot-etiquetas - aplicarEtiquetasGerenciadas", () => {
     await aplicarEtiquetasGerenciadas(api, "42", ["aprovado"], [...ETIQUETAS_GERENCIADAS, ETIQUETA_FINALIZADO]);
 
     expect(api.addConversationLabels).toHaveBeenCalledWith("42", ["manual", "aprovado"]);
+  });
+});
+
+describe("chatwoot-etiquetas - cliente frequente (D-09, D-11, D-16)", () => {
+  const AGORA = new Date("2026-11-21T12:00:00Z");
+  const envs = (valores: Record<string, string | undefined>) => (chave: string) => valores[chave];
+
+  it("STATUS_PEDIDO_CONCRETIZADO e exatamente APROVADO, EM_PRODUCAO, PRONTO_PARA_ENTREGA, ENTREGUE", () => {
+    expect([...STATUS_PEDIDO_CONCRETIZADO]).toEqual([
+      QuoteStatus.APROVADO,
+      QuoteStatus.EM_PRODUCAO,
+      QuoteStatus.PRONTO_PARA_ENTREGA,
+      QuoteStatus.ENTREGUE,
+    ]);
+  });
+
+  it("inicioJanelaClienteFrequente recua N meses mantendo o horario", () => {
+    expect(inicioJanelaClienteFrequente(6, AGORA).toISOString()).toBe("2026-05-21T12:00:00.000Z");
+    expect(inicioJanelaClienteFrequente(12, AGORA).toISOString()).toBe("2025-11-21T12:00:00.000Z");
+  });
+
+  it("lerLimiaresClienteFrequente usa o padrao sem envs", () => {
+    expect(lerLimiaresClienteFrequente(envs({}))).toEqual({ min: 3, meses: 6 });
+  });
+
+  it("lerLimiaresClienteFrequente le inteiros validos das envs", () => {
+    expect(
+      lerLimiaresClienteFrequente(envs({ [ENV_CLIENTE_FREQUENTE_MIN]: "5", [ENV_CLIENTE_FREQUENTE_MESES]: "12" })),
+    ).toEqual({ min: 5, meses: 12 });
+  });
+
+  it.each(["abc", "0", "-2", "1.5", ""])("lerLimiaresClienteFrequente volta ao padrao com valor invalido %p", (valor) => {
+    expect(
+      lerLimiaresClienteFrequente(envs({ [ENV_CLIENTE_FREQUENTE_MIN]: valor, [ENV_CLIENTE_FREQUENTE_MESES]: valor })),
+    ).toEqual({ min: 3, meses: 6 });
+  });
+
+  describe("clienteEhFrequente", () => {
+    const criarPrisma = (total: number) => ({ quote: { count: jest.fn().mockResolvedValue(total) } });
+
+    it("conta uma vez com status concretizados e janela de 6 meses por createdAt", async () => {
+      const prisma = criarPrisma(3);
+
+      const resultado = await clienteEhFrequente(prisma, "cus1", envs({}), AGORA);
+
+      expect(resultado).toBe(true);
+      expect(prisma.quote.count).toHaveBeenCalledTimes(1);
+      expect(prisma.quote.count).toHaveBeenCalledWith({
+        where: {
+          customerId: "cus1",
+          status: { in: ["APROVADO", "EM_PRODUCAO", "PRONTO_PARA_ENTREGA", "ENTREGUE"] },
+          createdAt: { gte: new Date("2026-05-21T12:00:00Z") },
+        },
+      });
+    });
+
+    it("com 2 pedidos nao e frequente (padrao 3)", async () => {
+      expect(await clienteEhFrequente(criarPrisma(2), "cus1", envs({}), AGORA)).toBe(false);
+    });
+
+    it("com min 2 por env, 2 pedidos bastam", async () => {
+      expect(
+        await clienteEhFrequente(criarPrisma(2), "cus1", envs({ [ENV_CLIENTE_FREQUENTE_MIN]: "2" }), AGORA),
+      ).toBe(true);
+    });
+
+    it("sem relogio explicito usa a data atual", async () => {
+      jest.useFakeTimers({ now: AGORA });
+      try {
+        const prisma = criarPrisma(0);
+        await clienteEhFrequente(prisma, "cus1", envs({}));
+        expect(prisma.quote.count).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({ createdAt: { gte: new Date("2026-05-21T12:00:00Z") } }),
+          }),
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+});
+
+describe("chatwoot-etiquetas - fila por conversa (R1, R4)", () => {
+  /** Promessa controlada manualmente. */
+  const manual = <T = void>() => {
+    let resolver!: (valor: T) => void;
+    let rejeitar!: (erro: unknown) => void;
+    const promessa = new Promise<T>((res, rej) => {
+      resolver = res;
+      rejeitar = rej;
+    });
+    return { promessa, resolver, rejeitar };
+  };
+  const ciclos = async () => {
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+  };
+
+  it("a mesma conversa roda em serie e na ordem de chegada", async () => {
+    const ordem: string[] = [];
+    const c1 = manual();
+    const p1 = enfileirarPorConversa("a", async () => {
+      ordem.push("inicio-1");
+      await c1.promessa;
+      ordem.push("fim-1");
+      return 1;
+    });
+    const p2 = enfileirarPorConversa("a", async () => {
+      ordem.push("inicio-2");
+      return 2;
+    });
+
+    await ciclos();
+    expect(ordem).toEqual(["inicio-1"]);
+
+    c1.resolver();
+    expect(await p1).toBe(1);
+    expect(await p2).toBe(2);
+    expect(ordem).toEqual(["inicio-1", "fim-1", "inicio-2"]);
+  });
+
+  it("conversas diferentes rodam em paralelo", async () => {
+    const ordem: string[] = [];
+    const ca = manual();
+    const pa = enfileirarPorConversa("a", async () => {
+      ordem.push("inicio-a");
+      await ca.promessa;
+    });
+    const pb = enfileirarPorConversa("b", async () => {
+      ordem.push("inicio-b");
+    });
+
+    await ciclos();
+    expect(ordem).toEqual(["inicio-a", "inicio-b"]);
+    ca.resolver();
+    await Promise.all([pa, pb]);
+  });
+
+  it("a rejeicao da primeira nao trava a segunda e a promessa da primeira rejeita", async () => {
+    const p1 = enfileirarPorConversa("a", async () => {
+      throw new Error("falhou-1");
+    });
+    const p2 = enfileirarPorConversa("a", async () => "ok-2");
+
+    await expect(p1).rejects.toThrow("falhou-1");
+    await expect(p2).resolves.toBe("ok-2");
+  });
+
+  it("com 5 conversas diferentes no maximo 3 execucoes simultaneas", async () => {
+    expect(MAX_CONCORRENCIA_CHATWOOT).toBe(3);
+    let ativas = 0;
+    let maximo = 0;
+    const portoes = Array.from({ length: 5 }, () => manual());
+    const promessas = portoes.map((portao, i) =>
+      enfileirarPorConversa(`conv-${i}`, async () => {
+        ativas++;
+        maximo = Math.max(maximo, ativas);
+        await portao.promessa;
+        ativas--;
+      }),
+    );
+
+    await ciclos();
+    expect(ativas).toBe(3);
+
+    for (const portao of portoes) {
+      portao.resolver();
+      await ciclos();
+    }
+    await Promise.all(promessas);
+    expect(maximo).toBe(3);
+  });
+
+  it("aguardarFilaEtiquetas so resolve depois da ultima tarefa", async () => {
+    const c = manual();
+    let terminou = false;
+    void enfileirarPorConversa("a", async () => {
+      await c.promessa;
+      terminou = true;
+    });
+    void enfileirarPorConversa("a", async () => {
+      throw new Error("ignorada pela espera");
+    }).catch(() => undefined);
+
+    const espera = aguardarFilaEtiquetas();
+    await ciclos();
+    expect(terminou).toBe(false);
+
+    c.resolver();
+    await espera;
+    expect(terminou).toBe(true);
   });
 });

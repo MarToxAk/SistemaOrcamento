@@ -1,5 +1,5 @@
 /**
- * Fase 51 (plano 51-01): tracer changeStatus -> gancho -> GET labels -> mescla -> POST labels.
+ * Fase 51 (planos 51-01 e 51-02): tracer changeStatus -> gancho -> GET labels -> mescla -> POST labels.
  * ChatwootService REAL com axios FALSO (nenhuma chamada de rede) e Athos FALSO explicito
  * (o gancho de etiquetas nao pode consultar o Athos).
  */
@@ -58,7 +58,7 @@ const flush = async () => {
   for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
 };
 
-describe("QuotesService - etiquetas do Chatwoot por fase (Fase 51, plano 51-01)", () => {
+describe("QuotesService - etiquetas do Chatwoot por fase (Fase 51, planos 51-01 e 51-02)", () => {
   let service: QuotesService;
   let prisma: any;
   let athos: Record<string, jest.Mock>;
@@ -115,11 +115,22 @@ describe("QuotesService - etiquetas do Chatwoot por fase (Fase 51, plano 51-01)"
 
   afterEach(() => jest.restoreAllMocks());
 
-  /** Prepara changeStatus PENDENTE -> APROVADO; conversationId opcional. */
-  const prepararTroca = (conversationId: bigint | null) => {
-    prisma.quote.findFirst.mockResolvedValue(makeQuote({ status: "PENDENTE", conversationId }));
+  /**
+   * Prepara changeStatus PENDENTE -> APROVADO; conversationId opcional. O findFirst distingue a busca
+   * do changeStatus (por identificador) da busca da conversa (where.conversationId definido, 51-02).
+   */
+  const prepararTroca = (
+    conversationId: bigint | null,
+    conversa: { status: string; customerId: string | null } = { status: "APROVADO", customerId: "cus1" },
+  ) => {
+    prisma.quote.findFirst.mockImplementation(async (args: any) =>
+      args?.where?.conversationId !== undefined
+        ? conversa
+        : makeQuote({ status: "PENDENTE", conversationId }),
+    );
     prisma.quote.update.mockResolvedValue(makeQuote({ status: "APROVADO", conversationId }));
     prisma.quote.findUnique.mockResolvedValue({ status: "APROVADO", conversationId });
+    prisma.quote.count.mockResolvedValue(0);
   };
 
   const semChamadasAoAthos = () => {
@@ -221,5 +232,118 @@ describe("QuotesService - etiquetas do Chatwoot por fase (Fase 51, plano 51-01)"
     for (const chamada of warn.mock.calls) {
       expect(JSON.stringify(chamada)).not.toContain("token-secreto-xyz");
     }
+  });
+
+  it("F1 (tracer): APROVADO de cliente com 3 pedidos recebe aprovado + cliente-frequente e nao consulta o Athos", async () => {
+    prepararTroca(BigInt(42), { status: "APROVADO", customerId: "cus1" });
+    prisma.quote.count.mockResolvedValue(3);
+    axiosGet.mockResolvedValue({ data: { payload: ["orcamento-pendente"] } });
+
+    await service.changeStatus("quote-001", "APROVADO", "Painel");
+    await flush();
+
+    expect(prisma.quote.count).toHaveBeenCalledTimes(1);
+    expect(chamadasDeLabels(axiosPost)).toHaveLength(1);
+    expect(axiosPost).toHaveBeenCalledWith(
+      URL_LABELS,
+      { labels: ["aprovado", "cliente-frequente"] },
+      expect.anything(),
+    );
+    semChamadasAoAthos();
+  });
+
+  it("F2: com 2 pedidos a cliente-frequente que ja estava na conversa sai", async () => {
+    prepararTroca(BigInt(42));
+    prisma.quote.count.mockResolvedValue(2);
+    axiosGet.mockResolvedValue({ data: { payload: ["manual-x", "aprovado", "cliente-frequente"] } });
+
+    await service.changeStatus("quote-001", "APROVADO", "Painel");
+    await flush();
+
+    expect(chamadasDeLabels(axiosPost)).toHaveLength(1);
+    expect(axiosPost).toHaveBeenCalledWith(URL_LABELS, { labels: ["manual-x", "aprovado"] }, expect.anything());
+  });
+
+  it("F3: a fase vem da cotacao mais recente da conversa (updatedAt desc), nao da cotacao passada ao gancho", async () => {
+    prepararTroca(BigInt(42), { status: "EM_PRODUCAO", customerId: "cus9" });
+    axiosGet.mockResolvedValue({ data: { payload: ["aprovado"] } });
+
+    await service.changeStatus("quote-001", "APROVADO", "Painel");
+    await flush();
+
+    const buscasDaConversa = prisma.quote.findFirst.mock.calls.filter(
+      (chamada: any[]) => chamada[0]?.where?.conversationId !== undefined,
+    );
+    expect(buscasDaConversa).toHaveLength(1);
+    expect(buscasDaConversa[0][0]).toEqual({
+      where: { conversationId: BigInt(42) },
+      orderBy: { updatedAt: "desc" },
+      select: { status: true, customerId: true },
+    });
+    expect(prisma.quote.count).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ customerId: "cus9" }) }),
+    );
+    expect(axiosPost).toHaveBeenCalledWith(URL_LABELS, { labels: ["em-producao"] }, expect.anything());
+  });
+
+  it("F4: CHATWOOT_CLIENTE_FREQUENTE_MIN=2 faz 2 pedidos bastarem", async () => {
+    configValues.CHATWOOT_CLIENTE_FREQUENTE_MIN = "2";
+    prepararTroca(BigInt(42));
+    prisma.quote.count.mockResolvedValue(2);
+    axiosGet.mockResolvedValue({ data: { payload: ["orcamento-pendente"] } });
+
+    await service.changeStatus("quote-001", "APROVADO", "Painel");
+    await flush();
+
+    expect(axiosPost).toHaveBeenCalledWith(
+      URL_LABELS,
+      { labels: ["aprovado", "cliente-frequente"] },
+      expect.anything(),
+    );
+  });
+
+  it("F5: duas sincronizacoes da MESMA conversa sao serializadas (2o GET so depois do 1o POST)", async () => {
+    prepararTroca(BigInt(42));
+    const eventos: string[] = [];
+    let liberarPrimeiroGet!: () => void;
+    const primeiroGetPreso = new Promise<void>((resolver) => {
+      liberarPrimeiroGet = resolver;
+    });
+    let gets = 0;
+    axiosGet.mockImplementation(async () => {
+      gets++;
+      eventos.push(`get-${gets}`);
+      if (gets === 1) await primeiroGetPreso;
+      return { data: { payload: ["orcamento-pendente"] } };
+    });
+    axiosPost.mockImplementation(async () => {
+      eventos.push("post");
+      return { data: { payload: [] } };
+    });
+
+    const s1 = service.sincronizarEtiquetasChatwoot("quote-001");
+    const s2 = service.sincronizarEtiquetasChatwoot("quote-001");
+    await flush();
+    expect(eventos).toEqual(["get-1"]);
+
+    liberarPrimeiroGet();
+    await Promise.all([s1, s2]);
+
+    expect(eventos.slice(0, 3)).toEqual(["get-1", "post", "get-2"]);
+  });
+
+  it("F6: CANCELADO de cliente frequente recebe cancelado + cliente-frequente", async () => {
+    prepararTroca(BigInt(42), { status: "CANCELADO", customerId: "cus1" });
+    prisma.quote.count.mockResolvedValue(5);
+    axiosGet.mockResolvedValue({ data: { payload: ["aprovado"] } });
+
+    await service.changeStatus("quote-001", "CANCELADO", "Painel");
+    await flush();
+
+    expect(axiosPost).toHaveBeenCalledWith(
+      URL_LABELS,
+      { labels: ["cancelado", "cliente-frequente"] },
+      expect.anything(),
+    );
   });
 });
