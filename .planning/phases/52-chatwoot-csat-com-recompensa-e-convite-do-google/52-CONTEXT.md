@@ -53,6 +53,23 @@ Fora do escopo: integracao de cupom com Athos/PDV (Athos nao tem sistema de cupo
 - Painel na mesma area: nota media (geral e por variante), taxa de resposta, ultimas respostas com comentario, cupons emitidos/usados, gasto real no mes vs teto.
 - Defaults sugeridos (editaveis): Box — 10%, teto R$2, compra minima R$6; Bom Custo — 10%, teto R$5, compra minima R$30. Como Box e Bom Custo sao instancias separadas, o default pode vir de env por instancia ou ser preenchido no primeiro acesso (criterio do planner).
 
+### Decisoes pos-research (2026-11-22, usuario: "se tiver mais alguma pergunta usa o recomendado")
+- Validacao da cadeia completa: Chatwoot de teste local (conta de teste com inbox Channel::Api e numero da equipe); sem ele o tracer nao e validado ponta a ponta. Montagem e checkpoint manual do roteiro (nao criar nada no Chatwoot de producao).
+- Uma pesquisa com registro no Chatwoot (input_csat) por conversa; pesquisas seguintes na mesma conversa ficam so no nosso banco (o PUT publico usa find_by! da primeira input_csat).
+- CSAT nativo: desligar manualmente no roteiro com verificacao somente leitura. ATENCAO: esta LIGADO na inbox 1 do Box hoje — pre-condicao de ativacao.
+- Teto mensal no resgate: rigido — bloquear resgate quando usado_no_mes + desconto > teto.
+- Mes de referencia do teto: America/Sao_Paulo.
+- Normalizacao de telefone: 55 + DDD + numero; sem tentar casar numero sem o 9.
+- Labels avaliou e csat-baixo: criadas nas duas contas com token de administrador, passo do roteiro.
+- Ciclo de vida: o fechamento (fase 51 D-06) preserva avaliou e csat-baixo (mescla), refletindo a ultima pesquisa — ajuste do D-06 so para essas duas labels.
+- SAIR reabre a conversa resolvida (comportamento nativo do Chatwoot): aceitar e documentar.
+- Webhook de SAIR: webhook de conta message_created autenticado por HMAC (X-Chatwoot-Signature) com secret por instancia + janela de timestamp; nao usar o limite de 30/min do webhook atual.
+- Rota publica da pesquisa: @SkipThrottle no throttler global por IP (proxy Next usa um IP so) + limite por token.
+- Parecer juridico (base legal da oferta pos-venda, prazo de opt-out, anonimizacao em 12 meses): pedir ao responsavel ANTES de ligar em producao; nao bloqueia o desenvolvimento.
+- Link do Google: aceitar so https em g.page, search.google.com, maps.google.com, business.google.com.
+- Corrigir o re-check herdado da fase 51 (avaliarRespostaDoCliente) para usar GET .../messages?after=<id>, porque GET conversation so traz a ultima mensagem.
+- Pre-condicao de deploy: PR #75 (envs CHATWOOT_AUTOMATION_*) mesclado em main.
+
 ### Decided autonomously
 - [Arquitetura] Q: 'Como suportar Box e Bom Custo?' -> Selected: 'Mesmo codigo, uma instancia por empresa (deploys box-backend e orcamento-backend ja separados); config singleton por instancia; sem refatoracao multi-Chatwoot' — segue o modelo de deploy atual (fase 51 D-14/D-24).
 - [Pesquisa] Q: 'Como servir a pagina publica?' -> Selected: 'Pagina/rota no Next.js que faz proxy server-side ao backend (backendFetch), padrao de /cobranca/confirmar/[token]' — padrao local existente.
