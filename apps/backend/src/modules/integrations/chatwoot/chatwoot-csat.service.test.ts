@@ -27,6 +27,25 @@ const configCompleta = {
   CHATWOOT_API_TOKEN: "token-agente",
 };
 
+describe("ChatwootService - sendOutgoingMessage (WR-08, Fase 52)", () => {
+  beforeEach(() => {
+    axiosPost.mockReset();
+  });
+
+  it("faz POST publico na conversa com header api_access_token e timeout 10000", async () => {
+    axiosPost.mockResolvedValue({ data: { id: 5 } });
+
+    const resultado = await criarService(configCompleta).sendOutgoingMessage("42", "oi");
+
+    expect(axiosPost).toHaveBeenCalledWith(
+      URL_MESSAGES,
+      { content: "oi", message_type: "outgoing", private: false },
+      { headers: { api_access_token: "token-agente" }, timeout: 10000 },
+    );
+    expect(resultado).toEqual({ enabled: true, response: { id: 5 } });
+  });
+});
+
 describe("ChatwootService - createPrivateCsatMessage (D-06, Fase 52)", () => {
   beforeEach(() => {
     axiosGet.mockReset();

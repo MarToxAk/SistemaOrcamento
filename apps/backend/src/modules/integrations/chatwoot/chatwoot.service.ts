@@ -68,7 +68,7 @@ export class ChatwootService {
 
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
     try {
-      const response = await axios.post(url, { content: message, message_type: "outgoing", private: false }, { headers: { api_access_token: token } });
+      const response = await axios.post(url, { content: message, message_type: "outgoing", private: false }, { headers: { api_access_token: token }, timeout: 10000 });
       this.logger.debug(`Mensagem enviada conversationId=${conversationId}`);
       return { enabled: true, response: response.data };
     } catch (err) {
