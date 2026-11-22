@@ -98,6 +98,24 @@
       CHATWOOT_CLIENTE_FREQUENTE_MESES: ${CHATWOOT_CLIENTE_FREQUENTE_MESES:-6}
       CHATWOOT_FECHAMENTO_ATRASO_MIN_S: ${CHATWOOT_FECHAMENTO_ATRASO_MIN_S:-45}
       CHATWOOT_FECHAMENTO_ATRASO_MAX_S: ${CHATWOOT_FECHAMENTO_ATRASO_MAX_S:-180}
+      # Pesquisa de satisfacao e recompensa (Fase 52): o liga/desliga fica na tela
+      # /configuracoes/pesquisa e nasce DESLIGADO. Os padroes abaixo so valem na
+      # criacao da linha de configuracao (primeira leitura); depois a tela manda.
+      # Padroes do Bom Custo: 10%, teto R$5, compra minima R$30, teto mensal R$300 e prefixo BC.
+      PESQUISA_PERCENTUAL_PADRAO: ${PESQUISA_PERCENTUAL_PADRAO:-10}
+      PESQUISA_TETO_PADRAO: ${PESQUISA_TETO_PADRAO:-5}
+      PESQUISA_COMPRA_MINIMA_PADRAO: ${PESQUISA_COMPRA_MINIMA_PADRAO:-30}
+      PESQUISA_TETO_MENSAL_PADRAO: ${PESQUISA_TETO_MENSAL_PADRAO:-300}
+      PESQUISA_PREFIXO_PADRAO: ${PESQUISA_PREFIXO_PADRAO:-BC}
+      # Somente o texto "false" desliga a criacao da input_csat privada no Chatwoot
+      # (fallback se a premissa da mensagem privada falhar na homologacao).
+      PESQUISA_CSAT_NATIVO_ATIVO: ${PESQUISA_CSAT_NATIVO_ATIVO:-true}
+      # Retencao (anonimizacao de 12 meses): somente o texto "true" liga; depende do parecer juridico.
+      PESQUISA_RETENCAO_ATIVA: ${PESQUISA_RETENCAO_ATIVA:-false}
+      PESQUISA_RETENCAO_MESES: ${PESQUISA_RETENCAO_MESES:-12}
+      # Segredo do webhook de conta message_created (SAIR). Sem token de administrador aqui:
+      # as etiquetas avaliou e csat-baixo sao criadas a mao no roteiro de homologacao.
+      CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
       ATHOS_SMB_MOUNT_PATH: ${ATHOS_SMB_MOUNT_PATH}
       PDV_DB_URL: ${PDV_DB_URL}
       PDV_DB_SCHEMA: ${PDV_DB_SCHEMA}
