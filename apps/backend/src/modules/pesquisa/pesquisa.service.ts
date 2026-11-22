@@ -20,6 +20,21 @@ import {
 } from "../integrations/chatwoot/chatwoot-automation.service";
 import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
 import {
+  ETIQUETAS_PESQUISA,
+  agendarEnvioFechamento,
+  aplicarEtiquetasGerenciadas,
+  cancelarEnvioFechamento,
+  enfileirarPorConversa,
+  sortearAtrasoHumanoMs,
+} from "../integrations/chatwoot/chatwoot-etiquetas";
+import { PesquisaConfigService, type PesquisaConfigView } from "./pesquisa-config.service";
+import {
+  etiquetasDaPesquisa,
+  montarAtributosContato,
+  montarNotaPrivada,
+  montarVariaveisMensagem,
+} from "./pesquisa-efeitos";
+import {
   REGEX_TOKEN,
   type Variante,
   corPrimariaAcessivel,
@@ -35,7 +50,6 @@ import {
   renderizarTexto,
   sortearVariante,
 } from "./pesquisa-regras";
-import { PesquisaConfigService, type PesquisaConfigView } from "./pesquisa-config.service";
 
 export type TextosPagina = {
   titulo: string;
@@ -72,6 +86,47 @@ const TEXTO_INPUT_CSAT =
 /** D-28: estados em que a conversa ja tem a input_csat que o PUT publico vai preencher. */
 const ESTADOS_COM_INPUT_CSAT = ["MENSAGEM_OK", "OK", "RESPOSTA_FALHA"];
 
+function mensagemDeErro(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** D-21/UI-D08: atraso humano entre a mensagem do cupom e o convite do Google. */
+export const ATRASO_CONVITE_MIN_S = 60;
+export const ATRASO_CONVITE_MAX_S = 180;
+/** D-47: limites da re-tentativa (nunca disputa com o envio em andamento, nunca vira tempestade). */
+export const IDADE_MINIMA_REENVIO_MS = 5 * 60_000;
+export const IDADE_MAXIMA_REENVIO_MS = 3 * 24 * 3600_000;
+export const MAX_TENTATIVAS_ENVIO = 6;
+/** D-28/P15: o Chatwoot bloqueia o PUT do CSAT nativo 14 dias depois da mensagem. */
+export const LIMITE_CSAT_NATIVO_MS = 14 * 24 * 3600_000;
+/** Reserva de envio considerada velha (resultado incerto); so entao a re-tentativa confere no Chatwoot. */
+export const IDADE_RESERVA_VELHA_MS = 15 * 60_000;
+
+/** Resultado de um envio (WhatsApp ou CSAT nativo) usado pelas contagens da re-tentativa. */
+type ResultadoEnvio = "ENVIADA" | "FALHA" | "NAO_APLICAVEL" | "PENDENTE" | "IGNORADO";
+type ResultadoCsat = "OK" | "FALHA" | "NAO_APLICAVEL" | "PENDENTE" | "IGNORADO";
+
+/** Compara textos de mensagem ignorando espacos nas pontas e repeticoes internas. */
+function normalizarConteudo(texto: string): string {
+  return texto.replace(/\s+/g, " ").trim();
+}
+
+/** `created_at` do Chatwoot pode vir em segundos, milissegundos, string numerica ou ISO. */
+function criadaEmMs(valor: unknown): number | null {
+  if (typeof valor === "number") {
+    if (!Number.isFinite(valor) || valor < 0) return null;
+    return valor < 1e11 ? valor * 1000 : valor;
+  }
+  if (typeof valor === "string") {
+    const texto = valor.trim();
+    if (!texto) return null;
+    const numero = /^\d+(\.\d+)?$/.test(texto) ? Number(texto) : Date.parse(texto);
+    if (!Number.isFinite(numero) || numero < 0) return null;
+    return numero < 1e11 ? numero * 1000 : numero;
+  }
+  return null;
+}
+
 type Classificacao =
   | { tipo: "INDISPONIVEL" }
   | { tipo: "RESPONDIDA"; pesquisa: PesquisaSatisfacao; config: PesquisaConfigView }
@@ -83,6 +138,7 @@ type Elegibilidade = { disponivel: boolean; motivo?: "TETO_MENSAL" | "INTERVALO"
 export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PesquisaService.name);
   private readonly efeitos = new Set<Promise<void>>();
+  private readonly convitesAgendados = new Set<string>();
   private avisoCorRegistrado = false;
 
   constructor(
@@ -99,6 +155,9 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
 
   async onModuleDestroy(): Promise<void> {
     this.automation.registrarGanchoPesquisa(null);
+    // D-47: o timer do convite vive em memoria; no shutdown nenhum convite agendado deve sair.
+    for (const chave of this.convitesAgendados) cancelarEnvioFechamento(chave);
+    this.convitesAgendados.clear();
     await this.aguardarEfeitos();
   }
 
@@ -109,18 +168,21 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     }
   }
 
-  /** Dispara sem await; a promessa guardada nunca rejeita e se remove ao terminar. */
-  private dispararEfeito(tarefa: () => Promise<void>): void {
+  /**
+   * Dispara sem await; a promessa guardada nunca rejeita e se remove ao terminar. Devolve a promessa
+   * para quem precisa aguarda-la (os testes usam `aguardarEfeitos` e o timer do convite a encadeia).
+   */
+  private dispararEfeito(tarefa: () => Promise<void>): Promise<void> {
     const promessa: Promise<void> = Promise.resolve()
       .then(tarefa)
       .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`Efeito da pesquisa falhou: ${msg}`);
+        this.logger.warn(`Efeito da pesquisa falhou: ${mensagemDeErro(err)}`);
       })
       .finally(() => {
         this.efeitos.delete(promessa);
       });
     this.efeitos.add(promessa);
+    return promessa;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -319,10 +381,21 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     }
 
     const { pesquisa } = c;
-    this.dispararEfeito(() => this.enviarNotaAoChatwoot(pesquisa, nota, texto ?? undefined));
-
     // D-10: emitir o cupom nunca desfaz a nota ja gravada; falha vira `cupom: null`.
     const cupom = await this.emitirCupom(pesquisa, c.config, agora);
+    // D-10: todos os efeitos saem em segundo plano; a resposta ao cliente nunca e aguardada por eles.
+    const gravada: PesquisaSatisfacao = {
+      ...pesquisa,
+      nota,
+      comentario: texto,
+      respondidaEm: agora,
+      status: "RESPONDIDA",
+    };
+    this.dispararEfeito(async () => {
+      await this.aplicarEfeitosChatwoot(gravada, cupom);
+      await this.enviarCupomWhatsApp(gravada);
+      await this.agendarConviteGoogle(gravada);
+    });
 
     return {
       tipo: "OK",
@@ -516,35 +589,617 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Efeitos em segundo plano
+  // Mensagens de WhatsApp: cupom na hora, convite do Google com atraso humano (plano 52-05)
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Envia a nota ao CSAT nativo. So com a input_csat ja criada (MENSAGEM_OK); nos demais estados nada e
-   * chamado e o estado fica como esta (a re-tentativa do plano 52-05 cuida de AGUARDANDO_MENSAGEM e
-   * MENSAGEM_FALHA). Nunca rejeita.
+   * D-21/D-22/D-49: mensagem do cupom, sem link e sem atraso. Nunca lanca. Pesquisa anonimizada,
+   * cupom inexistente ou fora de EMITIDO, pesquisa revogada e telefone no opt-out nao recebem nada
+   * (a supressao e consultada imediatamente antes do envio, nao so na criacao).
    */
-  private async enviarNotaAoChatwoot(
-    pesquisa: Pick<PesquisaSatisfacao, "id" | "conversationUuid" | "chatwootCsat">,
-    nota: number,
-    comentario?: string,
-  ): Promise<void> {
-    if (pesquisa.chatwootCsat !== "MENSAGEM_OK" || !pesquisa.conversationUuid) return;
+  private async enviarCupomWhatsApp(
+    pesquisa: PesquisaSatisfacao,
+    opcoes: { confirmarEnvioIncerto?: boolean } = {},
+    agora: Date = new Date(),
+  ): Promise<ResultadoEnvio> {
+    try {
+      if (pesquisa.conversationId === null || !pesquisa.telefone) return "IGNORADO";
 
-    let novoEstado = "RESPOSTA_FALHA";
-    try {
-      const resultado = await this.chatwoot.submitCsatResponse(pesquisa.conversationUuid, nota, comentario);
-      if (resultado?.enabled === true) novoEstado = "OK";
-      else this.logger.warn(`Nota nao enviada ao Chatwoot pesquisaId=${pesquisa.id} motivo=chatwoot_desabilitado`);
+      const linha = await this.prisma.cupomRecompensa.findUnique({ where: { pesquisaId: pesquisa.id } });
+      if (!linha) return "IGNORADO";
+
+      const marcarNaoAplicavel = () => this.gravarEnvio("cupom", linha.id, "NAO_APLICAVEL");
+      if (linha.status !== "EMITIDO" || pesquisa.revogadaEm) {
+        await marcarNaoAplicavel();
+        return "NAO_APLICAVEL";
+      }
+      const suprimido = await this.prisma.pesquisaSupressao.findUnique({ where: { telefone: pesquisa.telefone } });
+      if (suprimido) {
+        await marcarNaoAplicavel();
+        return "NAO_APLICAVEL";
+      }
+
+      const cfg = await this.configPesquisa.obter();
+      const texto = renderizarTexto(
+        cfg.textoPosResposta,
+        montarVariaveisMensagem({
+          linkGoogle: cfg.linkGoogle ?? null,
+          cupom: {
+            codigo: linha.codigo,
+            percentual: Number(String(linha.percentual)),
+            teto: Number(String(linha.teto)),
+            compraMinima: Number(String(linha.compraMinima)),
+            validadeAte: linha.validadeAte,
+          },
+          empresaNome: this.config.get<string>("EMPRESA_NOME") ?? "",
+          cfg,
+        }),
+      );
+
+      return await this.enviarComReserva({
+        canal: "cupom",
+        id: linha.id,
+        conversationId: String(pesquisa.conversationId),
+        texto,
+        pesquisaId: pesquisa.id,
+        statusAtual: linha.envioCupomStatus,
+        reservadoEm: linha.envioCupomReservadoEm,
+        confirmar: opcoes.confirmarEnvioIncerto === true,
+        agora,
+      });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Falha ao enviar a nota ao Chatwoot pesquisaId=${pesquisa.id}: ${msg}`);
+      this.logger.warn(`Falha ao enviar o cupom pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+      return "PENDENTE";
     }
+  }
+
+  /**
+   * D-21/UI-D08: agenda o convite do Google com atraso humano entre 60 e 180 s (uma mensagem
+   * separada do cupom, para qualquer nota). Sem link na config nada e agendado.
+   */
+  private async agendarConviteGoogle(pesquisa: PesquisaSatisfacao): Promise<void> {
     try {
-      await this.prisma.pesquisaSatisfacao.update({ where: { id: pesquisa.id }, data: { chatwootCsat: novoEstado } });
+      if (pesquisa.conversationId === null || !pesquisa.telefone) return;
+      const cfg = await this.configPesquisa.obter();
+      if (!cfg.linkGoogle) {
+        await this.gravarEnvio("convite", pesquisa.id, "NAO_APLICAVEL");
+        return;
+      }
+      // D-49: quem pediu SAIR nao recebe nem o agendamento (e a checagem se repete no envio).
+      const suprimido = await this.prisma.pesquisaSupressao.findUnique({ where: { telefone: pesquisa.telefone } });
+      if (suprimido) {
+        await this.gravarEnvio("convite", pesquisa.id, "NAO_APLICAVEL");
+        return;
+      }
+
+      const chave = `convite:${pesquisa.id}`;
+      this.convitesAgendados.add(chave);
+      agendarEnvioFechamento(chave, sortearAtrasoHumanoMs(ATRASO_CONVITE_MIN_S, ATRASO_CONVITE_MAX_S), () =>
+        this.dispararEfeito(async () => {
+          this.convitesAgendados.delete(chave);
+          await this.enviarConviteGoogle(pesquisa.id);
+        }),
+      );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Falha ao gravar o estado do CSAT pesquisaId=${pesquisa.id}: ${msg}`);
+      this.logger.warn(`Falha ao agendar o convite pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+    }
+  }
+
+  /**
+   * D-21/D-22/D-49: convite do Google. Rele a pesquisa e a config no momento do envio, so usa
+   * `link_google` e `nome_empresa` (nunca nada do cupom) e respeita revogacao e opt-out checados
+   * na hora, mesmo que o timer nao tenha sido cancelado. Nunca lanca.
+   */
+  private async enviarConviteGoogle(
+    pesquisaId: string,
+    opcoes: { confirmarEnvioIncerto?: boolean } = {},
+    agora: Date = new Date(),
+  ): Promise<ResultadoEnvio> {
+    try {
+      const pesquisa = await this.prisma.pesquisaSatisfacao.findUnique({ where: { id: pesquisaId } });
+      if (!pesquisa || pesquisa.conversationId === null || !pesquisa.telefone) return "IGNORADO";
+
+      const marcarNaoAplicavel = () => this.gravarEnvio("convite", pesquisa.id, "NAO_APLICAVEL");
+      if (pesquisa.revogadaEm) {
+        await marcarNaoAplicavel();
+        return "NAO_APLICAVEL";
+      }
+
+      const status = pesquisa.envioConviteStatus;
+      if (status === "ENVIANDO") {
+        if (!opcoes.confirmarEnvioIncerto) return "IGNORADO";
+      } else if (status !== "PENDENTE" && status !== "FALHA") {
+        return "IGNORADO";
+      }
+
+      const cfg = await this.configPesquisa.obter();
+      if (!cfg.linkGoogle) {
+        await marcarNaoAplicavel();
+        return "NAO_APLICAVEL";
+      }
+      const suprimido = await this.prisma.pesquisaSupressao.findUnique({ where: { telefone: pesquisa.telefone } });
+      if (suprimido) {
+        await marcarNaoAplicavel();
+        return "NAO_APLICAVEL";
+      }
+
+      const texto = renderizarTexto(cfg.textoConviteGoogle, {
+        link_google: cfg.linkGoogle,
+        nome_empresa: this.config.get<string>("EMPRESA_NOME") ?? "",
+      });
+
+      return await this.enviarComReserva({
+        canal: "convite",
+        id: pesquisa.id,
+        conversationId: String(pesquisa.conversationId),
+        texto,
+        pesquisaId: pesquisa.id,
+        statusAtual: status,
+        reservadoEm: pesquisa.envioConviteReservadoEm,
+        confirmar: opcoes.confirmarEnvioIncerto === true,
+        agora,
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao enviar o convite pesquisaId=${pesquisaId}: ${mensagemDeErro(err)}`);
+      return "PENDENTE";
+    }
+  }
+
+  /**
+   * D-47/T-52-67: reserva ANTES de enviar (updateMany condicionado, contagem 1). Quando o status e
+   * ENVIANDO (resultado incerto de um ciclo anterior), confere no Chatwoot se a mensagem ja existe
+   * antes de reenviar; lista indisponivel nao reenvia (prefere nao duplicar).
+   */
+  private async enviarComReserva(dados: {
+    canal: "cupom" | "convite";
+    id: string;
+    conversationId: string;
+    texto: string;
+    pesquisaId: string;
+    statusAtual: string;
+    reservadoEm: Date | null;
+    confirmar: boolean;
+    agora: Date;
+  }): Promise<ResultadoEnvio> {
+    const pendenteOuFalha = dados.statusAtual === "PENDENTE" || dados.statusAtual === "FALHA";
+    const incerto = dados.statusAtual === "ENVIANDO";
+
+    if (!pendenteOuFalha) {
+      if (!incerto || !dados.confirmar) return "IGNORADO";
+      const desde = dados.reservadoEm ? dados.reservadoEm.getTime() : 0;
+      const jaEnviada = await this.mensagemJaEnviada(dados.conversationId, dados.texto, desde);
+      if (jaEnviada === null) return "PENDENTE";
+      if (jaEnviada) {
+        await this.gravarEnvio(dados.canal, dados.id, "ENVIADA");
+        return "ENVIADA";
+      }
+    }
+
+    // D-47: a reserva por canal e o unico gate do envio; contagem diferente de 1 = outro ciclo reservou.
+    const reservou =
+      dados.canal === "cupom"
+        ? await this.reservarEnvio("cupom", dados.id, dados.agora, incerto)
+        : await this.reservarEnvio("convite", dados.id, dados.agora, incerto);
+    if (!reservou) return "IGNORADO";
+
+    return this.enviarMensagem(dados.canal, dados.id, dados.conversationId, dados.texto, dados.pesquisaId);
+  }
+
+  /** updateMany condicionado: PENDENTE ou FALHA (e ENVIANDO velho na re-tentativa) -> ENVIANDO. */
+  private async reservarEnvio(
+    canal: "cupom" | "convite",
+    id: string,
+    agora: Date,
+    aceitarReservaVelha: boolean,
+  ): Promise<boolean> {
+    try {
+      const limiteVelho = new Date(agora.getTime() - IDADE_RESERVA_VELHA_MS);
+      if (canal === "cupom") {
+        const { count } = await this.prisma.cupomRecompensa.updateMany({
+          where: {
+            id,
+            OR: [
+              { envioCupomStatus: { in: ["PENDENTE", "FALHA"] } },
+              ...(aceitarReservaVelha
+                ? [{ envioCupomStatus: "ENVIANDO", envioCupomReservadoEm: { lt: limiteVelho } }]
+                : []),
+            ],
+          },
+          data: { envioCupomStatus: "ENVIANDO", envioCupomReservadoEm: agora },
+        });
+        return count === 1;
+      }
+      const { count } = await this.prisma.pesquisaSatisfacao.updateMany({
+        where: {
+          id,
+          OR: [
+            { envioConviteStatus: { in: ["PENDENTE", "FALHA"] } },
+            ...(aceitarReservaVelha
+              ? [{ envioConviteStatus: "ENVIANDO", envioConviteReservadoEm: { lt: limiteVelho } }]
+              : []),
+          ],
+        },
+        data: { envioConviteStatus: "ENVIANDO", envioConviteReservadoEm: agora },
+      });
+      return count === 1;
+    } catch (err) {
+      this.logger.warn(`Falha ao reservar o envio de ${canal} id=${id}: ${mensagemDeErro(err)}`);
+      return false;
+    }
+  }
+
+  /** Envia pelo Chatwoot e classifica o resultado: HTTP respondido ou enabled falso = FALHA definitiva. */
+  private async enviarMensagem(
+    canal: "cupom" | "convite",
+    id: string,
+    conversationId: string,
+    texto: string,
+    pesquisaId: string,
+  ): Promise<ResultadoEnvio> {
+    try {
+      const resultado = await this.chatwoot.sendOutgoingMessage(conversationId, texto);
+      if (resultado?.enabled === true) {
+        await this.gravarEnvio(canal, id, "ENVIADA");
+        return "ENVIADA";
+      }
+      await this.gravarEnvio(canal, id, "FALHA");
+      this.logger.warn(`Envio de ${canal} desabilitado pesquisaId=${pesquisaId} motivo=chatwoot_desabilitado`);
+      return "FALHA";
+    } catch (err) {
+      const respostaHttp = (err as { response?: unknown })?.response !== undefined;
+      if (respostaHttp) {
+        await this.gravarEnvio(canal, id, "FALHA");
+        this.logger.warn(`Falha ao enviar ${canal} pesquisaId=${pesquisaId}: ${mensagemDeErro(err)}`);
+        return "FALHA";
+      }
+      // Sem resposta (tempo esgotado ou rede): resultado incerto, fica ENVIANDO para a re-tentativa
+      // conferir no Chatwoot antes de reenviar.
+      this.logger.warn(`Envio de ${canal} com resultado incerto pesquisaId=${pesquisaId}: ${mensagemDeErro(err)}`);
+      return "PENDENTE";
+    }
+  }
+
+  private async gravarEnvio(canal: "cupom" | "convite", id: string, status: string): Promise<void> {
+    try {
+      if (canal === "cupom") {
+        await this.prisma.cupomRecompensa.updateMany({ where: { id }, data: { envioCupomStatus: status } });
+      } else {
+        await this.prisma.pesquisaSatisfacao.updateMany({ where: { id }, data: { envioConviteStatus: status } });
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao gravar o envio de ${canal} id=${id}: ${mensagemDeErro(err)}`);
+    }
+  }
+
+  /**
+   * D-47: confere no Chatwoot se uma mensagem de saida com o mesmo texto ja foi criada desde a
+   * reserva (as 20 mais recentes, sem afterId). `null` = indeterminado (lista indisponivel).
+   */
+  private async mensagemJaEnviada(conversationId: string, texto: string, desdeMs: number): Promise<boolean | null> {
+    try {
+      const mensagens = await this.chatwoot.listMessagesAfter(conversationId);
+      if (!Array.isArray(mensagens)) return null;
+      const alvo = normalizarConteudo(texto);
+      return mensagens.some((item) => {
+        if (!item || typeof item !== "object") return false;
+        const mensagem = item as { message_type?: unknown; content?: unknown; created_at?: unknown };
+        if (mensagem.message_type !== 1 && mensagem.message_type !== "outgoing") return false;
+        if (normalizarConteudo(String(mensagem.content ?? "")) !== alvo) return false;
+        const quando = criadaEmMs(mensagem.created_at);
+        return quando !== null && quando >= desdeMs - 60_000;
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao conferir mensagem ja enviada conversationId=${conversationId}: ${mensagemDeErro(err)}`);
+      return null;
+    }
+  }
+
+  /** D-28: le conversa -> inbox e diz se o CSAT nativo esta ligado (null = nao foi possivel ler). */
+  private async csatNativoLigado(conversationId: string): Promise<boolean | null> {
+    try {
+      const conversa = await this.chatwoot.getConversation(conversationId);
+      const inboxId = conversa?.inbox_id;
+      if (typeof inboxId !== "number") {
+        this.logger.warn(`Leitura da inbox ignorada conversationId=${conversationId} motivo=inbox_id_ausente`);
+        return null;
+      }
+      const inbox = await this.chatwoot.getInbox(inboxId);
+      if (!inbox) {
+        this.logger.warn(`Leitura da inbox sem retorno conversationId=${conversationId} inboxId=${inboxId}`);
+        return null;
+      }
+      if (inbox.csat_survey_enabled === true) {
+        this.logger.warn(`CSAT nativo ligado na inbox ${inboxId}: nenhuma input_csat sera criada (conversationId=${conversationId})`);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      this.logger.warn(
+        `Falha ao ler a inbox conversationId=${conversationId} (seguindo como CSAT nativo desligado): ${mensagemDeErro(err)}`,
+      );
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Re-tentativa e housekeeping (D-47)
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * D-47: re-tenta cupom, convite e CSAT nativo pendentes. Nunca toca itens com menos de 5 minutos,
+   * com 3 dias ou mais, ou com 6 tentativas; nunca toca pesquisa anonimizada ou revogada; incrementa
+   * `tentativasEnvio` UMA vez por pesquisa por ciclo e nunca lanca por causa de uma pesquisa.
+   */
+  async reenviarPendentes(
+    agora: Date = new Date(),
+  ): Promise<{ candidatos: number; cupons: number; convites: number; csat: number; falhas: number }> {
+    const resultado = { candidatos: 0, cupons: 0, convites: 0, csat: 0, falhas: 0 };
+    try {
+      const inicio = new Date(agora.getTime() - IDADE_MAXIMA_REENVIO_MS);
+      const limiteMinimo = new Date(agora.getTime() - IDADE_MINIMA_REENVIO_MS);
+      const velho = new Date(agora.getTime() - IDADE_RESERVA_VELHA_MS);
+      const limiteCsat = new Date(agora.getTime() - LIMITE_CSAT_NATIVO_MS);
+
+      const linhas = await this.prisma.pesquisaSatisfacao.findMany({
+        where: {
+          respondidaEm: { gte: inicio, lt: limiteMinimo },
+          revogadaEm: null,
+          tentativasEnvio: { lt: MAX_TENTATIVAS_ENVIO },
+        },
+      });
+
+      for (const pesquisa of linhas) {
+        if (pesquisa.conversationId === null || !pesquisa.telefone) continue;
+
+        const cupom = await this.prisma.cupomRecompensa.findUnique({ where: { pesquisaId: pesquisa.id } });
+        const cupomPendente =
+          cupom !== null &&
+          (cupom.envioCupomStatus === "PENDENTE" ||
+            cupom.envioCupomStatus === "FALHA" ||
+            (cupom.envioCupomStatus === "ENVIANDO" &&
+              cupom.envioCupomReservadoEm !== null &&
+              cupom.envioCupomReservadoEm.getTime() < velho.getTime()));
+        const convitePendente =
+          pesquisa.envioConviteStatus === "PENDENTE" ||
+          pesquisa.envioConviteStatus === "FALHA" ||
+          (pesquisa.envioConviteStatus === "ENVIANDO" &&
+            pesquisa.envioConviteReservadoEm !== null &&
+            pesquisa.envioConviteReservadoEm.getTime() < velho.getTime());
+        const csatPendente = this.csatPendente(pesquisa, limiteCsat);
+
+        if (!cupomPendente && !convitePendente && !csatPendente) continue;
+
+        resultado.candidatos += 1;
+        let falhou = false;
+
+        if (cupomPendente) {
+          const envio = await this.enviarCupomWhatsApp(
+            pesquisa,
+            { confirmarEnvioIncerto: cupom?.envioCupomStatus === "ENVIANDO" },
+            agora,
+          );
+          if (envio === "ENVIADA") resultado.cupons += 1;
+          else if (envio === "FALHA" || envio === "PENDENTE") falhou = true;
+        }
+
+        if (convitePendente) {
+          const envio = await this.enviarConviteGoogle(
+            pesquisa.id,
+            { confirmarEnvioIncerto: pesquisa.envioConviteStatus === "ENVIANDO" },
+            agora,
+          );
+          if (envio === "ENVIADA") resultado.convites += 1;
+          else if (envio === "FALHA" || envio === "PENDENTE") falhou = true;
+        }
+
+        if (csatPendente) {
+          const estado = await this.reconciliarCsatNativo(pesquisa, agora);
+          if (estado === "OK") resultado.csat += 1;
+          else if (estado === "FALHA" || estado === "PENDENTE") falhou = true;
+        }
+
+        if (falhou) {
+          resultado.falhas += 1;
+          try {
+            await this.prisma.pesquisaSatisfacao.update({
+              where: { id: pesquisa.id },
+              data: { tentativasEnvio: pesquisa.tentativasEnvio + 1 },
+            });
+          } catch (err) {
+            this.logger.warn(`Falha ao incrementar tentativasEnvio pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Falha na re-tentativa das pesquisas: ${mensagemDeErro(err)}`);
+    }
+    return resultado;
+  }
+
+  private csatPendente(pesquisa: PesquisaSatisfacao, limiteCsat: Date): boolean {
+    const estado = pesquisa.chatwootCsat;
+    if (estado !== "AGUARDANDO_MENSAGEM" && estado !== "MENSAGEM_FALHA" && estado !== "RESPOSTA_FALHA") return false;
+    if (!pesquisa.enviadaEm) return false;
+    return pesquisa.enviadaEm.getTime() >= limiteCsat.getTime();
+  }
+
+  /**
+   * D-28: CSAT nativo na re-tentativa. Antes de criar a input_csat le a inbox (nativo ligado ->
+   * NAO_APLICAVEL) e lista as mensagens incluindo as internas (input_csat existente e reutilizada,
+   * nunca uma segunda). Lista indisponivel nao cria. RESPOSTA_FALHA so repete o PUT.
+   */
+  private async reconciliarCsatNativo(pesquisa: PesquisaSatisfacao, agora: Date): Promise<ResultadoCsat> {
+    try {
+      if (pesquisa.conversationId === null || pesquisa.revogadaEm) return "IGNORADO";
+      const conversationId = String(pesquisa.conversationId);
+      const estado = pesquisa.chatwootCsat;
+
+      if (estado === "NAO_APLICAVEL" || estado === "OK") return "IGNORADO";
+      if (estado === "RESPOSTA_FALHA" || estado === "MENSAGEM_OK") return this.enviarPutCsat(pesquisa);
+      if (estado !== "AGUARDANDO_MENSAGEM" && estado !== "MENSAGEM_FALHA") return "IGNORADO";
+      if (!pesquisa.enviadaEm || pesquisa.enviadaEm.getTime() < agora.getTime() - LIMITE_CSAT_NATIVO_MS) {
+        return "IGNORADO";
+      }
+
+      const nativoLigado = await this.csatNativoLigado(conversationId);
+      if (nativoLigado === true) {
+        await this.gravarCsat(pesquisa.id, "NAO_APLICAVEL");
+        return "NAO_APLICAVEL";
+      }
+
+      const mensagens = await this.chatwoot.listMessagesAfter(conversationId, undefined, { incluirInternas: true });
+      if (!Array.isArray(mensagens)) {
+        this.logger.warn(`Lista de mensagens indisponivel pesquisaId=${pesquisa.id} motivo=nao_criar_input_csat`);
+        return "PENDENTE";
+      }
+
+      const existente = mensagens.some(
+        (item) =>
+          item !== null && typeof item === "object" && (item as { content_type?: unknown }).content_type === "input_csat",
+      );
+      if (!existente) {
+        try {
+          const criada = await this.chatwoot.createPrivateCsatMessage(conversationId, TEXTO_INPUT_CSAT);
+          if (!(criada?.enabled === true || criada?.id !== undefined)) {
+            await this.gravarCsat(pesquisa.id, "MENSAGEM_FALHA");
+            this.logger.warn(`input_csat nao criada pesquisaId=${pesquisa.id} motivo=chatwoot_desabilitado`);
+            return "FALHA";
+          }
+        } catch (err) {
+          this.logger.warn(`Falha ao criar input_csat na re-tentativa pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+          await this.gravarCsat(pesquisa.id, "MENSAGEM_FALHA");
+          return "FALHA";
+        }
+      }
+
+      await this.gravarCsat(pesquisa.id, "MENSAGEM_OK");
+      return this.enviarPutCsat(pesquisa);
+    } catch (err) {
+      this.logger.warn(`Falha ao reconciliar o CSAT nativo pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+      return "PENDENTE";
+    }
+  }
+
+  private async enviarPutCsat(pesquisa: PesquisaSatisfacao): Promise<ResultadoCsat> {
+    if (!pesquisa.conversationUuid) return "IGNORADO";
+    try {
+      const resultado = await this.chatwoot.submitCsatResponse(
+        pesquisa.conversationUuid,
+        pesquisa.nota ?? 0,
+        pesquisa.comentario ?? undefined,
+      );
+      if (resultado?.enabled === true) {
+        await this.gravarCsat(pesquisa.id, "OK");
+        return "OK";
+      }
+      await this.gravarCsat(pesquisa.id, "RESPOSTA_FALHA");
+      return "FALHA";
+    } catch (err) {
+      this.logger.warn(`Falha ao enviar a nota ao Chatwoot pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+      await this.gravarCsat(pesquisa.id, "RESPOSTA_FALHA");
+      return "FALHA";
+    }
+  }
+
+  /**
+   * Housekeeping idempotente (chamado pelo job do plano 52-06): cupons EMITIDO vencidos viram EXPIRADO.
+   */
+  async marcarCuponsExpirados(agora: Date = new Date()): Promise<number> {
+    const { count } = await this.prisma.cupomRecompensa.updateMany({
+      where: { status: "EMITIDO", validadeAte: { lt: agora } },
+      data: { status: "EXPIRADO" },
+    });
+    return count;
+  }
+
+  /**
+   * D-10/D-12/D-13/D-14/D-28: efeitos da resposta no Chatwoot. Cada passo roda no proprio try/catch:
+   * a falha de um nunca impede os outros, nunca lanca para fora do `dispararEfeito` e o log carrega
+   * apenas pesquisaId e motivo (nunca telefone, token ou codigo do cupom). Pesquisa anonimizada
+   * (conversationId nulo) nao recebe nenhum efeito.
+   */
+  private async aplicarEfeitosChatwoot(pesquisa: PesquisaSatisfacao, cupom: CupomPublico | null): Promise<void> {
+    if (pesquisa.conversationId === null) return;
+    const conversationId = String(pesquisa.conversationId);
+    const cupomDaNota = cupom
+      ? {
+          codigo: cupom.codigo,
+          percentual: cupom.percentual,
+          teto: cupom.teto,
+          validadeAte: new Date(cupom.validadeAte),
+        }
+      : null;
+
+    // a) CSAT nativo: so com a input_csat ja criada (MENSAGEM_OK). AGUARDANDO_MENSAGEM e MENSAGEM_FALHA
+    // ficam como estao: a re-tentativa (reenviarPendentes) cria a mensagem e envia a nota (D-28).
+    if (pesquisa.chatwootCsat === "MENSAGEM_OK" && pesquisa.conversationUuid) {
+      try {
+        let novoEstado = "RESPOSTA_FALHA";
+        const resultado = await this.chatwoot.submitCsatResponse(
+          pesquisa.conversationUuid,
+          pesquisa.nota ?? 0,
+          pesquisa.comentario ?? undefined,
+        );
+        if (resultado?.enabled === true) novoEstado = "OK";
+        else this.logger.warn(`Nota nao enviada ao Chatwoot pesquisaId=${pesquisa.id} motivo=chatwoot_desabilitado`);
+        await this.gravarCsat(pesquisa.id, novoEstado);
+      } catch (err) {
+        this.logger.warn(`Falha ao enviar a nota ao Chatwoot pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+        await this.gravarCsat(pesquisa.id, "RESPOSTA_FALHA");
+      }
+    }
+
+    // b) Nota privada: o atendimento ve nota, variante, comentario e cupom na conversa.
+    try {
+      await this.chatwoot.postConversationNote(
+        conversationId,
+        montarNotaPrivada({
+          nota: pesquisa.nota ?? 0,
+          variante: pesquisa.variante,
+          comentario: pesquisa.comentario ?? null,
+          cupom: cupomDaNota,
+        }),
+      );
+    } catch (err) {
+      this.logger.warn(`Falha ao gravar a nota privada pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+    }
+
+    // c) Atributos do contato: so quando a conversa trouxe o contactId.
+    if (pesquisa.contactId !== null) {
+      try {
+        await this.chatwoot.updateContactCustomAttributes(
+          Number(pesquisa.contactId),
+          montarAtributosContato({
+            nota: pesquisa.nota ?? 0,
+            respondidaEm: pesquisa.respondidaEm ?? new Date(),
+            cupom: cupomDaNota ? { codigo: cupomDaNota.codigo, validadeAte: cupomDaNota.validadeAte } : null,
+          }),
+        );
+      } catch (err) {
+        this.logger.warn(`Falha ao atualizar os atributos do contato pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+      }
+    }
+
+    // d) Etiquetas pela fila por conversa (leitura fresca + mescla, nunca sobrescreve escrita paralela).
+    try {
+      await enfileirarPorConversa(conversationId, () =>
+        aplicarEtiquetasGerenciadas(
+          this.chatwoot,
+          conversationId,
+          etiquetasDaPesquisa(pesquisa.nota ?? 0),
+          ETIQUETAS_PESQUISA,
+        ),
+      );
+    } catch (err) {
+      this.logger.warn(`Falha ao aplicar as etiquetas da pesquisa pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+    }
+  }
+
+  private async gravarCsat(pesquisaId: string, estado: string): Promise<void> {
+    try {
+      await this.prisma.pesquisaSatisfacao.update({ where: { id: pesquisaId }, data: { chatwootCsat: estado } });
+    } catch (err) {
+      this.logger.warn(`Falha ao gravar o estado do CSAT pesquisaId=${pesquisaId}: ${mensagemDeErro(err)}`);
     }
   }
 }

@@ -253,8 +253,10 @@ function montar(opcoes: Opcoes = {}) {
     axiosMock.post.mock.calls.filter(([url]) => String(url).endsWith("/conversations/42/messages"));
   const publica = () => postsMensagem().find(([, body]) => (body as Linha).private === false);
   const inputsCsat = () => postsMensagem().filter(([, body]) => (body as Linha).content_type === "input_csat");
+  // Plano 52-05: o contato tambem e atualizado por PUT; as assercoes do tracer valem para o CSAT.
+  const putsCsat = () => axiosMock.put.mock.calls.filter(([url]) => String(url).includes("/csat_survey/"));
 
-  return { prisma, pesquisas, estado, automation, service, controller, publica, inputsCsat, postsMensagem };
+  return { prisma, pesquisas, estado, automation, service, controller, publica, inputsCsat, postsMensagem, putsCsat };
 }
 
 type Ctx = ReturnType<typeof montar>;
@@ -351,8 +353,8 @@ describe("Pesquisa de satisfacao - tracer (Fase 52, plano 52-01)", () => {
     expect(resposta).toMatchObject({ estado: "RESPONDIDA", cupom: null });
     await ctx.service.aguardarEfeitos();
 
-    expect(axiosMock.put).toHaveBeenCalledTimes(1);
-    const [urlPut, corpoPut, opcoesPut] = axiosMock.put.mock.calls[0];
+    expect(ctx.putsCsat()).toHaveLength(1);
+    const [urlPut, corpoPut, opcoesPut] = ctx.putsCsat()[0];
     expect(urlPut).toBe("https://chat.exemplo.test/public/api/v1/csat_survey/uuid-123");
     expect(corpoPut).toEqual({
       message: { submitted_values: { csat_survey_response: { rating: 4, feedback_message: "ok" } } },
@@ -411,7 +413,7 @@ describe("Pesquisa de satisfacao - tracer (Fase 52, plano 52-01)", () => {
     expect(erro.getStatus()).toBe(409);
     expect(erro.getResponse()).toMatchObject({ estado: "RESPONDIDA" });
     await ctx.service.aguardarEfeitos();
-    expect(axiosMock.put).toHaveBeenCalledTimes(1);
+    expect(ctx.putsCsat()).toHaveLength(1);
   });
 
   it("T4 (best-effort): falha da input_csat e do PUT nunca bloqueia nem vaza segredo", async () => {
@@ -426,7 +428,7 @@ describe("Pesquisa de satisfacao - tracer (Fase 52, plano 52-01)", () => {
       estado: "RESPONDIDA",
     });
     await falhaMensagem.service.aguardarEfeitos();
-    expect(axiosMock.put).not.toHaveBeenCalled();
+    expect(falhaMensagem.putsCsat()).toHaveLength(0);
     expect(falhaMensagem.pesquisas[0].chatwootCsat).toBe("MENSAGEM_FALHA");
     cancelarTodosEnviosFechamento();
 
@@ -472,7 +474,7 @@ describe("Pesquisa de satisfacao - tracer (Fase 52, plano 52-01)", () => {
     const token = tokenDaMensagem(ctx);
     await ctx.controller.responder(token, { nota: 5 });
     await ctx.service.aguardarEfeitos();
-    expect(axiosMock.put).not.toHaveBeenCalled();
+    expect(ctx.putsCsat()).toHaveLength(0);
   });
 
   it("T6 (generico): token invalido, inexistente, expirado, revogado e config desativada dao o mesmo corpo", async () => {
