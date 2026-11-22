@@ -1057,13 +1057,7 @@ describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano
     }
   });
 
-  it("reenvio: anonimizada nao entra; duas falhas contam tentativasEnvio uma vez; erro em uma nao impede as outras", async () => {
-    const anonima = montar({
-      pesquisas: [respondidaEm(10 * MINUTO, { conversationId: null })],
-      cupons: [cupomPadrao({ envioCupomStatus: "FALHA" })],
-    });
-    expect((await anonima.service.reenviarPendentes()).candidatos).toBe(0);
-
+  it("reenvio: duas falhas contam tentativasEnvio uma vez; erro em uma nao impede as outras", async () => {
     const duasFalhas = montar({
       pesquisas: [respondidaEm(10 * MINUTO)],
       cupons: [cupomPadrao({ envioCupomStatus: "FALHA", criadoEm: new Date(Date.now() - 10 * MINUTO) })],

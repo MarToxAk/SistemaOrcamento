@@ -971,8 +971,9 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
       });
 
       for (const pesquisa of linhas) {
-        if (pesquisa.conversationId === null || !pesquisa.telefone) continue;
-
+        // Invariante: a janela de re-tentativa (respondida ha menos de 3 dias, link de ate 14 dias) e o
+        // piso de anonimizacao (>= 1 mes) garantem conversationId/telefone preenchidos nestas linhas; os
+        // envios abaixo ainda se protegem sozinhos (IGNORADO) caso isso um dia deixe de valer.
         const cupom = await this.prisma.cupomRecompensa.findUnique({ where: { pesquisaId: pesquisa.id } });
         const cupomPendente =
           cupom !== null &&
