@@ -20,6 +20,17 @@ import {
 } from "../integrations/chatwoot/chatwoot-automation.service";
 import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
 import {
+  ETIQUETAS_PESQUISA,
+  aplicarEtiquetasGerenciadas,
+  enfileirarPorConversa,
+} from "../integrations/chatwoot/chatwoot-etiquetas";
+import { PesquisaConfigService, type PesquisaConfigView } from "./pesquisa-config.service";
+import {
+  etiquetasDaPesquisa,
+  montarAtributosContato,
+  montarNotaPrivada,
+} from "./pesquisa-efeitos";
+import {
   REGEX_TOKEN,
   type Variante,
   corPrimariaAcessivel,
@@ -35,7 +46,6 @@ import {
   renderizarTexto,
   sortearVariante,
 } from "./pesquisa-regras";
-import { PesquisaConfigService, type PesquisaConfigView } from "./pesquisa-config.service";
 
 export type TextosPagina = {
   titulo: string;
@@ -71,6 +81,10 @@ const TEXTO_INPUT_CSAT =
   "Pesquisa de satisfação enviada ao cliente. A resposta é registrada pela página da pesquisa.";
 /** D-28: estados em que a conversa ja tem a input_csat que o PUT publico vai preencher. */
 const ESTADOS_COM_INPUT_CSAT = ["MENSAGEM_OK", "OK", "RESPOSTA_FALHA"];
+
+function mensagemDeErro(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 type Classificacao =
   | { tipo: "INDISPONIVEL" }
@@ -109,18 +123,21 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     }
   }
 
-  /** Dispara sem await; a promessa guardada nunca rejeita e se remove ao terminar. */
-  private dispararEfeito(tarefa: () => Promise<void>): void {
+  /**
+   * Dispara sem await; a promessa guardada nunca rejeita e se remove ao terminar. Devolve a promessa
+   * para quem precisa aguarda-la (os testes usam `aguardarEfeitos` e o timer do convite a encadeia).
+   */
+  private dispararEfeito(tarefa: () => Promise<void>): Promise<void> {
     const promessa: Promise<void> = Promise.resolve()
       .then(tarefa)
       .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`Efeito da pesquisa falhou: ${msg}`);
+        this.logger.warn(`Efeito da pesquisa falhou: ${mensagemDeErro(err)}`);
       })
       .finally(() => {
         this.efeitos.delete(promessa);
       });
     this.efeitos.add(promessa);
+    return promessa;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -319,10 +336,17 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     }
 
     const { pesquisa } = c;
-    this.dispararEfeito(() => this.enviarNotaAoChatwoot(pesquisa, nota, texto ?? undefined));
-
     // D-10: emitir o cupom nunca desfaz a nota ja gravada; falha vira `cupom: null`.
     const cupom = await this.emitirCupom(pesquisa, c.config, agora);
+    // D-10: todos os efeitos saem em segundo plano; a resposta ao cliente nunca e aguardada por eles.
+    const gravada: PesquisaSatisfacao = {
+      ...pesquisa,
+      nota,
+      comentario: texto,
+      respondidaEm: agora,
+      status: "RESPONDIDA",
+    };
+    this.dispararEfeito(() => this.aplicarEfeitosChatwoot(gravada, cupom));
 
     return {
       tipo: "OK",
@@ -520,31 +544,93 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Envia a nota ao CSAT nativo. So com a input_csat ja criada (MENSAGEM_OK); nos demais estados nada e
-   * chamado e o estado fica como esta (a re-tentativa do plano 52-05 cuida de AGUARDANDO_MENSAGEM e
-   * MENSAGEM_FALHA). Nunca rejeita.
+   * D-10/D-12/D-13/D-14/D-28: efeitos da resposta no Chatwoot. Cada passo roda no proprio try/catch:
+   * a falha de um nunca impede os outros, nunca lanca para fora do `dispararEfeito` e o log carrega
+   * apenas pesquisaId e motivo (nunca telefone, token ou codigo do cupom). Pesquisa anonimizada
+   * (conversationId nulo) nao recebe nenhum efeito.
    */
-  private async enviarNotaAoChatwoot(
-    pesquisa: Pick<PesquisaSatisfacao, "id" | "conversationUuid" | "chatwootCsat">,
-    nota: number,
-    comentario?: string,
-  ): Promise<void> {
-    if (pesquisa.chatwootCsat !== "MENSAGEM_OK" || !pesquisa.conversationUuid) return;
+  private async aplicarEfeitosChatwoot(pesquisa: PesquisaSatisfacao, cupom: CupomPublico | null): Promise<void> {
+    if (pesquisa.conversationId === null) return;
+    const conversationId = String(pesquisa.conversationId);
+    const cupomDaNota = cupom
+      ? {
+          codigo: cupom.codigo,
+          percentual: cupom.percentual,
+          teto: cupom.teto,
+          validadeAte: new Date(cupom.validadeAte),
+        }
+      : null;
 
-    let novoEstado = "RESPOSTA_FALHA";
-    try {
-      const resultado = await this.chatwoot.submitCsatResponse(pesquisa.conversationUuid, nota, comentario);
-      if (resultado?.enabled === true) novoEstado = "OK";
-      else this.logger.warn(`Nota nao enviada ao Chatwoot pesquisaId=${pesquisa.id} motivo=chatwoot_desabilitado`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Falha ao enviar a nota ao Chatwoot pesquisaId=${pesquisa.id}: ${msg}`);
+    // a) CSAT nativo: so com a input_csat ja criada (MENSAGEM_OK). AGUARDANDO_MENSAGEM e MENSAGEM_FALHA
+    // ficam como estao: a re-tentativa (reenviarPendentes) cria a mensagem e envia a nota (D-28).
+    if (pesquisa.chatwootCsat === "MENSAGEM_OK" && pesquisa.conversationUuid) {
+      try {
+        let novoEstado = "RESPOSTA_FALHA";
+        const resultado = await this.chatwoot.submitCsatResponse(
+          pesquisa.conversationUuid,
+          pesquisa.nota ?? 0,
+          pesquisa.comentario ?? undefined,
+        );
+        if (resultado?.enabled === true) novoEstado = "OK";
+        else this.logger.warn(`Nota nao enviada ao Chatwoot pesquisaId=${pesquisa.id} motivo=chatwoot_desabilitado`);
+        await this.gravarCsat(pesquisa.id, novoEstado);
+      } catch (err) {
+        this.logger.warn(`Falha ao enviar a nota ao Chatwoot pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+        await this.gravarCsat(pesquisa.id, "RESPOSTA_FALHA");
+      }
     }
+
+    // b) Nota privada: o atendimento ve nota, variante, comentario e cupom na conversa.
     try {
-      await this.prisma.pesquisaSatisfacao.update({ where: { id: pesquisa.id }, data: { chatwootCsat: novoEstado } });
+      await this.chatwoot.postConversationNote(
+        conversationId,
+        montarNotaPrivada({
+          nota: pesquisa.nota ?? 0,
+          variante: pesquisa.variante,
+          comentario: pesquisa.comentario ?? null,
+          cupom: cupomDaNota,
+        }),
+      );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Falha ao gravar o estado do CSAT pesquisaId=${pesquisa.id}: ${msg}`);
+      this.logger.warn(`Falha ao gravar a nota privada pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+    }
+
+    // c) Atributos do contato: so quando a conversa trouxe o contactId.
+    if (pesquisa.contactId !== null) {
+      try {
+        await this.chatwoot.updateContactCustomAttributes(
+          Number(pesquisa.contactId),
+          montarAtributosContato({
+            nota: pesquisa.nota ?? 0,
+            respondidaEm: pesquisa.respondidaEm ?? new Date(),
+            cupom: cupomDaNota ? { codigo: cupomDaNota.codigo, validadeAte: cupomDaNota.validadeAte } : null,
+          }),
+        );
+      } catch (err) {
+        this.logger.warn(`Falha ao atualizar os atributos do contato pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+      }
+    }
+
+    // d) Etiquetas pela fila por conversa (leitura fresca + mescla, nunca sobrescreve escrita paralela).
+    try {
+      await enfileirarPorConversa(conversationId, () =>
+        aplicarEtiquetasGerenciadas(
+          this.chatwoot,
+          conversationId,
+          etiquetasDaPesquisa(pesquisa.nota ?? 0),
+          ETIQUETAS_PESQUISA,
+        ),
+      );
+    } catch (err) {
+      this.logger.warn(`Falha ao aplicar as etiquetas da pesquisa pesquisaId=${pesquisa.id}: ${mensagemDeErro(err)}`);
+    }
+  }
+
+  private async gravarCsat(pesquisaId: string, estado: string): Promise<void> {
+    try {
+      await this.prisma.pesquisaSatisfacao.update({ where: { id: pesquisaId }, data: { chatwootCsat: estado } });
+    } catch (err) {
+      this.logger.warn(`Falha ao gravar o estado do CSAT pesquisaId=${pesquisaId}: ${mensagemDeErro(err)}`);
     }
   }
 }
