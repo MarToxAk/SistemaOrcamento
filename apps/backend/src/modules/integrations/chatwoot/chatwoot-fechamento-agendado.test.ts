@@ -58,6 +58,7 @@ function buildService(opcoes: Opcoes = {}) {
     sendOutgoingMessage: jest.fn().mockResolvedValue({ enabled: true }),
     getConversation: jest.fn().mockResolvedValue({ status: "resolved", messages: [] }),
     getConversationLabels: jest.fn().mockResolvedValue(["finalizado"]),
+    listMessagesAfter: jest.fn().mockResolvedValue([]),
   };
   const config = {
     get: jest.fn((chave: string) => {
@@ -253,6 +254,70 @@ describe("ChatwootAutomationService - fechamento agendado (Fase 51)", () => {
     await aguardarFilaEtiquetas();
     expect(chatwoot.addConversationLabels).toHaveBeenCalledWith("42", ["finalizado", "cliente-frequente"]);
   });
+
+  it("D-40: afterId da ultima mensagem do webhook chega ao listMessagesAfter", async () => {
+    const { service, chatwoot } = buildService({ quoteStatus: QuoteStatus.ENTREGUE });
+    await service.handleConversationResolved({ id: 42, contact_inbox: { inbox_id: 1 }, messages: [{ id: 777 }] });
+    await aguardarFilaEtiquetas();
+    await jest.advanceTimersByTimeAsync(180000);
+    expect(chatwoot.listMessagesAfter).toHaveBeenCalledWith("42", 777);
+  });
+
+  it("D-40: sem messages ou com id nao numerico, listMessagesAfter recebe afterId indefinido", async () => {
+    const sem = buildService({ quoteStatus: QuoteStatus.ENTREGUE });
+    await sem.service.handleConversationResolved({ id: 42, contact_inbox: { inbox_id: 1 } });
+    await aguardarFilaEtiquetas();
+    await jest.advanceTimersByTimeAsync(180000);
+    expect(sem.chatwoot.listMessagesAfter).toHaveBeenCalledWith("42", undefined);
+
+    const naoNumerico = buildService({ quoteStatus: QuoteStatus.ENTREGUE });
+    await naoNumerico.service.handleConversationResolved({
+      id: 42,
+      contact_inbox: { inbox_id: 1 },
+      messages: [{ id: "abc" as unknown as number }],
+    });
+    await aguardarFilaEtiquetas();
+    await jest.advanceTimersByTimeAsync(180000);
+    expect(naoNumerico.chatwoot.listMessagesAfter).toHaveBeenCalledWith("42", undefined);
+  });
+
+  it("D-34: fechamento preserva avaliou e csat-baixo ao gravar as etiquetas", async () => {
+    const { service, chatwoot } = buildService({ quoteStatus: QuoteStatus.ENTREGUE });
+    chatwoot.getConversationLabels.mockResolvedValue(["orcamento-pendente", "manual-x", "avaliou", "csat-baixo"]);
+    await service.handleConversationResolved(PAYLOAD);
+    await aguardarFilaEtiquetas();
+    expect(chatwoot.addConversationLabels).toHaveBeenCalledWith("42", ["finalizado", "avaliou", "csat-baixo"]);
+  });
+
+  it("D-34: cliente frequente mantem cliente-frequente junto das etiquetas de pesquisa", async () => {
+    const { service, chatwoot } = buildService({ quoteStatus: QuoteStatus.ENTREGUE, contagem: 3 });
+    chatwoot.getConversationLabels.mockResolvedValue(["avaliou", "csat-baixo"]);
+    await service.handleConversationResolved(PAYLOAD);
+    await aguardarFilaEtiquetas();
+    expect(chatwoot.addConversationLabels).toHaveBeenCalledWith("42", [
+      "finalizado",
+      "cliente-frequente",
+      "avaliou",
+      "csat-baixo",
+    ]);
+  });
+
+  it("D-34: falha ao ler as etiquetas grava so as desejadas e registra warn", async () => {
+    const { service, chatwoot, warn } = buildService({ quoteStatus: QuoteStatus.ENTREGUE });
+    chatwoot.getConversationLabels.mockRejectedValue(new Error("chatwoot fora"));
+    await service.handleConversationResolved(PAYLOAD);
+    await aguardarFilaEtiquetas();
+    expect(chatwoot.addConversationLabels).toHaveBeenCalledWith("42", ["finalizado"]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("chatwoot fora"));
+  });
+
+  it("D-34: lista sem etiquetas de pesquisa grava exatamente como na fase 51", async () => {
+    const { service, chatwoot } = buildService({ quoteStatus: QuoteStatus.ENTREGUE });
+    chatwoot.getConversationLabels.mockResolvedValue(["orcamento-pendente", "manual-x"]);
+    await service.handleConversationResolved(PAYLOAD);
+    await aguardarFilaEtiquetas();
+    expect(chatwoot.addConversationLabels).toHaveBeenCalledWith("42", ["finalizado"]);
+  });
 });
 
 describe("ChatwootAutomationService - re-check no disparo (D-13, Fase 51)", () => {
@@ -278,7 +343,11 @@ describe("ChatwootAutomationService - re-check no disparo (D-13, Fase 51)", () =
   ) {
     const ctx = buildService(opcoes);
     if (conversa instanceof Error) ctx.chatwoot.getConversation.mockRejectedValue(conversa);
-    else ctx.chatwoot.getConversation.mockResolvedValue(conversa as any);
+    else {
+      ctx.chatwoot.getConversation.mockResolvedValue(conversa as any);
+      const mensagens = (conversa as { messages?: unknown } | null)?.messages;
+      ctx.chatwoot.listMessagesAfter.mockResolvedValue(Array.isArray(mensagens) ? mensagens : null);
+    }
     preparar?.(ctx);
     await ctx.service.handleConversationResolved(PAYLOAD);
     await aguardarFilaEtiquetas();
@@ -399,6 +468,62 @@ describe("ChatwootAutomationService - re-check no disparo (D-13, Fase 51)", () =
     );
 
     expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("P5 (regressao): atividade depois da resposta do cliente nao esconde a resposta", async () => {
+    const ctx = await resolverEDisparar(
+      { quoteStatus: QuoteStatus.ENTREGUE },
+      { status: "resolved", messages: [{ message_type: 2, created_at: segundos(31) }] },
+      (c) =>
+        c.chatwoot.listMessagesAfter.mockResolvedValue([
+          { message_type: 0, created_at: segundos(30) },
+          { message_type: 2, created_at: segundos(31) },
+        ]),
+    );
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(todosOsLogs(ctx)).toContain("motivo=resposta_nova");
+  });
+
+  it("D-40 (truncamento): lista com 100 itens nao envia (possivelmente truncada)", async () => {
+    const cem = Array.from({ length: 100 }, () => ({ message_type: 1, created_at: segundos(-60) }));
+    const ctx = await resolverEDisparar({ quoteStatus: QuoteStatus.ENTREGUE }, { status: "resolved", messages: cem });
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(todosOsLogs(ctx)).toContain("motivo=mensagens_indeterminadas");
+  });
+
+  it("D-40 (truncamento): lista com 99 itens sem entrada nova envia", async () => {
+    const noventaEnove = Array.from({ length: 99 }, () => ({ message_type: 1, created_at: segundos(-60) }));
+    const ctx = await resolverEDisparar(
+      { quoteStatus: QuoteStatus.ENTREGUE },
+      { status: "resolved", messages: noventaEnove },
+    );
+
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("D-40 (falha de leitura): listMessagesAfter rejeita nao envia e avisa falha_recheck", async () => {
+    const ctx = await resolverEDisparar(
+      { quoteStatus: QuoteStatus.ENTREGUE },
+      { status: "resolved", messages: [] },
+      (c) => c.chatwoot.listMessagesAfter.mockRejectedValue(new Error("timeout do chatwoot")),
+    );
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(ctx.warn).toHaveBeenCalledWith(expect.stringContaining("motivo=falha_recheck"));
+    expect(ctx.warn).toHaveBeenCalledWith(expect.stringContaining("timeout do chatwoot"));
+  });
+
+  it("D-40 (guarda que fecha): listMessagesAfter devolve null nao envia com motivo indeterminado", async () => {
+    const ctx = await resolverEDisparar(
+      { quoteStatus: QuoteStatus.ENTREGUE },
+      { status: "resolved", messages: [] },
+      (c) => c.chatwoot.listMessagesAfter.mockResolvedValue(null),
+    );
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(todosOsLogs(ctx)).toContain("motivo=mensagens_indeterminadas");
   });
 });
 
