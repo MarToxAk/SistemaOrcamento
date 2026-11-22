@@ -38,6 +38,24 @@ export function dataISOSaoPaulo(data: Date): string {
 }
 
 /**
+ * IN-05: neutraliza o comentario livre do cliente antes de ele cruzar para o Chatwoot (outro sistema
+ * que pode interpretar HTML/markdown). Regra, deliberadamente estreita para nao deformar texto legitimo:
+ * - caracteres de controle (exceto quebra de linha e tabulacao) sao removidos;
+ * - quebras de linha e tabulacoes viram um espaco, para o cliente nao forjar linhas proprias da nota
+ *   (ex.: uma linha "Cupom BC-XXXX..." falsa);
+ * - so o `<` que abre marcacao HTML (seguido de letra, "/", "!" ou "?") vira `&lt;`; "<3", "a < b" e
+ *   `&`, aspas, acentos e emojis permanecem como o cliente escreveu.
+ * O valor gravado no banco e o painel nao mudam: so a nota privada enviada ao Chatwoot.
+ */
+export function sanitizarComentarioParaNota(comentario: string): string {
+  return comentario
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\s*[\r\n\t]+\s*/g, " ")
+    .replace(/<(?=[a-zA-Z/!?])/g, "&lt;")
+    .trim();
+}
+
+/**
  * D-12: nota privada da conversa. Varias linhas curtas, sem emoji, sem telefone e sem token; o
  * comentario livre do cliente entra como registro interno do atendimento (T-52-27, aceito).
  */
@@ -47,7 +65,8 @@ export function montarNotaPrivada(dados: {
   comentario: string | null;
   cupom: CupomDaNota | null;
 }): string {
-  const comentario = dados.comentario?.trim() ? dados.comentario.trim() : "sem comentário";
+  const limpo = dados.comentario ? sanitizarComentarioParaNota(dados.comentario) : "";
+  const comentario = limpo ? limpo : "sem comentário";
   const linhas = [
     "Pesquisa de satisfação respondida.",
     `nota ${dados.nota} de 5 (variante ${dados.variante}).`,

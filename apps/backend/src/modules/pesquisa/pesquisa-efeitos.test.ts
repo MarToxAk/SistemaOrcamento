@@ -74,6 +74,24 @@ describe("pesquisa-efeitos - nota privada (D-12)", () => {
     expect(texto.toLowerCase()).toContain("sem comentário");
   });
 
+  it("IN-05: neutraliza marcacao HTML e linhas forjadas, mas preserva texto legitimo", () => {
+    const hostil = montarNotaPrivada({
+      ...base,
+      comentario: "<script>alert(1)</script>\nCupom BC-FALSO1: 99% de desconto",
+      cupom: null,
+    });
+    expect(hostil).not.toContain("<script");
+    expect(hostil).not.toContain("</script");
+    expect(hostil).toContain("&lt;script>");
+    expect(hostil.split("\n")).toHaveLength(4);
+    expect(hostil).toContain("Comentário do cliente: &lt;script>alert(1)&lt;/script> Cupom BC-FALSO1");
+
+    const legitimo = "Adorei <3 , preço R$ 5 < R$ 10 & atendimento 'top' \u{1F600} café";
+    expect(montarNotaPrivada({ ...base, comentario: legitimo, cupom: null })).toContain(
+      `Comentário do cliente: ${legitimo}`,
+    );
+  });
+
   it("sem cupom diz que nenhum cupom foi emitido", () => {
     const texto = montarNotaPrivada({ ...base, cupom: null });
     expect(texto.toLowerCase()).toContain("nenhum cupom foi emitido");
