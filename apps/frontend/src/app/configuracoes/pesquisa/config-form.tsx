@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   MSG_SESSAO,
@@ -217,6 +217,21 @@ const VARIANTES: Array<{ valor: VarianteVisual; rotulo: string }> = [
   { valor: "AB", rotulo: "Alternar (teste A/B)" },
 ];
 
+type ResultadoCarga = { resposta: RespostaConfigAdmin } | { erro: string };
+
+/** Busca unica da configuracao (usada pela carga inicial e pelo "Tentar novamente"); nunca lanca. */
+async function buscarConfig(): Promise<ResultadoCarga> {
+  try {
+    const res = await fetch("/api/admin/pesquisa-config", { cache: "no-store" });
+    if (res.status === 401) return { erro: MSG_SESSAO };
+    const json = (await res.json().catch(() => ({}))) as RespostaConfigAdmin & { error?: string };
+    if (!res.ok || !json.config) return { erro: "Não foi possível carregar a configuração." };
+    return { resposta: json };
+  } catch {
+    return { erro: "Não foi possível carregar a configuração." };
+  }
+}
+
 export default function ConfigForm() {
   const [dados, setDados] = useState<RespostaConfigAdmin | null>(null);
   const [original, setOriginal] = useState<FormValues | null>(null);
@@ -229,65 +244,35 @@ export default function ConfigForm() {
   const [ok, setOk] = useState("");
   const emEnvio = useRef(false);
 
-  function aplicar(resposta: RespostaConfigAdmin) {
+  const aplicar = useCallback((resposta: RespostaConfigAdmin) => {
     const valores = paraFormulario(resposta.config);
     setDados(resposta);
     setOriginal(valores);
     setAtual(valores);
     setErrosServidor({});
-  }
+  }, []);
 
   async function carregar() {
     setCarregando(true);
     setErroCarregar("");
-    try {
-      const res = await fetch("/api/admin/pesquisa-config", { cache: "no-store" });
-      if (res.status === 401) {
-        setErroCarregar(MSG_SESSAO);
-        return;
-      }
-      const json = (await res.json().catch(() => ({}))) as RespostaConfigAdmin & { error?: string };
-      if (!res.ok || !json.config) {
-        setErroCarregar("Não foi possível carregar a configuração.");
-        return;
-      }
-      aplicar(json);
-    } catch {
-      setErroCarregar("Não foi possível carregar a configuração.");
-    } finally {
-      setCarregando(false);
-    }
+    const resultado = await buscarConfig();
+    if ("erro" in resultado) setErroCarregar(resultado.erro);
+    else aplicar(resultado.resposta);
+    setCarregando(false);
   }
 
   useEffect(() => {
     let cancelado = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/admin/pesquisa-config", { cache: "no-store" });
-        if (cancelado) return;
-        if (res.status === 401) {
-          setErroCarregar(MSG_SESSAO);
-          return;
-        }
-        const json = (await res.json().catch(() => ({}))) as RespostaConfigAdmin & { error?: string };
-        if (!res.ok || !json.config) {
-          setErroCarregar("Não foi possível carregar a configuração.");
-          return;
-        }
-        const valores = paraFormulario(json.config);
-        setDados(json);
-        setOriginal(valores);
-        setAtual(valores);
-      } catch {
-        if (!cancelado) setErroCarregar("Não foi possível carregar a configuração.");
-      } finally {
-        if (!cancelado) setCarregando(false);
-      }
-    })();
+    void buscarConfig().then((resultado) => {
+      if (cancelado) return;
+      if ("erro" in resultado) setErroCarregar(resultado.erro);
+      else aplicar(resultado.resposta);
+      setCarregando(false);
+    });
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [aplicar]);
 
   const errosCliente = useMemo(
     () => (dados && atual ? validarConfigCliente(paraConfig(atual), dados.limites, dados.placeholders) : {}),
