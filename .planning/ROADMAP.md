@@ -290,16 +290,16 @@ Plans:
 **Goal:** Ao fechar o atendimento (Box e Bom Custo, dois Chatwoots distintos), o cliente recebe uma mensagem unica com link de pesquisa de satisfacao propria (token assinado por conversa, nota obrigatoria, comentario opcional) e, ao responder, recebe cupom unico por cliente (desconto em % com teto, compra minima, validade curta, qualquer nota); depois, mensagem separada convidando para avaliar no Google, sem recompensa. Tudo editavel por empresa em nova aba de /configuracoes (percentual, teto, compra minima, validade, textos, liga/desliga), com opt-out "Responda SAIR" e teto de custo mensal (R$300). Decisoes e pareceres em memory/project_fase52_csat_recompensa.md.
 **Requirements**: TBD
 **Depends on:** Phase 51
-**Plans:** 12 plans
+**Plans:** 4/12 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 52-01-PLAN.md — tracer: schema e migracao (provada em Postgres descartavel), fechamento com link, rota publica, resposta e PUT no CSAT nativo
+- [x] 52-01-PLAN.md — tracer: schema e migracao (provada em Postgres descartavel), fechamento com link, rota publica, resposta e PUT no CSAT nativo
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 52-02-PLAN.md — pagina publica /pesquisa/[token] (formulario de nota, agradecimento com cupom, bloco Google)
-- [ ] 52-03-PLAN.md — regras puras, config singleton com padroes por empresa e emissao de cupom (intervalo e teto mensal)
-- [ ] 52-04-PLAN.md — cliente Chatwoot (mensagens, atributos, etiqueta de conta), re-check por GET messages e fechamento que preserva avaliou e csat-baixo
+- [x] 52-02-PLAN.md — pagina publica /pesquisa/[token] (formulario de nota, agradecimento com cupom, bloco Google)
+- [x] 52-03-PLAN.md — regras puras, config singleton com padroes por empresa e emissao de cupom (intervalo e teto mensal)
+- [x] 52-04-PLAN.md — cliente Chatwoot (mensagens, atributos, etiqueta de conta), re-check por GET messages e fechamento que preserva avaliou e csat-baixo
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 52-05-PLAN.md — efeitos no Chatwoot (nota privada, atributos, etiquetas), WhatsApp do cupom e convite do Google, re-tentativa
