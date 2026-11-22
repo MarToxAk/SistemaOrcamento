@@ -10,7 +10,7 @@
  */
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { PesquisaConfig, PesquisaSatisfacao } from "@prisma/client";
+import type { CupomRecompensa, PesquisaSatisfacao } from "@prisma/client";
 
 import { PrismaService } from "../database/prisma.service";
 import {
@@ -22,14 +22,20 @@ import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
 import {
   REGEX_TOKEN,
   type Variante,
+  corPrimariaAcessivel,
   formatarDataBR,
   formatarPercentual,
   formatarReais,
+  gerarCodigoCupom,
   gerarToken,
+  janelaMesSaoPaulo,
   normalizarTelefone,
+  notaValida,
+  paraCentavos,
   renderizarTexto,
   sortearVariante,
 } from "./pesquisa-regras";
+import { PesquisaConfigService, type PesquisaConfigView } from "./pesquisa-config.service";
 
 export type TextosPagina = {
   titulo: string;
@@ -61,7 +67,6 @@ export type ResultadoResponder =
   | { tipo: "JA_RESPONDIDA"; view: PesquisaPublicaView }
   | { tipo: "INDISPONIVEL" };
 
-const COR_PRIMARIA_PADRAO = "#0d6efd";
 const TEXTO_INPUT_CSAT =
   "Pesquisa de satisfação enviada ao cliente. A resposta é registrada pela página da pesquisa.";
 /** D-28: estados em que a conversa ja tem a input_csat que o PUT publico vai preencher. */
@@ -69,19 +74,23 @@ const ESTADOS_COM_INPUT_CSAT = ["MENSAGEM_OK", "OK", "RESPOSTA_FALHA"];
 
 type Classificacao =
   | { tipo: "INDISPONIVEL" }
-  | { tipo: "RESPONDIDA"; pesquisa: PesquisaSatisfacao; config: PesquisaConfig }
-  | { tipo: "ABERTA"; pesquisa: PesquisaSatisfacao; config: PesquisaConfig };
+  | { tipo: "RESPONDIDA"; pesquisa: PesquisaSatisfacao; config: PesquisaConfigView }
+  | { tipo: "ABERTA"; pesquisa: PesquisaSatisfacao; config: PesquisaConfigView };
+
+type Elegibilidade = { disponivel: boolean; motivo?: "TETO_MENSAL" | "INTERVALO" };
 
 @Injectable()
 export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PesquisaService.name);
   private readonly efeitos = new Set<Promise<void>>();
+  private avisoCorRegistrado = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatwoot: ChatwootService,
     private readonly config: ConfigService,
     private readonly automation: ChatwootAutomationService,
+    private readonly configPesquisa: PesquisaConfigService,
   ) {}
 
   onModuleInit(): void {
@@ -125,8 +134,8 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   }): Promise<{ bloco: string; pesquisaId: string } | null> {
     const { conversationId, customerId, conversa } = entrada;
     try {
-      const cfg = await this.prisma.pesquisaConfig.findUnique({ where: { id: "default" } });
-      if (!cfg || !cfg.ativo) return null;
+      const cfg = await this.configPesquisa.obter();
+      if (!cfg.ativo) return null;
 
       const telefone = normalizarTelefone(conversa.meta?.sender?.phone_number);
       if (!telefone) {
@@ -175,16 +184,21 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
         });
       }
 
-      const bloco = renderizarTexto(cfg.textoFechamento, {
-        link: `${baseUrl}/pesquisa/${pesquisa.token}`,
-        percentual: formatarPercentual(String(cfg.percentualDesconto)),
-        teto: formatarReais(String(cfg.tetoDesconto)),
-        compra_minima: formatarReais(String(cfg.compraMinima)),
-        validade: formatarDataBR(new Date(agora.getTime() + Number(cfg.validadeCupomDias) * 86_400_000)),
-        nome_empresa: this.config.get<string>("EMPRESA_NOME") ?? "",
-        codigo: "",
-        link_google: "",
-      });
+      const bloco = renderizarTexto(
+        (await this.avaliarRecompensa(telefone, cfg, agora)).disponivel
+          ? cfg.textoFechamento
+          : cfg.textoSemRecompensa,
+        {
+          link: `${baseUrl}/pesquisa/${pesquisa.token}`,
+          percentual: formatarPercentual(String(cfg.percentualDesconto)),
+          teto: formatarReais(String(cfg.tetoDesconto)),
+          compra_minima: formatarReais(String(cfg.compraMinima)),
+          validade: formatarDataBR(new Date(agora.getTime() + Number(cfg.validadeCupomDias) * 86_400_000)),
+          nome_empresa: this.config.get<string>("EMPRESA_NOME") ?? "",
+          codigo: "",
+          link_google: "",
+        },
+      );
       return { bloco, pesquisaId: pesquisa.id };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -282,7 +296,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   }
 
   async responder(token: string, nota: number, comentario?: string): Promise<ResultadoResponder> {
-    if (!Number.isInteger(nota) || nota < 1 || nota > 5) {
+    if (!notaValida(nota)) {
       throw new BadRequestException("A nota deve ser um inteiro de 1 a 5.");
     }
 
@@ -307,11 +321,14 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     const { pesquisa } = c;
     this.dispararEfeito(() => this.enviarNotaAoChatwoot(pesquisa, nota, texto ?? undefined));
 
+    // D-10: emitir o cupom nunca desfaz a nota ja gravada; falha vira `cupom: null`.
+    const cupom = await this.emitirCupom(pesquisa, c.config, agora);
+
     return {
       tipo: "OK",
       resposta: {
         estado: "RESPONDIDA",
-        cupom: null, // plano 52-03 preenche
+        cupom,
         textos: this.textos(c.config),
         corPrimaria: this.corPrimaria(),
         linkGoogle: c.config.linkGoogle ?? null,
@@ -326,8 +343,8 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     const pesquisa = await this.prisma.pesquisaSatisfacao.findUnique({ where: { token } });
     if (!pesquisa) return { tipo: "INDISPONIVEL" };
 
-    const config = await this.prisma.pesquisaConfig.findUnique({ where: { id: "default" } });
-    if (!config || !config.ativo) return { tipo: "INDISPONIVEL" };
+    const config = await this.configPesquisa.obter();
+    if (!config.ativo) return { tipo: "INDISPONIVEL" };
 
     if (pesquisa.revogadaEm) return { tipo: "INDISPONIVEL" };
     if (pesquisa.expiraEm.getTime() <= Date.now()) return { tipo: "INDISPONIVEL" };
@@ -335,7 +352,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     return { tipo: "ABERTA", pesquisa, config };
   }
 
-  private viewRespondida(config: PesquisaConfig): PesquisaPublicaView {
+  private viewRespondida(config: PesquisaConfigView): PesquisaPublicaView {
     return {
       estado: "RESPONDIDA",
       textos: this.textos(config),
@@ -344,7 +361,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     };
   }
 
-  private textos(config: PesquisaConfig): TextosPagina {
+  private textos(config: PesquisaConfigView): TextosPagina {
     return {
       titulo: config.paginaTitulo,
       subtitulo: config.paginaSubtitulo,
@@ -355,7 +372,147 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   }
 
   private corPrimaria(): string {
-    return this.config.get<string>("EMPRESA_COR_PRIMARIA") || COR_PRIMARIA_PADRAO;
+    const { cor, ajustada } = corPrimariaAcessivel(this.config.get<string>("EMPRESA_COR_PRIMARIA"));
+    if (ajustada && !this.avisoCorRegistrado) {
+      this.avisoCorRegistrado = true;
+      this.logger.warn("Cor primaria da empresa com contraste abaixo de 4,5:1; usando o fallback #0d6efd");
+    }
+    return cor;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Recompensa: gasto do mes, elegibilidade e emissao (plano 52-03)
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * D-18/D-31: soma do desconto real dos cupons USADO no mes de America/Sao_Paulo, em centavos.
+   * `inicio` inclusivo e `fim` exclusivo (o cupom usado em 01/12 01:00Z ainda conta em novembro).
+   */
+  async gastoDoMesCentavos(agora: Date = new Date()): Promise<number> {
+    const { inicio, fim } = janelaMesSaoPaulo(agora);
+    const soma = await this.prisma.cupomRecompensa.aggregate({
+      _sum: { descontoAplicado: true },
+      where: { status: "USADO", usadoEm: { gte: inicio, lt: fim } },
+    });
+    const valor = soma?._sum?.descontoAplicado;
+    return valor === null || valor === undefined ? 0 : paraCentavos(String(valor));
+  }
+
+  /** D-18/D-19/D-46: na duvida (consulta falhando) nao promete recompensa. */
+  private async avaliarRecompensa(
+    telefone: string | null,
+    cfg: PesquisaConfigView,
+    agora: Date,
+  ): Promise<Elegibilidade> {
+    if (!telefone) return { disponivel: false };
+    try {
+      const tetoMensalCentavos = paraCentavos(String(cfg.tetoMensal));
+      if ((await this.gastoDoMesCentavos(agora)) >= tetoMensalCentavos) {
+        return { disponivel: false, motivo: "TETO_MENSAL" };
+      }
+      if (cfg.intervaloDias > 0) {
+        const desde = new Date(agora.getTime() - Number(cfg.intervaloDias) * 86_400_000);
+        const recentes = await this.prisma.cupomRecompensa.count({
+          where: { telefone, criadoEm: { gte: desde } },
+        });
+        if (recentes > 0) return { disponivel: false, motivo: "INTERVALO" };
+      }
+      return { disponivel: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Falha ao avaliar recompensa (seguindo sem cupom) motivo=${msg}`);
+      return { disponivel: false };
+    }
+  }
+
+  private cupomPublico(
+    cupom: Pick<CupomRecompensa, "codigo" | "percentual" | "teto" | "compraMinima" | "validadeAte">,
+  ): CupomPublico {
+    return {
+      codigo: cupom.codigo,
+      percentual: Number(String(cupom.percentual)),
+      teto: Number(String(cupom.teto)),
+      compraMinima: Number(String(cupom.compraMinima)),
+      validadeAte: new Date(cupom.validadeAte).toISOString(),
+    };
+  }
+
+  /**
+   * D-15/D-16/D-45: emite UM cupom por pesquisa com snapshot da config. Nunca lanca (D-10).
+   * P2002 em `pesquisaId` devolve o cupom existente; em `codigo` tenta outro ate 5 vezes.
+   * Depois do create relê `revogadaEm` e cancela o cupom se a revogacao passou no meio (T-52-69).
+   */
+  private async emitirCupom(
+    pesquisa: Pick<PesquisaSatisfacao, "id" | "telefone">,
+    cfg: PesquisaConfigView,
+    agora: Date,
+  ): Promise<CupomPublico | null> {
+    if (!pesquisa.telefone) return null;
+    try {
+      // Idempotencia: uma pesquisa tem no maximo um cupom (unique por pesquisaId).
+      const existente = await this.prisma.cupomRecompensa.findUnique({ where: { pesquisaId: pesquisa.id } });
+      if (existente) return existente.status === "EMITIDO" ? this.cupomPublico(existente) : null;
+
+      if (!(await this.avaliarRecompensa(pesquisa.telefone, cfg, agora)).disponivel) return null;
+
+      for (let tentativa = 1; tentativa <= 5; tentativa += 1) {
+        try {
+          const criado = await this.prisma.cupomRecompensa.create({
+            data: {
+              codigo: gerarCodigoCupom(cfg.prefixoCupom),
+              pesquisaId: pesquisa.id,
+              telefone: pesquisa.telefone,
+              percentual: cfg.percentualDesconto,
+              teto: cfg.tetoDesconto,
+              compraMinima: cfg.compraMinima,
+              validadeAte: new Date(agora.getTime() + Number(cfg.validadeCupomDias) * 86_400_000),
+              status: "EMITIDO",
+              envioCupomStatus: "PENDENTE",
+            },
+          });
+
+          // T-52-69: a revogacao pode ter rodado entre a gravacao da nota e este create.
+          const atual = await this.prisma.pesquisaSatisfacao.findUnique({
+            where: { id: pesquisa.id },
+            select: { revogadaEm: true },
+          });
+          if (atual?.revogadaEm) {
+            try {
+              await this.prisma.cupomRecompensa.updateMany({
+                where: { id: criado.id, status: "EMITIDO" },
+                data: { status: "CANCELADO" },
+              });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              this.logger.warn(`Falha ao cancelar cupom de pesquisa revogada pesquisaId=${pesquisa.id} motivo=${msg}`);
+            }
+            return null;
+          }
+          return this.cupomPublico(criado);
+        } catch (err) {
+          const prismaErro = err as { code?: string; meta?: { target?: unknown }; message?: string };
+          if (prismaErro?.code === "P2002") {
+            const alvo = Array.isArray(prismaErro.meta?.target)
+              ? (prismaErro.meta?.target as string[]).join(",")
+              : String(prismaErro.meta?.target ?? "");
+            if (alvo.includes("pesquisaId")) {
+              const ja = await this.prisma.cupomRecompensa.findUnique({ where: { pesquisaId: pesquisa.id } });
+              return ja ? this.cupomPublico(ja) : null;
+            }
+            if (alvo.includes("codigo") && tentativa < 5) continue;
+          }
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Falha ao emitir cupom pesquisaId=${pesquisa.id} motivo=${msg}`);
+          return null;
+        }
+      }
+      this.logger.warn(`Falha ao emitir cupom pesquisaId=${pesquisa.id} motivo=colisao_de_codigo`);
+      return null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Falha ao emitir cupom pesquisaId=${pesquisa.id} motivo=${msg}`);
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
