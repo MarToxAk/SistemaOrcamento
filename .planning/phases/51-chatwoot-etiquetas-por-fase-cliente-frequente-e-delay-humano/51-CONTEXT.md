@@ -48,7 +48,7 @@ Na conversa do Chatwoot vinculada a um orcamento (`Quote.conversationId`), o bac
 - D-20: Labels do fechamento aplicadas na hora; apenas a mensagem e agendada com o atraso (setTimeout + Map por conversa para dedupe). Instancia unica do backend por tenant.
 - D-21: Fora desta fase, divida explicita (nao implementar): (a) `approveByConversation` usa `findFirst` sem `orderBy` (pre-existente, nao deterministico com varias cotacoes na conversa); (b) re-post de cotacao sem `status` volta a PENDENTE (`normalizeStatus`) e a etiqueta acompanha; (c) `mergeDuplicates` apaga cotacoes sem ressincronizar as etiquetas. Registrados em 51-RESEARCH.md (Q5, R10, R14).
 - D-22: Distribuicao do atraso do fechamento triangular entre min e max (padrao 45-180 s) aceita.
-- D-23: As variaveis CHATWOOT_AUTOMATION_* e CHATWOOT_AI_* sao entregues pelo PR #75 (branch fix/compose-chatwoot-automation-env, commit 3709ae5). O PR #75 e PRE-CONDICAO DE DEPLOY desta fase; os planos nao as repetem e o gate do plano 51-05 falha sem ele.
+- D-23: As variaveis CHATWOOT_AUTOMATION_* e CHATWOOT_AI_* sao entregues pelo PR #75 (branch fix/compose-chatwoot-automation-env, commit 3709ae5). O PR #75 e PRE-CONDICAO DE DEPLOY desta fase; os planos nao as repetem; o gate do plano 51-05 garante ausencia de conflito e a implantacao do PR #75 e checkpoint de deploy manual (roteiro passo 0).
 - D-24: Instancia unica do backend por tenant confirmada; o risco de timer perdido em restart (D-12/D-20) e aceito.
 
 ### Claude's Discretion

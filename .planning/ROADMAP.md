@@ -273,7 +273,7 @@ Plans:
 **Goal:** A conversa do Chatwoot vinculada a um orcamento mostra a etiqueta da fase atual do orcamento (substitui a anterior a cada troca de status) e a etiqueta cliente-frequente quando o cliente tem 3+ pedidos pagos/entregues nos ultimos 6 meses. Ao resolver a conversa liberada, ficam apenas finalizado (+ cliente-frequente); bloqueio por pendencia mantem a etiqueta da fase. A mensagem de encerramento sai com atraso aleatorio com cara de humano. Vale para Box e Bom Custo (mesmo backend).
 **Requirements**: CW-01, CW-02, CW-03, CW-04, CW-05, CW-06, CW-07, CW-08, CW-09, CW-10, CW-11, CW-12 (IDs locais da fase — definidos em 51-VALIDATION.md)
 **Depends on:** Phase 50
-**Pré-condição de deploy:** PR #75 (branch `fix/compose-chatwoot-automation-env`, commit `3709ae5`: variáveis `CHATWOOT_AUTOMATION_*` e `CHATWOOT_AI_*`) precisa estar implantado antes desta fase; em produção `CHATWOOT_AUTOMATION_STATUS_FECHAMENTO=PRONTO_PARA_ENTREGA,ENTREGUE,ENVIADO,CANCELADO` (D-08, D-23). O gate do plano 51-05 falha sem o PR #75.
+**Pré-condição de deploy:** PR #75 (branch `fix/compose-chatwoot-automation-env`, commit `3709ae5`: variáveis `CHATWOOT_AUTOMATION_*` e `CHATWOOT_AI_*`) precisa estar implantado antes desta fase; em produção `CHATWOOT_AUTOMATION_STATUS_FECHAMENTO=PRONTO_PARA_ENTREGA,ENTREGUE,ENVIADO,CANCELADO` (D-08, D-23). O gate do plano 51-05 garante ausência de conflito com o PR #75; a implantação do PR #75 é checkpoint de deploy manual (roteiro, passo 0).
 **Dívida registrada (fora da fase, D-21):** `approveByConversation` sem `orderBy`; re-post sem `status` volta a PENDENTE; `mergeDuplicates` não ressincroniza etiquetas.
 **Plans:** 0/5 plans complete
 

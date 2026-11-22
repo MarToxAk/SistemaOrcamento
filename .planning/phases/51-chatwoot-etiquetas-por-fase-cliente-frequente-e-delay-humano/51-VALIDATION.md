@@ -26,7 +26,7 @@ created: "2026-11-21"
 | **Full suite command** | `cd apps/backend && ../../node_modules/.bin/jest --no-coverage` (baseline em 810c059: 83 suítes, 81 passed + 2 skipped; 1171 passed + 28 skipped, ~17 s) |
 | **Typecheck** | `npx tsc --noEmit -p apps/backend/tsconfig.json` (baseline: exit 0, ~5 s) |
 | **YAML dos composes** | `python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" deploy/docker-compose.box.vps.yml deploy/docker-compose.vps.yml` |
-| **Pré-condição do PR #75** | gate do plano 51-05 Task 1: passa se `3709ae5` é ancestral de `origin/main`, ou `origin/main` já traz `CHATWOOT_AUTOMATION_WEBHOOK_TOKEN` em `deploy/stack.env.example`, ou `git merge-tree --write-tree HEAD fix/compose-chatwoot-automation-env` é limpo; senão falha (exit 1) |
+| **Pré-condição do PR #75** | gate do plano 51-05 Task 1: passa se `3709ae5` é ancestral de `origin/main`, ou `origin/main` já traz `CHATWOOT_AUTOMATION_WEBHOOK_TOKEN` em `deploy/stack.env.example`, ou `git merge-tree --write-tree HEAD fix/compose-chatwoot-automation-env` é limpo; senão falha (exit 1). Prova COMPATIBILIDADE, não implantação. Implantação do PR #75 = checkpoint de deploy manual (roteiro passo 0): `git merge-base --is-ancestor 3709ae5 origin/main || git grep -q CHATWOOT_AUTOMATION_WEBHOOK_TOKEN origin/main -- deploy/stack.env.example` deve passar antes do Update do stack |
 | **Estimated runtime** | ~17 s (suíte completa); teste de arquivo < 10 s |
 
 ---
@@ -142,7 +142,7 @@ created: "2026-11-21"
 | Mensagem de encerramento sai entre 45 e 180 s depois e não duplica | CW-09 | exige tempo real e WhatsApp/Chatwoot reais | roteiro: resolver conversa liberada e cronometrar |
 | Reinício do backend descarta a mensagem agendada, mantendo as etiquetas | CW-09 | exige reiniciar o container | roteiro, passo opcional de reinício; documentado em deploy/UPDATE_RUNBOOK.md |
 | Valor de produção `CHATWOOT_AUTOMATION_STATUS_FECHAMENTO=PRONTO_PARA_ENTREGA,ENTREGUE,ENVIADO,CANCELADO` no ambiente do servidor | CW-08, CW-11 | é configuração do servidor, fora do repositório | roteiro, passo 0; runbook |
-| PR #75 implantado antes desta fase | CW-11 | depende do deploy real | gate da Task 1 do plano 51-05 + roteiro, passo 0 |
+| PR #75 implantado antes desta fase | CW-11 | depende do deploy real | checkpoint de deploy no roteiro, passo 0 (comando de verificação contra origin/main); o gate da Task 1 só garante ausência de conflito |
 | Revisão do diff: nenhum trecho específico de tenant (Box ou Bom Custo) | CW-12 | é um critério de revisão de código | revisar `git diff 810c059 -- apps/backend deploy` antes do verify-work |
 
 ---
