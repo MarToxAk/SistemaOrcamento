@@ -6,15 +6,15 @@ current_phase: 52
 current_phase_name: Chatwoot CSAT com recompensa e convite do Google
 status: executing
 stopped_at: Phase 52 UI-SPEC approved
-last_updated: "2026-11-22T17:53:12.789Z"
+last_updated: "2026-11-22T20:13:00.025Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 52 execution resumed (wave continue)
-state_head: 37bdc65e6e00120e5d8c51f8542270f353ce34ba
+state_head: 966859a335e6ffe698411225b6ce744f1dcb36c5
 progress:
   total_phases: 14
   completed_phases: 4
-  total_plans: 62
-  completed_plans: 51
+  total_plans: 63
+  completed_plans: 62
   percent: 29
 ---
 
@@ -28,12 +28,16 @@ Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ## Current Position
 
-Phase: 52 (Chatwoot CSAT com recompensa e convite do Google) — EXECUTING
+Phase: 52 (Chatwoot CSAT com recompensa e convite do Google) — READY TO EXECUTE
 Plan: 2 of 12
-Status: Executing Phase 52
+Status: Ready to execute
 Last activity: 2026-11-22 — Phase 52 execution resumed (wave continue)
 
 Progress: [███░░░░░░░] 29% (2/2 phases complete)
+
+## Planning Gate Overrides
+
+- **2026-11-22 — Phase 52 (gap closure):** the decision-coverage gate (`check.decision-coverage-plan`) returned `could-not-parse` — `52-CONTEXT.md` lists decisions as plain bullets under `## Implementation Decisions`, with no `D-NN:` IDs (the plans cite `D-46`/`D-52`, which do not exist in the CONTEXT). The user chose **Proceed anyway** (option 1) after being shown the options, so planning could complete. verify-phase should re-surface this. Fix option: normalize the CONTEXT decision bullets to `- **D-NN:** ...` and re-run the gate.
 
 ## Project Status
 
