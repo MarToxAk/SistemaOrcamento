@@ -111,6 +111,12 @@ const EXEMPLOS: Record<string, string> = {
   nome_empresa: "Sua empresa",
 };
 
+/**
+ * Paridade com o envio real do fechamento (PesquisaService.prepararFechamento): la `codigo` e
+ * `link_google` vao vazios, entao a previa do fechamento tambem os mostra vazios.
+ */
+const EXEMPLOS_FECHAMENTO: Record<string, string> = { ...EXEMPLOS, codigo: "", link_google: "" };
+
 interface CampoNumeroProps {
   id: string;
   label: string;
@@ -706,7 +712,7 @@ export default function ConfigForm() {
           </div>
           <div className="pa-card-body">
             <div className="pesquisa-previa" aria-label="Prévia da mensagem de fechamento com valores de exemplo">
-              {renderizarPrevia(atual.textoFechamento, EXEMPLOS)}
+              {renderizarPrevia(atual.textoFechamento, EXEMPLOS_FECHAMENTO)}
             </div>
             <div className="pesquisa-ajuda">Exemplo com valores fictícios; nada é enviado ao servidor.</div>
           </div>
