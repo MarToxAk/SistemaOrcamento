@@ -19,17 +19,17 @@ function contar(texto: string, regex: RegExp): number {
 }
 
 describe("PESQUISA_VARIACAO_IA: codigo x deploy (quick 261122-rlb)", () => {
-  it.each(COMPOSES)("%s tem exatamente uma linha PESQUISA_VARIACAO_IA com padrao true", (arquivo) => {
-    const regex = new RegExp(`^\\s+PESQUISA_VARIACAO_IA:\\s+\\$\\{PESQUISA_VARIACAO_IA:-true\\}\\s*$`, "gm");
+  it.each(COMPOSES)("%s tem exatamente uma linha PESQUISA_VARIACAO_IA com padrao false (desligada no deploy)", (arquivo) => {
+    const regex = new RegExp(`^\\s+PESQUISA_VARIACAO_IA:\\s+\\$\\{PESQUISA_VARIACAO_IA:-false\\}\\s*$`, "gm");
     expect(contar(ler(arquivo), regex)).toBe(1);
   });
 
-  it("stack.env.example tem exatamente uma linha PESQUISA_VARIACAO_IA=true", () => {
-    const regex = /^PESQUISA_VARIACAO_IA=true\s*$/gm;
+  it("stack.env.example tem exatamente uma linha PESQUISA_VARIACAO_IA=false", () => {
+    const regex = /^PESQUISA_VARIACAO_IA=false\s*$/gm;
     expect(contar(ler("stack.env.example"), regex)).toBe(1);
   });
 
-  it("o padrao do codigo bate com o do deploy: variacaoAtiva sem env e true", () => {
+  it("o padrao do codigo segue ligado (dev/testes); o deploy liga so por env, de proposito", () => {
     expect(variacaoAtiva(undefined)).toBe(true);
     expect(ENV_VARIACAO_IA).toBe("PESQUISA_VARIACAO_IA");
   });
