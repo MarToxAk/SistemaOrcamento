@@ -6,7 +6,9 @@
  * placeholders e 600 caracteres) ficam em `validarConfig`, que e a fonte unica tanto da tela quanto do
  * servidor; aqui ficam so tipo e tamanho maxima.
  */
-import { IsBoolean, IsIn, IsInt, IsNumber, IsString, MaxLength, ValidateIf } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsNumber, IsString, Max, MaxLength, ValidateIf } from "class-validator";
+
+import { VALOR_MAXIMO_DINHEIRO } from "../pesquisa-regras";
 
 export class AtualizarPesquisaConfigDto {
   @IsBoolean({ message: "ativo deve ser verdadeiro ou falso." })
@@ -16,9 +18,11 @@ export class AtualizarPesquisaConfigDto {
   percentualDesconto!: number;
 
   @IsNumber({ maxDecimalPlaces: 2 }, { message: "tetoDesconto deve ser um número com até 2 casas decimais." })
+  @Max(VALOR_MAXIMO_DINHEIRO, { message: "tetoDesconto deve ser no máximo 9999999999.99." })
   tetoDesconto!: number;
 
   @IsNumber({ maxDecimalPlaces: 2 }, { message: "compraMinima deve ser um número com até 2 casas decimais." })
+  @Max(VALOR_MAXIMO_DINHEIRO, { message: "compraMinima deve ser no máximo 9999999999.99." })
   compraMinima!: number;
 
   @IsInt({ message: "validadeCupomDias deve ser um número inteiro de dias." })
@@ -31,6 +35,7 @@ export class AtualizarPesquisaConfigDto {
   intervaloDias!: number;
 
   @IsNumber({ maxDecimalPlaces: 2 }, { message: "tetoMensal deve ser um número com até 2 casas decimais." })
+  @Max(VALOR_MAXIMO_DINHEIRO, { message: "tetoMensal deve ser no máximo 9999999999.99." })
   tetoMensal!: number;
 
   @IsString({ message: "prefixoCupom deve ser texto." })

@@ -350,6 +350,22 @@ describe("pesquisa-regras", () => {
       expect(validarConfig({ ...CONFIG_BASE(), percentualDesconto: 51 }).percentualDesconto).toBe("Máximo de 50%.");
     });
 
+    it("config: valores em dinheiro acima do Decimal(12,2) sao recusados por campo (400, nao 500)", () => {
+      const maximo = 9_999_999_999.99;
+      expect(
+        validarConfig({ ...CONFIG_BASE(), tetoDesconto: maximo, compraMinima: maximo, tetoMensal: maximo }),
+      ).toEqual({});
+      const erros = validarConfig({
+        ...CONFIG_BASE(),
+        tetoDesconto: 1e10,
+        compraMinima: Number.MAX_SAFE_INTEGER,
+        tetoMensal: 1e12,
+      });
+      expect(erros.tetoDesconto).toBe("Máximo de R$ 9.999.999.999,99.");
+      expect(erros.compraMinima).toBe("Máximo de R$ 9.999.999.999,99.");
+      expect(erros.tetoMensal).toBe("Máximo de R$ 9.999.999.999,99.");
+    });
+
     it("config: validade do cupom vai de 1 a 180 dias", () => {
       expect(validarConfig({ ...CONFIG_BASE(), validadeCupomDias: 0 }).validadeCupomDias).toBe("Mínimo de 1 dia.");
       expect(validarConfig({ ...CONFIG_BASE(), validadeCupomDias: 181 }).validadeCupomDias).toBe(

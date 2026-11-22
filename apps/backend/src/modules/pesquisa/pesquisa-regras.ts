@@ -405,6 +405,10 @@ export interface ConfigEntrada {
   paginaGoogleCorpo: string;
 }
 
+/** Maior valor que cabe em Decimal(12,2) (tetoDesconto, compraMinima, tetoMensal). */
+export const VALOR_MAXIMO_DINHEIRO = 9_999_999_999.99;
+const MSG_VALOR_MAXIMO = "Máximo de R$ 9.999.999.999,99.";
+
 /** UI-D15/T-52-16: mapa campo -> mensagem em portugues; vazio = valida. */
 export function validarConfig(c: ConfigEntrada): Record<string, string> {
   const erros: Record<string, string> = {};
@@ -426,9 +430,10 @@ export function validarConfig(c: ConfigEntrada): Record<string, string> {
   };
 
   numero("percentualDesconto", c.percentualDesconto, 1, 50, "Mínimo de 1%.", "Máximo de 50%.");
-  numero("tetoDesconto", c.tetoDesconto, 0, Number.MAX_SAFE_INTEGER, "Não pode ser negativo.", "Informe um número.");
-  numero("compraMinima", c.compraMinima, 0, Number.MAX_SAFE_INTEGER, "Não pode ser negativo.", "Informe um número.");
-  numero("tetoMensal", c.tetoMensal, 0, Number.MAX_SAFE_INTEGER, "Não pode ser negativo.", "Informe um número.");
+  // As tres colunas sao Decimal(12,2): acima do maximo o Prisma estoura (500); aqui vira 400 por campo.
+  numero("tetoDesconto", c.tetoDesconto, 0, VALOR_MAXIMO_DINHEIRO, "Não pode ser negativo.", MSG_VALOR_MAXIMO);
+  numero("compraMinima", c.compraMinima, 0, VALOR_MAXIMO_DINHEIRO, "Não pode ser negativo.", MSG_VALOR_MAXIMO);
+  numero("tetoMensal", c.tetoMensal, 0, VALOR_MAXIMO_DINHEIRO, "Não pode ser negativo.", MSG_VALOR_MAXIMO);
   numero("validadeCupomDias", c.validadeCupomDias, 1, 180, "Mínimo de 1 dia.", "Máximo de 180 dias.");
   numero("validadeLinkDias", c.validadeLinkDias, 1, 14, "Mínimo de 1 dia.", "Máximo de 14 dias.");
   numero("intervaloDias", c.intervaloDias, 0, 365, "Não pode ser negativo.", "Máximo de 365 dias.");
