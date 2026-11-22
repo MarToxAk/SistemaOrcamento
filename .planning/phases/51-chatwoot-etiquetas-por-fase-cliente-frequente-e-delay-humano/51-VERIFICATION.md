@@ -129,3 +129,8 @@ Nenhum gap de codigo. Pendencias sao exclusivamente de homologacao e deploy (sec
 
 _Verificado: 2026-11-21_
 _Verificador: Claude (gsd-verifier)_
+
+## Sonda A3 (executada pelo orquestrador em 2026-11-21, somente leitura)
+
+`GET /api/v1/accounts/:id/conversations/:id` em conversa resolvida, nas duas instalações (Box id 304, Bom Custo id 20098):
+`status` = "resolved" (string), `labels` array, `messages` array (o Chatwoot devolve apenas a ULTIMA mensagem), `message_type` number, `created_at` number em segundos (ex.: 1795308278). Premissa A3 confirmada; o re-check compara a ultima mensagem, suficiente porque resposta do cliente vira a ultima mensagem e reabre a conversa.
