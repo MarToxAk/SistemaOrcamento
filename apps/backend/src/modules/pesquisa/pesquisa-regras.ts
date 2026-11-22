@@ -497,11 +497,18 @@ export const TEXTOS_PADRAO: Pick<
   paginaGoogleCorpo: "Sua avaliação no Google ajuda outros clientes a nos conhecerem.",
 };
 
-function numeroEnv(get: (chave: string) => string | undefined, chave: string, padrao: number): number {
+/** Le um numero da env; ausente, nao numerico ou fora de [minimo, maximo] (as faixas de `validarConfig`) usa o padrao. */
+function numeroEnv(
+  get: (chave: string) => string | undefined,
+  chave: string,
+  padrao: number,
+  minimo: number,
+  maximo: number,
+): number {
   const bruto = get(chave);
   if (bruto === undefined || bruto === null || String(bruto).trim() === "") return padrao;
   const n = Number(String(bruto).trim());
-  return Number.isFinite(n) && n >= 0 ? n : padrao;
+  return Number.isFinite(n) && n >= minimo && n <= maximo ? n : padrao;
 }
 
 /**
@@ -512,13 +519,13 @@ export function montarConfigPadrao(get: (chave: string) => string | undefined): 
   const prefixoBruto = (get("PESQUISA_PREFIXO_PADRAO") ?? "").trim().toUpperCase();
   return {
     ativo: false,
-    percentualDesconto: numeroEnv(get, "PESQUISA_PERCENTUAL_PADRAO", 10),
-    tetoDesconto: numeroEnv(get, "PESQUISA_TETO_PADRAO", 5),
-    compraMinima: numeroEnv(get, "PESQUISA_COMPRA_MINIMA_PADRAO", 30),
+    percentualDesconto: numeroEnv(get, "PESQUISA_PERCENTUAL_PADRAO", 10, 1, 50),
+    tetoDesconto: numeroEnv(get, "PESQUISA_TETO_PADRAO", 5, 0, VALOR_MAXIMO_DINHEIRO),
+    compraMinima: numeroEnv(get, "PESQUISA_COMPRA_MINIMA_PADRAO", 30, 0, VALOR_MAXIMO_DINHEIRO),
     validadeCupomDias: 30,
     validadeLinkDias: 7,
     intervaloDias: 90,
-    tetoMensal: numeroEnv(get, "PESQUISA_TETO_MENSAL_PADRAO", 300),
+    tetoMensal: numeroEnv(get, "PESQUISA_TETO_MENSAL_PADRAO", 300, 0, VALOR_MAXIMO_DINHEIRO),
     prefixoCupom: /^[A-Z0-9]{1,6}$/.test(prefixoBruto) ? prefixoBruto : "BC",
     linkGoogle: null,
     varianteVisual: "AB",

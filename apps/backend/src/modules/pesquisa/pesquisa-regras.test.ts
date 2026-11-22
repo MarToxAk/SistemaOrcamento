@@ -465,6 +465,24 @@ describe("pesquisa-regras", () => {
       });
     });
 
+    it("config padrão: env fora da faixa de validarConfig volta ao padrao e o resultado sempre valida (IN-06)", () => {
+      const cfg = montarConfigPadrao(
+        env({
+          PESQUISA_PERCENTUAL_PADRAO: "0",
+          PESQUISA_TETO_PADRAO: "99999999999",
+          PESQUISA_COMPRA_MINIMA_PADRAO: "1e12",
+          PESQUISA_TETO_MENSAL_PADRAO: "99999999999.5",
+        }),
+      );
+      expect(cfg).toMatchObject({ percentualDesconto: 10, tetoDesconto: 5, compraMinima: 30, tetoMensal: 300 });
+      expect(validarConfig(cfg)).toEqual({});
+      expect(montarConfigPadrao(env({ PESQUISA_PERCENTUAL_PADRAO: "60" })).percentualDesconto).toBe(10);
+      expect(montarConfigPadrao(env({ PESQUISA_PERCENTUAL_PADRAO: "50", PESQUISA_COMPRA_MINIMA_PADRAO: "0" }))).toMatchObject({
+        percentualDesconto: 50,
+        compraMinima: 0,
+      });
+    });
+
     it("config padrão: todos os textos nascem preenchidos e ativo e false", () => {
       const cfg = CONFIG_BASE();
       for (const texto of [
