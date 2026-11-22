@@ -895,6 +895,9 @@ export class QuotesService {
       return fullQuote;
     });
 
+    // Fase 51 (D-03): etiquetas da conversa, sempre DEPOIS do commit e sem await (nunca dentro da transacao).
+    this.dispararEtiquetasChatwoot(quote);
+
     const mappedQuote = this.mapQuoteBody(quote);
 
     try {
@@ -1907,6 +1910,8 @@ export class QuotesService {
           },
         },
       });
+      // Fase 51 (D-03): a transicao para ENVIADO realmente aconteceu; sincroniza as etiquetas sem await.
+      this.dispararEtiquetasChatwoot(quote);
     }
 
     // Tenta resolver idcliente, nome e email (prioriza dados persistidos)
