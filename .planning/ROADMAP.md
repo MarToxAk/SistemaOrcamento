@@ -290,7 +290,7 @@ Plans:
 **Goal:** Ao fechar o atendimento (Box e Bom Custo, dois Chatwoots distintos), o cliente recebe uma mensagem unica com link de pesquisa de satisfacao propria (token assinado por conversa, nota obrigatoria, comentario opcional) e, ao responder, recebe cupom unico por cliente (desconto em % com teto, compra minima, validade curta, qualquer nota); depois, mensagem separada convidando para avaliar no Google, sem recompensa. Tudo editavel por empresa em nova aba de /configuracoes (percentual, teto, compra minima, validade, textos, liga/desliga), com opt-out "Responda SAIR" e teto de custo mensal (R$300). Decisoes e pareceres em memory/project_fase52_csat_recompensa.md.
 **Requirements**: TBD
 **Depends on:** Phase 51
-**Plans:** 6/12 plans executed
+**Plans:** 7/12 plans executed
 
 Plans:
 **Wave 1**
@@ -306,7 +306,7 @@ Plans:
 - [x] 52-07-PLAN.md — servicos de config (gravar), cupons (resgate atomico, teto rigido) e resultados do painel
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 52-12-PLAN.md — controller admin (config, resultados, cupons, resgate, etiquetas) e revogacao de pesquisa
+- [x] 52-12-PLAN.md — controller admin (config, resultados, cupons, resgate, etiquetas) e revogacao de pesquisa
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 52-06-PLAN.md — webhook de SAIR com HMAC, job de re-tentativa e job de retencao de 12 meses
