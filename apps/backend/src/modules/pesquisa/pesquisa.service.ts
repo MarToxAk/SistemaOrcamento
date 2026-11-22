@@ -44,6 +44,7 @@ import {
   gerarCodigoCupom,
   gerarToken,
   janelaMesSaoPaulo,
+  mascararTelefone,
   normalizarTelefone,
   notaValida,
   paraCentavos,
@@ -922,6 +923,23 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Opt-out (D-49): quem responde SAIR deixa de receber pesquisa e convite
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * D-49: grava o telefone na lista de supressao. Upsert idempotente (a mesma mensagem pode chegar
+   * duas vezes); log somente com o telefone mascarado (T-52-20).
+   */
+  async registrarOptOut(telefone: string): Promise<void> {
+    await this.prisma.pesquisaSupressao.upsert({
+      where: { telefone },
+      create: { telefone, origem: "SAIR" },
+      update: {},
+    });
+    this.logger.log(`Opt-out registrado telefone=${mascararTelefone(telefone)}`);
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // Re-tentativa e housekeeping (D-47)
   // ---------------------------------------------------------------------------------------------
 
@@ -1099,6 +1117,47 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
       await this.gravarCsat(pesquisa.id, "RESPOSTA_FALHA");
       return "FALHA";
     }
+  }
+
+  /**
+   * D-38/D-39/T-52-39/T-52-74: retencao de 12 meses por padrao (job do plano 52-06). Anonimiza as
+   * pesquisas criadas antes do corte gravando NULL (nunca string vazia) nos campos pessoais e nos
+   * identificadores; mantem os agregados (nota, variante, datas e valores) para o painel e NUNCA apaga
+   * linhas. A lista de supressao (SAIR) e preservada de proposito: o opt-out continua valendo.
+   *
+   * Limite conhecido (vai ao parecer juridico, D-38, e ao roteiro 52-11): a anonimizacao cobre o banco
+   * deste sistema; NAO alcanca o que ja esta no Chatwoot (nota privada, atributos do contato, etiquetas,
+   * a mensagem input_csat e o historico do WhatsApp), que segue a retencao do proprio Chatwoot.
+   */
+  async anonimizarAntigos(meses: number, agora: Date = new Date()): Promise<{ pesquisas: number; cupons: number }> {
+    if (!Number.isInteger(meses) || meses < 1) {
+      throw new RangeError("meses deve ser um inteiro maior ou igual a 1");
+    }
+
+    // Corte em UTC: retrocede meses preservando hora/minuto (setUTCMonth trata a virada de ano).
+    const corte = new Date(agora.getTime());
+    corte.setUTCMonth(corte.getUTCMonth() - meses);
+
+    const { count: pesquisas } = await this.prisma.pesquisaSatisfacao.updateMany({
+      where: { criadaEm: { lt: corte }, anonimizadaEm: null },
+      data: {
+        telefone: null,
+        conversationId: null,
+        comentario: null,
+        contactId: null,
+        conversationUuid: null,
+        customerId: null,
+        anonimizadaEm: agora,
+      },
+    });
+
+    const { count: cupons } = await this.prisma.cupomRecompensa.updateMany({
+      where: { criadoEm: { lt: corte }, telefone: { not: null } },
+      data: { telefone: null },
+    });
+
+    this.logger.log(`Anonimizacao da retencao concluida pesquisas=${pesquisas} cupons=${cupons}`);
+    return { pesquisas, cupons };
   }
 
   /**
