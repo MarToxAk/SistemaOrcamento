@@ -9,6 +9,7 @@ import { PesquisaResultadosService } from "./pesquisa-resultados.service";
 import { PesquisaRetryJob } from "./pesquisa-retry.job";
 import { PesquisaRevogacaoService } from "./pesquisa-revogacao.service";
 import { PesquisaService } from "./pesquisa.service";
+import { PesquisaVariacaoService } from "./pesquisa-variacao.service";
 import { PesquisaWebhookController } from "./pesquisa-webhook.controller";
 import { ChatwootModule } from "../integrations/chatwoot/chatwoot.module";
 
@@ -21,6 +22,7 @@ import { ChatwootModule } from "../integrations/chatwoot/chatwoot.module";
     PesquisaCupomService,
     PesquisaResultadosService,
     PesquisaRevogacaoService,
+    PesquisaVariacaoService,
     PesquisaRetryJob,
     PesquisaRetencaoJob,
   ],
