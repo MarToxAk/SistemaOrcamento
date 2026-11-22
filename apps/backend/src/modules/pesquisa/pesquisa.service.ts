@@ -32,15 +32,14 @@ import {
   etiquetasDaPesquisa,
   montarAtributosContato,
   montarNotaPrivada,
+  montarVariaveisConvite,
+  montarVariaveisFechamento,
   montarVariaveisMensagem,
 } from "./pesquisa-efeitos";
 import {
   REGEX_TOKEN,
   type Variante,
   corPrimariaAcessivel,
-  formatarDataBR,
-  formatarPercentual,
-  formatarReais,
   gerarCodigoCupom,
   gerarToken,
   janelaMesSaoPaulo,
@@ -255,16 +254,12 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
         (await this.avaliarRecompensa(telefone, cfg, agora)).disponivel
           ? cfg.textoFechamento
           : cfg.textoSemRecompensa,
-        {
+        montarVariaveisFechamento({
           link: `${baseUrl}/pesquisa/${pesquisa.token}`,
-          percentual: formatarPercentual(String(cfg.percentualDesconto)),
-          teto: formatarReais(String(cfg.tetoDesconto)),
-          compra_minima: formatarReais(String(cfg.compraMinima)),
-          validade: formatarDataBR(new Date(agora.getTime() + Number(cfg.validadeCupomDias) * 86_400_000)),
-          nome_empresa: this.config.get<string>("EMPRESA_NOME") ?? "",
-          codigo: "",
-          link_google: "",
-        },
+          cfg,
+          empresaNome: this.config.get<string>("EMPRESA_NOME") ?? "",
+          agora,
+        }),
       );
       return { bloco, pesquisaId: pesquisa.id };
     } catch (err) {
@@ -728,10 +723,10 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
         return "NAO_APLICAVEL";
       }
 
-      const texto = renderizarTexto(cfg.textoConviteGoogle, {
-        link_google: cfg.linkGoogle,
-        nome_empresa: this.config.get<string>("EMPRESA_NOME") ?? "",
-      });
+      const texto = renderizarTexto(
+        cfg.textoConviteGoogle,
+        montarVariaveisConvite({ linkGoogle: cfg.linkGoogle, empresaNome: this.config.get<string>("EMPRESA_NOME") ?? "" }),
+      );
 
       return await this.enviarComReserva({
         canal: "convite",

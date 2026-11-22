@@ -98,6 +98,39 @@ export function montarAtributosContato(dados: {
 }
 
 /**
+ * Variaveis da mensagem de fechamento (com ou sem recompensa): `link` real da pesquisa e os numeros da
+ * config; `codigo` e `link_google` vao SEMPRE vazios (nao ha cupom nem convite nesse momento). Fonte unica
+ * usada pelo servico, pelo teste de paridade e espelhada pela previa do admin (config-form).
+ */
+export function montarVariaveisFechamento(dados: {
+  link: string;
+  cfg: {
+    percentualDesconto: number | string;
+    tetoDesconto: number | string;
+    compraMinima: number | string;
+    validadeCupomDias: number | string;
+  };
+  empresaNome: string;
+  agora: Date;
+}): Record<string, string> {
+  return {
+    link: dados.link,
+    percentual: formatarPercentual(String(dados.cfg.percentualDesconto)),
+    teto: formatarReais(String(dados.cfg.tetoDesconto)),
+    compra_minima: formatarReais(String(dados.cfg.compraMinima)),
+    validade: formatarDataBR(new Date(dados.agora.getTime() + Number(dados.cfg.validadeCupomDias) * 86_400_000)),
+    nome_empresa: dados.empresaNome,
+    codigo: "",
+    link_google: "",
+  };
+}
+
+/** Variaveis do convite do Google: so `link_google` e `nome_empresa` (nunca nada do cupom). */
+export function montarVariaveisConvite(dados: { linkGoogle: string; empresaNome: string }): Record<string, string> {
+  return { link_google: dados.linkGoogle, nome_empresa: dados.empresaNome };
+}
+
+/**
  * D-21/D-22: variaveis das mensagens de WhatsApp. Sem cupom `codigo` fica vazio e os numeros vem da
  * config (o convite so usa `link_google` e `nome_empresa`, nunca variavel do cupom).
  */

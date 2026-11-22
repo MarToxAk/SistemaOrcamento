@@ -9,7 +9,7 @@
  */
 import * as path from "node:path";
 
-import { montarVariaveisMensagem } from "./pesquisa-efeitos";
+import { montarVariaveisConvite, montarVariaveisFechamento, montarVariaveisMensagem } from "./pesquisa-efeitos";
 import { PLACEHOLDERS_VALIDOS, renderizarTexto, validarTextoMensagem } from "./pesquisa-regras";
 
 type RenderizarPrevia = (modelo: string, variaveis: Record<string, string>) => string;
@@ -21,17 +21,13 @@ const { renderizarPrevia } = require(path.join(
 
 const LINK_GOOGLE = "https://g.page/r/abc/review";
 
-// (1) fechamento: mesmas chaves de `prepararFechamento` (link real + numeric + codigo/link_google vazios).
-const mapaFechamento: Record<string, string> = {
+// (1) fechamento: o mesmo helper de producao (`prepararFechamento`): link real + numeros + codigo/link_google vazios.
+const mapaFechamento = montarVariaveisFechamento({
   link: `https://app.test/pesquisa/${"a".repeat(48)}`,
-  percentual: "10%",
-  teto: "R$ 5,00",
-  compra_minima: "R$ 30,00",
-  validade: "22/12/2026",
-  nome_empresa: "Bom Custo",
-  codigo: "",
-  link_google: "",
-};
+  cfg: { percentualDesconto: 10, tetoDesconto: 5, compraMinima: 30, validadeCupomDias: 30 },
+  empresaNome: "Bom Custo",
+  agora: new Date("2026-11-22T12:00:00Z"),
+});
 
 // (2) pos-resposta: exatamente a saida de `montarVariaveisMensagem` (sem `link`).
 const mapaPosResposta = montarVariaveisMensagem({
@@ -47,11 +43,8 @@ const mapaPosResposta = montarVariaveisMensagem({
   cfg: { percentualDesconto: 10, tetoDesconto: 5, compraMinima: 30, validadeCupomDias: 30 },
 });
 
-// (3) convite: so `link_google` e `nome_empresa` (mesmas chaves de `enviarConviteGoogle`).
-const mapaConvite: Record<string, string> = {
-  link_google: LINK_GOOGLE,
-  nome_empresa: "Bom Custo",
-};
+// (3) convite: o mesmo helper de producao (`enviarConviteGoogle`): so `link_google` e `nome_empresa`.
+const mapaConvite = montarVariaveisConvite({ linkGoogle: LINK_GOOGLE, empresaNome: "Bom Custo" });
 
 const contextos: Array<{ nome: string; variaveis: Record<string, string>; aplicaveis: readonly string[] }> = [
   { nome: "fechamento", variaveis: mapaFechamento, aplicaveis: PLACEHOLDERS_VALIDOS },
