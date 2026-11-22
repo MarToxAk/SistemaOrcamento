@@ -103,13 +103,17 @@ function casa(linha: Linha, where: Linha): boolean {
     if (cond === null) return valor === null || valor === undefined;
     if (typeof cond === "object" && !(cond instanceof Date)) {
       const c = cond as Record<string, unknown>;
-      if ("in" in c) return (c.in as unknown[]).includes(valor);
-      if ("not" in c) return valor !== c.not;
-      if ("lt" in c) return valor !== null && valor !== undefined && numero(valor) < numero(c.lt);
-      if ("lte" in c) return valor !== null && valor !== undefined && numero(valor) <= numero(c.lte);
-      if ("gt" in c) return valor !== null && valor !== undefined && numero(valor) > numero(c.gt);
-      if ("gte" in c) return valor !== null && valor !== undefined && numero(valor) >= numero(c.gte);
-      throw new Error(`operador nao suportado no mock: ${JSON.stringify(Object.keys(c))}`);
+      const operadores = ["in", "not", "lt", "lte", "gt", "gte"].filter((chave) => chave in c);
+      if (operadores.length === 0) throw new Error(`operador nao suportado no mock: ${JSON.stringify(Object.keys(c))}`);
+      for (const operador of operadores) {
+        if (operador === "in" && !(c.in as unknown[]).includes(valor)) return false;
+        if (operador === "not" && valor === c.not) return false;
+        if (operador === "lt" && !(valor !== null && valor !== undefined && numero(valor) < numero(c.lt))) return false;
+        if (operador === "lte" && !(valor !== null && valor !== undefined && numero(valor) <= numero(c.lte))) return false;
+        if (operador === "gt" && !(valor !== null && valor !== undefined && numero(valor) > numero(c.gt))) return false;
+        if (operador === "gte" && !(valor !== null && valor !== undefined && numero(valor) >= numero(c.gte))) return false;
+      }
+      return true;
     }
     return valor === cond;
   });
@@ -472,5 +476,590 @@ describe("PesquisaService - efeitos no Chatwoot (Fase 52, plano 52-05, Task 1)",
     expect(ctx.chatwoot.postConversationNote).not.toHaveBeenCalled();
     expect(ctx.chatwoot.updateContactCustomAttributes).not.toHaveBeenCalled();
     expect(ctx.chatwoot.addConversationLabels).not.toHaveBeenCalled();
+  });
+});
+
+describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano 52-05, Task 2)", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    espiarLogs();
+  });
+
+  afterEach(async () => {
+    await aguardarFilaEtiquetas();
+    cancelarTodosEnviosFechamento();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  function textoEnviado(ctx: Ctx, indice = 0): string {
+    return ctx.chatwoot.sendOutgoingMessage.mock.calls[indice][1] as string;
+  }
+
+  function respondidaEm(ms: number, extra: Linha = {}): Linha {
+    return pesquisaPadrao({ respondidaEm: new Date(Date.now() - ms), nota: 5, status: "RESPONDIDA", ...extra });
+  }
+
+  it("cupom: sai na hora, com as variaveis resolvidas e sem link", async () => {
+    const ctx = montar();
+
+    const resultado = await ctx.service.responder(TOKEN, 4);
+    expect(resultado.tipo).toBe("OK");
+    if (resultado.tipo !== "OK") throw new Error("esperado OK");
+    await assentar(ctx.service);
+
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+    const [conversationId, texto] = ctx.chatwoot.sendOutgoingMessage.mock.calls[0];
+    const codigo = resultado.resposta.cupom?.codigo as string;
+    expect(conversationId).toBe("42");
+    expect(texto).toContain(codigo);
+    expect(texto).toContain("10%");
+    expect(texto).toContain("R$ 5,00");
+    expect(texto).toContain("R$ 30,00");
+    expect(texto).toContain("Loja Teste");
+    expect(texto).not.toMatch(/https?:\/\//);
+    expect(texto).not.toMatch(/[{}]/);
+    expect(ctx.cupons[0].envioCupomStatus).toBe("ENVIADA");
+  });
+
+  it("cupom: enabled false vira FALHA com warn e a resposta ja saiu com o cupom", async () => {
+    const ctx = montar({ chatwoot: { sendOutgoingMessage: jest.fn(async () => ({ enabled: false })) } });
+
+    const resultado = await ctx.service.responder(TOKEN, 4);
+    expect(resultado.tipo).toBe("OK");
+    if (resultado.tipo !== "OK") throw new Error("esperado OK");
+    expect(resultado.resposta.cupom).not.toBeNull();
+    await assentar(ctx.service);
+
+    expect(ctx.cupons[0].envioCupomStatus).toBe("FALHA");
+    expect(logs.some((l) => l.startsWith("warn") && l.includes("pesquisaId=pes-1"))).toBe(true);
+    for (const linha of logs) semSegredos(linha);
+  });
+
+  it("cupom: erro HTTP do Chatwoot vira FALHA e erro sem resposta mantem ENVIANDO", async () => {
+    const http = montar({
+      chatwoot: {
+        sendOutgoingMessage: jest.fn(async () => {
+          throw Object.assign(new Error("500"), { response: { status: 500 } });
+        }),
+      },
+    });
+    await http.service.responder(TOKEN, 4);
+    await assentar(http.service);
+    expect(http.cupons[0].envioCupomStatus).toBe("FALHA");
+
+    const rede = montar({
+      chatwoot: {
+        sendOutgoingMessage: jest.fn(async () => {
+          throw new Error("timeout");
+        }),
+      },
+    });
+    await rede.service.responder(TOKEN, 4);
+    await assentar(rede.service);
+    expect(rede.cupons[0].envioCupomStatus).toBe("ENVIANDO");
+    expect(logs.some((l) => l.startsWith("warn") && l.includes("incerto"))).toBe(true);
+  });
+
+  it("cupom: reserva com updateMany condicionado antes de enviar", async () => {
+    const ctx = montar();
+
+    await ctx.service.responder(TOKEN, 4);
+    await assentar(ctx.service);
+
+    expect(ctx.prisma.cupomRecompensa.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: expect.any(String),
+        OR: expect.arrayContaining([{ envioCupomStatus: { in: ["PENDENTE", "FALHA"] } }]),
+      },
+      data: { envioCupomStatus: "ENVIANDO", envioCupomReservadoEm: expect.any(Date) },
+    });
+    const reserva = ctx.prisma.cupomRecompensa.updateMany.mock.invocationCallOrder[0];
+    const envio = ctx.chatwoot.sendOutgoingMessage.mock.invocationCallOrder[0];
+    expect(reserva).toBeLessThan(envio);
+  });
+
+  it("cupom: sem reserva (contagem 0) nada e enviado", async () => {
+    const ctx = montar();
+    ctx.prisma.cupomRecompensa.updateMany.mockResolvedValue({ count: 0 });
+
+    await ctx.service.responder(TOKEN, 4);
+    await assentar(ctx.service);
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(ctx.cupons[0].envioCupomStatus).toBe("PENDENTE");
+  });
+
+  it("convite: nota 1 e nota 5 agendam um envio, nada sai antes de 60 s e sai ate 180 s", async () => {
+    for (const nota of [1, 5]) {
+      const ctx = montar();
+      await ctx.service.responder(TOKEN, nota);
+      await assentar(ctx.service);
+
+      expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+      expect(enviosFechamentoPendentes()).toBe(1);
+
+      await avancar(ctx.service, 59_999);
+      expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+
+      await avancar(ctx.service, 120_001);
+      expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(2);
+      expect(ctx.pesquisas[0].envioConviteStatus).toBe("ENVIADA");
+      cancelarTodosEnviosFechamento();
+    }
+  });
+
+  it("convite: texto com um unico link, sem nada do cupom", async () => {
+    const ctx = montar();
+    const resultado = await ctx.service.responder(TOKEN, 4);
+    if (resultado.tipo !== "OK") throw new Error("esperado OK");
+    const codigo = resultado.resposta.cupom?.codigo as string;
+    await assentar(ctx.service);
+    await avancar(ctx.service, 200_000);
+
+    const texto = textoEnviado(ctx, 1);
+    expect(texto).toContain("https://g.page/r/abc/review");
+    expect([...texto.matchAll(/https?:\/\//g)]).toHaveLength(1);
+    expect(texto).toContain("Loja Teste");
+    expect(texto).not.toContain(codigo);
+    expect(texto).not.toContain("{codigo}");
+    expect(texto.toLowerCase()).not.toContain("cupom");
+  });
+
+  it("convite: sem link na config vira NAO_APLICAVEL e nenhum timer fica pendente", async () => {
+    const ctx = montar({ config: { linkGoogle: null } });
+
+    await ctx.service.responder(TOKEN, 5);
+    await assentar(ctx.service);
+
+    expect(ctx.pesquisas[0].envioConviteStatus).toBe("NAO_APLICAVEL");
+    expect(enviosFechamentoPendentes()).toBe(0);
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("convite: usa a config do momento do envio e respeita link removido no intervalo", async () => {
+    const trocado = montar();
+    await trocado.service.responder(TOKEN, 5);
+    await assentar(trocado.service);
+    trocado.cfg.textoConviteGoogle = "Novo convite: {link_google}";
+    await avancar(trocado.service, 200_000);
+    expect(textoEnviado(trocado, 1)).toContain("Novo convite: https://g.page/r/abc/review");
+    cancelarTodosEnviosFechamento();
+
+    const removido = montar();
+    await removido.service.responder(TOKEN, 5);
+    await assentar(removido.service);
+    removido.cfg.linkGoogle = null;
+    await avancar(removido.service, 200_000);
+    expect(removido.pesquisas[0].envioConviteStatus).toBe("NAO_APLICAVEL");
+    expect(removido.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("supressao: telefone no opt-out nao recebe cupom nem convite e o cupom fica na resposta", async () => {
+    const ctx = montar({ suprimidos: [TELEFONE] });
+
+    const resultado = await ctx.service.responder(TOKEN, 4);
+    expect(resultado.tipo).toBe("OK");
+    if (resultado.tipo !== "OK") throw new Error("esperado OK");
+    expect(resultado.resposta.cupom).not.toBeNull();
+    await assentar(ctx.service);
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(ctx.cupons[0].envioCupomStatus).toBe("NAO_APLICAVEL");
+    expect(ctx.pesquisas[0].envioConviteStatus).toBe("NAO_APLICAVEL");
+  });
+
+  it("supressao: telefone que entra no opt-out entre a resposta e o convite nao recebe o convite", async () => {
+    const ctx = montar();
+    await ctx.service.responder(TOKEN, 5);
+    await assentar(ctx.service);
+
+    ctx.suprimidos.add(TELEFONE);
+    await avancar(ctx.service, 200_000);
+
+    expect(ctx.pesquisas[0].envioConviteStatus).toBe("NAO_APLICAVEL");
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("revogada: cupom de status diferente de EMITIDO vira NAO_APLICAVEL sem enviar", async () => {
+    for (const status of ["CANCELADO", "USADO", "EXPIRADO"]) {
+      const ctx = montar({ cupons: [cupomPadrao({ status, criadoEm: new Date(Date.now() - MINUTO) })] });
+      await ctx.service.responder(TOKEN, 4);
+      await assentar(ctx.service);
+      expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+      expect(ctx.cupons[0].envioCupomStatus).toBe("NAO_APLICAVEL");
+      cancelarTodosEnviosFechamento();
+    }
+  });
+
+  it("revogada: o timer do convite que nao foi cancelado grava NAO_APLICAVEL e nao envia", async () => {
+    const ctx = montar();
+    await ctx.service.responder(TOKEN, 5);
+    await assentar(ctx.service);
+
+    ctx.pesquisas[0].revogadaEm = new Date();
+    await avancar(ctx.service, 200_000);
+
+    expect(ctx.pesquisas[0].envioConviteStatus).toBe("NAO_APLICAVEL");
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("reenvio: cupom FALHA com 10 min reenvia; com 2 min, 6 tentativas ou 3 dias e ignorado", async () => {
+    const antigo = montar({
+      pesquisas: [respondidaEm(10 * MINUTO)],
+      cupons: [cupomPadrao({ envioCupomStatus: "FALHA", criadoEm: new Date(Date.now() - 10 * MINUTO) })],
+    });
+    const r1 = await antigo.service.reenviarPendentes();
+    expect(r1).toMatchObject({ candidatos: 1, cupons: 1 });
+    expect(antigo.cupons[0].envioCupomStatus).toBe("ENVIADA");
+    cancelarTodosEnviosFechamento();
+
+    for (const cenario of [
+      { pesquisas: [respondidaEm(2 * MINUTO)], cupons: [] as Linha[] },
+      { pesquisas: [respondidaEm(10 * MINUTO, { tentativasEnvio: 6 })], cupons: [] as Linha[] },
+      { pesquisas: [respondidaEm(3 * DIA + 3600_000)], cupons: [] as Linha[] },
+    ]) {
+      const ctx = montar({
+        pesquisas: cenario.pesquisas,
+        cupons:
+          cenario.cupons.length > 0
+            ? cenario.cupons
+            : [cupomPadrao({ envioCupomStatus: "FALHA", criadoEm: new Date(Date.now() - MINUTO) })],
+      });
+      const resultado = await ctx.service.reenviarPendentes();
+      expect(resultado.candidatos).toBe(0);
+      expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+      cancelarTodosEnviosFechamento();
+    }
+  });
+
+  it("reenvio: cupom PENDENTE antigo (timer perdido) e enviado", async () => {
+    const ctx = montar({
+      pesquisas: [respondidaEm(10 * MINUTO)],
+      cupons: [cupomPadrao({ envioCupomStatus: "PENDENTE", criadoEm: new Date(Date.now() - 10 * MINUTO) })],
+    });
+
+    const resultado = await ctx.service.reenviarPendentes();
+
+    expect(resultado).toMatchObject({ candidatos: 1, cupons: 1, falhas: 0 });
+    expect(ctx.cupons[0].envioCupomStatus).toBe("ENVIADA");
+  });
+
+  it("reenvio: convite PENDENTE com 10 min sai sem novo atraso; telefone suprimido vira NAO_APLICAVEL", async () => {
+    const ctx = montar({ pesquisas: [respondidaEm(10 * MINUTO)] });
+    const resultado = await ctx.service.reenviarPendentes();
+    expect(resultado).toMatchObject({ candidatos: 1, convites: 1 });
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+    expect(ctx.pesquisas[0].envioConviteStatus).toBe("ENVIADA");
+
+    const suprimido = montar({
+      pesquisas: [respondidaEm(10 * MINUTO)],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA", criadoEm: new Date(Date.now() - 10 * MINUTO) })],
+      suprimidos: [TELEFONE],
+    });
+    await suprimido.service.reenviarPendentes();
+    expect(suprimido.pesquisas[0].envioConviteStatus).toBe("NAO_APLICAVEL");
+    expect(suprimido.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+  });
+
+  it("reenvio: ENVIANDO velho confere no Chatwoot e nao duplica a mensagem", async () => {
+    const jaSaiu = montar({
+      pesquisas: [respondidaEm(10 * MINUTO, { envioConviteStatus: "ENVIANDO", envioConviteReservadoEm: new Date(Date.now() - 20 * MINUTO) })],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    jaSaiu.chatwoot.listMessagesAfter.mockResolvedValue([
+      { message_type: 1, content: "Avalie a Loja Teste: https://g.page/r/abc/review", created_at: Math.floor(Date.now() / 1000) },
+    ]);
+    const r1 = await jaSaiu.service.reenviarPendentes();
+    expect(r1.convites).toBe(1);
+    expect(jaSaiu.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(jaSaiu.pesquisas[0].envioConviteStatus).toBe("ENVIADA");
+    expect(jaSaiu.chatwoot.listMessagesAfter).toHaveBeenCalledWith("42");
+
+    const naoSaiu = montar({
+      pesquisas: [respondidaEm(10 * MINUTO, { envioConviteStatus: "ENVIANDO", envioConviteReservadoEm: new Date(Date.now() - 20 * MINUTO) })],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    naoSaiu.chatwoot.listMessagesAfter.mockResolvedValue([]);
+    const r2 = await naoSaiu.service.reenviarPendentes();
+    expect(r2.convites).toBe(1);
+    expect(naoSaiu.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+    expect(naoSaiu.pesquisas[0].envioConviteStatus).toBe("ENVIADA");
+
+    const indeterminado = montar({
+      pesquisas: [respondidaEm(10 * MINUTO, { envioConviteStatus: "ENVIANDO", envioConviteReservadoEm: new Date(Date.now() - 20 * MINUTO) })],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    indeterminado.chatwoot.listMessagesAfter.mockResolvedValue(null);
+    const r3 = await indeterminado.service.reenviarPendentes();
+    expect(r3.falhas).toBe(1);
+    expect(indeterminado.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(indeterminado.pesquisas[0].envioConviteStatus).toBe("ENVIANDO");
+    expect(indeterminado.pesquisas[0].tentativasEnvio).toBe(1);
+  });
+
+  it("reenvio: ENVIANDO com reserva de 14 minutos nao e tocado", async () => {
+    const ctx = montar({
+      pesquisas: [respondidaEm(10 * MINUTO, { envioConviteStatus: "ENVIANDO", envioConviteReservadoEm: new Date(Date.now() - 14 * MINUTO) })],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+
+    const resultado = await ctx.service.reenviarPendentes();
+
+    expect(resultado.candidatos).toBe(0);
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(ctx.chatwoot.listMessagesAfter).not.toHaveBeenCalled();
+  });
+
+  it("reenvio CSAT: cria a input_csat, envia o PUT e grava OK", async () => {
+    const ctx = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          chatwootCsat: "MENSAGEM_FALHA",
+          enviadaEm: new Date(Date.now() - DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    ctx.chatwoot.listMessagesAfter.mockResolvedValue([{ message_type: 2, content: "nota interna" }]);
+
+    const resultado = await ctx.service.reenviarPendentes();
+
+    expect(resultado).toMatchObject({ candidatos: 1, csat: 1, falhas: 0 });
+    expect(ctx.chatwoot.createPrivateCsatMessage).toHaveBeenCalledWith("42", expect.any(String));
+    expect(ctx.chatwoot.submitCsatResponse).toHaveBeenCalledWith("uuid-123", 5, undefined);
+    expect(ctx.pesquisas[0].chatwootCsat).toBe("OK");
+  });
+
+  it("reenvio CSAT: input_csat existente e reutilizada sem criar outra", async () => {
+    const ctx = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          chatwootCsat: "MENSAGEM_FALHA",
+          enviadaEm: new Date(Date.now() - DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    ctx.chatwoot.listMessagesAfter.mockResolvedValue([{ content_type: "input_csat", private: true }]);
+
+    const resultado = await ctx.service.reenviarPendentes();
+
+    expect(ctx.chatwoot.createPrivateCsatMessage).not.toHaveBeenCalled();
+    expect(ctx.chatwoot.listMessagesAfter).toHaveBeenCalledWith("42", undefined, { incluirInternas: true });
+    expect(resultado.csat).toBe(1);
+    expect(ctx.pesquisas[0].chatwootCsat).toBe("OK");
+  });
+
+  it("reenvio CSAT: CSAT nativo ligado na inbox vira NAO_APLICAVEL sem criar nem enviar", async () => {
+    const ctx = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          chatwootCsat: "AGUARDANDO_MENSAGEM",
+          enviadaEm: new Date(Date.now() - DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    ctx.chatwoot.getInbox.mockResolvedValue({ csat_survey_enabled: true });
+
+    await ctx.service.reenviarPendentes();
+
+    expect(ctx.chatwoot.createPrivateCsatMessage).not.toHaveBeenCalled();
+    expect(ctx.chatwoot.submitCsatResponse).not.toHaveBeenCalled();
+    expect(ctx.pesquisas[0].chatwootCsat).toBe("NAO_APLICAVEL");
+    expect(logs.some((l) => l.startsWith("warn") && l.includes("inbox 1"))).toBe(true);
+  });
+
+  it("reenvio CSAT: leitura da inbox falhando segue; lista indisponivel nao cria e conta falha", async () => {
+    const falhaInbox = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          chatwootCsat: "AGUARDANDO_MENSAGEM",
+          enviadaEm: new Date(Date.now() - DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    falhaInbox.chatwoot.getInbox.mockRejectedValue(new Error("inbox fora"));
+    const r1 = await falhaInbox.service.reenviarPendentes();
+    expect(r1.csat).toBe(1);
+    expect(falhaInbox.pesquisas[0].chatwootCsat).toBe("OK");
+
+    const semLista = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          chatwootCsat: "MENSAGEM_FALHA",
+          enviadaEm: new Date(Date.now() - DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    semLista.chatwoot.listMessagesAfter.mockRejectedValue(new Error("lista fora"));
+    const r2 = await semLista.service.reenviarPendentes();
+    expect(r2.falhas).toBe(1);
+    expect(semLista.chatwoot.createPrivateCsatMessage).not.toHaveBeenCalled();
+    expect(semLista.pesquisas[0].chatwootCsat).toBe("MENSAGEM_FALHA");
+  });
+
+  it("reenvio CSAT: RESPOSTA_FALHA so repete o PUT; criacao falhando mantem MENSAGEM_FALHA", async () => {
+    const putFalhou = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          chatwootCsat: "RESPOSTA_FALHA",
+          enviadaEm: new Date(Date.now() - DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    const r1 = await putFalhou.service.reenviarPendentes();
+    expect(r1.csat).toBe(1);
+    expect(putFalhou.chatwoot.createPrivateCsatMessage).not.toHaveBeenCalled();
+    expect(putFalhou.chatwoot.submitCsatResponse).toHaveBeenCalledTimes(1);
+    expect(putFalhou.pesquisas[0].chatwootCsat).toBe("OK");
+
+    const criacaoFalhou = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          chatwootCsat: "AGUARDANDO_MENSAGEM",
+          enviadaEm: new Date(Date.now() - DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    criacaoFalhou.chatwoot.createPrivateCsatMessage.mockRejectedValue(new Error("csat fora"));
+    const r2 = await criacaoFalhou.service.reenviarPendentes();
+    expect(r2.falhas).toBe(1);
+    expect(criacaoFalhou.chatwoot.submitCsatResponse).not.toHaveBeenCalled();
+    expect(criacaoFalhou.pesquisas[0].chatwootCsat).toBe("MENSAGEM_FALHA");
+  });
+
+  it("reenvio CSAT: enviadaEm de 15 dias, OK e NAO_APLICAVEL sao ignorados", async () => {
+    const antiga = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          chatwootCsat: "MENSAGEM_FALHA",
+          enviadaEm: new Date(Date.now() - 15 * DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    const r1 = await antiga.service.reenviarPendentes();
+    expect(r1.candidatos).toBe(0);
+    expect(antiga.chatwoot.submitCsatResponse).not.toHaveBeenCalled();
+
+    for (const estado of ["OK", "NAO_APLICAVEL"]) {
+      const ctx = montar({
+        pesquisas: [
+          respondidaEm(10 * MINUTO, {
+            chatwootCsat: estado,
+            enviadaEm: new Date(Date.now() - DIA),
+            conversationUuid: "uuid-123",
+            envioConviteStatus: "ENVIADA",
+          }),
+        ],
+        cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+      });
+      const resultado = await ctx.service.reenviarPendentes();
+      expect(resultado.candidatos).toBe(0);
+      expect(ctx.chatwoot.submitCsatResponse).not.toHaveBeenCalled();
+    }
+  });
+
+  it("reenvio: anonimizada nao entra; duas falhas contam tentativasEnvio uma vez; erro em uma nao impede as outras", async () => {
+    const anonima = montar({
+      pesquisas: [respondidaEm(10 * MINUTO, { conversationId: null })],
+      cupons: [cupomPadrao({ envioCupomStatus: "FALHA" })],
+    });
+    expect((await anonima.service.reenviarPendentes()).candidatos).toBe(0);
+
+    const duasFalhas = montar({
+      pesquisas: [respondidaEm(10 * MINUTO)],
+      cupons: [cupomPadrao({ envioCupomStatus: "FALHA", criadoEm: new Date(Date.now() - 10 * MINUTO) })],
+      chatwoot: {
+        sendOutgoingMessage: jest.fn(async () => {
+          throw Object.assign(new Error("500"), { response: { status: 500 } });
+        }),
+      },
+    });
+    const r1 = await duasFalhas.service.reenviarPendentes();
+    expect(r1.falhas).toBe(1);
+    expect(duasFalhas.pesquisas[0].tentativasEnvio).toBe(1);
+
+    const umaQuebra = montar({
+      pesquisas: [respondidaEm(10 * MINUTO, { id: "pes-1" }), respondidaEm(10 * MINUTO, { id: "pes-2", token: TOKEN_B, telefone: TELEFONE_B })],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" }), cupomPadrao({ id: "cup-2", pesquisaId: "pes-2", envioCupomStatus: "ENVIADA" })],
+    });
+    umaQuebra.chatwoot.sendOutgoingMessage
+      .mockRejectedValueOnce(Object.assign(new Error("500"), { response: { status: 500 } }))
+      .mockResolvedValueOnce({ enabled: true });
+    const r2 = await umaQuebra.service.reenviarPendentes();
+    expect(r2.candidatos).toBe(2);
+    expect(r2.convites).toBe(1);
+    expect(r2.falhas).toBe(1);
+  });
+
+  it("reenvio: dois ciclos simultaneos enviam a mesma mensagem uma unica vez (reserva)", async () => {
+    const ctx = montar({
+      pesquisas: [respondidaEm(10 * MINUTO, { envioConviteStatus: "ENVIADA" })],
+      cupons: [cupomPadrao({ envioCupomStatus: "PENDENTE", criadoEm: new Date(Date.now() - 10 * MINUTO) })],
+    });
+
+    const agora = new Date();
+    const [a, b] = await Promise.all([ctx.service.reenviarPendentes(agora), ctx.service.reenviarPendentes(agora)]);
+
+    expect(a.cupons + b.cupons).toBe(1);
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+    expect(ctx.cupons[0].envioCupomStatus).toBe("ENVIADA");
+  });
+
+  it("expiracao: marcarCuponsExpirados passa EMITIDO vencido para EXPIRADO e devolve a contagem", async () => {
+    const ctx = montar({
+      pesquisas: [respondidaEm(10 * MINUTO)],
+      cupons: [
+        cupomPadrao({ id: "cup-1", validadeAte: new Date(Date.now() - DIA) }),
+        cupomPadrao({ id: "cup-2", codigo: "BC-NOVO22", pesquisaId: "pes-2", validadeAte: new Date(Date.now() + DIA) }),
+      ],
+    });
+
+    const agora = new Date();
+    const total = await ctx.service.marcarCuponsExpirados(agora);
+
+    expect(total).toBe(1);
+    expect(ctx.prisma.cupomRecompensa.updateMany).toHaveBeenCalledWith({
+      where: { status: "EMITIDO", validadeAte: { lt: agora } },
+      data: { status: "EXPIRADO" },
+    });
+    expect(ctx.cupons[0].status).toBe("EXPIRADO");
+    expect(ctx.cupons[1].status).toBe("EMITIDO");
+  });
+
+  it("shutdown: onModuleDestroy cancela os convites agendados", async () => {
+    const ctx = montar();
+    await ctx.service.responder(TOKEN, 5);
+    await assentar(ctx.service);
+    expect(enviosFechamentoPendentes()).toBe(1);
+
+    await ctx.service.onModuleDestroy();
+
+    expect(enviosFechamentoPendentes()).toBe(0);
+    await avancar(ctx.service, 200_000);
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
   });
 });
