@@ -5,6 +5,7 @@
 import { Logger } from "@nestjs/common";
 
 import type { PesquisaConfigView } from "./pesquisa-config.service";
+import { validarTextoMensagem } from "./pesquisa-regras";
 import { PesquisaService } from "./pesquisa.service";
 
 type Linha = Record<string, any>;
@@ -372,6 +373,20 @@ describe("PesquisaService - recompensa (Fase 52, plano 52-03)", () => {
     expect(bloco?.bloco).toContain("R$ 5,00");
     expect(bloco?.bloco).toContain("R$ 30,00");
     expect(bloco?.bloco).not.toMatch(/[{}]/);
+  });
+
+  it("T52-13a (tracer): fechamento com {LINK} em caixa alta envia o link real", async () => {
+    const { service } = montar({ config: { textoFechamento: "Responda: {LINK}" } });
+    const bloco = await service.prepararFechamento({
+      conversationId: "42",
+      customerId: null,
+      conversa: conversa(),
+    });
+
+    expect(bloco).not.toBeNull();
+    expect(bloco?.bloco).toContain("https://app.test/pesquisa/");
+    expect(bloco?.bloco).not.toMatch(/[{}]/);
+    expect(validarTextoMensagem("fechamento", "Responda: {LINK}")).toBeNull();
   });
 
   it("best-effort: falha ao criar o cupom nao desfaz a nota e nao vaza telefone nem codigo", async () => {
