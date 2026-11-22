@@ -44,6 +44,7 @@ import {
   gerarCodigoCupom,
   gerarToken,
   janelaMesSaoPaulo,
+  mascararTelefone,
   normalizarTelefone,
   notaValida,
   paraCentavos,
@@ -919,6 +920,23 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
       );
       return null;
     }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Opt-out (D-49): quem responde SAIR deixa de receber pesquisa e convite
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * D-49: grava o telefone na lista de supressao. Upsert idempotente (a mesma mensagem pode chegar
+   * duas vezes); log somente com o telefone mascarado (T-52-20).
+   */
+  async registrarOptOut(telefone: string): Promise<void> {
+    await this.prisma.pesquisaSupressao.upsert({
+      where: { telefone },
+      create: { telefone, origem: "SAIR" },
+      update: {},
+    });
+    this.logger.log(`Opt-out registrado telefone=${mascararTelefone(telefone)}`);
   }
 
   // ---------------------------------------------------------------------------------------------
