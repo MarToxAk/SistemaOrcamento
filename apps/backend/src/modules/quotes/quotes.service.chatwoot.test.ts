@@ -216,4 +216,57 @@ describe("QuotesService - Chatwoot Validation", () => {
       await expect(service.create(payload)).resolves.toBeDefined();
     });
   });
+
+  // Fase 51 (plano 51-02, D-03): create dispara a sincronizacao de etiquetas depois da transacao.
+  describe("etiquetas do Chatwoot apos create (fase 51)", () => {
+    const payloadBase = (extra: Partial<CreateQuoteDto> = {}): CreateQuoteDto => ({
+      cliente: { nome: "João" },
+      itens: [{ produto: { descricaoproduto: "Produto" }, quantidadeitem: 1, valoritem: 100 }],
+      ...extra,
+    });
+
+    /** $transaction falso; devolve a flag "terminou" para provar a ordem. */
+    const prepararTransacao = (conversationId: bigint | null) => {
+      const estado = { terminou: false };
+      mockPrismaService.$transaction.mockImplementation(async (callback) => {
+        const criada = { id: "quote-create-1", internalNumber: 1, externalQuoteId: null, status: "PENDENTE", approved: false, approvedAt: null, approvalToken: null, approvalExpiresAt: null, notes: null, total: BigInt(10000), discount: BigInt(0), surcharge: BigInt(0), sellerName: null, conversationId, chatwootContactId: null, validity: null, deliveryDate: null, paymentTerms: null, createdAt: new Date(), updatedAt: new Date(), editedAt: null, customer: { id: "cus1", fullName: "João", isAssociated: false, phone: null, email: null }, items: [], stamps: [], documents: [] };
+        const mockTx = {
+          quote: { create: jest.fn().mockResolvedValue(criada), findFirst: jest.fn().mockResolvedValue(null), findUnique: jest.fn().mockResolvedValue(criada), update: jest.fn().mockResolvedValue(criada) },
+          quoteItem: { create: jest.fn().mockResolvedValue({ id: "item1" }), deleteMany: jest.fn(), createMany: jest.fn() },
+          quoteStampItem: { deleteMany: jest.fn() },
+          customer: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: "cus1", fullName: "João", isAssociated: false, phone: null, email: null }), update: jest.fn() },
+        };
+        const resultado = await callback(mockTx);
+        estado.terminou = true;
+        return resultado;
+      });
+      return estado;
+    };
+
+    it("G4: com conversationId sincroniza com o id criado, depois da transacao; sem conversationId nao", async () => {
+      const estado = prepararTransacao(BigInt(12345));
+      let terminouNaChamada: boolean | undefined;
+      const sync = jest.spyOn(service, "sincronizarEtiquetasChatwoot").mockImplementation(async () => {
+        terminouNaChamada = estado.terminou;
+      });
+
+      await service.create(payloadBase({ conversationId: 12345 }));
+
+      expect(sync).toHaveBeenCalledTimes(1);
+      expect(sync).toHaveBeenCalledWith("quote-create-1");
+      expect(terminouNaChamada).toBe(true);
+
+      sync.mockClear();
+      prepararTransacao(null);
+      await service.create(payloadBase());
+      expect(sync).not.toHaveBeenCalled();
+    });
+
+    it("G5: sincronizacao que rejeita nao derruba o create", async () => {
+      prepararTransacao(BigInt(12345));
+      jest.spyOn(service, "sincronizarEtiquetasChatwoot").mockRejectedValue(new Error("labels fora"));
+
+      await expect(service.create(payloadBase({ conversationId: 12345 }))).resolves.toBeDefined();
+    });
+  });
 });

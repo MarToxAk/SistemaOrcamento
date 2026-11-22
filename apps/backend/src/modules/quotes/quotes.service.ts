@@ -3,6 +3,15 @@ import { randomBytes } from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { AthosService } from "../integrations/athos/athos.service";
 import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
+import {
+  aplicarEtiquetasGerenciadas,
+  clienteEhFrequente,
+  ENV_ETIQUETAS_ATIVAS,
+  ETIQUETA_CLIENTE_FREQUENTE,
+  enfileirarPorConversa,
+  etiquetaDaFase,
+  etiquetasAtivas,
+} from "../integrations/chatwoot/chatwoot-etiquetas";
 import { EfiService } from "../integrations/efi/efi.service";
 import { PriceSource, Prisma, QuoteStatus } from "@prisma/client";
 
@@ -886,6 +895,9 @@ export class QuotesService {
       return fullQuote;
     });
 
+    // Fase 51 (D-03): etiquetas da conversa, sempre DEPOIS do commit e sem await (nunca dentro da transacao).
+    this.dispararEtiquetasChatwoot(quote);
+
     const mappedQuote = this.mapQuoteBody(quote);
 
     try {
@@ -928,6 +940,71 @@ export class QuotesService {
           },
         },
       };
+    }
+  }
+
+  /**
+   * Fase 51 (D-01/D-02/D-04/D-09/D-15/D-16): alinha as etiquetas da conversa do Chatwoot com a fase atual
+   * do orcamento e com o criterio de cliente frequente. As gravacoes sao serializadas por conversa
+   * (enfileirarPorConversa) com leitura FRESCA do banco e do Chatwoot dentro da fila: a fase e o cliente
+   * vem da cotacao atualizada mais recentemente da conversa (R2), mesma regra do fechamento. Le as
+   * etiquetas atuais (GET), mescla preservando as manuais e so grava (POST) quando a lista mudou.
+   * NUNCA lanca: falhas viram warn com quoteId e so a mensagem do erro (jamais token, headers ou config
+   * do axios). Sem conversationId nao faz nenhuma chamada HTTP. Nao consulta o Athos.
+   */
+  async sincronizarEtiquetasChatwoot(quoteId: string): Promise<void> {
+    try {
+      // Kill-switch (mesmo padrao da Fase 43): so o texto "false" desliga; sem leitura de banco nem HTTP.
+      if (!etiquetasAtivas(this.configService.get<string>(ENV_ETIQUETAS_ATIVAS))) return;
+      const quote = await this.prisma.quote.findUnique({
+        where: { id: quoteId },
+        select: { status: true, conversationId: true },
+      });
+      if (!quote || !quote.conversationId) return;
+      const conversationId = quote.conversationId;
+      await enfileirarPorConversa(String(conversationId), async () => {
+        const maisRecente = await this.prisma.quote.findFirst({
+          where: { conversationId },
+          orderBy: { updatedAt: "desc" },
+          select: { status: true, customerId: true },
+        });
+        if (!maisRecente) return;
+        const fase = etiquetaDaFase(maisRecente.status);
+        const frequente = maisRecente.customerId
+          ? await clienteEhFrequente(this.prisma, maisRecente.customerId, (chave) =>
+              this.configService.get<string>(chave),
+            )
+          : false;
+        const desejadas = [...(fase ? [fase] : []), ...(frequente ? [ETIQUETA_CLIENTE_FREQUENTE] : [])];
+        const { alterou } = await aplicarEtiquetasGerenciadas(
+          this.chatwootService,
+          String(conversationId),
+          desejadas,
+        );
+        this.logger.log(
+          `Etiquetas do Chatwoot sincronizadas quoteId=${quoteId} conversationId=${String(conversationId)} alterou=${alterou}`,
+        );
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Falha ao sincronizar etiquetas do Chatwoot quoteId=${quoteId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /** Dispara a sincronizacao de etiquetas sem await; sem conversationId nao faz nada. */
+  private dispararEtiquetasChatwoot(quote: { id: string; conversationId?: unknown } | null | undefined): void {
+    if (!quote?.conversationId) return;
+    try {
+      Promise.resolve(this.sincronizarEtiquetasChatwoot(quote.id)).catch((err) => {
+        this.logger.warn(
+          `Falha ao disparar etiquetas do Chatwoot quoteId=${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Falha ao disparar etiquetas do Chatwoot quoteId=${quote.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -1017,6 +1094,9 @@ export class QuotesService {
         },
       },
     });
+
+    // Fase 51 (D-03): etiqueta da fase no Chatwoot, depois do commit e sem await (nunca bloqueia nem falha a troca).
+    this.dispararEtiquetasChatwoot(updated);
 
     // Notificação Chatwoot para mudanças de status visíveis ao cliente (D-03, D-06)
     const statusesToNotify: QuoteStatus[] = ["EM_PRODUCAO", "PRONTO_PARA_ENTREGA", "ENTREGUE", "CANCELADO"];
@@ -1830,6 +1910,8 @@ export class QuotesService {
           },
         },
       });
+      // Fase 51 (D-03): a transicao para ENVIADO realmente aconteceu; sincroniza as etiquetas sem await.
+      this.dispararEtiquetasChatwoot(quote);
     }
 
     // Tenta resolver idcliente, nome e email (prioriza dados persistidos)

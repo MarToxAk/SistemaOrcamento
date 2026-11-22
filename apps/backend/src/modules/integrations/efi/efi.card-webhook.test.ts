@@ -24,6 +24,7 @@ describe("EfiService - processCardWebhook", () => {
   const mockQuotesService = {
     changeStatus: jest.fn(),
     getById: jest.fn(),
+    sincronizarEtiquetasChatwoot: jest.fn(),
   };
 
   const mockChatwootService = {
@@ -205,5 +206,109 @@ describe("EfiService - processCardWebhook", () => {
     expect(updateArg.data.paymentConfirmedAt).toBeInstanceOf(Date);
 
     expect(mockChatwootService.sendOutgoingMessage).toHaveBeenCalled();
+  });
+
+  // Fase 51 (plano 51-03, D-03): gancho de etiquetas do Chatwoot depois da transacao do webhook de cartao.
+  describe("processCardWebhook - etiquetas do Chatwoot (fase 51)", () => {
+    const quoteBase = (overrides: Record<string, unknown> = {}) => ({
+      id: "quote-card-label",
+      status: "PENDENTE",
+      total: "150.00",
+      paidTotal: "0.00",
+      paymentConfirmedAt: null,
+      conversationId: 42,
+      customer: { fullName: "Cliente Cartao" },
+      internalNumber: 888,
+      ...overrides,
+    });
+
+    let transacaoTerminou: boolean;
+
+    beforeEach(() => {
+      transacaoTerminou = false;
+      mockAxiosCreate.mockReturnValue(buildCobrancaClient());
+      mockQuotesService.sincronizarEtiquetasChatwoot.mockReset();
+      mockQuotesService.getById.mockReset();
+      mockQuotesService.getById.mockResolvedValue({
+        body: { cliente: { nome: "Cliente Cartao" }, idorcamento: "ORC-CARD", totais: { valor: "150.00" } },
+        chatwootConversationUrl: null,
+      });
+      mockChatwootService.sendOutgoingMessage.mockReset();
+      mockChatwootService.sendOutgoingMessage.mockResolvedValue(undefined);
+      mockPrisma.paymentTransaction.findFirst.mockReset();
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
+      mockPrisma.quote.findFirst.mockReset();
+      mockPrisma.quote.findFirst.mockResolvedValue(quoteBase());
+      mockPrisma.$transaction.mockReset();
+      mockPrisma.$transaction.mockImplementation(async (callback: (tx: any) => Promise<any>) => {
+        const resultado = await callback({
+          paymentTransaction: { create: jest.fn().mockResolvedValue({ id: "ptx-card-label" }) },
+          quote: { update: jest.fn().mockResolvedValue({ status: "APROVADO" }) },
+          quoteStatusHistory: { create: jest.fn().mockResolvedValue({ id: "hist-card-label" }) },
+        });
+        transacaoTerminou = true;
+        return resultado;
+      });
+    });
+
+    it("H1: PENDENTE -> APROVADO sincroniza uma vez, depois da transacao e antes da mensagem ao cliente", async () => {
+      let terminouNaChamada: boolean | undefined;
+      mockQuotesService.sincronizarEtiquetasChatwoot.mockImplementation(() => {
+        terminouNaChamada = transacaoTerminou;
+        return Promise.resolve();
+      });
+
+      await service.processCardWebhook("token-123");
+
+      expect(mockQuotesService.sincronizarEtiquetasChatwoot).toHaveBeenCalledTimes(1);
+      expect(mockQuotesService.sincronizarEtiquetasChatwoot).toHaveBeenCalledWith("quote-card-label");
+      expect(terminouNaChamada).toBe(true);
+      expect(mockChatwootService.sendOutgoingMessage).toHaveBeenCalled();
+      expect(mockQuotesService.sincronizarEtiquetasChatwoot.mock.invocationCallOrder[0]).toBeLessThan(
+        mockChatwootService.sendOutgoingMessage.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("H2: status que nao muda (ja APROVADO, sem confirmacao previa) nao sincroniza", async () => {
+      mockPrisma.quote.findFirst.mockResolvedValue(quoteBase({ status: "APROVADO" }));
+
+      await service.processCardWebhook("token-123");
+
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mockQuotesService.sincronizarEtiquetasChatwoot).not.toHaveBeenCalled();
+    });
+
+    it("H3: cotacao sem conversationId nao sincroniza", async () => {
+      mockPrisma.quote.findFirst.mockResolvedValue(quoteBase({ conversationId: null }));
+
+      await service.processCardWebhook("token-123");
+
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mockQuotesService.sincronizarEtiquetasChatwoot).not.toHaveBeenCalled();
+    });
+
+    it("H4: falha sincrona ou rejeicao do gancho nao derruba o webhook nem a mensagem ao cliente", async () => {
+      mockQuotesService.sincronizarEtiquetasChatwoot.mockImplementationOnce(() => {
+        throw new Error("falha sincrona");
+      });
+      await expect(service.processCardWebhook("token-123")).resolves.toBeUndefined();
+      expect(mockChatwootService.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+
+      mockChatwootService.sendOutgoingMessage.mockClear();
+      mockQuotesService.sincronizarEtiquetasChatwoot.mockRejectedValueOnce(new Error("rejeitou"));
+      await expect(service.processCardWebhook("token-123")).resolves.toBeUndefined();
+      expect(mockChatwootService.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("H5: QuotesService antigo, sem sincronizarEtiquetasChatwoot, nao derruba o webhook", async () => {
+      const original = mockQuotesService.sincronizarEtiquetasChatwoot;
+      delete (mockQuotesService as any).sincronizarEtiquetasChatwoot;
+      try {
+        await expect(service.processCardWebhook("token-123")).resolves.toBeUndefined();
+        expect(mockChatwootService.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+      } finally {
+        mockQuotesService.sincronizarEtiquetasChatwoot = original;
+      }
+    });
   });
 });

@@ -428,3 +428,62 @@ describe("QuotesService.enviarParaCliente — mensagem (fase 46)", () => {
     });
   });
 });
+
+// Fase 51 (plano 51-02, D-03): enviarParaCliente sincroniza as etiquetas do Chatwoot (-> ENVIADO).
+describe("QuotesService.enviarParaCliente - etiquetas do Chatwoot (fase 51)", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const cotacao = (sobrescritas: Record<string, unknown> = {}) => ({
+    ...makeQuoteCompleto({
+      externalQuoteId: 25877,
+      total: 20,
+      itens: [{ descricao: "Caderno", quantidade: 2, unitPrice: 10, discount: 0, finalPrice: 20 }],
+    }),
+    ...sobrescritas,
+  });
+
+  it("G1: PENDENTE com conversa -> sincroniza uma vez com o id, DEPOIS do update que grava ENVIADO", async () => {
+    const amb = await montarAmbiente(cotacao());
+    const sync = jest.spyOn(amb.service, "sincronizarEtiquetasChatwoot").mockResolvedValue(undefined);
+
+    await amb.service.enviarParaCliente("quote-mensagem-001");
+
+    expect(amb.prisma.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "ENVIADO" }) }),
+    );
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(sync).toHaveBeenCalledWith("quote-mensagem-001");
+    expect(amb.prisma.quote.update.mock.invocationCallOrder[0]).toBeLessThan(sync.mock.invocationCallOrder[0]);
+  });
+
+  it("G2: sem conversationId, ou ja ENVIADO (sem update), nao sincroniza", async () => {
+    const semConversa = await montarAmbiente(cotacao({ conversationId: null }));
+    const syncA = jest.spyOn(semConversa.service, "sincronizarEtiquetasChatwoot").mockResolvedValue(undefined);
+    await semConversa.service.enviarParaCliente("quote-mensagem-001");
+    expect(semConversa.prisma.quote.update).toHaveBeenCalled();
+    expect(syncA).not.toHaveBeenCalled();
+
+    const jaEnviado = await montarAmbiente(cotacao({ status: "ENVIADO" }));
+    const syncB = jest.spyOn(jaEnviado.service, "sincronizarEtiquetasChatwoot").mockResolvedValue(undefined);
+    await jaEnviado.service.enviarParaCliente("quote-mensagem-001");
+    // outros updates (dados do pagamento) podem ocorrer; so nenhum deles grava status
+    for (const [args] of jaEnviado.prisma.quote.update.mock.calls) {
+      expect(args.data.status).toBeUndefined();
+    }
+    expect(syncB).not.toHaveBeenCalled();
+  });
+
+  it("G3: sincronizacao que rejeita ou lanca nao impede o envio da mensagem principal", async () => {
+    const rejeita = await montarAmbiente(cotacao());
+    jest.spyOn(rejeita.service, "sincronizarEtiquetasChatwoot").mockRejectedValue(new Error("labels fora"));
+    await expect(rejeita.service.enviarParaCliente("quote-mensagem-001")).resolves.toBeDefined();
+    expect(rejeita.chatwoot.sendOutgoingMessage).toHaveBeenCalled();
+
+    const lanca = await montarAmbiente(cotacao());
+    jest.spyOn(lanca.service, "sincronizarEtiquetasChatwoot").mockImplementation(() => {
+      throw new Error("falha sincrona");
+    });
+    await expect(lanca.service.enviarParaCliente("quote-mensagem-001")).resolves.toBeDefined();
+    expect(lanca.chatwoot.sendOutgoingMessage).toHaveBeenCalled();
+  });
+});
