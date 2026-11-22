@@ -44,6 +44,28 @@ function montar(linhaInicial: Linha | null = null, env: Record<string, string> =
 }
 
 describe("PesquisaConfigService", () => {
+  it("primeiro acesso concorrente: P2002 no create relê a linha do vencedor em vez de falhar", async () => {
+    const { service, prisma, estado } = montar();
+    const vencedora: Linha = { id: "default", ativo: false, percentualDesconto: 10, atualizadoEm: new Date("2026-11-22T12:00:00Z"), atualizadoPor: null };
+    prisma.pesquisaConfig.create.mockImplementationOnce(async () => {
+      estado.linha = vencedora;
+      throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+    });
+
+    const [a, b] = await Promise.all([service.obter(), service.obter()]);
+
+    expect(a.ativo).toBe(false);
+    expect(b.ativo).toBe(false);
+    expect(prisma.pesquisaConfig.findUnique).toHaveBeenCalled();
+  });
+
+  it("primeiro acesso: erro do create que nao e P2002 continua propagando", async () => {
+    const { service, prisma } = montar();
+    prisma.pesquisaConfig.create.mockRejectedValueOnce(new Error("banco fora"));
+
+    await expect(service.obter()).rejects.toThrow("banco fora");
+  });
+
   it("cria o singleton no primeiro acesso com ativo false e os padroes das envs", async () => {
     const { service, prisma } = montar();
 

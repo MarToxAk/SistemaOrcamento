@@ -52,10 +52,23 @@ export class PesquisaConfigService {
   /** Le o singleton; ausente, cria com o padrao da empresa. Nunca guarda Decimal no retorno. */
   async obter(): Promise<PesquisaConfigView> {
     const existente = await this.prisma.pesquisaConfig.findUnique({ where: { id: "default" } });
-    const linha =
-      existente ??
-      (await this.prisma.pesquisaConfig.create({ data: { id: "default", ...this.padroes() } }));
+    const linha = existente ?? (await this.criarPadrao());
     return this.paraView(linha);
+  }
+
+  /**
+   * Cria o singleton no primeiro acesso. Dois acessos concorrentes podem tentar criar ao mesmo tempo:
+   * o que perde recebe P2002 (id ja existe) e apenas le a linha criada pelo vencedor.
+   */
+  private async criarPadrao(): Promise<PesquisaConfig> {
+    try {
+      return await this.prisma.pesquisaConfig.create({ data: { id: "default", ...this.padroes() } });
+    } catch (err) {
+      if ((err as { code?: string } | null)?.code !== "P2002") throw err;
+      const criada = await this.prisma.pesquisaConfig.findUnique({ where: { id: "default" } });
+      if (!criada) throw err;
+      return criada;
+    }
   }
 
   /** Padrao sugerido da instancia (para a tela do plano 52-07 mostrar o valor sugerido). */
