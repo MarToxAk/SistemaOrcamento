@@ -97,6 +97,7 @@ type Opcoes = {
   cupons?: Linha[];
   gasto?: string | null;
   corPrimaria?: string;
+  variacao?: unknown;
 };
 
 function montar(opcoes: Opcoes = {}) {
@@ -176,6 +177,7 @@ function montar(opcoes: Opcoes = {}) {
     configService as never,
     automation as never,
     configPesquisa as never,
+    opcoes.variacao as never,
   );
 
   return { service, prisma, chatwoot, cfg, pesquisas, cupons };
@@ -505,5 +507,91 @@ describe("PesquisaService - recompensa (Fase 52, plano 52-03)", () => {
 
     expect(await service.obterPublica(TOKEN)).toMatchObject({ corPrimaria: "#0a58ca" });
     expect(logs.some((l) => l.includes("Cor primaria"))).toBe(false);
+  });
+});
+
+describe("PesquisaService - variacao por IA no fechamento (quick 261122-rlb)", () => {
+  beforeEach(() => espiarLogs());
+  afterEach(() => jest.restoreAllMocks());
+
+  const variacaoFalsa = (variar: (modelo: string) => string) => ({
+    variar: jest.fn(async (modelo: string) => variar(modelo)),
+  });
+
+  it("fechamento com recompensa varia o texto e preenche o link so depois", async () => {
+    const variacao = variacaoFalsa((modelo) => modelo.replace("Ganhe", "Receba"));
+    const ctx = montar({ variacao });
+
+    const bloco = await ctx.service.prepararFechamento({
+      conversationId: "42",
+      customerId: null,
+      conversa: conversa(),
+    });
+
+    expect(bloco).not.toBeNull();
+    expect(variacao.variar).toHaveBeenCalledWith(ctx.cfg.textoFechamento, "fechamento");
+    const modeloRecebido = variacao.variar.mock.calls[0][0] as string;
+    expect(modeloRecebido).not.toContain("app.test");
+    expect(modeloRecebido).not.toContain(TOKEN);
+
+    expect(bloco?.bloco).toContain("Receba");
+    expect(bloco?.bloco).toContain("https://app.test/pesquisa/");
+    expect(bloco?.bloco).toContain("10%");
+    expect(bloco?.bloco).toContain("R$ 5,00");
+    expect(bloco?.bloco).toContain("R$ 30,00");
+    expect(bloco?.bloco).not.toMatch(/[{}]/);
+  });
+
+  it("teto atingido varia o textoSemRecompensa", async () => {
+    const variacao = variacaoFalsa((modelo) => modelo);
+    const ctx = montar({ gasto: "300.00", variacao });
+
+    const bloco = await ctx.service.prepararFechamento({
+      conversationId: "42",
+      customerId: null,
+      conversa: conversa(),
+    });
+
+    expect(bloco).not.toBeNull();
+    expect(variacao.variar).toHaveBeenCalledWith(ctx.cfg.textoSemRecompensa, "semRecompensa");
+  });
+
+  it("variar que lanca ou devolve o proprio modelo deixa o bloco identico ao atual", async () => {
+    const semVariacao = montar();
+    const esperado = await semVariacao.service.prepararFechamento({
+      conversationId: "42",
+      customerId: null,
+      conversa: conversa(),
+    });
+
+    const lanca = { variar: jest.fn(async () => { throw new Error("fora"); }) };
+    const comLanca = await montar({ variacao: lanca }).service.prepararFechamento({
+      conversationId: "42",
+      customerId: null,
+      conversa: conversa(),
+    });
+
+    const identidade = variacaoFalsa((modelo) => modelo);
+    const comIdentidade = await montar({ variacao: identidade }).service.prepararFechamento({
+      conversationId: "42",
+      customerId: null,
+      conversa: conversa(),
+    });
+
+    expect(comLanca?.bloco).toBe(esperado?.bloco);
+    expect(comIdentidade?.bloco).toBe(esperado?.bloco);
+  });
+
+  it("servico sem o 6o argumento deixa o bloco identico ao atual", async () => {
+    const ctx = montar();
+
+    const bloco = await ctx.service.prepararFechamento({
+      conversationId: "42",
+      customerId: null,
+      conversa: conversa(),
+    });
+
+    expect(bloco?.bloco).toContain("Ganhe 10% de desconto");
+    expect(bloco?.bloco).not.toMatch(/[{}]/);
   });
 });

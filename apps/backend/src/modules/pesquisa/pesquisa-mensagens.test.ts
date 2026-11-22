@@ -626,6 +626,108 @@ describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano
       expect(privada.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
       expect(privada.cupons[0].envioCupomStatus).toBe("ENVIADA");
     });
+
+    it("cupom com variar falso recebe o modelo cru e sai com o codigo real", async () => {
+      const variar = jest.fn(async (modelo: string) => modelo.replace("Cupom", "Seu cupom"));
+      const ctx = montar({ variacao: { variar } });
+
+      const resultado = await ctx.service.responder(TOKEN, 4);
+      expect(resultado.tipo).toBe("OK");
+      if (resultado.tipo !== "OK") throw new Error("esperado OK");
+      await assentar(ctx.service);
+
+      expect(variar).toHaveBeenCalledWith(ctx.cfg.textoPosResposta, "posResposta");
+      const modeloRecebido = variar.mock.calls[0][0] as string;
+      const codigo = resultado.resposta.cupom?.codigo as string;
+      expect(modeloRecebido).toContain("{codigo}");
+      expect(modeloRecebido).not.toContain(codigo);
+
+      const texto = textoEnviado(ctx, 0);
+      expect(texto).toContain("Seu cupom");
+      expect(texto).toContain(codigo);
+      expect(texto).not.toMatch(/[{}]/);
+    });
+
+    it("convite com variar falso recebe o modelo cru e sai com o link do Google uma vez", async () => {
+      const variar = jest.fn(async (modelo: string) => modelo.replace("Avalie", "Deixe sua avaliação em"));
+      const ctx = montar({ variacao: { variar } });
+
+      await ctx.service.responder(TOKEN, 4);
+      await assentar(ctx.service);
+      await avancar(ctx.service, 200_000);
+
+      expect(variar).toHaveBeenNthCalledWith(2, ctx.cfg.textoConviteGoogle, "convite");
+      const modeloRecebido = variar.mock.calls[1][0] as string;
+      expect(modeloRecebido).toContain("{link_google}");
+      expect(modeloRecebido).not.toContain("https://g.page/r/abc/review");
+
+      const texto = textoEnviado(ctx, 1);
+      expect([...texto.matchAll(/https:\/\/g\.page\/r\/abc\/review/g)]).toHaveLength(1);
+    });
+
+    it("sem {codigo} no cupom e sem {link_google} no convite a variacao nao roda (decisao b)", async () => {
+      const variar = jest.fn(async (modelo: string) => modelo);
+      const ctx = montar({
+        config: {
+          textoPosResposta: "Obrigado! {nome_empresa} agradece.",
+          textoConviteGoogle: "Veja nossa pagina.",
+        },
+        variacao: { variar },
+      });
+
+      const resultado = await ctx.service.responder(TOKEN, 4);
+      if (resultado.tipo !== "OK") throw new Error("esperado OK");
+      await assentar(ctx.service);
+      expect(variar).not.toHaveBeenCalled();
+      expect(textoEnviado(ctx, 0)).toBe("Obrigado! Loja Teste agradece.");
+
+      await avancar(ctx.service, 200_000);
+      expect(variar).not.toHaveBeenCalled();
+      expect(textoEnviado(ctx, 1)).toBe("Veja nossa pagina.");
+    });
+
+    it("re-tentativa do convite nao duplica com variante diferente (marcador do link)", async () => {
+      const variar = jest.fn(async (modelo: string) => modelo.replace("Avalie", "Deixe sua avaliação"));
+      const base = () => ({
+        pesquisas: [
+          respondidaEm(10 * MINUTO, {
+            chatwootCsat: "OK",
+            envioConviteStatus: "ENVIANDO",
+            envioConviteReservadoEm: new Date(Date.now() - 20 * MINUTO),
+          }),
+        ],
+        cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+        variacao: { variar },
+      });
+
+      // Ja saiu: mensagem publica recente com o link do Google e texto diferente.
+      const jaSaiu = montar(base());
+      jaSaiu.chatwoot.listMessagesAfter.mockResolvedValue([
+        { message_type: 1, content: "Outra variante com https://g.page/r/abc/review no meio", created_at: Math.floor(Date.now() / 1000) },
+      ]);
+      const r1 = await jaSaiu.service.reenviarPendentes();
+      expect(r1.convites).toBe(1);
+      expect(jaSaiu.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+      expect(jaSaiu.pesquisas[0].envioConviteStatus).toBe("ENVIADA");
+
+      // Sem mensagem: reenvia uma vez.
+      const vazio = montar(base());
+      vazio.chatwoot.listMessagesAfter.mockResolvedValue([]);
+      const r2 = await vazio.service.reenviarPendentes();
+      expect(r2.convites).toBe(1);
+      expect(vazio.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+      expect(vazio.pesquisas[0].envioConviteStatus).toBe("ENVIADA");
+
+      // So mensagem privada com o link: reenvia uma vez.
+      const privada = montar(base());
+      privada.chatwoot.listMessagesAfter.mockResolvedValue([
+        { message_type: 1, private: true, content: "Convite https://g.page/r/abc/review", created_at: Math.floor(Date.now() / 1000) },
+      ]);
+      const r3 = await privada.service.reenviarPendentes();
+      expect(r3.convites).toBe(1);
+      expect(privada.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+      expect(privada.pesquisas[0].envioConviteStatus).toBe("ENVIADA");
+    });
   });
 
   it("cupom: sai na hora, com as variaveis resolvidas e sem link", async () => {
