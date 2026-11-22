@@ -222,3 +222,81 @@ export async function aguardarFilaEtiquetas(): Promise<void> {
     await Promise.all([...caudasPorConversa.values()]);
   }
 }
+
+/**
+ * Fase 51 (plano 51-04): atraso "humano" da mensagem de encerramento (D-12, D-20, D-22).
+ *
+ * O envio e agendado por setTimeout em processo, com um timer por conversa. Premissa: instancia unica
+ * por tenant. Reiniciar o processo perde a mensagem agendada (aceito, D-12 e D-24): as etiquetas ja
+ * ficaram aplicadas na hora e so a despedida se perde.
+ */
+export const ENV_FECHAMENTO_ATRASO_MIN_S = "CHATWOOT_FECHAMENTO_ATRASO_MIN_S";
+export const ENV_FECHAMENTO_ATRASO_MAX_S = "CHATWOOT_FECHAMENTO_ATRASO_MAX_S";
+export const ATRASO_FECHAMENTO_MIN_PADRAO_S = 45;
+export const ATRASO_FECHAMENTO_MAX_PADRAO_S = 180;
+export const ATRASO_FECHAMENTO_TETO_S = 900;
+
+function segundosPositivos(valor: string | undefined, padrao: number): number {
+  const texto = (valor ?? "").trim();
+  if (texto === "") return padrao;
+  const numero = Number(texto);
+  if (!Number.isFinite(numero) || numero <= 0) return padrao;
+  return Math.min(numero, ATRASO_FECHAMENTO_TETO_S);
+}
+
+/** Cada valor: numero finito > 0, senao padrao; limitado a 900 s; troca min e max se vierem invertidos. */
+export function lerAtrasoFechamentoS(get: (chave: string) => string | undefined): { minS: number; maxS: number } {
+  const a = segundosPositivos(get(ENV_FECHAMENTO_ATRASO_MIN_S), ATRASO_FECHAMENTO_MIN_PADRAO_S);
+  const b = segundosPositivos(get(ENV_FECHAMENTO_ATRASO_MAX_S), ATRASO_FECHAMENTO_MAX_PADRAO_S);
+  return a <= b ? { minS: a, maxS: b } : { minS: b, maxS: a };
+}
+
+/**
+ * Distribuicao triangular (media de dois sorteios uniformes): concentra o atraso no meio do intervalo e
+ * evita o padrao plano de um uniforme, que parece robotico. Devolve milissegundos inteiros.
+ */
+export function sortearAtrasoHumanoMs(minS: number, maxS: number, rnd: () => number = Math.random): number {
+  const menor = Math.min(minS, maxS);
+  const maior = Math.max(minS, maxS);
+  const u = (rnd() + rnd()) / 2;
+  return Math.round((menor + u * (maior - menor)) * 1000);
+}
+
+const timersFechamento = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Agenda a tarefa em `delayMs`. Um timer por conversa: um novo agendamento substitui o anterior.
+ * O timer nao segura o processo (unref) e a tarefa nunca vira rejeicao nao tratada (quem agenda deve
+ * registrar o proprio log de erro).
+ */
+export function agendarEnvioFechamento(conversationId: string, delayMs: number, tarefa: () => Promise<void>): void {
+  const anterior = timersFechamento.get(conversationId);
+  if (anterior) clearTimeout(anterior);
+
+  const timer = setTimeout(() => {
+    if (timersFechamento.get(conversationId) === timer) timersFechamento.delete(conversationId);
+    void Promise.resolve()
+      .then(tarefa)
+      .catch(() => undefined);
+  }, delayMs);
+  const comUnref = timer as unknown as { unref?: () => void };
+  if (typeof comUnref.unref === "function") comUnref.unref();
+  timersFechamento.set(conversationId, timer);
+}
+
+export function cancelarEnvioFechamento(conversationId: string): boolean {
+  const timer = timersFechamento.get(conversationId);
+  if (!timer) return false;
+  clearTimeout(timer);
+  timersFechamento.delete(conversationId);
+  return true;
+}
+
+export function cancelarTodosEnviosFechamento(): void {
+  for (const timer of timersFechamento.values()) clearTimeout(timer);
+  timersFechamento.clear();
+}
+
+export function enviosFechamentoPendentes(): number {
+  return timersFechamento.size;
+}
