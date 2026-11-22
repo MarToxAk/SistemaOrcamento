@@ -19,8 +19,9 @@ status: partial
 - Findings in scope: 18 (CR-01, WR-01..WR-09 e IN-01..IN-08; escopo `all`, incluindo o achado de necessidade WR-09)
 - Fixed: 17
 - Skipped: 1 (WR-07, requer decisao de produto e/ou mudanca de schema)
-- Fixed nesta execucao (novo commit): IN-07 (commit `6186bd4`)
-- Ja corrigidos em execucoes anteriores e reverificados no codigo atual: os outros 16
+- Corrigidos nesta execucao: 16 findings via commits `ae68420`..`da712b2` e IN-07 em `6186bd4`
+- CR-01 ja havia sido corrigido pelo plano 52-13 (`07348e2`) e foi reverificado no codigo atual
+- Inclui tambem dois achados da revisao incremental do gap (`bf9e4f0`, `30a6ba2`; ver `52-REVIEW-gap13.md`), fora dos 18 originais
 
 **Verificacao desta execucao:** executada em uma worktree isolada (`workflow.use_worktrees: true`), branch `gsd-reviewfix/52-581736`, a partir de `30a6ba2`. Como a worktree nao tem `node_modules`, as ferramentas rodaram a partir de `/root/SistemaOrcamento/node_modules` e o Node resolveu as dependencias subindo ate o `node_modules` do checkout principal — portanto um run feito a partir da worktree, nao reproduzivel depois que ela e removida. Resultados:
 - `jest src/modules/pesquisa src/modules/integrations/chatwoot --no-coverage`: 19 suites, 490 testes, todos passando (inclui o teste novo de IN-07).
