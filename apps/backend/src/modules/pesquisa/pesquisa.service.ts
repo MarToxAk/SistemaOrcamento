@@ -253,10 +253,10 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
         });
       }
 
+      const disponivel = (await this.avaliarRecompensa(telefone, cfg, agora)).disponivel;
+      const modelo = disponivel ? cfg.textoFechamento : cfg.textoSemRecompensa;
       const bloco = renderizarTexto(
-        (await this.avaliarRecompensa(telefone, cfg, agora)).disponivel
-          ? cfg.textoFechamento
-          : cfg.textoSemRecompensa,
+        await this.variarModelo(modelo, disponivel ? "fechamento" : "semRecompensa"),
         montarVariaveisFechamento({
           link: `${baseUrl}/pesquisa/${pesquisa.token}`,
           cfg,
@@ -745,7 +745,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
       }
 
       const texto = renderizarTexto(
-        cfg.textoConviteGoogle,
+        await this.variarModelo(cfg.textoConviteGoogle, "convite", "link_google"),
         montarVariaveisConvite({ linkGoogle: cfg.linkGoogle, empresaNome: this.config.get<string>("EMPRESA_NOME") ?? "" }),
       );
 
@@ -758,6 +758,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
         statusAtual: status,
         reservadoEm: pesquisa.envioConviteReservadoEm,
         confirmar: opcoes.confirmarEnvioIncerto === true,
+        marcador: cfg.linkGoogle,
         agora,
       });
     } catch (err) {
