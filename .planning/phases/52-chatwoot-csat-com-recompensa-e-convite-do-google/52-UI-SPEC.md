@@ -623,7 +623,7 @@ Viewport: o Next.js já inclui `width=device-width, initial-scale=1` por padrão
 
 ## UI Considerations
 
-Applicable state considerations resolved: 21 covered, 3 backstop, 2 unresolved
+Applicable state considerations resolved: 23 covered, 3 backstop, 0 unresolved
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -651,8 +651,8 @@ Applicable state considerations resolved: 21 covered, 3 backstop, 2 unresolved
 | zero-one-many | Gasto vs teto (R$ 0, abaixo do teto, teto exato e acima) | 🧪 backstop | Verificação visual com 0, R$ 299,99, R$ 300,00 e R$ 412,00: barra limitada a 100%, texto "Teto atingido" |
 | long-text | Comentário de 500 caracteres em 320 px | 🧪 backstop | Verificação visual com fixture em 320px, sem scroll horizontal da página |
 | overflow | Lista de cupons com muitos registros | 🧪 backstop | Paginação de 50 com "Carregar mais". Teste de integração da paginação |
-| long-text | Cor primária da empresa com contraste baixo | ⚠ unresolved | Padrão `#0d6efd` passa (4,50:1). Cores customizadas precisam de checagem na implantação. Planner trata como premissa |
-| empty | Situação "Suspenso" é derivada, não persistida | ⚠ unresolved | Premissa: a tela calcula a partir do gasto do mês e da validade. Planner confirma se a API já devolve o campo |
+| long-text | Cor primária da empresa com contraste baixo | ✅ covered | (recomendado, confirmado pelo usuario) A pagina publica calcula o contraste de EMPRESA_COR_PRIMARIA contra texto branco; abaixo de 4,5:1 usa o fallback `#0d6efd` e registra aviso no log do backend. Teste unitario da funcao de contraste |
+| empty | Situação "Suspenso" é derivada, não persistida | ✅ covered | (recomendado, confirmado pelo usuario) A API de cupons devolve o campo derivado `situacao` (EMITIDO, SUSPENSO, USADO, EXPIRADO, CANCELADO) calculado no servidor a partir do gasto real do mes e da validade; a tela so exibe |
 
 ---
 
@@ -721,15 +721,15 @@ Cada decisão tem motivo e custo de reversão. Os itens marcados como "Confirmar
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: FLAG (Design System sentence vs. non-exhaustive reuse list; provenance line present)
 
-**Approval:** pending
+**Approval:** approved 2026-11-22 (gsd-ui-checker, after revision 1)
 
 ## Confirmacoes do usuario (2026-11-22)
 
