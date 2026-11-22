@@ -69,6 +69,7 @@ Task IDs are assigned by the planner; this table maps CONTEXT decisions to the v
 | TBD | TBD | TBD | Kill-switch | — | `ativo=false` nao cria pesquisa nem envia bloco | unit | `jest pesquisa.service -t ativo` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | Telefone normalizado | — | `+5512996484918`, `(12) 99648-4918`, `12996484918` -> mesma chave | unit | `jest pesquisa-regras -t telefone` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | Link Google allowlist | — | Dominio fora da lista recusado no DTO | unit | `jest pesquisa-admin -t linkGoogle` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | Revogar pesquisa (token revogavel, CONTEXT rev. 1) | — | Apos revogar, rota publica responde INDISPONIVEL com corpo generico (mesmo de token inexistente); cupom EMITIDO vira CANCELADO; USADO intacto; idempotente; id invalido 404 | unit | `jest pesquisa-revogacao` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -82,6 +83,7 @@ Task IDs are assigned by the planner; this table maps CONTEXT decisions to the v
 - [ ] `apps/backend/src/modules/pesquisa/pesquisa-webhook.controller.test.ts` — HMAC, janela, filtro, SAIR.
 - [ ] `apps/backend/src/modules/pesquisa/pesquisa-public.controller.test.ts` — limite por token e metadado de throttle.
 - [ ] `apps/backend/src/modules/pesquisa/pesquisa-retencao.test.ts` — anonimizacao.
+- [ ] `apps/backend/src/modules/pesquisa/pesquisa-revogacao.service.test.ts` — revogacao de pesquisa (INDISPONIVEL ponta a ponta com PesquisaService real, CANCELADO, idempotencia, convite agendado cancelado).
 - [ ] `apps/backend/src/modules/integrations/chatwoot/chatwoot-csat.service.test.ts` — payloads de `createPrivateCsatMessage`, `submitCsatResponse`, `listMessagesAfter`, `updateContactCustomAttributes`, `createAccountLabel` (corpo aninhado).
 - [ ] Atualizar `chatwoot-automation.service.test.ts:147` e `chatwoot-fechamento-agendado.test.ts:72` se o construtor mudar (P3).
 - [ ] Estender `chatwoot-etiquetas.test.ts` para a reavaliacao com historico (P5).
