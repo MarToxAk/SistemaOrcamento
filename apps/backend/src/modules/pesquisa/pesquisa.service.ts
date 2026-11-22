@@ -8,7 +8,7 @@
  *
  * Logs: so conversationId, pesquisaId e motivo. Nunca o token, o telefone nem o texto das mensagens.
  */
-import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { CupomRecompensa, PesquisaSatisfacao } from "@prisma/client";
 
@@ -28,6 +28,8 @@ import {
   sortearAtrasoHumanoMs,
 } from "../integrations/chatwoot/chatwoot-etiquetas";
 import { PesquisaConfigService, type PesquisaConfigView } from "./pesquisa-config.service";
+import { type TipoVariacao } from "./pesquisa-variacao";
+import { PesquisaVariacaoService } from "./pesquisa-variacao.service";
 import {
   etiquetasDaPesquisa,
   montarAtributosContato,
@@ -151,6 +153,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     private readonly config: ConfigService,
     private readonly automation: ChatwootAutomationService,
     private readonly configPesquisa: PesquisaConfigService,
+    @Optional() private readonly variacao?: PesquisaVariacaoService,
   ) {}
 
   onModuleInit(): void {
@@ -593,6 +596,23 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   // ---------------------------------------------------------------------------------------------
 
   /**
+   * [U6][U7] Variacao por IA antes de renderizar. Sem o servico (parametro opcional) devolve o
+   * modelo; com `placeholderEstavel` so varia quando o modelo contem aquele placeholder (decisao
+   * (b): sem marcador estavel a conferencia por texto exato precisa continuar valendo). Qualquer
+   * excecao cai no modelo original sem lancar.
+   */
+  private async variarModelo(modelo: string, tipo: TipoVariacao, placeholderEstavel?: string): Promise<string> {
+    if (!this.variacao) return modelo;
+    if (placeholderEstavel && !new RegExp(`\\{${placeholderEstavel}\\}`, "i").test(modelo)) return modelo;
+    try {
+      return await this.variacao.variar(modelo, tipo);
+    } catch (err) {
+      this.logger.warn(`Variacao por IA falhou (usando o texto original) motivo=excecao`);
+      return modelo;
+    }
+  }
+
+  /**
    * D-21/D-22/D-49: mensagem do cupom, sem link e sem atraso. Nunca lanca. Pesquisa anonimizada,
    * cupom inexistente ou fora de EMITIDO, pesquisa revogada e telefone no opt-out nao recebem nada
    * (a supressao e consultada imediatamente antes do envio, nao so na criacao).
@@ -621,7 +641,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
 
       const cfg = await this.configPesquisa.obter();
       const texto = renderizarTexto(
-        cfg.textoPosResposta,
+        await this.variarModelo(cfg.textoPosResposta, "posResposta", "codigo"),
         montarVariaveisMensagem({
           linkGoogle: cfg.linkGoogle ?? null,
           cupom: {
@@ -645,6 +665,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
         statusAtual: linha.envioCupomStatus,
         reservadoEm: linha.envioCupomReservadoEm,
         confirmar: opcoes.confirmarEnvioIncerto === true,
+        marcador: linha.codigo,
         agora,
       });
     } catch (err) {
@@ -760,6 +781,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     reservadoEm: Date | null;
     confirmar: boolean;
     agora: Date;
+    marcador?: string;
   }): Promise<ResultadoEnvio> {
     const pendenteOuFalha = dados.statusAtual === "PENDENTE" || dados.statusAtual === "FALHA";
     const incerto = dados.statusAtual === "ENVIANDO";
@@ -767,7 +789,7 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
     if (!pendenteOuFalha) {
       if (!incerto || !dados.confirmar) return "IGNORADO";
       const desde = dados.reservadoEm ? dados.reservadoEm.getTime() : 0;
-      const jaEnviada = await this.mensagemJaEnviada(dados.conversationId, dados.texto, desde);
+      const jaEnviada = await this.mensagemJaEnviada(dados.conversationId, dados.texto, desde, dados.marcador);
       if (jaEnviada === null) return "PENDENTE";
       if (jaEnviada) {
         await this.gravarEnvio(dados.canal, dados.id, "ENVIADA");
@@ -874,17 +896,36 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   /**
    * D-47: confere no Chatwoot se uma mensagem de saida com o mesmo texto ja foi criada desde a
    * reserva (as 20 mais recentes, sem afterId). `null` = indeterminado (lista indisponivel).
+   *
+   * [U7] A variacao por IA torna o texto instavel entre tentativas: alem da igualdade de texto,
+   * aceita um `marcador` estavel (codigo do cupom / link do Google) quando a mensagem de saida,
+   * publica e recente, o contem. Mensagens privadas nunca contam.
    */
-  private async mensagemJaEnviada(conversationId: string, texto: string, desdeMs: number): Promise<boolean | null> {
+  private async mensagemJaEnviada(
+    conversationId: string,
+    texto: string,
+    desdeMs: number,
+    marcador?: string,
+  ): Promise<boolean | null> {
     try {
       const mensagens = await this.chatwoot.listMessagesAfter(conversationId);
       if (!Array.isArray(mensagens)) return null;
       const alvo = normalizarConteudo(texto);
+      const marcadorAlvo = marcador ? normalizarConteudo(marcador) : "";
       return mensagens.some((item) => {
         if (!item || typeof item !== "object") return false;
-        const mensagem = item as { message_type?: unknown; content?: unknown; created_at?: unknown };
+        const mensagem = item as {
+          message_type?: unknown;
+          content?: unknown;
+          created_at?: unknown;
+          private?: unknown;
+        };
         if (mensagem.message_type !== 1 && mensagem.message_type !== "outgoing") return false;
-        if (normalizarConteudo(String(mensagem.content ?? "")) !== alvo) return false;
+        if (mensagem.private === true) return false;
+        const conteudo = normalizarConteudo(String(mensagem.content ?? ""));
+        const bateTexto = conteudo === alvo;
+        const bateMarcador = marcadorAlvo !== "" && conteudo.includes(marcadorAlvo);
+        if (!bateTexto && !bateMarcador) return false;
         const quando = criadaEmMs(mensagem.created_at);
         return quando !== null && quando >= desdeMs - 60_000;
       });

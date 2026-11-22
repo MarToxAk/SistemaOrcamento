@@ -4,10 +4,18 @@
  * timers falsos. Nenhuma escrita real.
  */
 import { Logger } from "@nestjs/common";
+import axios from "axios";
 
 import { aguardarFilaEtiquetas, cancelarTodosEnviosFechamento, enviosFechamentoPendentes } from "../integrations/chatwoot/chatwoot-etiquetas";
 import type { PesquisaConfigView } from "./pesquisa-config.service";
+import { TIMEOUT_VARIACAO_MS } from "./pesquisa-variacao";
+import { PesquisaVariacaoService } from "./pesquisa-variacao.service";
 import { PesquisaService } from "./pesquisa.service";
+
+jest.mock("axios", () => ({
+  __esModule: true,
+  default: { post: jest.fn() },
+}));
 
 type Linha = Record<string, any>;
 
@@ -125,6 +133,7 @@ type Opcoes = {
   cupons?: Linha[];
   suprimidos?: string[];
   chatwoot?: Linha;
+  variacao?: unknown;
 };
 
 function montar(opcoes: Opcoes = {}) {
@@ -234,6 +243,7 @@ function montar(opcoes: Opcoes = {}) {
     configService as never,
     automation as never,
     configPesquisa as never,
+    opcoes.variacao as never,
   );
 
   return { service, prisma, chatwoot, cfg, pesquisas, cupons, suprimidos };
@@ -499,6 +509,124 @@ describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano
   function respondidaEm(ms: number, extra: Linha = {}): Linha {
     return pesquisaPadrao({ respondidaEm: new Date(Date.now() - ms), nota: 5, status: "RESPONDIDA", ...extra });
   }
+
+  describe("variacao por IA (quick 261122-rlb)", () => {
+    const envIA: Record<string, string> = {
+      CHATWOOT_AI_URL: "https://ia.exemplo.test",
+      CHATWOOT_AI_TOKEN: "tok-secreto-ia",
+      CHATWOOT_AI_MODEL: "openclaw/main",
+    };
+
+    beforeEach(() => {
+      (axios.post as jest.Mock).mockReset();
+    });
+
+    function variacaoService(): PesquisaVariacaoService {
+      return new PesquisaVariacaoService({ get: (chave: string) => envIA[chave] } as never);
+    }
+
+    function respostaIA(texto: string): unknown {
+      return { data: { output: [{ content: [{ text: texto }] }] } };
+    }
+
+    const VARIANTE_CUPOM =
+      "Seu cupom: {codigo}. Desconto de {percentual} até {teto}, compra mínima de {compra_minima}, válido até {validade}. {nome_empresa}";
+
+    it("cupom varia via IA com o codigo real so depois da variacao", async () => {
+      (axios.post as jest.Mock).mockResolvedValue(respostaIA(VARIANTE_CUPOM));
+      const ctx = montar({ variacao: variacaoService() });
+
+      const resultado = await ctx.service.responder(TOKEN, 4);
+      expect(resultado.tipo).toBe("OK");
+      if (resultado.tipo !== "OK") throw new Error("esperado OK");
+      await assentar(ctx.service);
+
+      expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+      const texto = textoEnviado(ctx, 0);
+      const codigo = resultado.resposta.cupom?.codigo as string;
+      expect(texto).toContain("Seu cupom:");
+      expect(texto).toContain(codigo);
+      expect(texto).toContain("10%");
+      expect(texto).toContain("R$ 5,00");
+      expect(texto).toContain("R$ 30,00");
+      expect(texto).toContain("Loja Teste");
+      expect(texto).not.toMatch(/[{}]/);
+
+      const chamada = (axios.post as jest.Mock).mock.calls[0] as [string, { model: string; input: string }, { headers?: Record<string, string>; timeout?: number }];
+      expect(chamada[0]).toBe("https://ia.exemplo.test");
+      expect(chamada[1].model).toBe("openclaw/main");
+      expect(chamada[1].input).toContain("{codigo}");
+      expect(chamada[1].input).not.toContain(codigo);
+      expect(chamada[1].input).not.toContain(TELEFONE);
+      expect(chamada[1].input).not.toContain(TOKEN);
+      expect(chamada[2].headers?.Authorization).toBe("Bearer tok-secreto-ia");
+      expect(chamada[2].timeout).toBe(TIMEOUT_VARIACAO_MS);
+    });
+
+    it("falha da IA mantem o texto original e o cupom sai ENVIADA", async () => {
+      (axios.post as jest.Mock).mockRejectedValue(new Error("fora do ar"));
+      const ctx = montar({ variacao: variacaoService() });
+
+      const resultado = await ctx.service.responder(TOKEN, 4);
+      expect(resultado.tipo).toBe("OK");
+      if (resultado.tipo !== "OK") throw new Error("esperado OK");
+      await assentar(ctx.service);
+
+      const texto = textoEnviado(ctx, 0);
+      const codigo = resultado.resposta.cupom?.codigo as string;
+      expect(texto).toContain(`Cupom ${codigo}:`);
+      expect(ctx.cupons[0].envioCupomStatus).toBe("ENVIADA");
+    });
+
+    it("re-tentativa incerta nao duplica o cupom mesmo com variante diferente (marcador)", async () => {
+      const codigo = "BC-ABC234";
+      const variante =
+        "Seu cupom chegou: {codigo}. Desconto de {percentual}, teto de {teto}, mínimo {compra_minima}, válido até {validade}. {nome_empresa}";
+      const base = () => ({
+        pesquisas: [respondidaEm(10 * MINUTO, { chatwootCsat: "OK", envioConviteStatus: "ENVIADA" })],
+        cupons: [
+          cupomPadrao({
+            codigo,
+            envioCupomStatus: "ENVIANDO",
+            envioCupomReservadoEm: new Date(Date.now() - 20 * MINUTO),
+            criadoEm: new Date(Date.now() - 20 * MINUTO),
+          }),
+        ],
+        variacao: variacaoService(),
+      });
+
+      // Ja saiu: mensagem publica recente com texto diferente, mas contendo o codigo do cupom.
+      const jaSaiu = montar(base());
+      jaSaiu.chatwoot.listMessagesAfter.mockResolvedValue([
+        { message_type: 1, content: `Outra variante com o codigo ${codigo} no meio`, created_at: Math.floor(Date.now() / 1000) },
+      ]);
+      (axios.post as jest.Mock).mockResolvedValue(respostaIA(variante));
+      const r1 = await jaSaiu.service.reenviarPendentes();
+      expect(r1.cupons).toBe(1);
+      expect(jaSaiu.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+      expect(jaSaiu.cupons[0].envioCupomStatus).toBe("ENVIADA");
+
+      // Lista vazia: reenvia exatamente uma vez.
+      const vazio = montar(base());
+      vazio.chatwoot.listMessagesAfter.mockResolvedValue([]);
+      (axios.post as jest.Mock).mockResolvedValue(respostaIA(variante));
+      const r2 = await vazio.service.reenviarPendentes();
+      expect(r2.cupons).toBe(1);
+      expect(vazio.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+      expect(vazio.cupons[0].envioCupomStatus).toBe("ENVIADA");
+
+      // Mensagem privada contendo o codigo nao conta: reenvia exatamente uma vez.
+      const privada = montar(base());
+      privada.chatwoot.listMessagesAfter.mockResolvedValue([
+        { message_type: 1, private: true, content: `Cupom ${codigo} enviado`, created_at: Math.floor(Date.now() / 1000) },
+      ]);
+      (axios.post as jest.Mock).mockResolvedValue(respostaIA(variante));
+      const r3 = await privada.service.reenviarPendentes();
+      expect(r3.cupons).toBe(1);
+      expect(privada.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+      expect(privada.cupons[0].envioCupomStatus).toBe("ENVIADA");
+    });
+  });
 
   it("cupom: sai na hora, com as variaveis resolvidas e sem link", async () => {
     const ctx = montar();
