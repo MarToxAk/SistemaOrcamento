@@ -234,6 +234,19 @@ describe("PesquisaCupomService.resgatar", () => {
     expect(tx.cupomRecompensa.updateMany).not.toHaveBeenCalled();
   });
 
+  it("corrida com a revogacao: cupom cancelado entre a leitura e o update responde 422 CANCELADO (IN-03)", async () => {
+    const { service, tx, cupons } = montar();
+    tx.cupomRecompensa.updateMany.mockImplementationOnce(async () => {
+      cupons[0].status = "CANCELADO";
+      return { count: 0 };
+    });
+
+    const erro = erroDe(await capturar(service.resgatar("BOX-7K3Q9M", 30, AGORA)));
+
+    expect(erro.getStatus()).toBe(422);
+    expect(erro.getResponse()).toMatchObject({ codigo: "CANCELADO" });
+  });
+
   it("dois resgates simultaneos do mesmo codigo: um 200 e um 409", async () => {
     const { service } = montar();
 

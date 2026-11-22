@@ -39,6 +39,7 @@ const LIMITE_MAXIMO = 100;
 
 const MSG_NAO_ENCONTRADO = "Cupom não encontrado. Confira se digitou o código completo.";
 const MSG_JA_USADO = "Este cupom já foi usado. Atualize a busca.";
+const MSG_CANCELADO = "Este cupom foi cancelado e não pode ser usado.";
 
 type LinhaCupom = Pick<
   CupomRecompensa,
@@ -177,10 +178,7 @@ export class PesquisaCupomService {
 
       if (cupom.status === "USADO") throw new ConflictException({ codigo: "JA_USADO", message: MSG_JA_USADO });
       if (cupom.status === "CANCELADO") {
-        throw new UnprocessableEntityException({
-          codigo: "CANCELADO",
-          message: "Este cupom foi cancelado e não pode ser usado.",
-        });
+        throw new UnprocessableEntityException({ codigo: "CANCELADO", message: MSG_CANCELADO });
       }
       if (cupom.status === "EXPIRADO" || cupom.validadeAte.getTime() < agora.getTime()) {
         throw new UnprocessableEntityException({ codigo: "VENCIDO", message: "Este cupom venceu e não pode ser usado." });
@@ -224,7 +222,18 @@ export class PesquisaCupomService {
           usadoPor: "balcao",
         },
       });
-      if (atualizados.count !== 1) throw new ConflictException({ codigo: "JA_USADO", message: MSG_JA_USADO });
+      if (atualizados.count !== 1) {
+        // Corrida com a revogacao (que nao usa o lock 520001): se o cupom foi cancelado entre a leitura e
+        // o update condicional, o operador deve ver "cancelado" e nao "ja usado".
+        const atual = await tx.cupomRecompensa.findUnique({ where: { id: cupom.id } });
+        if (atual?.status === "CANCELADO") {
+          throw new UnprocessableEntityException({
+            codigo: "CANCELADO",
+            message: MSG_CANCELADO,
+          });
+        }
+        throw new ConflictException({ codigo: "JA_USADO", message: MSG_JA_USADO });
+      }
 
       return desconto;
     });
