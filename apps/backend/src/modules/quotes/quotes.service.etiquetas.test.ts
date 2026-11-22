@@ -194,4 +194,32 @@ describe("QuotesService - etiquetas do Chatwoot por fase (Fase 51, plano 51-01)"
     expect(chamadasDeLabels(axiosPost)).toHaveLength(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("422"));
   });
+  it("E6: CHATWOOT_ETIQUETAS_ATIVAS=false desliga a sincronizacao (sem GET nem POST)", async () => {
+    configValues.CHATWOOT_ETIQUETAS_ATIVAS = " False ";
+    prepararTroca(BigInt(42));
+    axiosGet.mockResolvedValue({ data: { payload: ["orcamento-pendente"] } });
+
+    const resultado = await service.changeStatus("quote-001", "APROVADO", "Painel");
+    await flush();
+
+    expect(resultado).toMatchObject({ statusKey: "APROVADO" });
+    expect(chamadasDeLabels(axiosGet)).toHaveLength(0);
+    expect(chamadasDeLabels(axiosPost)).toHaveLength(0);
+    expect(prisma.quote.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("E7: o log de falha nunca contem o token, mesmo quando o erro do axios carrega config.headers", async () => {
+    prepararTroca(BigInt(42));
+    const erro: any = new Error("Request failed with status code 500");
+    erro.config = { headers: { api_access_token: "token-secreto-xyz" }, url: URL_LABELS };
+    axiosGet.mockRejectedValue(erro);
+
+    await service.changeStatus("quote-001", "APROVADO", "Painel");
+    await flush();
+
+    expect(warn).toHaveBeenCalled();
+    for (const chamada of warn.mock.calls) {
+      expect(JSON.stringify(chamada)).not.toContain("token-secreto-xyz");
+    }
+  });
 });

@@ -3,7 +3,12 @@ import { randomBytes } from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { AthosService } from "../integrations/athos/athos.service";
 import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
-import { aplicarEtiquetasGerenciadas, etiquetaDaFase } from "../integrations/chatwoot/chatwoot-etiquetas";
+import {
+  aplicarEtiquetasGerenciadas,
+  ENV_ETIQUETAS_ATIVAS,
+  etiquetaDaFase,
+  etiquetasAtivas,
+} from "../integrations/chatwoot/chatwoot-etiquetas";
 import { EfiService } from "../integrations/efi/efi.service";
 import { PriceSource, Prisma, QuoteStatus } from "@prisma/client";
 
@@ -940,6 +945,8 @@ export class QuotesService {
    */
   async sincronizarEtiquetasChatwoot(quoteId: string): Promise<void> {
     try {
+      // Kill-switch (mesmo padrao da Fase 43): so o texto "false" desliga; sem leitura de banco nem HTTP.
+      if (!etiquetasAtivas(this.configService.get<string>(ENV_ETIQUETAS_ATIVAS))) return;
       const quote = await this.prisma.quote.findUnique({
         where: { id: quoteId },
         select: { status: true, conversationId: true },
