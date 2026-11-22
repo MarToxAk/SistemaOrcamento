@@ -43,13 +43,19 @@ Na conversa do Chatwoot vinculada a um orcamento (`Quote.conversationId`), o bac
 - D-15 (substitui o mapa do D-01 para esses dois): PENDENTE=`orcamento-pendente`, ENVIADO=`orcamento-enviado` (ENVIADO = orcamento enviado ao cliente via enviarParaCliente).
 - D-16 (refina D-09): contam como pedido para cliente-frequente: APROVADO, EM_PRODUCAO, PRONTO_PARA_ENTREGA, ENTREGUE. Exclui ENVIADO, PENDENTE, PAGAMENTO_PARCIAL, CANCELADO. Chave = `Quote.customerId`; janela por `createdAt` (6 meses).
 - D-17: Sem backfill. Etiquetas aparecem a partir da proxima mudanca de status.
-- D-18: As 9 etiquetas de conta (7 de fase + `finalizado` + `cliente-frequente`) foram/serao criadas uma vez via API nos dois Chatwoots (Box e Bom Custo), so as que faltarem. O codigo ainda deve tolerar etiqueta inexistente (Chatwoot aceita etiqueta nao cadastrada na conversa) sem quebrar.
+- D-18 (corrigido na revisao de 2026-11-21): as 10 etiquetas de conta (8 de fase: orcamento-pendente, orcamento-enviado, pagamento-parcial, aprovado, em-producao, pronto-entrega, entregue, cancelado; mais `finalizado` e `cliente-frequente`) JA EXISTEM nos dois Chatwoots (Box e Bom Custo). Fato verificado em 2026-11-21: o orquestrador listou via GET /labels e criou as faltantes (Box: 10 criadas com resposta 200; Bom Custo: 9 criadas, `finalizado` ja existia). O codigo nao cria etiquetas; so precisa tolerar etiqueta inexistente (Chatwoot aceita etiqueta nao cadastrada na conversa) e falhas sem quebrar. O roteiro mantem uma conferencia somente de leitura.
 - D-19: Corrigir o bug de ordem no webhook de fechamento (ramo "mensagem ja enviada hoje" pulava as etiquetas): etiquetas do D-06 sempre aplicadas na conversa liberada; so a mensagem respeita o limite diario.
 - D-20: Labels do fechamento aplicadas na hora; apenas a mensagem e agendada com o atraso (setTimeout + Map por conversa para dedupe). Instancia unica do backend por tenant.
+- D-21: Fora desta fase, divida explicita (nao implementar): (a) `approveByConversation` usa `findFirst` sem `orderBy` (pre-existente, nao deterministico com varias cotacoes na conversa); (b) re-post de cotacao sem `status` volta a PENDENTE (`normalizeStatus`) e a etiqueta acompanha; (c) `mergeDuplicates` apaga cotacoes sem ressincronizar as etiquetas. Registrados em 51-RESEARCH.md (Q5, R10, R14).
+- D-22: Distribuicao do atraso do fechamento triangular entre min e max (padrao 45-180 s) aceita.
+- D-23: As variaveis CHATWOOT_AUTOMATION_* e CHATWOOT_AI_* sao entregues pelo PR #75 (branch fix/compose-chatwoot-automation-env, commit 3709ae5). O PR #75 e PRE-CONDICAO DE DEPLOY desta fase; os planos nao as repetem e o gate do plano 51-05 falha sem ele.
+- D-24: Instancia unica do backend por tenant confirmada; o risco de timer perdido em restart (D-12/D-20) e aceito.
 
 ### Claude's Discretion
+
 - Estrutura (service de labels dedicado), testes unitarios das regras puras (mapa, mescla, criterio frequente, sorteio do delay).
 - Novas envs entram no compose (box e vps) e no stack.env.example.
+- Escolhas registradas nos planos: `finalizado` fora do conjunto gerenciado pela sincronizacao de status (so o fechamento escreve nele); fechamento com etiquetas e contagem best-effort e enfileiradas sem await; re-check que FECHA (nao envia) em falha, null, `messages` nao-array ou `created_at` ilegivel; reabertura detectada remove `finalizado` e restaura fase e cliente-frequente; gancho EFI so quando o status muda; kill-switch CHATWOOT_ETIQUETAS_ATIVAS; sem indice novo para a contagem por cliente; a fase vem da cotacao atualizada mais recentemente da conversa.
 
 </decisions>
 
@@ -70,6 +76,7 @@ Na conversa do Chatwoot vinculada a um orcamento (`Quote.conversationId`), o bac
 
 - Fila persistente (BullMQ/DB) para o atraso sobreviver a restart.
 - Cliente frequente contando compras de balcao no Athos.
+- Divida explicita da D-21 (approveByConversation sem orderBy, re-post sem status voltando a PENDENTE, mergeDuplicates sem ressincronizar etiquetas).
 
 </deferred>
 

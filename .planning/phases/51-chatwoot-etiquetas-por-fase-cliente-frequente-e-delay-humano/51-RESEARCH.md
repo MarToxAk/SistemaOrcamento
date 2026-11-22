@@ -664,21 +664,27 @@ Nomes propostos de env (padrão do projeto: `${VAR:-default}` como em `ATHOS_BAI
 
 Locais de inclusão: `deploy/docker-compose.box.vps.yml` (bloco `environment` do `backend`, após `CHATWOOT_INBOX_ID: ${CHATWOOT_INBOX_ID}`, linha 55), `deploy/docker-compose.vps.yml` (após linha 63), `deploy/stack.env.example` (após `CHATWOOT_INBOX_ID=`, linha 25, com comentário no padrão do bloco da Fase 45, linhas 64-69).
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-Responder em texto (sem AskUserQuestion). Recomendação entre parênteses.
+Todas resolvidas em 2026-11-21 (decisoes D-15..D-24 em 51-CONTEXT.md e discricao registrada nos planos). Texto original das perguntas preservado com a resposta de cada uma.
 
-1. **ENVIADO:** etiqueta `orcamento-enviado` (mesma de PENDENTE) ou nenhuma? (Recomendo `orcamento-enviado`. A sugestão `entregue` do D-01 não é semanticamente correta.)
-2. **Status "pago/entregue" (D-09):** confirmar `APROVADO, EM_PRODUCAO, PRONTO_PARA_ENTREGA, ENTREGUE`, excluindo `ENVIADO` e `PAGAMENTO_PARCIAL`? Aceitar que `APROVADO` por aprovação de link (sem pagamento) conte? (Recomendo sim para a lista, e aceitar o risco de APROVADO.)
-3. **Janela de 6 meses:** `createdAt` (recomendado) ou data de entrada no status (`statusHistory`)?
-4. **Chave do cliente:** `customerId` (recomendado) ou `customerId` OR `chatwootContactId`?
-5. **Conversa com várias cotações:** a fase vem da cotação mais recentemente atualizada da conversa (recomendado, mesma regra do fechamento)? E corrigir `approveByConversation` para usar a mesma regra?
-6. **Momento das labels no fechamento:** imediatamente no webhook (recomendado, sobrevive a restart) ou junto com a mensagem após o atraso? Se a conversa for reaberta durante a espera, remover `finalizado`? (Recomendo: imediato + remover `finalizado` se reaberta.)
-7. **Backfill:** aplicar etiquetas nas cotações abertas hoje, ou só nas próximas trocas de status? (Recomendo só nas próximas; backfill exige script à parte.)
-8. **Distribuição do atraso:** triangular entre 45 e 180 s (recomendado) ou uniforme?
-9. **Criação das etiquetas da conta (D-05):** autoriza a sonda S1 numa conta Chatwoot real, ou prefere criar as 8 etiquetas manualmente na interface do Chatwoot e o código só consulta?
-10. **Envs ausentes nos composes:** `CHATWOOT_AUTOMATION_WEBHOOK_TOKEN`, `CHATWOOT_AUTOMATION_STATUS_FECHAMENTO`, `CHATWOOT_AUTOMATION_INBOX_IDS`, `CHATWOOT_AI_URL`, `CHATWOOT_AI_TOKEN`, `CHATWOOT_AI_MODEL` estão definidas no servidor por outro meio? Se não, o webhook de fechamento não funciona nos composes atuais e precisa entrar neste plano.
-11. **Instância única:** confirmar que não há planos de escalar o backend horizontalmente (os timers e a fila em memória dependem disso).
+1. **ENVIADO:** etiqueta `orcamento-enviado` (mesma de PENDENTE) ou nenhuma? — **RESOLVED (D-15):** PENDENTE=`orcamento-pendente` e ENVIADO=`orcamento-enviado` (duas etiquetas distintas; ENVIADO = enviado ao cliente por `enviarParaCliente`). A sugestao `entregue` do D-01 foi descartada. Plano 51-01.
+2. **Status "pago/entregue" (D-09):** confirmar `APROVADO, EM_PRODUCAO, PRONTO_PARA_ENTREGA, ENTREGUE`, excluindo `ENVIADO` e `PAGAMENTO_PARCIAL`? Aceitar que `APROVADO` por link conte? — **RESOLVED (D-16):** contam APROVADO, EM_PRODUCAO, PRONTO_PARA_ENTREGA e ENTREGUE; excluem ENVIADO, PENDENTE, PAGAMENTO_PARCIAL e CANCELADO. O falso positivo de APROVADO por link (R15) e aceito. Plano 51-02.
+3. **Janela de 6 meses:** `createdAt` ou data de entrada no status? — **RESOLVED (D-16):** `createdAt` (6 meses, configuravel). Plano 51-02.
+4. **Chave do cliente:** `customerId` ou `customerId` OR `chatwootContactId`? — **RESOLVED (D-16):** `Quote.customerId`. Plano 51-02.
+5. **Conversa com varias cotacoes:** fase da cotacao mais recentemente atualizada? E corrigir `approveByConversation`? — **RESOLVED:** a fase e o cliente vem da cotacao atualizada mais recentemente da conversa (`orderBy updatedAt desc`, a mesma regra do fechamento; discricao do planejador, plano 51-02). Corrigir `approveByConversation` (findFirst sem `orderBy`) fica **fora desta fase**: divida explicita (**D-21**).
+6. **Momento das labels no fechamento:** imediatamente ou junto com a mensagem? Remover `finalizado` se reaberta? — **RESOLVED (D-20):** labels enfileiradas imediatamente (sem await no webhook) e so a mensagem e agendada. Reabertura detectada no re-check remove `finalizado` e restaura fase e cliente-frequente (discricao sobre R7). Plano 51-04.
+7. **Backfill:** — **RESOLVED (D-17):** sem backfill; as etiquetas aparecem a partir da proxima troca de status.
+8. **Distribuicao do atraso:** triangular ou uniforme? — **RESOLVED (D-22):** triangular entre 45 e 180 s aceita (min/max por env). Plano 51-04.
+9. **Criacao das etiquetas da conta (D-05):** sonda S1 ou criacao manual? — **RESOLVED (D-18):** as 10 etiquetas de conta JA EXISTEM nos dois Chatwoots; **fato verificado em 2026-11-21** pelo orquestrador via GET /labels, que criou as faltantes (Box: 10 criadas com 200; Bom Custo: 9 criadas, `finalizado` ja existia). A sonda S1 e a criacao pelo codigo ficam dispensadas; o roteiro mantem so uma conferencia somente de leitura. O formato de criacao (A1) deixa de importar.
+10. **Envs ausentes nos composes:** `CHATWOOT_AUTOMATION_*` e `CHATWOOT_AI_*` estao no servidor? — **RESOLVED (D-23):** sao entregues pelo PR #75 (branch `fix/compose-chatwoot-automation-env`, commit `3709ae5`). O PR #75 e **PRE-CONDICAO DE DEPLOY** desta fase; o plano 51-05 nao repete essas variaveis, usa ancora diferente para nao conflitar e tem gate que falha sem o PR. O valor de producao de `CHATWOOT_AUTOMATION_STATUS_FECHAMENTO` (PRONTO_PARA_ENTREGA,ENTREGUE,ENVIADO,CANCELADO, D-08) e documentado no runbook e no roteiro.
+11. **Instancia unica:** — **RESOLVED (D-24):** instancia unica do backend por tenant confirmada; o risco de timer perdido em restart e aceito (D-12/D-20) e documentado.
+
+### Riscos que ficaram fora do escopo (divida explicita, D-21)
+
+- **R10** (re-post de cotacao sem `status` volta a PENDENTE e a etiqueta acompanha): fora desta fase.
+- **R14** (`mergeDuplicates` apaga cotacoes sem ressincronizar as etiquetas): fora desta fase.
+- **Q5** (`approveByConversation` sem `orderBy`): fora desta fase.
 
 ## Sources
 
