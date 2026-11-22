@@ -470,4 +470,15 @@ describe("pesquisa-regras", () => {
       expect(formatarPercentual("10")).toBe("10%");
     });
   });
+
+  describe("render (plano 52-13)", () => {
+    it("T52-13b: renderizarTexto resolve {LINK}, {Link} e {link} para o mesmo valor", () => {
+      expect(renderizarTexto("Responda: {LINK}", { link: "https://app.test/pesquisa/abc" })).toBe(
+        "Responda: https://app.test/pesquisa/abc",
+      );
+      expect(renderizarTexto("{LINK} {Link} {link}", { link: "x" })).toBe("x x x");
+      expect(renderizarTexto("a {xyz} b", { link: "x" })).toBe("a  b");
+      expect(validarTextoMensagem("fechamento", "Responda: {LINK}")).toBeNull();
+    });
+  });
 });
