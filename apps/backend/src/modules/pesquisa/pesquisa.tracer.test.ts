@@ -18,6 +18,7 @@ import {
 } from "../integrations/chatwoot/chatwoot-etiquetas";
 import { ChatwootService } from "../integrations/chatwoot/chatwoot.service";
 import { IS_PUBLIC_KEY } from "../security/security.constants";
+import { PesquisaConfigService } from "./pesquisa-config.service";
 import { PesquisaPublicController, ResponderPesquisaDto } from "./pesquisa-public.controller";
 import {
   LIMITES_PESQUISA_PUBLICA,
@@ -103,6 +104,10 @@ function montar(opcoes: Opcoes = {}) {
   const prisma = {
     pesquisaConfig: {
       findUnique: jest.fn(async () => (estado.config ? { ...estado.config } : null)),
+      create: jest.fn(async ({ data }: { data: Linha }) => {
+        estado.config = { atualizadoEm: new Date(), atualizadoPor: null, ...data };
+        return { ...estado.config };
+      }),
     },
     pesquisaSupressao: {
       findUnique: jest.fn(async ({ where }: { where: { telefone: string } }) =>
@@ -160,6 +165,17 @@ function montar(opcoes: Opcoes = {}) {
     chatwootMensagemEnviada: {
       findFirst: jest.fn(async () => null),
       create: jest.fn(async () => undefined),
+    },
+    // Plano 52-03: sem cupom no tracer (a emissao tem suite propria); o create falha de proposito
+    // para a resposta continuar devolvendo `cupom: null` sem quebrar a nota (best-effort, D-10).
+    cupomRecompensa: {
+      findUnique: jest.fn(async () => null),
+      count: jest.fn(async () => 0),
+      aggregate: jest.fn(async () => ({ _sum: { descontoAplicado: null } })),
+      create: jest.fn(async () => {
+        throw new Error("cupom fora do escopo do tracer");
+      }),
+      updateMany: jest.fn(async () => ({ count: 0 })),
     },
     quote: { findFirst: jest.fn(async () => null), count: jest.fn(async () => 0) },
   };
@@ -223,7 +239,13 @@ function montar(opcoes: Opcoes = {}) {
   jest
     .spyOn(automation as unknown as { chamarIA: () => Promise<unknown> }, "chamarIA")
     .mockResolvedValue({ output: [{ content: [{ text: "Obrigado pelo contato" }] }] });
-  const service = new PesquisaService(prisma as never, chatwoot, configService as never, automation);
+  const service = new PesquisaService(
+    prisma as never,
+    chatwoot,
+    configService as never,
+    automation,
+    new PesquisaConfigService(prisma as never, configService as never),
+  );
   service.onModuleInit();
   const controller = new PesquisaPublicController(service, configService as never);
 
@@ -346,17 +368,28 @@ describe("Pesquisa de satisfacao - tracer (Fase 52, plano 52-01)", () => {
     }
   });
 
-  it("T2 (kill-switch): sem config ou com ativo false o fechamento sai como na fase 51", async () => {
-    for (const config of [null, { ativo: false }] as const) {
-      const ctx = montar({ config });
-      await fechar(ctx);
+  it("T2 (kill-switch): sem config a primeira leitura cria a linha padrao com ativo false e o fechamento sai como na fase 51", async () => {
+    const semConfig = montar({ config: null });
+    await fechar(semConfig);
 
-      expect((ctx.publica()?.[1] as Linha).content).toBe("Obrigado pelo contato");
-      expect(ctx.prisma.pesquisaSatisfacao.create).not.toHaveBeenCalled();
-      expect(ctx.inputsCsat()).toHaveLength(0);
-      expect(await ctx.controller.obter("a".repeat(48))).toEqual({ estado: "INDISPONIVEL" });
-      cancelarTodosEnviosFechamento();
-    }
+    expect(semConfig.prisma.pesquisaConfig.create).toHaveBeenCalledTimes(1);
+    expect(semConfig.prisma.pesquisaConfig.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ id: "default", ativo: false }),
+    });
+    expect(semConfig.estado.config?.ativo).toBe(false);
+    expect((semConfig.publica()?.[1] as Linha).content).toBe("Obrigado pelo contato");
+    expect(semConfig.prisma.pesquisaSatisfacao.create).not.toHaveBeenCalled();
+    expect(semConfig.inputsCsat()).toHaveLength(0);
+    cancelarTodosEnviosFechamento();
+
+    const desativada = montar({ config: { ativo: false } });
+    await fechar(desativada);
+
+    expect(desativada.prisma.pesquisaConfig.create).not.toHaveBeenCalled();
+    expect((desativada.publica()?.[1] as Linha).content).toBe("Obrigado pelo contato");
+    expect(desativada.prisma.pesquisaSatisfacao.create).not.toHaveBeenCalled();
+    expect(desativada.inputsCsat()).toHaveLength(0);
+    expect(await desativada.controller.obter("a".repeat(48))).toEqual({ estado: "INDISPONIVEL" });
   });
 
   it("T3 (resposta unica): duas respostas simultaneas dao uma 200 e uma 409", async () => {
