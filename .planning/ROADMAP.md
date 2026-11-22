@@ -41,6 +41,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 48: Contas a receber: escolher a ordenação (data, nome, pago)**
 - [ ] **Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa**
 - [x] **Phase 50: Contas a receber: boleto atualizado com juros e multa** (completed 2026-11-17)
+- [ ] **Phase 51: Chatwoot: etiquetas por fase, cliente frequente e delay humano no fechamento**
 
 ### Phase Details
 
@@ -266,6 +267,19 @@ Plans:
 - [x] 50-05-PLAN.md — Wave 2 · E-mail existente com CC leva a mensagem do boleto atualizado + alerta de pagamento do original cancelado (log e consulta) + titulos-em-uso com total, vínculo, juros/multa e ordem (D-10, D-12, D-15; BA-07, 10)
 - [x] 50-06-PLAN.md — Wave 3 · Aba Boletos: botão Atualizar -> modal com prévia -> geração -> modal de e-mail existente; lista com total, marca de substituição, juros/multa por título e alerta de pagamento em dobro (D-01, D-06, D-10, D-15, D-16; BA-01, 03, 07, 08, 10)
 - [x] 50-07-PLAN.md — Wave 4 · Gates + migration validada em Postgres descartável + roteiro + homologação humana D-17 (boleto real de valor baixo; baixa só no clone athos-teste) + decisão de liberação em produção (D-17; BA-11)
+
+### Phase 51: Chatwoot: etiquetas por fase, cliente frequente e delay humano no fechamento
+
+**Goal:** A conversa do Chatwoot vinculada a um orcamento mostra a etiqueta da fase atual do orcamento (substitui a anterior a cada troca de status) e a etiqueta cliente-frequente quando o cliente tem 3+ pedidos pagos/entregues nos ultimos 6 meses. Ao resolver a conversa liberada, ficam apenas finalizado (+ cliente-frequente); bloqueio por pendencia mantem a etiqueta da fase. A mensagem de encerramento sai com atraso aleatorio com cara de humano. Vale para Box e Bom Custo (mesmo backend).
+**Requirements**: CW-01, CW-02, CW-03, CW-04, CW-05, CW-06, CW-07, CW-08, CW-09, CW-10, CW-11, CW-12 (IDs locais da fase — definidos em 51-VALIDATION.md)
+**Depends on:** Phase 50
+**Plans:** 0/4 plans complete
+
+Plans:
+- [ ] 51-01-PLAN.md — Wave 1 · Tracer: changeStatus -> GET labels -> mescla -> POST labels ponta a ponta (mapa de 8 status, só a etiqueta da fase atual, manuais preservadas, falha do Chatwoot nunca bloqueia, kill-switch e log sem segredo) (D-01..D-05, D-15, D-18; CW-01, 02, 03, 04, 12)
+- [ ] 51-02-PLAN.md — Wave 2 · Tracer: cliente-frequente (3+ pedidos APROVADO/EM_PRODUCAO/PRONTO/ENTREGUE em 6 meses, por customerId) + fila por conversa com teto 3 + gancho depois do commit em enviarParaCliente, create e nos webhooks EFI PIX e cartão (D-02, D-03, D-09, D-11, D-16, D-17; CW-02, 03, 05, 12)
+- [ ] 51-03-PLAN.md — Wave 3 · Tracer: webhook de fechamento com etiquetas na hora (finalizado + cliente-frequente, inclusive no ramo "já enviada hoje"), mensagem agendada com atraso humano triangular e dedupe, re-check de reabertura e de resposta nova (D-06..D-08, D-10, D-12, D-13, D-19, D-20; CW-06, 07, 08, 09, 10)
+- [ ] 51-04-PLAN.md — Wave 4 · 5 envs novas nos dois composes e no stack.env.example (só adições, sem conflito com o PR #75) + teste de consistência código x deploy + runbook, roteiro de homologação e gate final (D-11, D-12, D-14, D-17; CW-11, 12)
 
 ---
 
