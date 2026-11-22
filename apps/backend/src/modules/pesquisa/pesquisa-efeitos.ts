@@ -8,10 +8,8 @@
  * - D-21/D-22: as variaveis das mensagens deixam `codigo` vazio quando nao ha cupom; a mensagem do
  *   cupom nao carrega link e a do convite so usa `link_google` e `nome_empresa`.
  */
+import { ETIQUETA_AVALIOU, ETIQUETA_CSAT_BAIXO } from "../integrations/chatwoot/chatwoot-etiquetas";
 import { formatarDataBR, formatarPercentual, formatarReais } from "./pesquisa-regras";
-
-export const ETIQUETA_AVALIOU = "avaliou";
-export const ETIQUETA_CSAT_BAIXO = "csat-baixo";
 
 export type CupomDaNota = { codigo: string; percentual: number; teto: number; validadeAte: Date };
 
