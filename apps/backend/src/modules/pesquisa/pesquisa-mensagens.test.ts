@@ -855,7 +855,7 @@ describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano
 
   it("reenvio: ENVIANDO com reserva de 14 minutos nao e tocado", async () => {
     const ctx = montar({
-      pesquisas: [respondidaEm(10 * MINUTO, { envioConviteStatus: "ENVIANDO", envioConviteReservadoEm: new Date(Date.now() - 14 * MINUTO) })],
+      pesquisas: [respondidaEm(10 * MINUTO, { chatwootCsat: "OK", envioConviteStatus: "ENVIANDO", envioConviteReservadoEm: new Date(Date.now() - 14 * MINUTO) })],
       cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
     });
 
@@ -1001,6 +1001,26 @@ describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano
     expect(r2.falhas).toBe(1);
     expect(criacaoFalhou.chatwoot.submitCsatResponse).not.toHaveBeenCalled();
     expect(criacaoFalhou.pesquisas[0].chatwootCsat).toBe("MENSAGEM_FALHA");
+  });
+
+  it("reenvio CSAT: MENSAGEM_OK com a nota ainda nao enviada entra na re-tentativa e repete o PUT", async () => {
+    const mensagemOk = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          chatwootCsat: "MENSAGEM_OK",
+          enviadaEm: new Date(Date.now() - DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    const resultado = await mensagemOk.service.reenviarPendentes();
+    expect(resultado.candidatos).toBe(1);
+    expect(resultado.csat).toBe(1);
+    expect(mensagemOk.chatwoot.createPrivateCsatMessage).not.toHaveBeenCalled();
+    expect(mensagemOk.chatwoot.submitCsatResponse).toHaveBeenCalledTimes(1);
+    expect(mensagemOk.pesquisas[0].chatwootCsat).toBe("OK");
   });
 
   it("reenvio CSAT: enviadaEm de 15 dias, OK e NAO_APLICAVEL sao ignorados", async () => {

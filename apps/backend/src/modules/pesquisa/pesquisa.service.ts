@@ -1036,7 +1036,14 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
 
   private csatPendente(pesquisa: PesquisaSatisfacao, limiteCsat: Date): boolean {
     const estado = pesquisa.chatwootCsat;
-    if (estado !== "AGUARDANDO_MENSAGEM" && estado !== "MENSAGEM_FALHA" && estado !== "RESPOSTA_FALHA") return false;
+    if (
+      estado !== "AGUARDANDO_MENSAGEM" &&
+      estado !== "MENSAGEM_FALHA" &&
+      estado !== "MENSAGEM_OK" &&
+      estado !== "RESPOSTA_FALHA"
+    ) {
+      return false;
+    }
     if (!pesquisa.enviadaEm) return false;
     return pesquisa.enviadaEm.getTime() >= limiteCsat.getTime();
   }
