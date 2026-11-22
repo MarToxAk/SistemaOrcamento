@@ -129,9 +129,14 @@ export class ChatwootService {
    * Fase 51 (plano 51-04): le a conversa (GET .../conversations/:id) para o re-check do fechamento (D-13).
    * Sem configuracao devolve null; erro do axios propaga (quem chama trata a falha como "nao enviar").
    */
-  async getConversation(
-    conversationId: string,
-  ): Promise<{ status?: string; labels?: string[]; messages?: unknown } | null> {
+  async getConversation(conversationId: string): Promise<{
+    status?: string;
+    labels?: string[];
+    messages?: unknown;
+    uuid?: string;
+    inbox_id?: number;
+    meta?: { sender?: { id?: number; phone_number?: string | null } };
+  } | null> {
     const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
     const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
     const token = this.config.get<string>("CHATWOOT_API_TOKEN");
@@ -141,6 +146,67 @@ export class ChatwootService {
     }
 
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}`;
+    const response = await axios.get(url, { headers: { api_access_token: token }, timeout: 10000 });
+    return response.data;
+  }
+
+  /**
+   * Fase 52 (D-06): cria a mensagem input_csat PRIVADA da conversa, que e o ancora do CSAT nativo
+   * (o PUT publico grava a resposta na primeira input_csat). `private: true` e `content_type`
+   * ficam fixos aqui: sem private a Evolution enviaria texto tecnico ao cliente. Erro do axios propaga.
+   */
+  async createPrivateCsatMessage(conversationId: string, content: string): Promise<{ enabled: boolean; id?: number }> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return { enabled: false };
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
+    const response = await axios.post(
+      url,
+      { content, message_type: "outgoing", private: true, content_type: "input_csat" },
+      { headers: { api_access_token: token }, timeout: 10000 },
+    );
+    return { enabled: true, id: response.data?.id };
+  }
+
+  /**
+   * Fase 52 (D-07): envia a nota ao CSAT nativo pela rota PUBLICA do Chatwoot (sem api_access_token;
+   * o uuid da conversa e a credencial). O Chatwoot grava de forma assincrona: o retorno do PUT nao
+   * confirma a gravacao. Erro do axios propaga.
+   */
+  async submitCsatResponse(conversationUuid: string, rating: number, feedback?: string): Promise<{ enabled: boolean }> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    if (!baseUrl) {
+      return { enabled: false };
+    }
+
+    const url = `${baseUrl}/public/api/v1/csat_survey/${encodeURIComponent(conversationUuid)}`;
+    await axios.put(
+      url,
+      { message: { submitted_values: { csat_survey_response: { rating, feedback_message: feedback ?? "" } } } },
+      { timeout: 10000 },
+    );
+    return { enabled: true };
+  }
+
+  /**
+   * Fase 52: le a inbox (GET .../inboxes/:id) para saber se o CSAT nativo esta ligado
+   * (`csat_survey_enabled`). Sem configuracao devolve null; erro do axios propaga.
+   */
+  async getInbox(inboxId: number): Promise<{ csat_survey_enabled?: boolean } | null> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return null;
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/inboxes/${inboxId}`;
     const response = await axios.get(url, { headers: { api_access_token: token }, timeout: 10000 });
     return response.data;
   }
