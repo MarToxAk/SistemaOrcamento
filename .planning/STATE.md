@@ -6,10 +6,10 @@ current_phase: 52
 current_phase_name: Chatwoot CSAT com recompensa e convite do Google
 status: executing
 stopped_at: Phase 52 UI-SPEC approved
-last_updated: "2026-11-22T20:16:10.855Z"
+last_updated: "2026-11-22T23:13:37.257Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 52 execution started
-state_head: be8821ffff8e81ca4900da9aa6bff7ff5282e12f
+state_head: 9be4ac8baa2d5dfea231fad6107a28b68bce51ab
 progress:
   total_phases: 14
   completed_phases: 4
@@ -230,6 +230,7 @@ Current focus: v2.5 — API de Produtos Compostos (Kits) no Athos (Fases 39-40)
 | 260906-iz0 | Corrigido 404 "Orcamento nao encontrado" real (reportado pelo usuario com dev server rodando) ao emitir NFS-e no orcamento: NfseService buscava o Quote so por UUID (`findUnique({ where: { id } })`), mas a URL/frontend usam `internalNumber` (ex: /orcamento/22764) ou `externalQuoteId`. Novo util compartilhado `quote-identifier.util.ts` (`findQuoteByIdentifierBasic`) com a ordem externalQuoteId->internalNumber->id, usado nos 5 pontos do NfseService e no `QuotesService.findQuoteByIdentifier` (elimina duplicacao de um bloco `include` 3x repetido). Corrigido tambem bug de precisao (T-iz0-02): candidato externalQuoteId agora vem de `BigInt(string)` direto, nunca via `Number()`, evitando casar orcamento errado num documento fiscal acima de MAX_SAFE_INTEGER. Merge com 260906-i7c exigiu resolver conflito manual em nfse.service.ts (precedencia de endereco manual>Athos preservada, usando quote.id ja resolvido) e atualizar mocks de teste (findUnique->findFirst). 502/502 testes backend + tsc limpos apos o merge | 2026-09-06 | a7cfdb6, cdff771, d25e892 | [260906-iz0-corrigir-404-orcamento-nao-encontrado-ao](./quick/260906-iz0-corrigir-404-orcamento-nao-encontrado-ao/) |
 | 260913-hhi | Microsite standalone promo/ (Vite+React+node:http/node:sqlite) portando o mock aprovado de sorteio Dia das Criancas: cadastro de cupom (nome/telefone/NFC-e) vinculado a ?id=NNNN persistido em SQLite dedicado, cupom unico (UNIQUE + pre-check + catch), guarda de id invalido, rate limit 10/10min, export CSV protegido por token com fail-closed (503 sem PROMO_ADMIN_TOKEN), e empacotamento Docker (2 estagios, runtime sem dependencias) + compose/nginx dedicados para promocao.bomcustoilhabela.com.br, sem tocar no app de orcamento (D-01) nem no Athos (D-02). 30/30 testes verdes, check.mjs tracer/hardening/deploy passam. Human-check de producao (deploy real na VPS com DNS/TLS) pendente de ambiente | 2026-09-13 | 2dbacc7 | [260913-hhi-criar-pagina-de-sorteio-baseada-em-d-dow](./quick/260913-hhi-criar-pagina-de-sorteio-baseada-em-d-dow/) |
 | 260913-ivr | Microsite de sorteio ganhou validacao do cupom fiscal (COO) contra o Athos: novo endpoint GET /api/athos/venda/verificar-cupom no backend NestJS (autenticado por x-api-token + x-internal-api-key, valor minimo R$50 sempre no servidor, avaliacao em JS dos booleanos/valor nao confiaveis do Athos), consumido por promo/server/athos.js (fetch nativo, zero dependencia) com fail-closed simetrico (422 cupom_fiscal_invalido, 503 validacao_indisponivel, nunca grava linha parcial). Cadastro aceito agora dispara WhatsApp best-effort via Evolution API (promo/server/whatsapp.js) com texto do sorteio + link do Instagram, numero normalizado para 55+DDD+numero; falha no envio nunca desfaz o cadastro. Segredos (apikey, tokens, nome da instancia) apenas em deploy/promo.env, gate de forma-de-segredo (UUID/hex longo) no check.mjs. apps/frontend e deploy do app de orcamento sem diff (D-01/D-02 preservados). 285/285 testes backend + 67/67 testes promo verdes. Human-check contra Athos real e instancia WhatsApp real pendente de ambiente (sem Tailscale/VPS nesta maquina) | 2026-09-13 | 6852837, 4e16112, 4421d24 | [260913-ivr-adicionar-ao-microsite-de-sorteio-promo-](./quick/260913-ivr-adicionar-ao-microsite-de-sorteio-promo-/) |
+| 261122-rlb | Variar por IA (anti-spam) os textos da pesquisa: link, cupom e convite do Google | 2026-11-22 | 9be4ac8 | [261122-rlb-variar-por-ia-os-textos-da-pesquisa-fase](./quick/261122-rlb-variar-por-ia-os-textos-da-pesquisa-fase/) |
 
 ---
 
