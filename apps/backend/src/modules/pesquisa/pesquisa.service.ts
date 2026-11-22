@@ -1120,6 +1120,47 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   }
 
   /**
+   * D-38/D-39/T-52-39/T-52-74: retencao de 12 meses por padrao (job do plano 52-06). Anonimiza as
+   * pesquisas criadas antes do corte gravando NULL (nunca string vazia) nos campos pessoais e nos
+   * identificadores; mantem os agregados (nota, variante, datas e valores) para o painel e NUNCA apaga
+   * linhas. A lista de supressao (SAIR) e preservada de proposito: o opt-out continua valendo.
+   *
+   * Limite conhecido (vai ao parecer juridico, D-38, e ao roteiro 52-11): a anonimizacao cobre o banco
+   * deste sistema; NAO alcanca o que ja esta no Chatwoot (nota privada, atributos do contato, etiquetas,
+   * a mensagem input_csat e o historico do WhatsApp), que segue a retencao do proprio Chatwoot.
+   */
+  async anonimizarAntigos(meses: number, agora: Date = new Date()): Promise<{ pesquisas: number; cupons: number }> {
+    if (!Number.isInteger(meses) || meses < 1) {
+      throw new RangeError("meses deve ser um inteiro maior ou igual a 1");
+    }
+
+    // Corte em UTC: retrocede meses preservando hora/minuto (setUTCMonth trata a virada de ano).
+    const corte = new Date(agora.getTime());
+    corte.setUTCMonth(corte.getUTCMonth() - meses);
+
+    const { count: pesquisas } = await this.prisma.pesquisaSatisfacao.updateMany({
+      where: { criadaEm: { lt: corte }, anonimizadaEm: null },
+      data: {
+        telefone: null,
+        conversationId: null,
+        comentario: null,
+        contactId: null,
+        conversationUuid: null,
+        customerId: null,
+        anonimizadaEm: agora,
+      },
+    });
+
+    const { count: cupons } = await this.prisma.cupomRecompensa.updateMany({
+      where: { criadoEm: { lt: corte }, telefone: { not: null } },
+      data: { telefone: null },
+    });
+
+    this.logger.log(`Anonimizacao da retencao concluida pesquisas=${pesquisas} cupons=${cupons}`);
+    return { pesquisas, cupons };
+  }
+
+  /**
    * Housekeeping idempotente (chamado pelo job do plano 52-06): cupons EMITIDO vencidos viram EXPIRADO.
    */
   async marcarCuponsExpirados(agora: Date = new Date()): Promise<number> {
