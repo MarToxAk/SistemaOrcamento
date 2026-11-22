@@ -42,6 +42,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa**
 - [x] **Phase 50: Contas a receber: boleto atualizado com juros e multa** (completed 2026-11-17)
 - [ ] **Phase 51: Chatwoot: etiquetas por fase, cliente frequente e delay humano no fechamento**
+- [ ] **Phase 52: Chatwoot CSAT com recompensa e convite do Google**
 
 ### Phase Details
 
@@ -283,6 +284,16 @@ Plans:
 - [ ] 51-03-PLAN.md — Wave 2 · Tracer: gancho depois da transação nos webhooks EFI PIX e cartão, só com mudança de status, à prova de falha e de mock antigo (D-03; CW-03, 12)
 - [ ] 51-04-PLAN.md — Wave 3 · Tracer: webhook de fechamento com etiquetas enfileiradas sem await (finalizado + cliente-frequente, inclusive no ramo "já enviada hoje"), mensagem agendada com atraso humano triangular e dedupe, re-check que fecha em reabertura, resposta nova, formato indeterminado ou falha (D-06..D-08, D-10, D-12, D-13, D-19, D-20, D-22; CW-06, 07, 08, 09, 10)
 - [ ] 51-05-PLAN.md — Wave 4 · 5 envs novas nos dois composes e no stack.env.example (só adições, sem conflito com o PR #75; PR #75 como pré-condição com gate) + teste de consistência código x deploy + runbook, roteiro de homologação (com sonda de A3) e gate final (D-08, D-11, D-12, D-14, D-17, D-23, D-24; CW-11, 12)
+
+### Phase 52: Chatwoot CSAT com recompensa e convite do Google
+
+**Goal:** Ao fechar o atendimento (Box e Bom Custo, dois Chatwoots distintos), o cliente recebe uma mensagem unica com link de pesquisa de satisfacao propria (token assinado por conversa, nota obrigatoria, comentario opcional) e, ao responder, recebe cupom unico por cliente (desconto em % com teto, compra minima, validade curta, qualquer nota); depois, mensagem separada convidando para avaliar no Google, sem recompensa. Tudo editavel por empresa em nova aba de /configuracoes (percentual, teto, compra minima, validade, textos, liga/desliga), com opt-out "Responda SAIR" e teto de custo mensal (R$300). Decisoes e pareceres em memory/project_fase52_csat_recompensa.md.
+**Requirements**: TBD
+**Depends on:** Phase 51
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 52 to break down)
 
 ---
 

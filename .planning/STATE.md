@@ -283,6 +283,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ### Roadmap Evolution
 
+- Phase 52 added (2026-11-22): Chatwoot CSAT com recompensa (cupom unico por cliente, % com teto), pagina propria de pesquisa, convite do Google sem recompensa, config por empresa em /configuracoes, suporte a dois Chatwoots (Box e Bom Custo).
 - Phase 51 added (2026-11-21): Chatwoot — etiqueta da fase atual do orcamento na conversa, etiqueta cliente-frequente, ao resolver deixa so finalizado (+cliente-frequente) e atraso aleatorio humano antes da mensagem de encerramento. Box e Bom Custo.
 - Phase 50 added (2026-11-17): Contas a receber — boleto atualizado com juros (0,99% a.m.) e multa (2%) calculados desde o vencimento original; novo vencimento so hoje ou amanha; taxas padrao configuraveis em tela.
 - Phase 49 added (2026-11-15): Status ao cliente só no "pronto" (demais mudanças viram nota privada no Chatwoot) e API para mudar status sem enviar mensagem (mudança em massa sem risco de ban no WhatsApp).
