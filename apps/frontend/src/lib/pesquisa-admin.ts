@@ -7,11 +7,23 @@
 
 export const MSG_SESSAO = "Sessão expirada. Recarregue a página e digite a senha.";
 
-/** Aceita vírgula ou ponto como separador decimal; devolve NaN para vazio ou texto inválido. */
+/**
+ * Aceita vírgula ou ponto como separador decimal e o ponto como separador de milhar pt-BR
+ * ("1.000" = 1000, "1.000,50" = 1000,5); devolve NaN para vazio ou texto inválido.
+ *
+ * Sem vírgula, um ponto seguido de exatamente 3 dígitos (grupos de milhar, sem zero à esquerda)
+ * é lido como milhar, nunca como decimal: "1.000" vale 1000 e não 1 (evita salvar R$ 1,00 por engano).
+ */
 export function lerNumero(texto: string): number {
-  const t = texto.trim().replace(",", ".");
+  const t = texto.trim();
+  if (t.includes(",")) {
+    if (!/^-?(?:[1-9]\d{0,2}(?:\.\d{3})+|\d*),\d*$/.test(t)) return Number.NaN;
+    const normalizado = t.replace(/\./g, "").replace(",", ".");
+    return /\d/.test(normalizado) ? Number(normalizado) : Number.NaN;
+  }
+  if (/^-?[1-9]\d{0,2}(?:\.\d{3})+$/.test(t)) return Number(t.replace(/\./g, ""));
   if (!/^-?\d*\.?\d*$/.test(t)) return Number.NaN;
-  return t === "" ? Number.NaN : Number(t);
+  return /\d/.test(t) ? Number(t) : Number.NaN;
 }
 
 /** dd/mm/aaaa, hh:mm em America/Sao_Paulo; "" quando a data é inválida. */
