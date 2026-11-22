@@ -477,6 +477,33 @@ describe("Pesquisa de satisfacao - tracer (Fase 52, plano 52-01)", () => {
     expect(ctx.putsCsat()).toHaveLength(0);
   });
 
+  it("T5b (D-28): pesquisa anterior ainda com input_csat pendente (MENSAGEM_FALHA/AGUARDANDO_MENSAGEM) tambem faz a nova nascer NAO_APLICAVEL", async () => {
+    for (const estadoAnterior of ["MENSAGEM_FALHA", "AGUARDANDO_MENSAGEM"]) {
+      const ctx = montar();
+      ctx.pesquisas.push({
+        id: "pes-anterior",
+        token: "d".repeat(48),
+        conversationId: 42n,
+        conversationUuid: "uuid-123",
+        telefone: TELEFONE_NORMALIZADO,
+        variante: "ESTRELAS",
+        status: "RESPONDIDA",
+        chatwootCsat: estadoAnterior,
+        respondidaEm: new Date(Date.now() - 1000),
+        revogadaEm: null,
+        expiraEm: new Date(Date.now() + 86_400_000),
+        criadaEm: new Date(Date.now() - 2000),
+      });
+
+      await fechar(ctx);
+
+      expect(ctx.pesquisas).toHaveLength(2);
+      expect(ctx.pesquisas[1].chatwootCsat).toBe("NAO_APLICAVEL");
+      expect(ctx.inputsCsat()).toHaveLength(0);
+      cancelarTodosEnviosFechamento();
+    }
+  });
+
   it("T6 (generico): token invalido, inexistente, expirado, revogado e config desativada dao o mesmo corpo", async () => {
     const ctx = montar();
     await fechar(ctx);

@@ -84,8 +84,12 @@ export type ResultadoResponder =
 
 const TEXTO_INPUT_CSAT =
   "Pesquisa de satisfação enviada ao cliente. A resposta é registrada pela página da pesquisa.";
-/** D-28: estados em que a conversa ja tem a input_csat que o PUT publico vai preencher. */
-const ESTADOS_COM_INPUT_CSAT = ["MENSAGEM_OK", "OK", "RESPOSTA_FALHA"];
+/**
+ * D-28: estados em que a conversa ja tem (ou ainda pode criar, na re-tentativa) a input_csat que o
+ * PUT publico vai preencher. AGUARDANDO_MENSAGEM e MENSAGEM_FALHA entram porque a re-tentativa
+ * (`reconciliarCsatNativo`) ainda pode criar a input_csat; so NAO_APLICAVEL nunca a possui.
+ */
+const ESTADOS_COM_INPUT_CSAT = ["AGUARDANDO_MENSAGEM", "MENSAGEM_FALHA", "MENSAGEM_OK", "OK", "RESPOSTA_FALHA"];
 
 function mensagemDeErro(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
