@@ -290,7 +290,7 @@ Plans:
 **Goal:** Ao fechar o atendimento (Box e Bom Custo, dois Chatwoots distintos), o cliente recebe uma mensagem unica com link de pesquisa de satisfacao propria (token assinado por conversa, nota obrigatoria, comentario opcional) e, ao responder, recebe cupom unico por cliente (desconto em % com teto, compra minima, validade curta, qualquer nota); depois, mensagem separada convidando para avaliar no Google, sem recompensa. Tudo editavel por empresa em nova aba de /configuracoes (percentual, teto, compra minima, validade, textos, liga/desliga), com opt-out "Responda SAIR" e teto de custo mensal (R$300). Decisoes e pareceres em memory/project_fase52_csat_recompensa.md.
 **Requirements**: TBD
 **Depends on:** Phase 51
-**Plans:** 12/12 plans executed
+**Plans:** 12/12 executados + 1 plano de gap closure (52-13)
 
 Plans:
 **Wave 1**
@@ -318,6 +318,9 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [x] 52-11-PLAN.md — envs de deploy e roteiro de homologacao/ativacao (inclui backstops de UI e revogacao)
+
+**Gap closure (pós-verificação)*
+- [ ] 52-13-PLAN.md — corrige CR-01 (verdade 15): placeholders aceitos em caixa alta (`{LINK}`, `{CODIGO}`, `{LINK_GOOGLE}`) renderizam o valor real na mensagem enviada, com paridade comprovada contra a prévia
 
 ---
 
