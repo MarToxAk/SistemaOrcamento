@@ -1111,11 +1111,12 @@ export class PesquisaService implements GanchoPesquisaFechamento, OnModuleInit, 
   }
 
   private async enviarPutCsat(pesquisa: PesquisaSatisfacao): Promise<ResultadoCsat> {
-    if (!pesquisa.conversationUuid) return "IGNORADO";
+    // Sem nota (linha inconsistente) nao ha o que enviar: rating 0 sairia da faixa 1..5 do Chatwoot.
+    if (!pesquisa.conversationUuid || pesquisa.nota === null) return "IGNORADO";
     try {
       const resultado = await this.chatwoot.submitCsatResponse(
         pesquisa.conversationUuid,
-        pesquisa.nota ?? 0,
+        pesquisa.nota,
         pesquisa.comentario ?? undefined,
       );
       if (resultado?.enabled === true) {

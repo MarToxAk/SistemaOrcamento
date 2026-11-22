@@ -1023,6 +1023,23 @@ describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano
     expect(mensagemOk.pesquisas[0].chatwootCsat).toBe("OK");
   });
 
+  it("reenvio CSAT: resposta com nota nula nao envia rating 0 ao Chatwoot (IN-02)", async () => {
+    const semNota = montar({
+      pesquisas: [
+        respondidaEm(10 * MINUTO, {
+          nota: null,
+          chatwootCsat: "MENSAGEM_OK",
+          enviadaEm: new Date(Date.now() - DIA),
+          conversationUuid: "uuid-123",
+          envioConviteStatus: "ENVIADA",
+        }),
+      ],
+      cupons: [cupomPadrao({ envioCupomStatus: "ENVIADA" })],
+    });
+    await semNota.service.reenviarPendentes();
+    expect(semNota.chatwoot.submitCsatResponse).not.toHaveBeenCalled();
+  });
+
   it("reenvio CSAT: enviadaEm de 15 dias, OK e NAO_APLICAVEL sao ignorados", async () => {
     const antiga = montar({
       pesquisas: [
