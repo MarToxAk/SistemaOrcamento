@@ -87,15 +87,42 @@ export function extrairMensagemIA(resposta: unknown): string | null {
   return typeof texto === "string" && texto.trim() ? texto.trim() : null;
 }
 
+/** Fase 52: recorte da conversa do Chatwoot que o gancho da pesquisa precisa. */
+export interface ConversaChatwootResumo {
+  status?: string;
+  uuid?: string;
+  inbox_id?: number;
+  meta?: { sender?: { id?: number; phone_number?: string | null } };
+}
+
+/**
+ * Fase 52: gancho do fechamento. Registrado pelo PesquisaService em onModuleInit (sem dependencia
+ * circular de modulo: o ChatwootModule nao conhece o PesquisaModule). Ambos os metodos nunca lancam.
+ */
+export interface GanchoPesquisaFechamento {
+  prepararFechamento(entrada: {
+    conversationId: string;
+    customerId: string | null;
+    conversa: ConversaChatwootResumo;
+  }): Promise<{ bloco: string; pesquisaId: string } | null>;
+  aoFechamentoEnviado(pesquisaId: string): Promise<void>;
+}
+
 @Injectable()
 export class ChatwootAutomationService implements OnModuleDestroy {
   private readonly logger = new Logger(ChatwootAutomationService.name);
+  private gancho: GanchoPesquisaFechamento | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatwoot: ChatwootService,
     private readonly config: ConfigService,
   ) {}
+
+  /** Fase 52: registra (ou remove, com null) o gancho da pesquisa de satisfacao no fechamento. */
+  registrarGanchoPesquisa(gancho: GanchoPesquisaFechamento | null): void {
+    this.gancho = gancho;
+  }
 
   private getInboxesPermitidos(): number[] {
     const raw = this.config.get<string>("CHATWOOT_AUTOMATION_INBOX_IDS") ?? "1,21";
@@ -292,13 +319,51 @@ export class ChatwootAutomationService implements OnModuleDestroy {
         mensagem = this.mensagemFallback(saudacao);
       }
 
-      await this.chatwoot.sendOutgoingMessage(conversationId, mensagem);
-      await this.prisma.chatwootMensagemEnviada.create({
-        data: { conversationId, tipoEvento: "close", mensagemEnviada: mensagem },
-      });
+      // Fase 52: o gancho da pesquisa (se registrado e ativo) devolve o bloco com o link unico.
+      const pesquisa = await this.prepararPesquisa(conversationId, conversa, contexto.customerId);
+      const mensagemFinal = pesquisa ? `${mensagem}\n\n${pesquisa.bloco}` : mensagem;
+
+      const envio = await this.chatwoot.sendOutgoingMessage(conversationId, mensagemFinal);
+
+      // Ordem fixa: envio -> registro -> gancho. O registro entra em try/catch proprio para que uma falha
+      // de gravacao nao impeca o gancho (a pesquisa nao pode ficar CRIADA com o link ja entregue) e para
+      // o limite diario enxergar a mensagem assim que ela sai.
+      try {
+        await this.prisma.chatwootMensagemEnviada.create({
+          data: { conversationId, tipoEvento: "close", mensagemEnviada: mensagemFinal },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Falha ao registrar mensagem de fechamento enviada conversationId=${conversationId}: ${msg}`);
+      }
+
+      if (pesquisa && this.gancho && envio?.enabled === true) {
+        try {
+          await this.gancho.aoFechamentoEnviado(pesquisa.pesquisaId);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Falha no gancho pos-envio da pesquisa conversationId=${conversationId}: ${msg}`);
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Falha ao enviar mensagem de fechamento conversationId=${conversationId}: ${msg}`);
+    }
+  }
+
+  /** Fase 52: pede o bloco da pesquisa ao gancho; sem gancho ou em qualquer erro devolve null (fechamento da fase 51). */
+  private async prepararPesquisa(
+    conversationId: string,
+    conversa: ConversaChatwootResumo,
+    customerId: string | null,
+  ): Promise<{ bloco: string; pesquisaId: string } | null> {
+    if (!this.gancho) return null;
+    try {
+      return await this.gancho.prepararFechamento({ conversationId, customerId, conversa });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Falha ao preparar pesquisa de satisfacao conversationId=${conversationId}: ${msg}`);
+      return null;
     }
   }
 
