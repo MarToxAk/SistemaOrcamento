@@ -42,6 +42,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 49: Status ao cliente só no "pronto" e troca de status silenciosa**
 - [x] **Phase 50: Contas a receber: boleto atualizado com juros e multa** (completed 2026-11-17)
 - [ ] **Phase 51: Chatwoot: etiquetas por fase, cliente frequente e delay humano no fechamento**
+- [ ] **Phase 52: Chatwoot CSAT com recompensa e convite do Google**
 
 ### Phase Details
 
@@ -283,6 +284,43 @@ Plans:
 - [ ] 51-03-PLAN.md — Wave 2 · Tracer: gancho depois da transação nos webhooks EFI PIX e cartão, só com mudança de status, à prova de falha e de mock antigo (D-03; CW-03, 12)
 - [ ] 51-04-PLAN.md — Wave 3 · Tracer: webhook de fechamento com etiquetas enfileiradas sem await (finalizado + cliente-frequente, inclusive no ramo "já enviada hoje"), mensagem agendada com atraso humano triangular e dedupe, re-check que fecha em reabertura, resposta nova, formato indeterminado ou falha (D-06..D-08, D-10, D-12, D-13, D-19, D-20, D-22; CW-06, 07, 08, 09, 10)
 - [ ] 51-05-PLAN.md — Wave 4 · 5 envs novas nos dois composes e no stack.env.example (só adições, sem conflito com o PR #75; PR #75 como pré-condição com gate) + teste de consistência código x deploy + runbook, roteiro de homologação (com sonda de A3) e gate final (D-08, D-11, D-12, D-14, D-17, D-23, D-24; CW-11, 12)
+
+### Phase 52: Chatwoot CSAT com recompensa e convite do Google
+
+**Goal:** Ao fechar o atendimento (Box e Bom Custo, dois Chatwoots distintos), o cliente recebe uma mensagem unica com link de pesquisa de satisfacao propria (token assinado por conversa, nota obrigatoria, comentario opcional) e, ao responder, recebe cupom unico por cliente (desconto em % com teto, compra minima, validade curta, qualquer nota); depois, mensagem separada convidando para avaliar no Google, sem recompensa. Tudo editavel por empresa em nova aba de /configuracoes (percentual, teto, compra minima, validade, textos, liga/desliga), com opt-out "Responda SAIR" e teto de custo mensal (R$300). Decisoes e pareceres em memory/project_fase52_csat_recompensa.md.
+**Requirements**: TBD
+**Depends on:** Phase 51
+**Plans:** 12/12 executados + 1 plano de gap closure (52-13)
+
+Plans:
+**Wave 1**
+- [x] 52-01-PLAN.md — tracer: schema e migracao (provada em Postgres descartavel), fechamento com link, rota publica, resposta e PUT no CSAT nativo
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 52-02-PLAN.md — pagina publica /pesquisa/[token] (formulario de nota, agradecimento com cupom, bloco Google)
+- [x] 52-03-PLAN.md — regras puras, config singleton com padroes por empresa e emissao de cupom (intervalo e teto mensal)
+- [x] 52-04-PLAN.md — cliente Chatwoot (mensagens, atributos, etiqueta de conta), re-check por GET messages e fechamento que preserva avaliou e csat-baixo
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 52-05-PLAN.md — efeitos no Chatwoot (nota privada, atributos, etiquetas), WhatsApp do cupom e convite do Google, re-tentativa
+- [x] 52-07-PLAN.md — servicos de config (gravar), cupons (resgate atomico, teto rigido) e resultados do painel
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 52-12-PLAN.md — controller admin (config, resultados, cupons, resgate, etiquetas) e revogacao de pesquisa
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 52-06-PLAN.md — webhook de SAIR com HMAC, job de re-tentativa e job de retencao de 12 meses
+- [x] 52-08-PLAN.md — menu, SRI do CDN, lib compartilhada, proxy e formulario de configuracao
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 52-09-PLAN.md — pagina /configuracoes/pesquisa com abas, painel de resultados e acao Revogar pesquisa
+- [x] 52-10-PLAN.md — tela /cupons (busca, resgate em dois passos, lista paginada)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 52-11-PLAN.md — envs de deploy e roteiro de homologacao/ativacao (inclui backstops de UI e revogacao)
+
+**Gap closure (pós-verificação)*
+- [x] 52-13-PLAN.md — corrige CR-01 (verdade 15): placeholders aceitos em caixa alta (`{LINK}`, `{CODIGO}`, `{LINK_GOOGLE}`) renderizam o valor real na mensagem enviada, com paridade comprovada contra a prévia
 
 ---
 

@@ -484,3 +484,99 @@ model AthosOrcamentoIa {
 
   @@index([idorcamento])
 }
+
+/// Fase 52 (D-03): CSAT com recompensa e convite do Google. Cupom de desconto emitido quando o cliente responde a pesquisa.
+enum CupomStatus {
+  EMITIDO
+  USADO
+  EXPIRADO
+  CANCELADO
+}
+
+/// Fase 52 (D-42): configuracao da pesquisa (singleton id "default"). ativo false e o kill-switch.
+model PesquisaConfig {
+  id                          String   @id @default("default")
+  ativo                       Boolean  @default(false)
+  percentualDesconto          Decimal  @default(10) @db.Decimal(5, 2)
+  tetoDesconto                Decimal  @default(5) @db.Decimal(12, 2)
+  compraMinima                Decimal  @default(30) @db.Decimal(12, 2)
+  validadeCupomDias           Int      @default(30)
+  validadeLinkDias            Int      @default(7)
+  intervaloDias               Int      @default(90)
+  tetoMensal                  Decimal  @default(300) @db.Decimal(12, 2)
+  prefixoCupom                String   @default("BC")
+  linkGoogle                  String?
+  varianteVisual              String   @default("AB") // ESTRELAS | CARINHAS | AB
+  textoFechamento             String   @db.Text
+  textoSemRecompensa          String   @db.Text
+  textoPosResposta            String   @db.Text
+  textoConviteGoogle          String   @db.Text
+  paginaTitulo                String
+  paginaSubtitulo             String
+  paginaObrigadoSemRecompensa String
+  paginaGoogleTitulo          String
+  paginaGoogleCorpo           String
+  atualizadoEm                DateTime @updatedAt
+  atualizadoPor               String?
+}
+
+/// Fase 52: uma pesquisa por link enviado. telefone e conversationId ficam NULOS so depois da anonimizacao (plano 52-06).
+model PesquisaSatisfacao {
+  id                      String           @id @default(uuid())
+  token                   String           @unique
+  conversationId          BigInt?          @db.BigInt
+  conversationUuid        String?
+  contactId               BigInt?          @db.BigInt
+  telefone                String? // normalizado (55 + DDD + numero)
+  customerId              String?
+  variante                String // ESTRELAS | CARINHAS
+  status                  String           @default("CRIADA") // CRIADA | ENVIADA | RESPONDIDA
+  chatwootCsat            String           @default("AGUARDANDO_MENSAGEM") // AGUARDANDO_MENSAGEM | MENSAGEM_OK | MENSAGEM_FALHA | RESPOSTA_FALHA | OK | NAO_APLICAVEL
+  nota                    Int?
+  comentario              String?          @db.VarChar(500)
+  envioConviteStatus      String           @default("PENDENTE") // PENDENTE | ENVIANDO | ENVIADA | FALHA | NAO_APLICAVEL
+  envioConviteReservadoEm DateTime? // reserva antes de enviar (plano 52-05)
+  tentativasEnvio         Int              @default(0)
+  criadaEm                DateTime         @default(now())
+  enviadaEm               DateTime?
+  expiraEm                DateTime
+  respondidaEm            DateTime?
+  anonimizadaEm           DateTime?
+  revogadaEm              DateTime? // plano 52-12 (revogacao); nulo = link valido
+  cupom                   CupomRecompensa?
+
+  @@index([conversationId])
+  @@index([telefone, criadaEm])
+  @@index([respondidaEm])
+}
+
+/// Fase 52: cupom unico por pesquisa respondida.
+model CupomRecompensa {
+  id                    String             @id @default(uuid())
+  codigo                String             @unique
+  pesquisaId            String             @unique
+  pesquisa              PesquisaSatisfacao @relation(fields: [pesquisaId], references: [id])
+  telefone              String? // nulo so depois da anonimizacao (plano 52-06)
+  percentual            Decimal            @db.Decimal(5, 2)
+  teto                  Decimal            @db.Decimal(12, 2)
+  compraMinima          Decimal            @db.Decimal(12, 2)
+  status                CupomStatus        @default(EMITIDO)
+  validadeAte           DateTime
+  envioCupomStatus      String             @default("PENDENTE") // PENDENTE | ENVIANDO | ENVIADA | FALHA | NAO_APLICAVEL
+  envioCupomReservadoEm DateTime? // reserva antes de enviar (plano 52-05)
+  valorCompra           Decimal?           @db.Decimal(12, 2)
+  descontoAplicado      Decimal?           @db.Decimal(12, 2)
+  usadoEm               DateTime?
+  usadoPor              String?
+  criadoEm              DateTime           @default(now())
+
+  @@index([telefone, criadoEm])
+  @@index([status, usadoEm])
+}
+
+/// Fase 52 (D-49): telefones que pediram SAIR; nunca recebem pesquisa.
+model PesquisaSupressao {
+  telefone String   @id
+  origem   String   @default("SAIR")
+  criadoEm DateTime @default(now())
+}

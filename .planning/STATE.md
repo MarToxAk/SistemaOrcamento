@@ -2,38 +2,42 @@
 gsd_state_version: "1.0"
 milestone: v2.5
 milestone_name: API de Produtos Compostos (Kits) no Athos
-current_phase: 43 — Baixa automática de contas a receber no Athos
-current_phase_name: Baixa automática de contas a receber no Athos
-status: verifying
-stopped_at: Phase 50 complete, ready to verify Phase 43
-last_updated: "2026-11-17T14:15:41.979Z"
-last_activity: 2026-11-17
-last_activity_desc: Phase 50 complete, transitioned to Phase 43
-state_head: 118444add139f4ebb46a08d0e0b051b0c3fc0c98
+current_phase: 52
+current_phase_name: Chatwoot CSAT com recompensa e convite do Google
+status: executing
+stopped_at: Phase 52 UI-SPEC approved
+last_updated: "2026-11-22T20:16:10.855Z"
+last_activity: 2026-11-22
+last_activity_desc: Phase 52 execution started
+state_head: be8821ffff8e81ca4900da9aa6bff7ff5282e12f
 progress:
-  total_phases: 12
+  total_phases: 14
   completed_phases: 4
-  total_plans: 45
-  completed_plans: 45
-  percent: 33
+  total_plans: 63
+  completed_plans: 62
+  percent: 29
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
 
 Last updated: 2026-09-04 — Fase 40 verificada retroativamente (código já implementado em commit 5d5270d); milestone v2.5 completo
-Current phase: 43 — Baixa automática de contas a receber no Athos
+Current phase: 52
 Milestone: v2.5 — API de Produtos Compostos (Kits) no Athos
 
 ---
 
 ## Current Position
 
-Phase: 50 (Contas a receber: boleto atualizado com juros e multa) — EXECUTING
-Plan: 4
-Status: Phase complete — ready for verification
-Last activity: 2026-11-17 — Phase 50 complete, transitioned to Phase 43
+Phase: 52 (Chatwoot CSAT com recompensa e convite do Google) — EXECUTING
+Plan: 13 of 13
+Status: Executing Phase 52
+Last activity: 2026-11-22 — Phase 52 execution started
 
-Progress: [███░░░░░░░] 33% (2/2 phases complete)
+Progress: [███░░░░░░░] 29% (2/2 phases complete)
+
+## Planning Gate Overrides
+
+- **2026-11-22 — Phase 52 (gap closure):** the decision-coverage gate (`check.decision-coverage-plan`) returned `could-not-parse` — `52-CONTEXT.md` lists decisions as plain bullets under `## Implementation Decisions`, with no `D-NN:` IDs (the plans cite `D-46`/`D-52`, which do not exist in the CONTEXT). The user chose **Proceed anyway** (option 1) after being shown the options, so planning could complete. verify-phase should re-surface this. Fix option: normalize the CONTEXT decision bullets to `- **D-NN:** ...` and re-run the gate.
 
 ## Project Status
 
@@ -283,6 +287,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ### Roadmap Evolution
 
+- Phase 52 added (2026-11-22): Chatwoot CSAT com recompensa (cupom unico por cliente, % com teto), pagina propria de pesquisa, convite do Google sem recompensa, config por empresa em /configuracoes, suporte a dois Chatwoots (Box e Bom Custo).
 - Phase 51 added (2026-11-21): Chatwoot — etiqueta da fase atual do orcamento na conversa, etiqueta cliente-frequente, ao resolver deixa so finalizado (+cliente-frequente) e atraso aleatorio humano antes da mensagem de encerramento. Box e Bom Custo.
 - Phase 50 added (2026-11-17): Contas a receber — boleto atualizado com juros (0,99% a.m.) e multa (2%) calculados desde o vencimento original; novo vencimento so hoje ou amanha; taxas padrao configuraveis em tela.
 - Phase 49 added (2026-11-15): Status ao cliente só no "pronto" (demais mudanças viram nota privada no Chatwoot) e API para mudar status sem enviar mensagem (mudança em massa sem risco de ban no WhatsApp).
@@ -329,9 +334,9 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Session
 
-**Last session:** 2026-11-17T14:08:45.708Z
-**Stopped at:** Phase 50 complete, ready to verify Phase 43
-**Resume file:** None
+**Last session:** 2026-11-22T13:21:22.320Z
+**Stopped at:** Phase 52 UI-SPEC approved
+**Resume file:** .planning/phases/52-chatwoot-csat-com-recompensa-e-convite-do-google/52-UI-SPEC.md
 
 ## Decisions
 
@@ -375,3 +380,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 |-------|-------|--------|
 | 45 | verification_deferred_human | /gsd-verify-work 45 |
 | 44 | verification_deferred_human | /gsd-verify-work 44 |
+
+## Planning Overrides
+
+- Phase 52 (2026-11-22): decision-coverage gate returned could-not-parse (smart-discuss CONTEXT has no D-NN ids by design). Proceeded with override; decision coverage was verified manually by gsd-plan-checker (iterations 1-2, all CONTEXT decisions mapped to plan tasks). verify-phase should re-surface.

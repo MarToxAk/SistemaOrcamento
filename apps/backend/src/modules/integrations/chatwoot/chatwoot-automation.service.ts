@@ -16,6 +16,7 @@ import {
   enfileirarPorConversa,
   etiquetaDaFase,
   lerAtrasoFechamentoS,
+  mesclarEtiquetasFechamento,
   sortearAtrasoHumanoMs,
 } from "./chatwoot-etiquetas";
 import { ChatwootService } from "./chatwoot.service";
@@ -25,7 +26,7 @@ export type ChatwootAutomationWebhookPayload = {
   id: number | string;
   inbox_id?: number;
   contact_inbox?: { inbox_id?: number };
-  messages?: Array<{ account_id?: number; content?: string }>;
+  messages?: Array<{ id?: number; account_id?: number; content?: string }>;
 };
 
 const DEFAULT_PROMPT_FECHAMENTO =
@@ -87,15 +88,42 @@ export function extrairMensagemIA(resposta: unknown): string | null {
   return typeof texto === "string" && texto.trim() ? texto.trim() : null;
 }
 
+/** Fase 52: recorte da conversa do Chatwoot que o gancho da pesquisa precisa. */
+export interface ConversaChatwootResumo {
+  status?: string;
+  uuid?: string;
+  inbox_id?: number;
+  meta?: { sender?: { id?: number; phone_number?: string | null } };
+}
+
+/**
+ * Fase 52: gancho do fechamento. Registrado pelo PesquisaService em onModuleInit (sem dependencia
+ * circular de modulo: o ChatwootModule nao conhece o PesquisaModule). Ambos os metodos nunca lancam.
+ */
+export interface GanchoPesquisaFechamento {
+  prepararFechamento(entrada: {
+    conversationId: string;
+    customerId: string | null;
+    conversa: ConversaChatwootResumo;
+  }): Promise<{ bloco: string; pesquisaId: string } | null>;
+  aoFechamentoEnviado(pesquisaId: string): Promise<void>;
+}
+
 @Injectable()
 export class ChatwootAutomationService implements OnModuleDestroy {
   private readonly logger = new Logger(ChatwootAutomationService.name);
+  private gancho: GanchoPesquisaFechamento | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatwoot: ChatwootService,
     private readonly config: ConfigService,
   ) {}
+
+  /** Fase 52: registra (ou remove, com null) o gancho da pesquisa de satisfacao no fechamento. */
+  registrarGanchoPesquisa(gancho: GanchoPesquisaFechamento | null): void {
+    this.gancho = gancho;
+  }
 
   private getInboxesPermitidos(): number[] {
     const raw = this.config.get<string>("CHATWOOT_AUTOMATION_INBOX_IDS") ?? "1,21";
@@ -205,7 +233,11 @@ export class ChatwootAutomationService implements OnModuleDestroy {
 
     const { minS, maxS } = lerAtrasoFechamentoS((chave) => this.config.get<string>(chave));
     const atrasoMs = sortearAtrasoHumanoMs(minS, maxS);
-    const contexto = { resolvidaEmMs, status: quote?.status ?? null, customerId };
+    // D-40: guarda o id da ultima mensagem conhecida no webhook para o re-check por GET .../messages.
+    const idUltimaMensagem = payload.messages?.[0]?.id;
+    const ultimaMensagemId =
+      typeof idUltimaMensagem === "number" && Number.isFinite(idUltimaMensagem) ? idUltimaMensagem : undefined;
+    const contexto = { resolvidaEmMs, status: quote?.status ?? null, customerId, ultimaMensagemId };
     agendarEnvioFechamento(conversationId, atrasoMs, () => this.enviarMensagemFechamento(conversationId, contexto));
     this.logger.log(`Mensagem de fechamento agendada conversationId=${conversationId} atrasoMs=${atrasoMs}`);
 
@@ -224,8 +256,17 @@ export class ChatwootAutomationService implements OnModuleDestroy {
           this.logger.warn(`Falha ao contar cliente frequente conversationId=${conversationId}: ${msg}`);
         }
       }
-      const etiquetas = [ETIQUETA_FINALIZADO, ...(frequente ? [ETIQUETA_CLIENTE_FREQUENTE] : [])];
-      await this.chatwoot.addConversationLabels(conversationId, etiquetas);
+      const desejadas = [ETIQUETA_FINALIZADO, ...(frequente ? [ETIQUETA_CLIENTE_FREQUENTE] : [])];
+      // D-34: o POST de labels substitui a lista inteira; preservar avaliou e csat-baixo da ultima
+      // pesquisa. Falha na leitura nao impede o finalizado: grava so as desejadas e registra warn.
+      let atuais: string[] = [];
+      try {
+        atuais = await this.chatwoot.getConversationLabels(conversationId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Falha ao ler etiquetas do fechamento conversationId=${conversationId}: ${msg}`);
+      }
+      await this.chatwoot.addConversationLabels(conversationId, mesclarEtiquetasFechamento(atuais, desejadas));
     }).catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Falha ao gravar etiquetas de fechamento conversationId=${conversationId}: ${msg}`);
@@ -240,7 +281,7 @@ export class ChatwootAutomationService implements OnModuleDestroy {
    */
   private async enviarMensagemFechamento(
     conversationId: string,
-    contexto: { resolvidaEmMs: number; status: QuoteStatus | null; customerId: string | null },
+    contexto: { resolvidaEmMs: number; status: QuoteStatus | null; customerId: string | null; ultimaMensagemId?: number },
   ): Promise<void> {
     try {
       let conversa: Awaited<ReturnType<ChatwootService["getConversation"]>>;
@@ -262,7 +303,18 @@ export class ChatwootAutomationService implements OnModuleDestroy {
         return;
       }
 
-      const avaliacao = avaliarRespostaDoCliente(conversa.messages, contexto.resolvidaEmMs);
+      // D-40: o re-check le o historico recente por GET .../messages. O campo `messages` do GET da
+      // conversa so traz a ultima mensagem, e uma atividade posterior esconderia a resposta do cliente.
+      let mensagens: unknown = null;
+      try {
+        mensagens = await this.chatwoot.listMessagesAfter(conversationId, contexto.ultimaMensagemId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Mensagem de fechamento nao enviada conversationId=${conversationId} motivo=falha_recheck: ${msg}`);
+        return;
+      }
+
+      const avaliacao = avaliarRespostaDoCliente(mensagens, contexto.resolvidaEmMs);
       if (avaliacao === "resposta_nova") {
         this.logger.log(`Mensagem de fechamento nao enviada conversationId=${conversationId} motivo=resposta_nova`);
         return;
@@ -292,13 +344,51 @@ export class ChatwootAutomationService implements OnModuleDestroy {
         mensagem = this.mensagemFallback(saudacao);
       }
 
-      await this.chatwoot.sendOutgoingMessage(conversationId, mensagem);
-      await this.prisma.chatwootMensagemEnviada.create({
-        data: { conversationId, tipoEvento: "close", mensagemEnviada: mensagem },
-      });
+      // Fase 52: o gancho da pesquisa (se registrado e ativo) devolve o bloco com o link unico.
+      const pesquisa = await this.prepararPesquisa(conversationId, conversa, contexto.customerId);
+      const mensagemFinal = pesquisa ? `${mensagem}\n\n${pesquisa.bloco}` : mensagem;
+
+      const envio = await this.chatwoot.sendOutgoingMessage(conversationId, mensagemFinal);
+
+      // Ordem fixa: envio -> registro -> gancho. O registro entra em try/catch proprio para que uma falha
+      // de gravacao nao impeca o gancho (a pesquisa nao pode ficar CRIADA com o link ja entregue) e para
+      // o limite diario enxergar a mensagem assim que ela sai.
+      try {
+        await this.prisma.chatwootMensagemEnviada.create({
+          data: { conversationId, tipoEvento: "close", mensagemEnviada: mensagemFinal },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Falha ao registrar mensagem de fechamento enviada conversationId=${conversationId}: ${msg}`);
+      }
+
+      if (pesquisa && this.gancho && envio?.enabled === true) {
+        try {
+          await this.gancho.aoFechamentoEnviado(pesquisa.pesquisaId);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Falha no gancho pos-envio da pesquisa conversationId=${conversationId}: ${msg}`);
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Falha ao enviar mensagem de fechamento conversationId=${conversationId}: ${msg}`);
+    }
+  }
+
+  /** Fase 52: pede o bloco da pesquisa ao gancho; sem gancho ou em qualquer erro devolve null (fechamento da fase 51). */
+  private async prepararPesquisa(
+    conversationId: string,
+    conversa: ConversaChatwootResumo,
+    customerId: string | null,
+  ): Promise<{ bloco: string; pesquisaId: string } | null> {
+    if (!this.gancho) return null;
+    try {
+      return await this.gancho.prepararFechamento({ conversationId, customerId, conversa });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Falha ao preparar pesquisa de satisfacao conversationId=${conversationId}: ${msg}`);
+      return null;
     }
   }
 

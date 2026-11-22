@@ -68,7 +68,7 @@ export class ChatwootService {
 
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
     try {
-      const response = await axios.post(url, { content: message, message_type: "outgoing", private: false }, { headers: { api_access_token: token } });
+      const response = await axios.post(url, { content: message, message_type: "outgoing", private: false }, { headers: { api_access_token: token }, timeout: 10000 });
       this.logger.debug(`Mensagem enviada conversationId=${conversationId}`);
       return { enabled: true, response: response.data };
     } catch (err) {
@@ -129,9 +129,14 @@ export class ChatwootService {
    * Fase 51 (plano 51-04): le a conversa (GET .../conversations/:id) para o re-check do fechamento (D-13).
    * Sem configuracao devolve null; erro do axios propaga (quem chama trata a falha como "nao enviar").
    */
-  async getConversation(
-    conversationId: string,
-  ): Promise<{ status?: string; labels?: string[]; messages?: unknown } | null> {
+  async getConversation(conversationId: string): Promise<{
+    status?: string;
+    labels?: string[];
+    messages?: unknown;
+    uuid?: string;
+    inbox_id?: number;
+    meta?: { sender?: { id?: number; phone_number?: string | null } };
+  } | null> {
     const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
     const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
     const token = this.config.get<string>("CHATWOOT_API_TOKEN");
@@ -143,6 +148,131 @@ export class ChatwootService {
     const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}`;
     const response = await axios.get(url, { headers: { api_access_token: token }, timeout: 10000 });
     return response.data;
+  }
+
+  /**
+   * Fase 52 (D-06): cria a mensagem input_csat PRIVADA da conversa, que e o ancora do CSAT nativo
+   * (o PUT publico grava a resposta na primeira input_csat). `private: true` e `content_type`
+   * ficam fixos aqui: sem private a Evolution enviaria texto tecnico ao cliente. Erro do axios propaga.
+   */
+  async createPrivateCsatMessage(conversationId: string, content: string): Promise<{ enabled: boolean; id?: number }> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return { enabled: false };
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
+    const response = await axios.post(
+      url,
+      { content, message_type: "outgoing", private: true, content_type: "input_csat" },
+      { headers: { api_access_token: token }, timeout: 10000 },
+    );
+    return { enabled: true, id: response.data?.id };
+  }
+
+  /**
+   * Fase 52 (D-07): envia a nota ao CSAT nativo pela rota PUBLICA do Chatwoot (sem api_access_token;
+   * o uuid da conversa e a credencial). O Chatwoot grava de forma assincrona: o retorno do PUT nao
+   * confirma a gravacao. Erro do axios propaga.
+   */
+  async submitCsatResponse(conversationUuid: string, rating: number, feedback?: string): Promise<{ enabled: boolean }> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    if (!baseUrl) {
+      return { enabled: false };
+    }
+
+    const url = `${baseUrl}/public/api/v1/csat_survey/${encodeURIComponent(conversationUuid)}`;
+    await axios.put(
+      url,
+      { message: { submitted_values: { csat_survey_response: { rating, feedback_message: feedback ?? "" } } } },
+      { timeout: 10000 },
+    );
+    return { enabled: true };
+  }
+
+  /**
+   * Fase 52: le a inbox (GET .../inboxes/:id) para saber se o CSAT nativo esta ligado
+   * (`csat_survey_enabled`). Sem configuracao devolve null; erro do axios propaga.
+   */
+  async getInbox(inboxId: number): Promise<{ csat_survey_enabled?: boolean } | null> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return null;
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/inboxes/${inboxId}`;
+    const response = await axios.get(url, { headers: { api_access_token: token }, timeout: 10000 });
+    return response.data;
+  }
+
+  /**
+   * Fase 52 (D-40): historico recente de mensagens da conversa (GET .../messages) para o re-check
+   * do fechamento. Contrato verificado no MessageFinder do Chatwoot (4.12.1 e 4.19.1):
+   * - `after` e EXCLUSIVO (id > after) e devolve ate 100 mensagens em ordem created_at ascendente;
+   * - sem `after` (nem `before`) devolve as 20 mais recentes em ordem ascendente;
+   * - `filter_internal_messages` e testado com `.blank?`, entao QUALQUER valor nao vazio exclui
+   *   privadas e atividades (message_type 2); para INCLUIR as internas a chave tem de ser OMITIDA
+   *   (nunca enviada como false, que o Chatwoot trataria como filtro ligado).
+   * A chave `after` so entra quando for numero finito. Devolve `response.data.payload` quando for
+   * array, senao null (indeterminado). Sem as tres envs devolve null; erro do axios propaga.
+   */
+  async listMessagesAfter(
+    conversationId: string,
+    afterId?: number,
+    opcoes?: { incluirInternas?: boolean },
+  ): Promise<unknown[] | null> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return null;
+    }
+
+    const params: Record<string, unknown> = {};
+    if (typeof afterId === "number" && Number.isFinite(afterId)) {
+      params.after = afterId;
+    }
+    if (!opcoes?.incluirInternas) {
+      params.filter_internal_messages = true;
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
+    const response = await axios.get(url, {
+      params,
+      headers: { api_access_token: token },
+      timeout: 10000,
+    });
+    const payload = response.data?.payload;
+    return Array.isArray(payload) ? payload : null;
+  }
+
+  /**
+   * Fase 52 (D-13): atualiza atributos customizados do contato (PUT .../contacts/:id). O Chatwoot
+   * MESCLA os custom_attributes (nenhuma leitura previa e necessaria). Sem as tres envs devolve
+   * `{ enabled: false }`; erro do axios propaga.
+   */
+  async updateContactCustomAttributes(
+    contactId: number,
+    atributos: Record<string, string | number>,
+  ): Promise<{ enabled: boolean }> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return { enabled: false };
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/contacts/${contactId}`;
+    await axios.put(url, { custom_attributes: atributos }, { headers: { api_access_token: token }, timeout: 10000 });
+    return { enabled: true };
   }
 
   async sendAttachment(conversationId: string, buffer: Buffer, fileName: string, contentType: string) {
