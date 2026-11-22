@@ -76,4 +76,31 @@ describe("ChatwootService - labels de conversa (Fase 51)", () => {
     );
     expect(resultado).toEqual({ enabled: true, response: { payload: ["aprovado"] } });
   });
+
+  it("getConversation chama GET na URL da conversa com api_access_token e timeout 10000 e devolve response.data", async () => {
+    const conversa = { status: "resolved", messages: [] };
+    axiosGet.mockResolvedValue({ data: conversa });
+
+    const resultado = await criarService(configCompleta).getConversation("42");
+
+    expect(axiosGet).toHaveBeenCalledWith("https://chat.exemplo.test/api/v1/accounts/7/conversations/42", {
+      headers: { api_access_token: "token-secreto-xyz" },
+      timeout: 10000,
+    });
+    expect(resultado).toBe(conversa);
+  });
+
+  it("getConversation devolve null sem chamar axios quando falta qualquer das tres envs", async () => {
+    for (const faltando of ["CHATWOOT_BASE_URL", "CHATWOOT_ACCOUNT_ID", "CHATWOOT_API_TOKEN"]) {
+      const parcial = { ...configCompleta, [faltando]: undefined };
+      expect(await criarService(parcial).getConversation("42")).toBeNull();
+    }
+    expect(axiosGet).not.toHaveBeenCalled();
+  });
+
+  it("getConversation propaga o erro do axios", async () => {
+    axiosGet.mockRejectedValue(new Error("Request failed with status code 500"));
+
+    await expect(criarService(configCompleta).getConversation("42")).rejects.toThrow("status code 500");
+  });
 });

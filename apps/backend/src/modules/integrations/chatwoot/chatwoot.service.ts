@@ -125,6 +125,26 @@ export class ChatwootService {
     return Array.isArray(payload) ? payload.filter((etiqueta): etiqueta is string => typeof etiqueta === "string") : [];
   }
 
+  /**
+   * Fase 51 (plano 51-04): le a conversa (GET .../conversations/:id) para o re-check do fechamento (D-13).
+   * Sem configuracao devolve null; erro do axios propaga (quem chama trata a falha como "nao enviar").
+   */
+  async getConversation(
+    conversationId: string,
+  ): Promise<{ status?: string; labels?: string[]; messages?: unknown } | null> {
+    const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
+    const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
+    const token = this.config.get<string>("CHATWOOT_API_TOKEN");
+
+    if (!baseUrl || !accountId || !token) {
+      return null;
+    }
+
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${conversationId}`;
+    const response = await axios.get(url, { headers: { api_access_token: token }, timeout: 10000 });
+    return response.data;
+  }
+
   async sendAttachment(conversationId: string, buffer: Buffer, fileName: string, contentType: string) {
     const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
     const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");

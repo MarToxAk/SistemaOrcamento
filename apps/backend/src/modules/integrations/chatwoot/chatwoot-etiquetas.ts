@@ -300,3 +300,58 @@ export function cancelarTodosEnviosFechamento(): void {
 export function enviosFechamentoPendentes(): number {
   return timersFechamento.size;
 }
+
+/**
+ * Fase 51 (plano 51-04, D-13): avaliacao de resposta do cliente no re-check do disparo.
+ *
+ * A guarda FECHA: so "sem_resposta" libera o envio. Formato desconhecido (mensagens que nao sao lista,
+ * mensagem de entrada com created_at ilegivel) vira "indeterminado" e a despedida e descartada.
+ * `created_at` pode vir em segundos (< 1e11), milissegundos, string numerica ou ISO (premissa A3,
+ * confirmada por sonda de leitura no roteiro de homologacao).
+ */
+export interface MensagemConversaChatwoot {
+  message_type?: number | string;
+  created_at?: number | string;
+  private?: boolean;
+}
+
+export type AvaliacaoRespostaCliente = "resposta_nova" | "sem_resposta" | "indeterminado";
+
+function ehMensagemDeEntrada(mensagem: MensagemConversaChatwoot): boolean {
+  return mensagem.message_type === 0 || mensagem.message_type === "incoming";
+}
+
+function criadaEmMs(valor: unknown): number | null {
+  let numero: number;
+  if (typeof valor === "number") {
+    numero = valor;
+  } else if (typeof valor === "string") {
+    const texto = valor.trim();
+    if (texto === "") return null;
+    numero = /^\d+(\.\d+)?$/.test(texto) ? Number(texto) : Date.parse(texto);
+    // ISO ja vem em ms; so numero puro precisa da heuristica de segundos.
+    if (!/^\d+(\.\d+)?$/.test(texto)) return Number.isFinite(numero) ? numero : null;
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(numero) || numero < 0) return null;
+  return numero < 1e11 ? numero * 1000 : numero;
+}
+
+export function avaliarRespostaDoCliente(mensagens: unknown, resolvidaEmMs: number): AvaliacaoRespostaCliente {
+  if (!Array.isArray(mensagens)) return "indeterminado";
+
+  let indeterminado = false;
+  for (const item of mensagens) {
+    if (item === null || typeof item !== "object") continue;
+    const mensagem = item as MensagemConversaChatwoot;
+    if (mensagem.private === true || !ehMensagemDeEntrada(mensagem)) continue;
+    const quando = criadaEmMs(mensagem.created_at);
+    if (quando === null) {
+      indeterminado = true;
+    } else if (quando > resolvidaEmMs) {
+      return "resposta_nova";
+    }
+  }
+  return indeterminado ? "indeterminado" : "sem_resposta";
+}

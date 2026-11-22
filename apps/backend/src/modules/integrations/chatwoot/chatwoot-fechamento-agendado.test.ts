@@ -8,6 +8,7 @@ import { ChatwootAutomationService } from "./chatwoot-automation.service";
 import {
   agendarEnvioFechamento,
   aguardarFilaEtiquetas,
+  avaliarRespostaDoCliente,
   cancelarTodosEnviosFechamento,
   enviosFechamentoPendentes,
   lerAtrasoFechamentoS,
@@ -55,6 +56,8 @@ function buildService(opcoes: Opcoes = {}) {
     postConversationNote: jest.fn().mockResolvedValue({ enabled: true }),
     addConversationLabels: jest.fn().mockResolvedValue({ enabled: true }),
     sendOutgoingMessage: jest.fn().mockResolvedValue({ enabled: true }),
+    getConversation: jest.fn().mockResolvedValue({ status: "resolved", messages: [] }),
+    getConversationLabels: jest.fn().mockResolvedValue(["finalizado"]),
   };
   const config = {
     get: jest.fn((chave: string) => {
@@ -71,9 +74,9 @@ function buildService(opcoes: Opcoes = {}) {
     .spyOn(service as any, "chamarIA")
     .mockResolvedValue({ output: [{ content: [{ text: "Mensagem gerada pela IA" }] }] });
   const warn = jest.spyOn((service as any).logger, "warn").mockImplementation(() => undefined);
-  jest.spyOn((service as any).logger, "log").mockImplementation(() => undefined);
+  const log = jest.spyOn((service as any).logger, "log").mockImplementation(() => undefined);
 
-  return { service, prisma, chatwoot, config, warn };
+  return { service, prisma, chatwoot, config, warn, log };
 }
 
 /** O retorno e uma uniao discriminada; os testes olham so o campo action. */
@@ -249,6 +252,195 @@ describe("ChatwootAutomationService - fechamento agendado (Fase 51)", () => {
     liberar({ enabled: true });
     await aguardarFilaEtiquetas();
     expect(chatwoot.addConversationLabels).toHaveBeenCalledWith("42", ["finalizado", "cliente-frequente"]);
+  });
+});
+
+describe("ChatwootAutomationService - re-check no disparo (D-13, Fase 51)", () => {
+  const T0_MS = 1_800_000_000_000;
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: T0_MS });
+  });
+
+  afterEach(async () => {
+    await aguardarFilaEtiquetas();
+    cancelarTodosEnviosFechamento();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  const segundos = (deslocamentoS: number) => T0_MS / 1000 + deslocamentoS;
+
+  async function resolverEDisparar(
+    opcoes: Opcoes,
+    conversa: unknown,
+    preparar?: (ctx: ReturnType<typeof buildService>) => void,
+  ) {
+    const ctx = buildService(opcoes);
+    if (conversa instanceof Error) ctx.chatwoot.getConversation.mockRejectedValue(conversa);
+    else ctx.chatwoot.getConversation.mockResolvedValue(conversa as any);
+    preparar?.(ctx);
+    await ctx.service.handleConversationResolved(PAYLOAD);
+    await aguardarFilaEtiquetas();
+    ctx.chatwoot.addConversationLabels.mockClear();
+    await jest.advanceTimersByTimeAsync(180000);
+    await aguardarFilaEtiquetas();
+    return ctx;
+  }
+
+  const todosOsLogs = (ctx: { warn: jest.SpyInstance; log: jest.SpyInstance }) =>
+    [...ctx.warn.mock.calls, ...ctx.log.mock.calls].map((c) => String(c[0])).join("\n");
+
+  it("R1 (reaberta): nao envia e troca finalizado pela fase e cliente-frequente recalculado", async () => {
+    const ctx = await resolverEDisparar(
+      { quoteStatus: QuoteStatus.ENTREGUE, contagem: 3 },
+      { status: "open", messages: [] },
+      (c) => c.chatwoot.getConversationLabels.mockResolvedValue(["finalizado", "cliente-frequente"]),
+    );
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(ctx.chatwoot.addConversationLabels).toHaveBeenCalledTimes(1);
+    expect(ctx.chatwoot.addConversationLabels).toHaveBeenCalledWith("42", ["entregue", "cliente-frequente"]);
+    expect(todosOsLogs(ctx)).toContain("motivo=reaberta");
+  });
+
+  it("R2 (resposta nova): status resolved com mensagem de entrada depois da resolucao nao envia nem mexe nas etiquetas", async () => {
+    const ctx = await resolverEDisparar(
+      { quoteStatus: QuoteStatus.ENTREGUE },
+      { status: "resolved", messages: [{ message_type: 0, created_at: segundos(30) }] },
+    );
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(ctx.chatwoot.addConversationLabels).not.toHaveBeenCalled();
+    expect(todosOsLogs(ctx)).toContain("motivo=resposta_nova");
+  });
+
+  it("R3: entrada anterior a resolucao, saida, atividade e entrada privada nao bloqueiam a despedida", async () => {
+    const ctx = await resolverEDisparar(
+      { quoteStatus: QuoteStatus.ENTREGUE },
+      {
+        status: "resolved",
+        messages: [
+          { message_type: 0, created_at: segundos(-60) },
+          { message_type: 1, created_at: segundos(30) },
+          { message_type: 2, created_at: segundos(30) },
+          { message_type: 0, created_at: segundos(30), private: true },
+        ],
+      },
+    );
+
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("R4: getConversation rejeita, nao envia, avisa com o motivo e nao lanca", async () => {
+    const ctx = await resolverEDisparar({ quoteStatus: QuoteStatus.ENTREGUE }, new Error("chatwoot fora do ar"));
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(ctx.warn).toHaveBeenCalledWith(expect.stringContaining("motivo=falha_recheck"));
+    expect(ctx.warn).toHaveBeenCalledWith(expect.stringContaining("chatwoot fora do ar"));
+  });
+
+  it("R5: getConversation devolve null (Chatwoot sem configuracao), nao envia", async () => {
+    const ctx = await resolverEDisparar({ quoteStatus: QuoteStatus.ENTREGUE }, null);
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(todosOsLogs(ctx)).toContain("motivo=falha_recheck");
+  });
+
+  it("R6: onModuleDestroy cancela os timers pendentes e nada e enviado", async () => {
+    const { service, chatwoot } = buildService({ quoteStatus: QuoteStatus.ENTREGUE });
+    await service.handleConversationResolved(PAYLOAD);
+    expect(enviosFechamentoPendentes()).toBe(1);
+
+    service.onModuleDestroy();
+
+    expect(enviosFechamentoPendentes()).toBe(0);
+    await jest.advanceTimersByTimeAsync(180000);
+    expect(chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["messages ausente", { status: "resolved" }],
+    ["messages null", { status: "resolved", messages: null }],
+    ["messages objeto nao-array", { status: "resolved", messages: { 0: { message_type: 0 } } }],
+  ])("R7 (guarda que fecha): %s nao envia e nao mexe nas etiquetas", async (_nome, conversa) => {
+    const ctx = await resolverEDisparar({ quoteStatus: QuoteStatus.ENTREGUE }, conversa);
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(ctx.chatwoot.addConversationLabels).not.toHaveBeenCalled();
+    expect(todosOsLogs(ctx)).toContain("motivo=mensagens_indeterminadas");
+  });
+
+  it.each([
+    ["created_at abc", "abc"],
+    ["created_at null", null],
+    ["created_at objeto", { x: 1 }],
+  ])("R8: mensagem de ENTRADA com %s nao envia", async (_nome, valor) => {
+    const ctx = await resolverEDisparar(
+      { quoteStatus: QuoteStatus.ENTREGUE },
+      { status: "resolved", messages: [{ message_type: 0, created_at: valor }] },
+    );
+
+    expect(ctx.chatwoot.sendOutgoingMessage).not.toHaveBeenCalled();
+    expect(todosOsLogs(ctx)).toContain("motivo=mensagens_indeterminadas");
+  });
+
+  it("R8: mensagem de saida, atividade ou privada com created_at invalido e ignorada e a despedida sai", async () => {
+    const ctx = await resolverEDisparar(
+      { quoteStatus: QuoteStatus.ENTREGUE },
+      {
+        status: "resolved",
+        messages: [
+          { message_type: 1, created_at: "abc" },
+          { message_type: 2, created_at: null },
+          { message_type: 0, created_at: "abc", private: true },
+        ],
+      },
+    );
+
+    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("avaliarRespostaDoCliente (funcao pura)", () => {
+  const RESOLVIDA_MS = 1_800_000_000_000;
+
+  it("array vazio e sem_resposta; undefined, null e objeto sao indeterminado", () => {
+    expect(avaliarRespostaDoCliente([], RESOLVIDA_MS)).toBe("sem_resposta");
+    expect(avaliarRespostaDoCliente(undefined, RESOLVIDA_MS)).toBe("indeterminado");
+    expect(avaliarRespostaDoCliente(null, RESOLVIDA_MS)).toBe("indeterminado");
+    expect(avaliarRespostaDoCliente({}, RESOLVIDA_MS)).toBe("indeterminado");
+  });
+
+  it("interpreta created_at em segundos, milissegundos, string numerica e ISO", () => {
+    const depoisS = RESOLVIDA_MS / 1000 + 10;
+    const antesS = RESOLVIDA_MS / 1000 - 10;
+    const nova = (created_at: unknown) =>
+      avaliarRespostaDoCliente([{ message_type: 0, created_at }] as any, RESOLVIDA_MS);
+
+    expect(nova(depoisS)).toBe("resposta_nova");
+    expect(nova(antesS)).toBe("sem_resposta");
+    expect(nova(RESOLVIDA_MS + 10_000)).toBe("resposta_nova");
+    expect(nova(RESOLVIDA_MS - 10_000)).toBe("sem_resposta");
+    expect(nova(String(depoisS))).toBe("resposta_nova");
+    expect(nova(new Date(RESOLVIDA_MS + 10_000).toISOString())).toBe("resposta_nova");
+    expect(nova(new Date(RESOLVIDA_MS - 10_000).toISOString())).toBe("sem_resposta");
+  });
+
+  it("aceita message_type textual incoming e deixa resposta_nova preceder o indeterminado", () => {
+    const depoisS = RESOLVIDA_MS / 1000 + 10;
+    expect(avaliarRespostaDoCliente([{ message_type: "incoming", created_at: depoisS }], RESOLVIDA_MS)).toBe(
+      "resposta_nova",
+    );
+    expect(
+      avaliarRespostaDoCliente(
+        [
+          { message_type: 0, created_at: "abc" },
+          { message_type: 0, created_at: depoisS },
+        ],
+        RESOLVIDA_MS,
+      ),
+    ).toBe("resposta_nova");
   });
 });
 

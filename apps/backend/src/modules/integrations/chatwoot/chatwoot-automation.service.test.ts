@@ -131,6 +131,7 @@ describe("ChatwootAutomationService - handleConversationResolved (orquestracao)"
       postConversationNote: jest.fn().mockResolvedValue({ enabled: true }),
       addConversationLabels: jest.fn().mockResolvedValue({ enabled: true }),
       sendOutgoingMessage: jest.fn().mockResolvedValue({ enabled: true }),
+      getConversation: jest.fn().mockResolvedValue({ status: "resolved", messages: [] }),
     };
     const config = {
       get: jest.fn((key: string) => {

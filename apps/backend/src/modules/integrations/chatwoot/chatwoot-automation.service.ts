@@ -6,11 +6,15 @@ import Handlebars from "handlebars";
 
 import {
   ETIQUETA_CLIENTE_FREQUENTE,
+  ETIQUETAS_GERENCIADAS,
   ETIQUETA_FINALIZADO,
   agendarEnvioFechamento,
+  aplicarEtiquetasGerenciadas,
+  avaliarRespostaDoCliente,
   cancelarTodosEnviosFechamento,
   clienteEhFrequente,
   enfileirarPorConversa,
+  etiquetaDaFase,
   lerAtrasoFechamentoS,
   sortearAtrasoHumanoMs,
 } from "./chatwoot-etiquetas";
@@ -228,12 +232,48 @@ export class ChatwootAutomationService implements OnModuleDestroy {
     });
   }
 
-  /** Disparo do timer. Nunca rejeita: qualquer erro vira warn com conversationId e err.message. */
+  /**
+   * Disparo do timer. Nunca rejeita: qualquer erro vira warn com conversationId e err.message.
+   * Re-check D-13 (a guarda FECHA): so envia se a conversa foi relida com sucesso, continua resolvida,
+   * sem mensagem nova do cliente depois da resolucao e com a avaliacao conclusiva. Logs: so
+   * conversationId e motivo (nunca o texto da mensagem, o token da IA nem o objeto de erro do axios).
+   */
   private async enviarMensagemFechamento(
     conversationId: string,
-    _contexto: { resolvidaEmMs: number; status: QuoteStatus | null; customerId: string | null },
+    contexto: { resolvidaEmMs: number; status: QuoteStatus | null; customerId: string | null },
   ): Promise<void> {
     try {
+      let conversa: Awaited<ReturnType<ChatwootService["getConversation"]>>;
+      try {
+        conversa = await this.chatwoot.getConversation(conversationId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Mensagem de fechamento nao enviada conversationId=${conversationId} motivo=falha_recheck: ${msg}`);
+        return;
+      }
+      if (!conversa || typeof conversa !== "object") {
+        this.logger.warn(`Mensagem de fechamento nao enviada conversationId=${conversationId} motivo=falha_recheck`);
+        return;
+      }
+
+      if (conversa.status !== "resolved") {
+        this.logger.log(`Mensagem de fechamento nao enviada conversationId=${conversationId} motivo=reaberta`);
+        await this.restaurarEtiquetasAposReabertura(conversationId, contexto);
+        return;
+      }
+
+      const avaliacao = avaliarRespostaDoCliente(conversa.messages, contexto.resolvidaEmMs);
+      if (avaliacao === "resposta_nova") {
+        this.logger.log(`Mensagem de fechamento nao enviada conversationId=${conversationId} motivo=resposta_nova`);
+        return;
+      }
+      if (avaliacao === "indeterminado") {
+        this.logger.warn(
+          `Mensagem de fechamento nao enviada conversationId=${conversationId} motivo=mensagens_indeterminadas`,
+        );
+        return;
+      }
+
       // D-19: o limite de uma mensagem por dia e reavaliado no envio, nao so no webhook.
       if (!(await this.podeEnviarMensagemFechamento(conversationId))) return;
 
@@ -259,6 +299,40 @@ export class ChatwootAutomationService implements OnModuleDestroy {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Falha ao enviar mensagem de fechamento conversationId=${conversationId}: ${msg}`);
+    }
+  }
+
+  /**
+   * Conversa reaberta durante a espera: tira "finalizado" e devolve a etiqueta da fase e, se for o caso,
+   * cliente-frequente (recalculado na hora). Best-effort: falha vira warn.
+   */
+  private async restaurarEtiquetasAposReabertura(
+    conversationId: string,
+    contexto: { status: QuoteStatus | null; customerId: string | null },
+  ): Promise<void> {
+    try {
+      await enfileirarPorConversa(conversationId, async () => {
+        let frequente = false;
+        if (contexto.customerId) {
+          try {
+            frequente = await clienteEhFrequente(this.prisma, contexto.customerId, (chave) =>
+              this.config.get<string>(chave),
+            );
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.warn(`Falha ao contar cliente frequente conversationId=${conversationId}: ${msg}`);
+          }
+        }
+        const fase = etiquetaDaFase(contexto.status);
+        const desejadas = [...(fase ? [fase] : []), ...(frequente ? [ETIQUETA_CLIENTE_FREQUENTE] : [])];
+        await aplicarEtiquetasGerenciadas(this.chatwoot, conversationId, desejadas, [
+          ...ETIQUETAS_GERENCIADAS,
+          ETIQUETA_FINALIZADO,
+        ]);
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Falha ao restaurar etiquetas apos reabertura conversationId=${conversationId}: ${msg}`);
     }
   }
 
