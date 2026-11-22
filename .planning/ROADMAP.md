@@ -320,7 +320,7 @@ Plans:
 - [x] 52-11-PLAN.md — envs de deploy e roteiro de homologacao/ativacao (inclui backstops de UI e revogacao)
 
 **Gap closure (pós-verificação)*
-- [ ] 52-13-PLAN.md — corrige CR-01 (verdade 15): placeholders aceitos em caixa alta (`{LINK}`, `{CODIGO}`, `{LINK_GOOGLE}`) renderizam o valor real na mensagem enviada, com paridade comprovada contra a prévia
+- [x] 52-13-PLAN.md — corrige CR-01 (verdade 15): placeholders aceitos em caixa alta (`{LINK}`, `{CODIGO}`, `{LINK_GOOGLE}`) renderizam o valor real na mensagem enviada, com paridade comprovada contra a prévia
 
 ---
 
