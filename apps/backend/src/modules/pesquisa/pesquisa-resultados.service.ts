@@ -122,6 +122,9 @@ export class PesquisaResultadosService {
       (p) => (p.status === "ENVIADA" || p.status === "RESPONDIDA") && this.dentro(p.enviadaEm, janela),
     );
     const totalRespostas = respondidas.length;
+    // WR-03: a taxa de resposta usa a mesma coorte no numerador e no denominador (enviada E respondida
+    // no periodo); sem isso, respostas de envios do periodo anterior inflavam a taxa acima de 100%.
+    const respondidasDasEnviadas = enviadas.filter((p) => this.dentro(p.respondidaEm, janela));
 
     const distribuicao = ([1, 2, 3, 4, 5] as const).map((nota) => {
       const total = respondidas.filter((p) => p.nota === nota).length;
@@ -132,13 +135,16 @@ export class PesquisaResultadosService {
     const variantes = (["ESTRELAS", "CARINHAS"] as const).map((variante) => {
       const respostas = respondidas.filter((p) => p.variante === variante);
       const enviadasVariante = enviadas.filter((p) => p.variante === variante);
+      const respondidasEnviadasVariante = respondidasDasEnviadas.filter((p) => p.variante === variante);
       return {
         variante,
         respostas: respostas.length,
         notaMedia: this.media(respostas.map((p) => p.nota)),
         enviadas: enviadasVariante.length,
         taxaResposta:
-          enviadasVariante.length > 0 ? umaCasa((respostas.length / enviadasVariante.length) * 100) : null,
+          enviadasVariante.length > 0
+            ? umaCasa((respondidasEnviadasVariante.length / enviadasVariante.length) * 100)
+            : null,
       };
     });
 
@@ -180,9 +186,10 @@ export class PesquisaResultadosService {
       notaMedia: this.media(respondidas.map((p) => p.nota)),
       totalRespostas,
       taxaResposta: {
-        respondidas: totalRespostas,
+        respondidas: respondidasDasEnviadas.length,
         enviadas: enviadas.length,
-        percentual: enviadas.length > 0 ? umaCasa((totalRespostas / enviadas.length) * 100) : null,
+        percentual:
+          enviadas.length > 0 ? umaCasa((respondidasDasEnviadas.length / enviadas.length) * 100) : null,
       },
       cupons: { emitidos, usados, vencidos },
       gastoMes: {

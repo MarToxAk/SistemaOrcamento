@@ -129,6 +129,23 @@ describe("PesquisaResultadosService.resultados", () => {
     expect(r.taxaResposta).toEqual({ respondidas: 3, enviadas: 10, percentual: 30 });
   });
 
+  it("virada de mes: respostas de envios do mes anterior nao inflam a taxa acima de 100%", async () => {
+    const { service } = montar({
+      pesquisas: [
+        ...Array.from({ length: 5 }, (_, i) =>
+          respondida({ id: `antigo-${i}`, enviadaEm: new Date("2026-10-30T12:00:00Z"), respondidaEm: new Date("2026-11-02T12:00:00Z") }),
+        ),
+        respondida({ id: "novo", status: "ENVIADA", respondidaEm: null, nota: null }),
+      ],
+    });
+
+    const r = await service.resultados("mes", AGORA);
+
+    expect(r.totalRespostas).toBe(5);
+    expect(r.taxaResposta).toEqual({ respondidas: 0, enviadas: 1, percentual: 0 });
+    expect(r.variantes.every((v) => v.taxaResposta === null || v.taxaResposta <= 100)).toBe(true);
+  });
+
   it("comparativo por variante e amostraPequena verdadeiro abaixo de 30 respostas", async () => {
     const { service } = montar({
       pesquisas: [
