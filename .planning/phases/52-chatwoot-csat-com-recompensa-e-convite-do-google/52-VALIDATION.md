@@ -64,12 +64,20 @@ Task IDs are assigned by the planner; this table maps CONTEXT decisions to the v
 | TBD | TBD | TBD | Webhook filtra incoming e private=false | — | Mensagem privada propria nao dispara nada | unit | `jest pesquisa-webhook -t filtro` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | Re-check com historico (corrige P5) | — | Resposta do cliente antes de atividade e detectada | unit | `jest chatwoot-etiquetas -t reavaliacao` (estender)` | ✅ | ⬜ pending |
 | TBD | TBD | TBD | Labels sem perda (P6, P7) | — | `avaliou` preservada em mesclagem; POST na fila | unit | `jest chatwoot-etiquetas -t mescla` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | Rota publica sem limite global (P8) | — | Metadado `SkipThrottle` presente; limite por token | unit | `jest pesquisa-public -t limite` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | Retencao 12 meses | — | Anonimiza linhas > 12 meses; mantem agregados | unit | `jest pesquisa-retencao` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | Rota publica sem limite global por IP (P8, D-37) | — | Metadado `SkipThrottle` presente; limites por IP real, por token e teto da rota (300/min) | unit | `jest pesquisa.tracer` (T10 e T15) | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | Retencao 12 meses (colunas nulaveis, grava NULL) | — | Anonimiza linhas > 12 meses gravando NULL em telefone, conversationId, contactId, conversationUuid, customerId e comentario; mantem agregados | unit | `jest pesquisa-jobs -t anonimiza` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | Kill-switch | — | `ativo=false` nao cria pesquisa nem envia bloco | unit | `jest pesquisa.service -t ativo` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | Telefone normalizado | — | `+5512996484918`, `(12) 99648-4918`, `12996484918` -> mesma chave | unit | `jest pesquisa-regras -t telefone` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | Link Google allowlist | — | Dominio fora da lista recusado no DTO | unit | `jest pesquisa-admin -t linkGoogle` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | Revogar pesquisa (token revogavel, CONTEXT rev. 1) | — | Apos revogar, rota publica responde INDISPONIVEL com corpo generico (mesmo de token inexistente); cupom EMITIDO vira CANCELADO; USADO intacto; idempotente; id invalido 404 | unit | `jest pesquisa-revogacao` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | IP real so com chave interna valida (revisao do arquiteto, D-37) | — | `x-client-ip` ignorado sem `x-internal-api-key` valida; inundacao de tokens aleatorios recebe 429 sem acesso ao banco | unit | `jest pesquisa.tracer -t T15` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | Proxy publico fora do prefixo de API (nginx roteia /api/ ao backend) | — | POST /pesquisa/[token]/responder chega ao proxy do Next e devolve 404 JSON INDISPONIVEL para token inexistente | manual | roteiro 52-11, passo 7 (curl no dominio publico) | Roteiro | ⬜ pending |
+| TBD | TBD | TBD | Reserva antes de enviar (ENVIANDO) | — | Dois ciclos simultaneos enviam uma vez; envio incerto so reenvia apos 15 min e depois de conferir a mensagem no Chatwoot | unit | `jest pesquisa-mensagens -t reserva` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | input_csat nao duplicada e guarda do CSAT nativo | — | Re-tentativa reutiliza input_csat existente (lista com internas); inbox com CSAT nativo ligado vira NAO_APLICAVEL com aviso | unit | `jest pesquisa-mensagens -t csat` e `jest pesquisa.tracer -t T14` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | Dupla despedida (envio, registro, gancho) | — | ChatwootMensagemEnviada gravada antes do gancho; falha na gravacao nao impede o gancho | unit | `jest pesquisa.tracer -t T13` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | Corrida revogar x responder | — | Cupom criado apos a revogacao e cancelado (CANCELADO) e a resposta devolve cupom nulo | unit | `jest pesquisa.service -t corrida` e `jest pesquisa-revogacao -t corrida` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | Trava advisory dos crons | — | Sem a trava (outro processo) o ciclo e pulado; timeout 15 min; chaves 520101 e 520102 | unit | `jest pesquisa-jobs -t trava` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | Contrato de messages.list verificado (after exclusivo, ate 100, filter_internal_messages por blank) | — | incluirInternas omite o parametro; lista de 100 itens vira indeterminada no re-check | unit | `jest chatwoot-csat.service -t listMessagesAfter` e `jest chatwoot-fechamento-agendado -t Truncamento` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -81,10 +89,10 @@ Task IDs are assigned by the planner; this table maps CONTEXT decisions to the v
 - [ ] `apps/backend/src/modules/pesquisa/pesquisa.service.test.ts` — criacao, resposta, cupom, teto, intervalo, convite, best-effort, kill-switch (mocks de Prisma e ChatwootService com os metodos novos).
 - [ ] `apps/backend/src/modules/pesquisa/pesquisa-cupom.test.ts` — resgate atomico, minimo, teto no resgate.
 - [ ] `apps/backend/src/modules/pesquisa/pesquisa-webhook.controller.test.ts` — HMAC, janela, filtro, SAIR.
-- [ ] `apps/backend/src/modules/pesquisa/pesquisa-public.controller.test.ts` — limite por token e metadado de throttle.
-- [ ] `apps/backend/src/modules/pesquisa/pesquisa-retencao.test.ts` — anonimizacao.
+- [ ] `apps/backend/src/modules/pesquisa/pesquisa.tracer.test.ts` — limites da rota publica (por IP real, token e teto), metadado de throttle e IP confiavel so com a chave interna.
+- [ ] `apps/backend/src/modules/pesquisa/pesquisa-jobs.test.ts` — jobs de retry e retencao, trava advisory e anonimizacao com NULL.
 - [ ] `apps/backend/src/modules/pesquisa/pesquisa-revogacao.service.test.ts` — revogacao de pesquisa (INDISPONIVEL ponta a ponta com PesquisaService real, CANCELADO, idempotencia, convite agendado cancelado).
-- [ ] `apps/backend/src/modules/integrations/chatwoot/chatwoot-csat.service.test.ts` — payloads de `createPrivateCsatMessage`, `submitCsatResponse`, `listMessagesAfter`, `updateContactCustomAttributes`, `createAccountLabel` (corpo aninhado).
+- [ ] `apps/backend/src/modules/integrations/chatwoot/chatwoot-csat.service.test.ts` — payloads de `createPrivateCsatMessage`, `submitCsatResponse`, `getInbox`, `listMessagesAfter` (com e sem `incluirInternas`) e `updateContactCustomAttributes` (sem criacao de etiqueta de conta: passo manual do roteiro).
 - [ ] Atualizar `chatwoot-automation.service.test.ts:147` e `chatwoot-fechamento-agendado.test.ts:72` se o construtor mudar (P3).
 - [ ] Estender `chatwoot-etiquetas.test.ts` para a reavaliacao com historico (P5).
 - [ ] Frontend: nenhuma biblioteca nova sem passar pelo gate de pacotes. Cobertura por `next build` e roteiro.
