@@ -76,7 +76,7 @@ describe("Fase 52 (plano 52-13): paridade prévia x produção", () => {
     });
   });
 
-  it("T52-13e: os três placeholders do gap são aceitos e renderizam o valor real (prévia = produção)", () => {
+  it("T52-13e2: os três placeholders do gap são aceitos e renderizam o valor real (prévia = produção)", () => {
     expect(validarTextoMensagem("fechamento", "Responda: {LINK}")).toBeNull();
     expect(renderizarTexto("Responda: {LINK}", mapaFechamento)).toContain(mapaFechamento.link);
     expect(renderizarPrevia("Responda: {LINK}", mapaFechamento)).toBe(

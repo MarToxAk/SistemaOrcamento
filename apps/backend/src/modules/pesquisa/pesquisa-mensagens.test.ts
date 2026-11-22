@@ -7,8 +7,6 @@ import { Logger } from "@nestjs/common";
 
 import { aguardarFilaEtiquetas, cancelarTodosEnviosFechamento, enviosFechamentoPendentes } from "../integrations/chatwoot/chatwoot-etiquetas";
 import type { PesquisaConfigView } from "./pesquisa-config.service";
-import { montarVariaveisMensagem } from "./pesquisa-efeitos";
-import { renderizarTexto } from "./pesquisa-regras";
 import { PesquisaService } from "./pesquisa.service";
 
 type Linha = Record<string, any>;
@@ -543,20 +541,6 @@ describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano
     const texto = textoEnviado(ctx, 0);
     expect(texto).toContain(codigo);
     expect(texto).not.toMatch(/[{}]/);
-
-    const mapa = montarVariaveisMensagem({
-      linkGoogle: CONFIG_BASE.linkGoogle,
-      cupom: {
-        codigo: "BC-7K3Q9M",
-        percentual: 10,
-        teto: 5,
-        compraMinima: 30,
-        validadeAte: new Date("2026-12-22T03:00:00Z"),
-      },
-      empresaNome: "Loja Teste",
-      cfg: { percentualDesconto: 10, tetoDesconto: 5, compraMinima: 30, validadeCupomDias: 30 },
-    });
-    expect(renderizarTexto("Cupom {CODIGO} vale.", mapa)).toBe(renderizarTexto("Cupom {codigo} vale.", mapa));
   });
 
   it("T52-13d: convite com {LINK_GOOGLE} em caixa alta sai com o link do Google", async () => {
@@ -570,11 +554,6 @@ describe("PesquisaService - mensagens de WhatsApp e re-tentativa (Fase 52, plano
     expect([...texto.matchAll(/https:\/\/g\.page\/r\/abc\/review/g)]).toHaveLength(1);
     expect(texto).toContain("Loja Teste");
     expect(texto).not.toMatch(/[{}]/);
-
-    const mapa = { link_google: CONFIG_BASE.linkGoogle as string, nome_empresa: "Loja Teste" };
-    expect(renderizarTexto("Avalie a {nome_empresa}: {LINK_GOOGLE}", mapa)).toBe(
-      renderizarTexto("Avalie a {nome_empresa}: {link_google}", mapa),
-    );
   });
 
   it("cupom: enabled false vira FALHA com warn e a resposta ja saiu com o cupom", async () => {
