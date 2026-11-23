@@ -15,9 +15,11 @@ import { TEXTOS_PADRAO } from "./pesquisa-regras";
 import { PesquisaService } from "./pesquisa.service";
 import {
   DIRETRIZES_VARIACAO,
+  DIRETRIZES_VARIACAO_FORTE,
   ENV_VARIACAO_IA,
   TIMEOUT_VARIACAO_MS,
   montarPromptVariacao,
+  nivelVariacao,
   sortearDiretriz,
   validarVariacao,
   variacaoAtiva,
@@ -68,6 +70,24 @@ describe("pesquisa-variacao: helpers puros", () => {
     expect(prompt).toContain("placeholders");
     expect(prompt).toContain("SAIR");
     expect(prompt).toContain("sem aspas, sem markdown");
+    expect(prompt).toContain("{link}");
+  });
+
+  it("nivelVariacao: padrao forte; so 'leve' escolhe o leve", () => {
+    expect(nivelVariacao(undefined)).toBe("forte");
+    expect(nivelVariacao("")).toBe("forte");
+    expect(nivelVariacao("lixo")).toBe("forte");
+    expect(nivelVariacao("forte")).toBe("forte");
+    expect(nivelVariacao(" LEVE ")).toBe("leve");
+  });
+
+  it("nivel forte: diretrizes e prompt pedem reescrita com palavras e estrutura diferentes, sem afrouxar as regras", () => {
+    expect(sortearDiretriz(() => 0, "forte")).toBe(DIRETRIZES_VARIACAO_FORTE[0]);
+    const prompt = montarPromptVariacao(TEXTOS_PADRAO.textoFechamento, "fechamento", "escreva de forma mais direta e curta", "forte");
+    expect(prompt).toContain("palavras e estrutura DIFERENTES");
+    expect(prompt).not.toContain("de forma LEVE");
+    expect(prompt).toContain("TODOS os placeholders");
+    expect(prompt).toContain("SAIR");
     expect(prompt).toContain("{link}");
   });
 

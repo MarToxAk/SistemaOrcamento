@@ -8,6 +8,14 @@ import { type TipoTexto, validarTextoMensagem } from "./pesquisa-regras";
 
 /** Flag que liga/desliga a variacao por IA (padrao ligada; so "false", "0" e "off" desligam). */
 export const ENV_VARIACAO_IA = "PESQUISA_VARIACAO_IA";
+/** Nivel da reescrita: "leve" (sinonimos/ordem) ou "forte" (outras palavras e estrutura, mesmo significado). */
+export const ENV_VARIACAO_NIVEL = "PESQUISA_VARIACAO_NIVEL";
+export type NivelVariacao = "leve" | "forte";
+/** Ausente, vazio ou desconhecido = "forte"; so "leve" (sem diferenciar caixa) escolhe a reescrita leve. */
+export function nivelVariacao(valor: string | null | undefined): NivelVariacao {
+  return String(valor ?? "").trim().toLowerCase() === "leve" ? "leve" : "forte";
+}
+
 /** Teto da chamada a IA: o envio da mensagem nunca espera alem disso. */
 export const TIMEOUT_VARIACAO_MS = 8000;
 /** Faixa de tamanho aceita para a variacao (multiplicador sobre o tamanho do modelo). */
@@ -38,18 +46,37 @@ export const DIRETRIZES_VARIACAO = [
   "varie a forma de agradecer ou convidar",
 ] as const;
 
-export function sortearDiretriz(sorteio: () => number = Math.random): string {
-  const indice = Math.floor(sorteio() * DIRETRIZES_VARIACAO.length);
-  return DIRETRIZES_VARIACAO[indice] ?? DIRETRIZES_VARIACAO[0];
+/** Diretrizes do nivel "forte": estilos bem distintos entre si, mesmo significado. */
+export const DIRETRIZES_VARIACAO_FORTE = [
+  "escreva de forma mais direta e curta",
+  "escreva de forma mais calorosa e informal, como numa conversa",
+  "comece pelo benefício ou pelo pedido, não pela saudação",
+  "use outra estrutura de frases e palavras totalmente diferentes",
+  "escreva de forma educada e objetiva, como uma loja atenciosa",
+] as const;
+
+export function sortearDiretriz(sorteio: () => number = Math.random, nivel: NivelVariacao = "leve"): string {
+  const lista = nivel === "forte" ? DIRETRIZES_VARIACAO_FORTE : DIRETRIZES_VARIACAO;
+  const indice = Math.floor(sorteio() * lista.length);
+  return lista[indice] ?? lista[0];
 }
 
 /** [U5] Prompt em portugues que pede reescrita LEVE; o modelo vai com os placeholders crus. */
-export function montarPromptVariacao(modelo: string, tipo: TipoVariacao, diretriz: string): string {
+export function montarPromptVariacao(
+  modelo: string,
+  tipo: TipoVariacao,
+  diretriz: string,
+  nivel: NivelVariacao = "leve",
+): string {
+  const abertura =
+    nivel === "forte"
+      ? `Reescreva a mensagem de WhatsApp abaixo (tipo: ${tipo}) com palavras e estrutura DIFERENTES, como se outra pessoa a escrevesse, mantendo exatamente o mesmo significado e todas as informações. Ela nao pode parecer a mesma mensagem.`
+      : `Reescreva de forma LEVE a mensagem de WhatsApp abaixo (tipo: ${tipo}), para ela nao parecer sempre a mesma.`;
   return [
-    `Reescreva de forma LEVE a mensagem de WhatsApp abaixo (tipo: ${tipo}), para ela nao parecer sempre a mesma.`,
+    abertura,
     `Diretriz de estilo: ${diretriz}.`,
     "Regras:",
-    "- Mantenha o tom, o tamanho aproximado e os emojis (se houver).",
+    "- Mantenha um tom cordial, o tamanho aproximado e os emojis (se houver).",
     "- Mantenha TODOS os placeholders entre chaves exatamente como estao (ex: {codigo}, {link}, {link_google}).",
     "- Mantenha a palavra SAIR e as quebras de linha.",
     "- Nao invente link, numero, codigo nem valor.",

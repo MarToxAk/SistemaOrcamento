@@ -29,6 +29,15 @@ describe("PESQUISA_VARIACAO_IA: codigo x deploy (quick 261122-rlb)", () => {
     expect(contar(ler("stack.env.example"), regex)).toBe(1);
   });
 
+  it.each(COMPOSES)("%s declara PESQUISA_VARIACAO_NIVEL com padrao forte", (arquivo) => {
+    const regex = /^\s+PESQUISA_VARIACAO_NIVEL:\s+\$\{PESQUISA_VARIACAO_NIVEL:-forte\}\s*$/gm;
+    expect(contar(ler(arquivo), regex)).toBe(1);
+  });
+
+  it("stack.env.example tem exatamente uma linha PESQUISA_VARIACAO_NIVEL=forte", () => {
+    expect(contar(ler("stack.env.example"), /^PESQUISA_VARIACAO_NIVEL=forte\s*$/gm)).toBe(1);
+  });
+
   it("o padrao do codigo segue ligado (dev/testes); o deploy liga so por env, de proposito", () => {
     expect(variacaoAtiva(undefined)).toBe(true);
     expect(ENV_VARIACAO_IA).toBe("PESQUISA_VARIACAO_IA");
