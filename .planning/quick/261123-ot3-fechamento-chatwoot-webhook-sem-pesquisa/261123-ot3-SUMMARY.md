@@ -7,10 +7,10 @@ status: complete
 
 ## Entregue
 - Rota nova `POST /api/integrations/chatwoot/automation/webhook-sem-pesquisa/:token` (mesmo `CHATWOOT_AUTOMATION_WEBHOOK_TOKEN`): fecha como hoje (pendência, etiquetas, atraso humano, resolvido da IA) mas nunca chama o gancho da pesquisa.
-- Webhook atual: a pesquisa só sai quando o orçamento da conversa está `APROVADO`, `PRONTO_PARA_ENTREGA`, `ENTREGUE` ou `ENVIADO` (`STATUS_ELEGIVEIS_PESQUISA`) **e** foi aprovado nos últimos 7 dias (`JANELA_APROVACAO_PESQUISA_DIAS`; data via histórico APROVADO, senão `approvedAt`; sem data = sem pesquisa). Sem orçamento ou com outro status (inclusive `CANCELADO`), sai só o resolvido da IA.
+- Webhook atual: a pesquisa só sai quando o orçamento da conversa está `ENTREGUE` ou `PRONTO_PARA_ENTREGA` (`STATUS_ELEGIVEIS_PESQUISA`) **e** chegou a esse status nos últimos 7 dias (`JANELA_PESQUISA_DIAS`; data = histórico de status; sem registro = sem pesquisa). Outro status (inclusive `APROVADO`, `ENVIADO`, `CANCELADO`) ou sem orçamento: só o resolvido da IA.
 
 ## Verificação
-- `npx jest src/modules/integrations/chatwoot src/modules/pesquisa`: 22 suites, 551 testes passando; `tsc --noEmit` limpo.
+- `npx jest src/modules/integrations/chatwoot src/modules/pesquisa`: 22 suites, 550 testes passando; `tsc --noEmit` limpo.
 - Testes com Chatwoot/IA/gancho falsos; nada testado contra o Chatwoot real.
 
 ## Observações

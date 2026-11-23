@@ -178,7 +178,7 @@ function montar(opcoes: Opcoes = {}) {
       updateMany: jest.fn(async () => ({ count: 0 })),
     },
     // quick 261123-ot3: a pesquisa so sai para pedido ENTREGUE/ENVIADO; os cenarios usam um pedido entregue.
-    quote: { findFirst: jest.fn(async () => ({ status: "ENTREGUE", customerId: "cus-1", approvedAt: new Date(), statusHistory: [{ changedAt: new Date() }] })), count: jest.fn(async () => 0) },
+    quote: { findFirst: jest.fn(async () => ({ status: "ENTREGUE", customerId: "cus-1", statusHistory: [{ changedAt: new Date() }] })), count: jest.fn(async () => 0) },
   };
 
   const env: Record<string, string> = {

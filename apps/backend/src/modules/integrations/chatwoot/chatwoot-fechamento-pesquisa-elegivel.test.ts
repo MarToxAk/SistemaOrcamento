@@ -8,10 +8,10 @@ import { UnauthorizedException } from "@nestjs/common";
 import { ChatwootAutomationController } from "./chatwoot-automation.controller";
 import {
   ChatwootAutomationService,
-  JANELA_APROVACAO_PESQUISA_DIAS,
+  JANELA_PESQUISA_DIAS,
   STATUS_ELEGIVEIS_PESQUISA,
   elegivelParaPesquisa,
-  momentoAprovacao,
+  momentoProntoOuEntregue,
 } from "./chatwoot-automation.service";
 import { aguardarFilaEtiquetas, cancelarTodosEnviosFechamento } from "./chatwoot-etiquetas";
 
@@ -21,8 +21,8 @@ const ATRASO_MAX_MS = 180000;
 const DIA_MS = 24 * 60 * 60 * 1000;
 const diasAtras = (dias: number) => new Date(Date.now() - dias * DIA_MS);
 
-type Aprovacao = { historico?: Date | null; approvedAt?: Date | null };
-/** Por padrao o pedido foi aprovado ha 2 dias (dentro da janela de 7). */
+type Aprovacao = { historico?: Date | null };
+/** Por padrao o pedido ficou entregue/pronto ha 2 dias (dentro da janela de 7). */
 const APROVADO_HA_2_DIAS: Aprovacao = { historico: diasAtras(2) };
 
 function buildService(quoteStatus: QuoteStatus | null, statusFechamento?: string, aprovacao: Aprovacao = APROVADO_HA_2_DIAS) {
@@ -39,7 +39,6 @@ function buildService(quoteStatus: QuoteStatus | null, statusFechamento?: string
           : {
               status: quoteStatus,
               customerId: "cus-1",
-              approvedAt: aprovacao.approvedAt ?? null,
               statusHistory: aprovacao.historico ? [{ changedAt: aprovacao.historico }] : [],
             },
       ),
@@ -95,21 +94,21 @@ describe("fechamento: pesquisa so para pedido entregue/enviado (quick 261123-ot3
     jest.restoreAllMocks();
   });
 
-  it("elegivelParaPesquisa: APROVADO, PRONTO_PARA_ENTREGA, ENTREGUE e ENVIADO, aprovados nos ultimos 7 dias", () => {
-    expect(STATUS_ELEGIVEIS_PESQUISA).toEqual([
-      QuoteStatus.APROVADO,
-      QuoteStatus.PRONTO_PARA_ENTREGA,
-      QuoteStatus.ENTREGUE,
-      QuoteStatus.ENVIADO,
-    ]);
-    expect(JANELA_APROVACAO_PESQUISA_DIAS).toBe(7);
+  it("elegivelParaPesquisa: ENTREGUE e PRONTO_PARA_ENTREGA, nos ultimos 7 dias", () => {
+    expect(STATUS_ELEGIVEIS_PESQUISA).toEqual([QuoteStatus.ENTREGUE, QuoteStatus.PRONTO_PARA_ENTREGA]);
+    expect(JANELA_PESQUISA_DIAS).toBe(7);
     const agora = Date.now();
     const hoje = new Date(agora);
     expect(elegivelParaPesquisa(QuoteStatus.ENTREGUE, hoje, agora)).toBe(true);
-    expect(elegivelParaPesquisa(QuoteStatus.ENVIADO, hoje, agora)).toBe(true);
-    expect(elegivelParaPesquisa(QuoteStatus.APROVADO, hoje, agora)).toBe(true);
     expect(elegivelParaPesquisa(QuoteStatus.PRONTO_PARA_ENTREGA, hoje, agora)).toBe(true);
-    for (const s of [QuoteStatus.PENDENTE, QuoteStatus.PAGAMENTO_PARCIAL, QuoteStatus.EM_PRODUCAO, QuoteStatus.CANCELADO]) {
+    for (const s of [
+      QuoteStatus.PENDENTE,
+      QuoteStatus.PAGAMENTO_PARCIAL,
+      QuoteStatus.APROVADO,
+      QuoteStatus.EM_PRODUCAO,
+      QuoteStatus.ENVIADO,
+      QuoteStatus.CANCELADO,
+    ]) {
       expect(elegivelParaPesquisa(s, hoje, agora)).toBe(false);
     }
     expect(elegivelParaPesquisa(null, hoje, agora)).toBe(false);
@@ -125,16 +124,14 @@ describe("fechamento: pesquisa so para pedido entregue/enviado (quick 261123-ot3
     expect(elegivelParaPesquisa(QuoteStatus.ENTREGUE, new Date(agora + DIA_MS), agora)).toBe(false);
   });
 
-  it("momentoAprovacao: historico APROVADO tem prioridade; sem ele usa approvedAt; sem nenhum, null", () => {
+  it("momentoProntoOuEntregue: usa o registro mais recente do historico; sem registro, null", () => {
     const h = new Date("2026-11-20T10:00:00Z");
-    const a = new Date("2026-11-10T10:00:00Z");
-    expect(momentoAprovacao({ approvedAt: a, statusHistory: [{ changedAt: h }] })).toBe(h);
-    expect(momentoAprovacao({ approvedAt: a, statusHistory: [] })).toBe(a);
-    expect(momentoAprovacao({ approvedAt: null, statusHistory: [] })).toBeNull();
-    expect(momentoAprovacao(null)).toBeNull();
+    expect(momentoProntoOuEntregue({ statusHistory: [{ changedAt: h }] })).toBe(h);
+    expect(momentoProntoOuEntregue({ statusHistory: [] })).toBeNull();
+    expect(momentoProntoOuEntregue(null)).toBeNull();
   });
 
-  it("ENTREGUE aprovado ha 10 dias: fecha com o resolvido, sem pesquisa", async () => {
+  it("ENTREGUE ha 10 dias: fecha com o resolvido, sem pesquisa", async () => {
     const ctx = buildService(QuoteStatus.ENTREGUE, undefined, { historico: diasAtras(10) });
     await fechar(ctx);
 
@@ -142,28 +139,26 @@ describe("fechamento: pesquisa so para pedido entregue/enviado (quick 261123-ot3
     expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledWith("42", "Mensagem da IA");
   });
 
-  it("ENTREGUE sem nenhuma data de aprovacao: sem pesquisa", async () => {
+  it("ENTREGUE sem registro no historico: sem pesquisa", async () => {
     const ctx = buildService(QuoteStatus.ENTREGUE, undefined, {});
     await fechar(ctx);
 
     expect(ctx.gancho.prepararFechamento).not.toHaveBeenCalled();
   });
 
-  it("ENVIADO aprovado ha 3 dias pelo link do cliente (so approvedAt): recebe a pesquisa", async () => {
-    const ctx = buildService(QuoteStatus.ENVIADO, undefined, { approvedAt: diasAtras(3) });
+  it("PRONTO_PARA_ENTREGA ha 3 dias (liberado por env): recebe a pesquisa", async () => {
+    const ctx = buildService(QuoteStatus.PRONTO_PARA_ENTREGA, "PRONTO_PARA_ENTREGA", { historico: diasAtras(3) });
     await fechar(ctx);
 
     expect(ctx.gancho.prepararFechamento).toHaveBeenCalledTimes(1);
     expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledWith("42", "Mensagem da IA\n\nLink da pesquisa");
   });
 
-  it("ENTREGUE: webhook normal envia a mensagem com o bloco da pesquisa e chama o gancho pos-envio", async () => {
-    const ctx = buildService(QuoteStatus.ENTREGUE);
+  it("ENVIADO nao recebe pesquisa (fora da lista)", async () => {
+    const ctx = buildService(QuoteStatus.ENVIADO);
     await fechar(ctx);
 
-    expect(ctx.gancho.prepararFechamento).toHaveBeenCalledTimes(1);
-    expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledWith("42", "Mensagem da IA\n\nLink da pesquisa");
-    expect(ctx.gancho.aoFechamentoEnviado).toHaveBeenCalledWith("pq-1");
+    expect(ctx.gancho.prepararFechamento).not.toHaveBeenCalled();
   });
 
   it("CANCELADO (fecha, mas nao elegivel): mensagem de resolvido sem pesquisa, etiquetas mantidas", async () => {
@@ -200,13 +195,6 @@ describe("fechamento: pesquisa so para pedido entregue/enviado (quick 261123-ot3
     expect(ctx.gancho.aoFechamentoEnviado).not.toHaveBeenCalled();
     expect(ctx.chatwoot.sendOutgoingMessage).toHaveBeenCalledWith("42", "Mensagem da IA");
     expect(ctx.chatwoot.addConversationLabels).toHaveBeenCalledWith("42", ["finalizado"]);
-  });
-
-  it("PRONTO_PARA_ENTREGA liberado por env e aprovado ha 2 dias: recebe a pesquisa", async () => {
-    const ctx = buildService(QuoteStatus.PRONTO_PARA_ENTREGA, "PRONTO_PARA_ENTREGA");
-    await fechar(ctx);
-
-    expect(ctx.gancho.prepararFechamento).toHaveBeenCalledTimes(1);
   });
 
   it("rota sem pesquisa continua bloqueando pedido pendente", async () => {

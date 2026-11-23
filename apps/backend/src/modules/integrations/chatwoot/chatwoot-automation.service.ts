@@ -39,41 +39,33 @@ const DEFAULT_PROMPT_FECHAMENTO =
   '- Responda APENAS com a mensagem final, sem aspas, sem explicacoes, sem markdown.';
 
 /**
- * Quick 261123-ot3: a pesquisa de satisfacao so e enviada quando o orcamento ligado a conversa
- * ja foi aprovado/pronto/entregue/enviado E foi aprovado nos ultimos 7 dias. Sem orcamento ou com qualquer outro status, a conversa fecha sem a pesquisa.
+ * Quick 261123-ot3: a pesquisa de satisfacao so e enviada quando o orcamento ligado a conversa esta
+ * ENTREGUE ou PRONTO_PARA_ENTREGA (pronto para retirar) E chegou a esse status nos ultimos 7 dias.
+ * Sem orcamento, com outro status ou fora da janela, a conversa fecha sem a pesquisa.
  */
-export const STATUS_ELEGIVEIS_PESQUISA: QuoteStatus[] = [
-  QuoteStatus.APROVADO,
-  QuoteStatus.PRONTO_PARA_ENTREGA,
-  QuoteStatus.ENTREGUE,
-  QuoteStatus.ENVIADO,
-];
+export const STATUS_ELEGIVEIS_PESQUISA: QuoteStatus[] = [QuoteStatus.ENTREGUE, QuoteStatus.PRONTO_PARA_ENTREGA];
 
-/** O orcamento precisa ter sido aprovado nos ultimos 7 dias para a conversa receber a pesquisa. */
-export const JANELA_APROVACAO_PESQUISA_DIAS = 7;
+/** O orcamento precisa ter ficado entregue/pronto nos ultimos 7 dias para a conversa receber a pesquisa. */
+export const JANELA_PESQUISA_DIAS = 7;
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Momento da aprovacao: o registro mais recente de historico com novo status APROVADO ou, se nao
- * houver, `approvedAt` (aprovacao pelo link do cliente). Sem nenhum dos dois, nao ha aprovacao conhecida.
+ * Momento em que o orcamento ficou ENTREGUE ou PRONTO_PARA_ENTREGA: o registro mais recente do
+ * historico de status com um desses novos status (ja vem ordenado do mais novo). Sem registro, null.
  */
-export function momentoAprovacao(quote: {
-  approvedAt?: Date | null;
-  statusHistory?: Array<{ changedAt: Date }>;
-} | null): Date | null {
-  const doHistorico = quote?.statusHistory?.[0]?.changedAt ?? null;
-  return doHistorico ?? quote?.approvedAt ?? null;
+export function momentoProntoOuEntregue(quote: { statusHistory?: Array<{ changedAt: Date }> } | null): Date | null {
+  return quote?.statusHistory?.[0]?.changedAt ?? null;
 }
 
 export function elegivelParaPesquisa(
   status: QuoteStatus | null | undefined,
-  aprovadoEm: Date | null | undefined,
+  desdeEm: Date | null | undefined,
   agoraMs: number = Date.now(),
 ): boolean {
   if (status === null || status === undefined || !STATUS_ELEGIVEIS_PESQUISA.includes(status)) return false;
-  if (!aprovadoEm) return false;
-  const idade = agoraMs - aprovadoEm.getTime();
-  return idade >= 0 && idade <= JANELA_APROVACAO_PESQUISA_DIAS * DIA_MS;
+  if (!desdeEm) return false;
+  const idade = agoraMs - desdeEm.getTime();
+  return idade >= 0 && idade <= JANELA_PESQUISA_DIAS * DIA_MS;
 }
 
 const STATUS_FECHAMENTO_PADRAO: QuoteStatus[] = [QuoteStatus.ENTREGUE, QuoteStatus.ENVIADO, QuoteStatus.CANCELADO];
@@ -257,9 +249,8 @@ export class ChatwootAutomationService implements OnModuleDestroy {
       select: {
         status: true,
         customerId: true,
-        approvedAt: true,
         statusHistory: {
-          where: { newStatus: QuoteStatus.APROVADO },
+          where: { newStatus: { in: STATUS_ELEGIVEIS_PESQUISA } },
           orderBy: { changedAt: "desc" },
           take: 1,
           select: { changedAt: true },
@@ -289,7 +280,7 @@ export class ChatwootAutomationService implements OnModuleDestroy {
     const idUltimaMensagem = payload.messages?.[0]?.id;
     const ultimaMensagemId =
       typeof idUltimaMensagem === "number" && Number.isFinite(idUltimaMensagem) ? idUltimaMensagem : undefined;
-    const enviarPesquisa = opcoes.semPesquisa !== true && elegivelParaPesquisa(quote?.status, momentoAprovacao(quote ?? null), resolvidaEmMs);
+    const enviarPesquisa = opcoes.semPesquisa !== true && elegivelParaPesquisa(quote?.status, momentoProntoOuEntregue(quote ?? null), resolvidaEmMs);
     const contexto = { resolvidaEmMs, status: quote?.status ?? null, customerId, ultimaMensagemId, enviarPesquisa };
     agendarEnvioFechamento(conversationId, atrasoMs, () => this.enviarMensagemFechamento(conversationId, contexto));
     this.logger.log(`Mensagem de fechamento agendada conversationId=${conversationId} atrasoMs=${atrasoMs}`);
