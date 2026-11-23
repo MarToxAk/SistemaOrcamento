@@ -38,6 +38,36 @@ const DEFAULT_PROMPT_FECHAMENTO =
   '- Maximo 2 frases curtas.\n' +
   '- Responda APENAS com a mensagem final, sem aspas, sem explicacoes, sem markdown.';
 
+/**
+ * Quick 261123-ot3: a pesquisa de satisfacao so e enviada quando o orcamento ligado a conversa esta
+ * ENTREGUE ou PRONTO_PARA_ENTREGA (pronto para retirar) E chegou a esse status nos ultimos 7 dias.
+ * Sem orcamento, com outro status ou fora da janela, a conversa fecha sem a pesquisa.
+ */
+export const STATUS_ELEGIVEIS_PESQUISA: QuoteStatus[] = [QuoteStatus.ENTREGUE, QuoteStatus.PRONTO_PARA_ENTREGA];
+
+/** O orcamento precisa ter ficado entregue/pronto nos ultimos 7 dias para a conversa receber a pesquisa. */
+export const JANELA_PESQUISA_DIAS = 7;
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Momento em que o orcamento ficou ENTREGUE ou PRONTO_PARA_ENTREGA: o registro mais recente do
+ * historico de status com um desses novos status (ja vem ordenado do mais novo). Sem registro, null.
+ */
+export function momentoProntoOuEntregue(quote: { statusHistory?: Array<{ changedAt: Date }> } | null): Date | null {
+  return quote?.statusHistory?.[0]?.changedAt ?? null;
+}
+
+export function elegivelParaPesquisa(
+  status: QuoteStatus | null | undefined,
+  desdeEm: Date | null | undefined,
+  agoraMs: number = Date.now(),
+): boolean {
+  if (status === null || status === undefined || !STATUS_ELEGIVEIS_PESQUISA.includes(status)) return false;
+  if (!desdeEm) return false;
+  const idade = agoraMs - desdeEm.getTime();
+  return idade >= 0 && idade <= JANELA_PESQUISA_DIAS * DIA_MS;
+}
+
 const STATUS_FECHAMENTO_PADRAO: QuoteStatus[] = [QuoteStatus.ENTREGUE, QuoteStatus.ENVIADO, QuoteStatus.CANCELADO];
 
 const DEFAULT_MENSAGEM_PEDIDO_PENDENTE =
@@ -196,12 +226,16 @@ export class ChatwootAutomationService implements OnModuleDestroy {
    *    processo, um timer por conversa. Reiniciar o backend perde a mensagem agendada (aceito, D-24).
    * O ramo bloqueado por pendencia nao mexe em etiquetas (D-07).
    */
-  async handleConversationResolved(payload: ChatwootAutomationWebhookPayload): Promise<
+  async handleConversationResolved(
+    payload: ChatwootAutomationWebhookPayload,
+    opcoes: { semPesquisa?: boolean } = {},
+  ): Promise<
     | { processed: false; reason: "inbox_nao_monitorado" }
     | { processed: true; action: "bloqueado_pedido_pendente" }
     | { processed: true; action: "mensagem_ja_enviada_hoje" }
     | { processed: true; action: "mensagem_agendada"; atrasoMs: number }
   > {
+    // Quick 261123-ot3: rota "sem pesquisa" nunca envia; a rota normal so envia para pedido entregue/enviado.
     const resolvidaEmMs = Date.now();
     const inboxId = payload.contact_inbox?.inbox_id ?? payload.inbox_id;
     if (!inboxPermitido(inboxId, this.getInboxesPermitidos())) {
@@ -212,7 +246,16 @@ export class ChatwootAutomationService implements OnModuleDestroy {
     const quote = await this.prisma.quote.findFirst({
       where: { conversationId: BigInt(conversationId) },
       orderBy: { updatedAt: "desc" },
-      select: { status: true, customerId: true },
+      select: {
+        status: true,
+        customerId: true,
+        statusHistory: {
+          where: { newStatus: { in: STATUS_ELEGIVEIS_PESQUISA } },
+          orderBy: { changedAt: "desc" },
+          take: 1,
+          select: { changedAt: true },
+        },
+      },
     });
 
     if (!podeFecharConversa(quote?.status, this.getStatusPermitidosFechamento())) {
@@ -237,7 +280,8 @@ export class ChatwootAutomationService implements OnModuleDestroy {
     const idUltimaMensagem = payload.messages?.[0]?.id;
     const ultimaMensagemId =
       typeof idUltimaMensagem === "number" && Number.isFinite(idUltimaMensagem) ? idUltimaMensagem : undefined;
-    const contexto = { resolvidaEmMs, status: quote?.status ?? null, customerId, ultimaMensagemId };
+    const enviarPesquisa = opcoes.semPesquisa !== true && elegivelParaPesquisa(quote?.status, momentoProntoOuEntregue(quote ?? null), resolvidaEmMs);
+    const contexto = { resolvidaEmMs, status: quote?.status ?? null, customerId, ultimaMensagemId, enviarPesquisa };
     agendarEnvioFechamento(conversationId, atrasoMs, () => this.enviarMensagemFechamento(conversationId, contexto));
     this.logger.log(`Mensagem de fechamento agendada conversationId=${conversationId} atrasoMs=${atrasoMs}`);
 
@@ -281,7 +325,13 @@ export class ChatwootAutomationService implements OnModuleDestroy {
    */
   private async enviarMensagemFechamento(
     conversationId: string,
-    contexto: { resolvidaEmMs: number; status: QuoteStatus | null; customerId: string | null; ultimaMensagemId?: number },
+    contexto: {
+      resolvidaEmMs: number;
+      status: QuoteStatus | null;
+      customerId: string | null;
+      ultimaMensagemId?: number;
+      enviarPesquisa?: boolean;
+    },
   ): Promise<void> {
     try {
       let conversa: Awaited<ReturnType<ChatwootService["getConversation"]>>;
@@ -345,7 +395,10 @@ export class ChatwootAutomationService implements OnModuleDestroy {
       }
 
       // Fase 52: o gancho da pesquisa (se registrado e ativo) devolve o bloco com o link unico.
-      const pesquisa = await this.prepararPesquisa(conversationId, conversa, contexto.customerId);
+      const pesquisa =
+        contexto.enviarPesquisa === false
+          ? null
+          : await this.prepararPesquisa(conversationId, conversa, contexto.customerId);
       const mensagemFinal = pesquisa ? `${mensagem}\n\n${pesquisa.bloco}` : mensagem;
 
       const envio = await this.chatwoot.sendOutgoingMessage(conversationId, mensagemFinal);

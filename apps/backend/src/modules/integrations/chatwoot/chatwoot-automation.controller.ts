@@ -36,7 +36,7 @@ export class ChatwootAutomationController {
   @ApiOperation({
     summary: "Webhook de automacao do Chatwoot (fechamento de conversa)",
     description:
-      "Configure no Chatwoot (Automation > conversation_resolved) a URL: POST /integrations/chatwoot/automation/webhook/<token>. Substitui o workflow n8n equivalente.",
+      "Configure no Chatwoot (Automation > conversation_resolved) a URL: POST /integrations/chatwoot/automation/webhook/<token>. A pesquisa so e enviada se o orcamento da conversa estiver ENTREGUE ou ENVIADO; para fechar sem pesquisa use /webhook-sem-pesquisa/<token>. Substitui o workflow n8n equivalente.",
   })
   @Public()
   @Throttle({ default: THROTTLE_WEBHOOK })
@@ -49,6 +49,26 @@ export class ChatwootAutomationController {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Erro ao processar webhook de fechamento de conversa: ${msg}`);
+      return { processed: false, error: msg };
+    }
+  }
+
+  @ApiOperation({
+    summary: "Webhook de automacao do Chatwoot (fechamento de conversa SEM pesquisa de satisfacao)",
+    description:
+      "Igual ao webhook de fechamento, mas nunca envia a pesquisa: a mensagem de resolvido sai sem o link. Configure no Chatwoot uma segunda automacao conversation_resolved com a URL: POST /integrations/chatwoot/automation/webhook-sem-pesquisa/<token> (mesmo token).",
+  })
+  @Public()
+  @Throttle({ default: THROTTLE_WEBHOOK })
+  @Post("webhook-sem-pesquisa/:token")
+  @HttpCode(200)
+  async webhookSemPesquisa(@Param("token") token: string, @Body() payload: ChatwootAutomationWebhookPayload) {
+    this.validateWebhookToken(token);
+    try {
+      return await this.automationService.handleConversationResolved(payload, { semPesquisa: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Erro ao processar webhook de fechamento sem pesquisa: ${msg}`);
       return { processed: false, error: msg };
     }
   }
