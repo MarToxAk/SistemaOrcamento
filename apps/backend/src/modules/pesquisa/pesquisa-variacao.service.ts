@@ -13,9 +13,11 @@ import axios from "axios";
 import { extrairMensagemIA } from "../integrations/chatwoot/chatwoot-automation.service";
 import {
   ENV_VARIACAO_IA,
+  ENV_VARIACAO_NIVEL,
   TIMEOUT_VARIACAO_MS,
   type TipoVariacao,
   montarPromptVariacao,
+  nivelVariacao,
   sortearDiretriz,
   validarVariacao,
   variacaoAtiva,
@@ -41,7 +43,8 @@ export class PesquisaVariacaoService {
     }
 
     const model = this.config.get<string>("CHATWOOT_AI_MODEL") ?? "openclaw/main";
-    const prompt = montarPromptVariacao(modelo, tipo, sortearDiretriz());
+    const nivel = nivelVariacao(this.config.get<string>(ENV_VARIACAO_NIVEL));
+    const prompt = montarPromptVariacao(modelo, tipo, sortearDiretriz(Math.random, nivel), nivel);
 
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
