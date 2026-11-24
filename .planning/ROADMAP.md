@@ -43,6 +43,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [x] **Phase 50: Contas a receber: boleto atualizado com juros e multa** (completed 2026-11-17)
 - [ ] **Phase 51: Chatwoot: etiquetas por fase, cliente frequente e delay humano no fechamento**
 - [ ] **Phase 52: Chatwoot CSAT com recompensa e convite do Google**
+- [ ] **Phase 53: Lançamento automático da venda no caixa do Athos com desconto do cupom**
 
 ### Phase Details
 
@@ -321,6 +322,16 @@ Plans:
 
 **Gap closure (pós-verificação)*
 - [x] 52-13-PLAN.md — corrige CR-01 (verdade 15): placeholders aceitos em caixa alta (`{LINK}`, `{CODIGO}`, `{LINK_GOOGLE}`) renderizam o valor real na mensagem enviada, com paridade comprovada contra a prévia
+
+### Phase 53: Lançamento automático da venda no caixa do Athos com desconto do cupom
+
+**Goal:** Investigar e planejar o lançamento automático da venda no caixa do Athos (PDV) a partir do orçamento, aplicando o desconto do cupom da pesquisa. Base: capturas Frida do PDV (venda à vista, venda com 5% de desconto rateado nos itens, cancelamento). Restrições: Athos é produção (PostgreSQL 9.0.5) e nunca recebe escrita de teste; escrita só no clone athos-teste (127.0.0.1:5440); transação única com RETURNING idvenda; estoque relativo; NFC-e emitida por serviço externo (sfNFCe=1). Lacunas a resolver na discussão: PIX/dinheiro/troco/pagamento misto, cancelamento da NFC-e, senha_pdv/triggers, arredondamento do rateio, IDs estranhos de orçamento (#793/#78) e a alternativa mais segura de aplicar o desconto no orçamento para o atendente finalizar no PDV.
+**Requirements**: TBD
+**Depends on:** Phase 52
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 53 to break down)
 
 ---
 

@@ -288,6 +288,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ### Roadmap Evolution
 
+- Phase 53 added (2026-11-23): Lançamento automático da venda no caixa do Athos com desconto do cupom (investigação e planejamento a partir das capturas Frida do PDV; escrita só no clone athos-teste).
 - Phase 52 added (2026-11-22): Chatwoot CSAT com recompensa (cupom unico por cliente, % com teto), pagina propria de pesquisa, convite do Google sem recompensa, config por empresa em /configuracoes, suporte a dois Chatwoots (Box e Bom Custo).
 - Phase 51 added (2026-11-21): Chatwoot — etiqueta da fase atual do orcamento na conversa, etiqueta cliente-frequente, ao resolver deixa so finalizado (+cliente-frequente) e atraso aleatorio humano antes da mensagem de encerramento. Box e Bom Custo.
 - Phase 50 added (2026-11-17): Contas a receber — boleto atualizado com juros (0,99% a.m.) e multa (2%) calculados desde o vencimento original; novo vencimento so hoje ou amanha; taxas padrao configuraveis em tela.
