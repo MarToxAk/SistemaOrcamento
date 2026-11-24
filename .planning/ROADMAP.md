@@ -331,9 +331,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 53-01-PLAN.md — montarVenda puro (tracer): rateio do cupom e valores das capturas
-- [ ] 53-02-PLAN.md — AthosVendaService: transacao unica, simulacao, travas, teste no athos-teste
-- [ ] 53-03-PLAN.md — endpoint admin (simulacao por padrao) e flag de deploy desligada
+- [x] 53-01-PLAN.md — montarVenda puro (tracer): rateio do cupom e valores das capturas
+- [x] 53-02-PLAN.md — AthosVendaService: transacao unica, simulacao, travas, teste no athos-teste
+- [x] 53-03-PLAN.md — endpoint admin (simulacao por padrao) e flag de deploy desligada
 
 ---
 
