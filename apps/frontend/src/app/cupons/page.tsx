@@ -2,7 +2,6 @@
 
 import { Suspense } from "react";
 
-import PasswordGate from "@/components/password-gate";
 import AdminShell from "../contas-receber/admin-shell";
 import RecursosBootstrap from "../contas-receber/_shared/recursos-bootstrap";
 import CuponsManager from "./cupons-manager";
@@ -10,15 +9,13 @@ import CuponsManager from "./cupons-manager";
 /**
  * Fase 52 (plano 52-10): página /cupons do balcão (D-17/UI-D12).
  *
- * PasswordGate + AdminShell, com o gerenciador (busca, detalhe, resgate em dois passos e lista
- * recente) dentro de Suspense porque `?status=` é lido com `useSearchParams`.
+ * Sem senha: é a tela do funcionário/atendente no balcão. AdminShell, com o gerenciador (busca,
+ * detalhe, resgate em dois passos e lista recente) dentro de Suspense porque `?status=` é lido
+ * com `useSearchParams`.
  */
 export default function CuponsPage() {
   return (
-    <PasswordGate
-      title="Cupons"
-      description="Esta área dá baixa em cupons de desconto. Digite a senha de configurações para continuar."
-    >
+    <>
       <RecursosBootstrap />
       <AdminShell
         activeHref="/cupons"
@@ -37,6 +34,6 @@ export default function CuponsPage() {
           <CuponsManager />
         </Suspense>
       </AdminShell>
-    </PasswordGate>
+    </>
   );
 }
