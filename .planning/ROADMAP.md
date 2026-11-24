@@ -328,10 +328,12 @@ Plans:
 **Goal:** Investigar e planejar o lançamento automático da venda no caixa do Athos (PDV) a partir do orçamento, aplicando o desconto do cupom da pesquisa. Base: capturas Frida do PDV (venda à vista, venda com 5% de desconto rateado nos itens, cancelamento). Restrições: Athos é produção (PostgreSQL 9.0.5) e nunca recebe escrita de teste; escrita só no clone athos-teste (127.0.0.1:5440); transação única com RETURNING idvenda; estoque relativo; NFC-e emitida por serviço externo (sfNFCe=1). Lacunas a resolver na discussão: PIX/dinheiro/troco/pagamento misto, cancelamento da NFC-e, senha_pdv/triggers, arredondamento do rateio, IDs estranhos de orçamento (#793/#78) e a alternativa mais segura de aplicar o desconto no orçamento para o atendente finalizar no PDV.
 **Requirements**: TBD
 **Depends on:** Phase 52
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 53 to break down)
+- [ ] 53-01-PLAN.md — montarVenda puro (tracer): rateio do cupom e valores das capturas
+- [ ] 53-02-PLAN.md — AthosVendaService: transacao unica, simulacao, travas, teste no athos-teste
+- [ ] 53-03-PLAN.md — endpoint admin (simulacao por padrao) e flag de deploy desligada
 
 ---
 

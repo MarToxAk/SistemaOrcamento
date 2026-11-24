@@ -21,7 +21,7 @@ Permitir que o backend lance no Athos (PostgreSQL 9.0.5) a venda de um orçament
 - Só a forma de pagamento 5 (à vista com `recebimento_cartao` status `AVC`), a única capturada. Qualquer outra forma é recusada com erro claro (sem tentativa de adivinhar PIX/dinheiro/troco) — **Reversibility:** costly — contrato da API de entrada.
 - O PDV continua sendo o caminho oficial para NFC-e: o serviço só grava `sfNFCe = 1` e `venda.obs` e deixa o emissor do Athos agir; não emite nem cancela nota — **Reversibility:** one-way — cancelamento fiscal não foi observado no banco.
 - Cancelamento automático da venda NÃO entra nesta fase (depende de confirmar o cancelamento da NFC-e).
-- Desconto do cupom: o serviço recebe o desconto total em R$ (já calculado pelo cupom: percentual com teto) e rateia proporcionalmente ao valor bruto de cada item, arredondando para centavo; o último item absorve a diferença de arredondamento. A regra de arredondamento é suposição (as capturas só tiveram divisões exatas) e fica marcada para validação em nova captura — **Reversibility:** costly — afeta valor fiscal gravado.
+- Desconto do cupom: o serviço recebe o desconto total em R$ (já calculado pelo cupom: percentual com teto) e rateia pelo `ratear()` já existente em `athos-orcamento-calc.util.ts` (proporcional ao líquido de cada item, método do maior resto, em centavos, empate para o índice maior). Confere com as capturas (5% de 180 e 50 = 9,00 e 2,50). O comportamento do PDV com sobra de centavos não foi capturado e fica marcado para validação em nova captura — **Reversibility:** costly — afeta valor fiscal gravado.
 
 ### Integridade dos dados
 - Uma única transação (`BEGIN`/`COMMIT`/`ROLLBACK`); `idvenda` por `INSERT ... RETURNING idvenda`, nunca por `order by idvenda desc limit 1` — **Reversibility:** costly.
@@ -37,7 +37,7 @@ Permitir que o backend lance no Athos (PostgreSQL 9.0.5) a venda de um orçament
 ### Decided autonomously
 - [Estrutura] Q: "Onde fica o código novo?" → Selected: "Serviço novo `athos-venda.service.ts` no módulo Athos, com util puro de rateio testável separado, reaproveitando `athos-orcamento-calc.util.ts` e o padrão de transação do `athos-conta-receber-baixa.service.ts`" — mover de arquivo é barato
 - [Testes] Q: "Como testar sem tocar o Athos?" → Selected: "Jest com cliente `pg` simulado para a sequência de comandos e testes de integração opcionais contra `athos-teste` (pulados sem a variável de ambiente)" — só afeta testes
-- [Nomes] Q: "Nomes de DTO/rota/flag" → Selected: "`ATHOS_VENDA_AUTOMATICA` (flag), rota `POST integrations/athos/venda/de-orcamento/:idorcamento`" — nomes internos ainda sem consumidores
+- [Nomes] Q: "Nomes de DTO/rota/flag" → Selected: "`ATHOS_VENDA_AUTOMATICA` (flag), rota `POST athos/venda/de-orcamento/:idorcamento`" — nomes internos ainda sem consumidores
 - [Dry-run] Q: "O dry-run devolve o quê?" → Selected: "A lista dos comandos que seriam executados com os valores calculados (sem expor dados pessoais)" — formato de resposta ainda não consumido
 
 ### Claude's Discretion
