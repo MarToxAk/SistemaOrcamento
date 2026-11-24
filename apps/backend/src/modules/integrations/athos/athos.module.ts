@@ -18,6 +18,9 @@ import { AthosContaReceberBaixaService } from "./athos-conta-receber-baixa.servi
 import { AthosOrcamentoService } from "./athos-orcamento.service";
 import { AthosOrcamentoController } from "./athos-orcamento.controller";
 import { AthosOrcamentoIdempotenciaService } from "./athos-orcamento-idempotencia.service";
+// Phase 53 — lancamento da venda do orcamento no caixa
+import { AthosVendaService } from "./athos-venda.service";
+import { AthosVendaController } from "./athos-venda.controller";
 
 @Module({
   imports: [DatabaseModule, EventsModule, forwardRef(() => QuotesModule)],
@@ -30,12 +33,14 @@ import { AthosOrcamentoIdempotenciaService } from "./athos-orcamento-idempotenci
     AthosContaReceberBaixaService, // Phase 43
     AthosOrcamentoService, // Phase 44
     AthosOrcamentoIdempotenciaService, // Phase 44 — idempotencia + auditoria (Prisma)
+    AthosVendaService, // Phase 53
   ],
   controllers: [
     AthosController,
     ProdutoController,
     ProdutoCompostoController, // Phase 39
     AthosOrcamentoController, // Phase 44
+    AthosVendaController, // Phase 53
   ],
   exports: [AthosService, AthosProdutoService, AthosDefaultsService, AthosContaReceberBaixaService],
   // AthosOrcamentoService nao exportado (Phase 44): so o controller proprio o usa
