@@ -382,6 +382,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 |-------|-------|--------|
 | 45 | verification_deferred_human | /gsd-verify-work 45 |
 | 44 | verification_deferred_human | /gsd-verify-work 44 |
+| 53 | verification_deferred_human | /gsd-verify-work 53 |
 
 ## Planning Overrides
 
