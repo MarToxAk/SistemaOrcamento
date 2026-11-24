@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { adminBackendFetch } from "@/lib/admin-backend-client";
-import { requireAdminSession } from "@/lib/admin-session";
 
 /**
  * Fase 52 (plano 52-10): proxy admin da lista paginada de cupons (D-17).
  *
- * - Exige sessão de admin (`requireAdminSession`) — T-52-53.
+ * - SEM senha: balcão/atendente usa direto. A chave de admin do backend é injetada aqui no servidor
+ *   (`adminBackendFetch`), nunca vai ao navegador.
  * - Só repassa as chaves conhecidas: `status` em lista fechada, `cursor` curto e `limite` de 1 a 100.
  *   Qualquer outro parâmetro é descartado; as chaves de admin/interna ficam no servidor (`adminBackendFetch`).
  */
@@ -18,16 +18,7 @@ const REGEX_CURSOR = /^[A-Za-z0-9-]{1,64}$/;
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
-function unauthorized() {
-  return NextResponse.json(
-    { error: "Sessao expirada ou nao autenticada." },
-    { status: 401, headers: NO_STORE },
-  );
-}
-
 export async function GET(req: NextRequest) {
-  if (!requireAdminSession(req)) return unauthorized();
-
   try {
     const params = new URLSearchParams();
 
