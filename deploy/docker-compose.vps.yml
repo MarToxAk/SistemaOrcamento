@@ -114,6 +114,8 @@
       # usa CHATWOOT_AI_URL/TOKEN/MODEL ja listados e qualquer falha mantem o texto original da tela de configuracao.
       PESQUISA_VARIACAO_IA: ${PESQUISA_VARIACAO_IA:-false}
       PESQUISA_VARIACAO_NIVEL: ${PESQUISA_VARIACAO_NIVEL:-forte}
+      # Fase 53: lancar a venda do orcamento no caixa do Athos. DESLIGADO por padrao (so simula).
+      ATHOS_VENDA_AUTOMATICA: ${ATHOS_VENDA_AUTOMATICA:-false}
       # Retencao (anonimizacao de 12 meses): somente o texto "true" liga; depende do parecer juridico.
       PESQUISA_RETENCAO_ATIVA: ${PESQUISA_RETENCAO_ATIVA:-false}
       PESQUISA_RETENCAO_MESES: ${PESQUISA_RETENCAO_MESES:-12}
