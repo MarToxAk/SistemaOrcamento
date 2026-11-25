@@ -7,6 +7,7 @@ import * as https from "https";
 import * as path from "path";
 
 import { PrismaService } from "../../database/prisma.service";
+import { calcularPixAvista, calcularQuitacao } from "../../quotes/quote-payment.util";
 import { QuotesService } from "../../quotes/quotes.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
 
@@ -631,11 +632,20 @@ export class EfiService implements OnModuleInit {
         continue;
       }
 
+      // Fase 54 (D-01/D-02): o desconto de PIX a vista so vale no txid da cobranca a vista.
       const quoteTotal = this.toMoney((quote as any).total);
-      const currentPaid = this.toMoney((quote as any).paidTotal);
-      const nextPaid = Number(Math.min(quoteTotal, currentPaid + payment.amount).toFixed(2));
-      const pending = Number(Math.max(quoteTotal - nextPaid, 0).toFixed(2));
-      const fullyPaid = pending <= 0;
+      const ehAvista = payment.txid === (quote as any).paymentExternalId;
+      const descontoPix = ehAvista ? calcularPixAvista(quoteTotal).desconto : 0;
+      const descontoConsiderado = ehAvista ? descontoPix : this.toMoney((quote as any).paymentDiscount);
+      const quitacao = calcularQuitacao({
+        total: quoteTotal,
+        desconto: descontoConsiderado,
+        pagoAntes: (quote as any).paidTotal,
+        pagamento: payment.amount,
+      });
+      const nextPaid = quitacao.pago;
+      const pending = quitacao.pendente;
+      const fullyPaid = quitacao.quitado;
       const nextStatus = this.resolveNextQuoteStatus(quote.status, fullyPaid);
 
       const updated = await this.prisma.$transaction(async (tx) => {
@@ -651,6 +661,11 @@ export class EfiService implements OnModuleInit {
             metadata: {
               txid: payment.txid,
               signature: signature ?? null,
+              desconto: descontoConsiderado,
+              devido: quitacao.devido,
+              horario: (payment.raw as any)?.horario ?? null,
+              infoPagador: (payment.raw as any)?.infoPagador ?? null,
+              pagador: (payment.raw as any)?.gnExtras?.pagador ?? null,
             },
             webhookPayload: payment.raw as any,
           },
@@ -664,6 +679,11 @@ export class EfiService implements OnModuleInit {
             paymentEventId: eventId,
             paidTotal: nextPaid.toFixed(2),
             pendingTotal: pending.toFixed(2),
+            // So no txid a vista com desconto: nunca zera nem sobrescreve em pagamento de outro txid (T-54-05).
+            ...(ehAvista && descontoPix > 0
+              ? { paymentDiscount: descontoPix.toFixed(2), paymentAmount: quitacao.devido.toFixed(2) }
+              : {}),
+            // Somente na quitacao: o util de pagamento classifica paymentConfirmedAt como pagamento integral.
             paymentConfirmedAt: fullyPaid ? new Date() : (quote as any).paymentConfirmedAt,
             status: nextStatus,
             updatedAt: new Date(),
@@ -687,6 +707,9 @@ export class EfiService implements OnModuleInit {
       // Fase 51 (D-03): etiquetas da conversa, depois do commit e so quando o status mudou.
       if (nextStatus !== quote.status) this.dispararEtiquetasChatwoot(quote);
 
+      // Numero do orcamento: declarado fora do try da mensagem para reutilizacao (comprovante, plano 54-04).
+      let numeroOrcamento: unknown = null;
+
       // Envio de mensagem automatica ao cliente via Chatwoot com dados do orcamento
       try {
         const mapped = await this.quotesService.getById(quote.id);
@@ -698,20 +721,23 @@ export class EfiService implements OnModuleInit {
         if (convId) {
           const clienteNome = (body.cliente as any)?.nome ?? (quote as any).customer?.fullName ?? "Cliente";
           const numero = (body as any).idorcamento ?? (body as any).idorcamento_interno ?? (quote as any).internalNumber ?? "-";
+          numeroOrcamento = numero;
           const total = Number((body as any).totais?.valor ?? (quote as any).total ?? 0);
           const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
           const halfAmount = Number((Number(total) / 2).toFixed(2));
           const isHalf = Math.abs(payment.amount - halfAmount) < 0.01 || Number((quote as any).firstInstallmentAmount ?? 0) === payment.amount;
 
           let mensagem: string;
-          if (fullyPaid) {
+          if (fullyPaid && ehAvista && descontoPix > 0) {
+            mensagem = `✅ Pagamento PIX recebido, ${clienteNome}!\n\nOrçamento #${numero}\nTotal do orçamento: ${fmt(total)}\nDesconto PIX à vista: ${fmt(descontoPix)}\nValor pago: ${fmt(nextPaid)}\n\nPagamento integral confirmado. Pedido confirmado! 😊`;
+          } else if (fullyPaid) {
             mensagem = `✅ Pagamento PIX recebido, ${clienteNome}!\n\nOrçamento #${numero} — ${fmt(total)}\nComprovante gerado. Pedido confirmado! 😊`;
           } else {
-            const remaining = Number(Math.max(Number(total) - Number(payment.amount), 0).toFixed(2));
+            const remaining = pending;
             if (isHalf) {
               mensagem = `✅ ${clienteNome}, recebemos sua entrada PIX!\n\nOrçamento #${numero}\nEntrada: ${fmt(payment.amount)} — Restante: ${fmt(remaining)} a pagar na loja.\n\nSeu pedido entrará em produção em breve! 😊`;
             } else {
-              mensagem = `⚠️ ${clienteNome}, recebemos um pagamento parcial PIX.\n\nOrçamento #${numero}\nPago: ${fmt(payment.amount)} de ${fmt(total)} — Restam: ${fmt(remaining)}.\n\nAguardamos o pagamento restante.`;
+              mensagem = `⚠️ ${clienteNome}, recebemos um pagamento parcial PIX.\n\nOrçamento #${numero}\nPago: ${fmt(nextPaid)} de ${fmt(quitacao.devido)} — Restam: ${fmt(remaining)}.\n\nAguardamos o pagamento restante.`;
             }
           }
 

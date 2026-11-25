@@ -4,6 +4,7 @@ import { EfiService } from "./efi.service";
 import { PrismaService } from "../../database/prisma.service";
 import { QuotesService } from "../../quotes/quotes.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
+import { quoteBase } from "../../quotes/__fixtures__/quote-pago.fixture";
 
 describe("EfiService - processWebhook", () => {
   let service: EfiService;
@@ -400,6 +401,78 @@ describe("EfiService - processWebhook", () => {
       } finally {
         mockQuotesService.sincronizarEtiquetasChatwoot = original;
       }
+    });
+  });
+
+  // Fase 54 (plano 54-02, D-01/D-02/D-03): quitacao com desconto de PIX a vista no webhook.
+  describe("processWebhook - desconto PIX a vista (fase 54)", () => {
+    const TXID_AVISTA = "txid-26809";
+    const TXID_ENTRADA = "txid-entrada-26809";
+
+    let txCreateSpy: jest.Mock;
+    let txQuoteUpdateSpy: jest.Mock;
+    let txHistorySpy: jest.Mock;
+
+    const payloadPix = (valor: string, txid = TXID_AVISTA, e2e = "E_54_001", extra: Record<string, unknown> = {}) => ({
+      pix: [{ txid, endToEndId: e2e, valor, ...extra }],
+    });
+
+    const mensagemEnviada = (): string => mockChatwootService.sendOutgoingMessage.mock.calls[0][1];
+
+    beforeEach(() => {
+      txCreateSpy = jest.fn().mockResolvedValue({ id: "ptx-54" });
+      txQuoteUpdateSpy = jest.fn().mockImplementation(async ({ data }: any) => ({ status: data.status }));
+      txHistorySpy = jest.fn().mockResolvedValue({ id: "hist-54" });
+
+      mockChatwootService.sendOutgoingMessage.mockReset();
+      mockChatwootService.sendOutgoingMessage.mockResolvedValue(undefined);
+      mockQuotesService.sincronizarEtiquetasChatwoot.mockReset();
+      mockQuotesService.sincronizarEtiquetasChatwoot.mockResolvedValue(undefined);
+      (mockQuotesService as any).getById = jest.fn().mockResolvedValue({
+        body: {
+          cliente: { nome: "Cliente Cinquenta e Quatro" },
+          conversationId: 999,
+          idorcamento: "26809",
+          totais: { valor: "173.00" },
+        },
+        chatwootConversationUrl: null,
+      });
+      mockPrisma.paymentTransaction.findFirst.mockReset();
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
+      mockPrisma.quote.findFirst.mockReset();
+      mockPrisma.quote.findFirst.mockResolvedValue(quoteBase({ secondInstallmentExternalId: TXID_ENTRADA }));
+      mockPrisma.$transaction.mockReset();
+      mockPrisma.$transaction.mockImplementation(async (callback: (tx: any) => Promise<any>) =>
+        callback({
+          paymentTransaction: { create: txCreateSpy },
+          quote: { update: txQuoteUpdateSpy },
+          quoteStatusHistory: { create: txHistorySpy },
+        }),
+      );
+    });
+
+    it("tracer: #26809 (173,00, PIX a vista de 164,35) quita com desconto de 8,65 e mensagem integral", async () => {
+      const result = await service.processWebhook(payloadPix("164.35"));
+
+      expect(result.processed).toBe(1);
+      expect((result as any).results[0]).toMatchObject({ status: "processed", paidTotal: 164.35, pendingTotal: 0 });
+
+      expect(txCreateSpy.mock.calls[0][0].data.status).toBe("PAID");
+
+      const upd = txQuoteUpdateSpy.mock.calls[0][0].data;
+      expect(upd.paymentDiscount).toBe("8.65");
+      expect(upd.paymentAmount).toBe("164.35");
+      expect(upd.paidTotal).toBe("164.35");
+      expect(upd.pendingTotal).toBe("0.00");
+      expect(upd.status).toBe("APROVADO");
+      expect(upd.paymentConfirmedAt).toBeInstanceOf(Date);
+
+      const msg = mensagemEnviada();
+      expect(msg).toContain("Cliente Cinquenta e Quatro");
+      expect(msg).toContain("8,65");
+      expect(msg.toLowerCase()).not.toContain("parcial");
+      expect(msg).not.toContain("Restam");
+      expect(msg).not.toContain("Comprovante gerado");
     });
   });
 });
