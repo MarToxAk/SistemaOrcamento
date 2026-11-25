@@ -344,16 +344,16 @@ Plans:
 **Plans:** 12 plans
 
 Plans:
-- [ ] 54-01-PLAN.md — util puro de quitacao em centavos (tolerancia R$ 0,02), situacao de pagamento do orcamento e fixtures (Wave 0)
-- [ ] 54-02-PLAN.md — webhook PIX: tracer #26809 quitado com desconto, entrada 50% sem desconto, PIX 50/50 sem desconto (D-13)
-- [ ] 54-03-PLAN.md — pecas do comprovante: sendAttachment privado com texto, texto da nota sanitizado, PNG de layout proprio
-- [ ] 54-04-PLAN.md — comprovante no webhook: oficial da EFI, fallback proprio, so texto; nota privada pos-commit sem derrubar o webhook
-- [ ] 54-05-PLAN.md — NFS-e: tabela de auditoria NfseLiberacao (migration aditiva), senha em tempo constante, limitador e DTO
-- [ ] 54-06-PLAN.md — NFS-e: trava de pagamento integral, teto do valor, liberacao por senha com auditoria e GET de pagamento
-- [ ] 54-07-PLAN.md — frontend orcamento/[id]: pagamento identificado, valor pre-preenchido e campo de senha
-- [ ] 54-08-PLAN.md — limpeza iiBrasil (codigo): token fora do boot, /health sem sonda, dependencia soap removida
-- [ ] 54-09-PLAN.md — limpeza iiBrasil (deploy e docs): NFSE_OVERRIDE_PASSWORD vazia nos composes e exemplos, memoria atualizada
-- [ ] 54-10-PLAN.md — script de reconciliacao dos orcamentos antigos (dry-run por padrao; nao executar em producao)
+- [x] 54-01-PLAN.md — util puro de quitacao em centavos (tolerancia R$ 0,02), situacao de pagamento do orcamento e fixtures (Wave 0)
+- [x] 54-02-PLAN.md — webhook PIX: tracer #26809 quitado com desconto, entrada 50% sem desconto, PIX 50/50 sem desconto (D-13)
+- [x] 54-03-PLAN.md — pecas do comprovante: sendAttachment privado com texto, texto da nota sanitizado, PNG de layout proprio
+- [x] 54-04-PLAN.md — comprovante no webhook: oficial da EFI, fallback proprio, so texto; nota privada pos-commit sem derrubar o webhook
+- [x] 54-05-PLAN.md — NFS-e: tabela de auditoria NfseLiberacao (migration aditiva), senha em tempo constante, limitador e DTO
+- [x] 54-06-PLAN.md — NFS-e: trava de pagamento integral, teto do valor, liberacao por senha com auditoria e GET de pagamento
+- [x] 54-07-PLAN.md — frontend orcamento/[id]: pagamento identificado, valor pre-preenchido e campo de senha
+- [x] 54-08-PLAN.md — limpeza iiBrasil (codigo): token fora do boot, /health sem sonda, dependencia soap removida
+- [x] 54-09-PLAN.md — limpeza iiBrasil (deploy e docs): NFSE_OVERRIDE_PASSWORD vazia nos composes e exemplos, memoria atualizada
+- [x] 54-10-PLAN.md — script de reconciliacao dos orcamentos antigos (dry-run por padrao; nao executar em producao)
 - [ ] 54-11-PLAN.md — checkpoints humanos: deploy e senha na stack, escopo gn.receipts.read, nota privada no Chatwoot de producao
 - [ ] 54-12-PLAN.md — checkpoints humanos: aprovar reconciliacao e UAT da NFS-e na pagina do orcamento
 
