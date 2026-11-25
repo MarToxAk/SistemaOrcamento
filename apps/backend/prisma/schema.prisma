@@ -580,3 +580,25 @@ model PesquisaSupressao {
   origem   String   @default("SAIR")
   criadoEm DateTime @default(now())
 }
+
+/// Fase 54 (D-09): auditoria de cada tentativa de liberacao da NFS-e por senha.
+/// SEM relacao com Quote de proposito: a fusao de orcamentos (quotes.service) apaga
+/// linhas de Quote e a trilha precisa sobreviver. Nunca guarda a senha nem hash dela.
+model NfseLiberacao {
+  id          String   @id @default(uuid())
+  quoteId     String
+  quoteNumero String?
+  resultado   String // LIBERADO | SENHA_INVALIDA | NAO_CONFIGURADA | BLOQUEADO
+  situacao    String // PARCIAL | SEM_PAGAMENTO (situacao do pagamento no momento)
+  valorPago   Decimal  @db.Decimal(12, 2)
+  valorDevido Decimal  @db.Decimal(12, 2)
+  valorNota   Decimal? @db.Decimal(12, 2)
+  liberadoPor String?
+  ip          String?
+  userAgent   String?
+  nfseNumero  String?
+  criadoEm    DateTime @default(now())
+
+  @@index([quoteId, criadoEm])
+  @@index([criadoEm])
+}
