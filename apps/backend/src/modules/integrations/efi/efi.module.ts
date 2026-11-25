@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { EfiController } from './efi.controller';
 import { EfiService } from './efi.service';
+import { PixComprovanteService } from './pix-comprovante.service';
 import { QuotesModule } from '../../quotes/quotes.module';
 import { ChatwootModule } from '../chatwoot/chatwoot.module';
 import { DatabaseModule } from '../../database/database.module';
@@ -12,7 +13,7 @@ import { DatabaseModule } from '../../database/database.module';
     DatabaseModule,
   ],
   controllers: [EfiController],
-  providers: [EfiService],
+  providers: [EfiService, PixComprovanteService],
   exports: [EfiService],
 })
 export class EfiModule {}
