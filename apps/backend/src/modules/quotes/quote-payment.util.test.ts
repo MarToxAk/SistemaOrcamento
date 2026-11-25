@@ -69,11 +69,13 @@ describe("calcularQuitacao", () => {
     });
   });
 
-  it("173 x 0.95 em float (164.34999999999997) nao muda o resultado", () => {
-    expect(173 * 0.95).not.toBe(164.35);
-    const r = calcularQuitacao({ total: 173, desconto: 173 - 173 * 0.95, pagoAntes: 0, pagamento: 164.35 });
-    expect(r.devido).toBe(164.35);
-    expect(r.quitado).toBe(true);
+  it("ruido de float (desconto 8.650000000000006 e pago 164.34999999999997) nao muda o resultado", () => {
+    const descontoFloat = 173 - 173 * 0.95; // 8.650000000000006
+    expect(descontoFloat).not.toBe(8.65);
+    const r1 = calcularQuitacao({ total: 173, desconto: descontoFloat, pagoAntes: 0, pagamento: 164.35 });
+    expect(r1).toEqual({ devido: 164.35, pago: 164.35, pendente: 0, quitado: true });
+    const r2 = calcularQuitacao({ total: 173, desconto: 8.65, pagoAntes: 0, pagamento: 164.34999999999997 });
+    expect(r2).toEqual({ devido: 164.35, pago: 164.35, pendente: 0, quitado: true });
   });
 
   it("fronteira: 164.33 quita, 164.32 nao quita (pendente 0.03)", () => {
