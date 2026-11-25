@@ -1,9 +1,12 @@
 ---
 name: NFS-e iiBrasil - Documentação de Integração
-description: Regras críticas, erros resolvidos e template XML validado para emissão de NFS-e via SOAP no provedor iiBrasil (Ilhabela-SP). Não alterar lógica de hash, alíquotas ou tags IBS/CBS.
+description: HISTORICO - emissor SOAP iiBrasil (Ilhabela-SP) descontinuado em ago/2026 e removido na Fase 54. Notas antigas, template XML e a logica de fallback de municipio, mantidos so como referencia.
 type: reference
 ---
-# Integração NFS-e SOAP - iiBrasil (Ilhabela)
+# Integracao NFS-e SOAP - iiBrasil (Ilhabela)
+
+> **HISTORICO / DESCONTINUADO.** O emissor SOAP iiBrasil foi descontinuado (ago/2026) e todo o codigo de emissao, as credenciais e as variaveis de ambiente (token, CNPJ legado, inscricao municipal, URLs SOAP e auxiliar) foram removidos na Fase 54. O emissor atual e a NFS-e Nacional (ver [[nfse-nacional-sefin-integracao]]).
+> O texto abaixo e referencia historica: notas antigas, template XML e a logica de fallback de municipio (`enviarRpsComFallbackMunicipio`) que a integracao Nacional cita como modelo. A instrucao antiga de "nao alterar hash/aliquotas/tags IBS-CBS" deixou de valer, pois nao ha mais codigo de emissao iiBrasil. A leitura/parse de notas ja emitidas pelo iiBrasil continua no sistema (Contas a Receber/Cobranca).
 
 **Ambiente:** Produção | **Padrão:** ABRASF modificado (iiBrasil) | **Município:** Ilhabela-SP (IBGE: `3520400`)
 
