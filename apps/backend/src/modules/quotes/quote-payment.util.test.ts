@@ -4,7 +4,15 @@ import {
   calcularQuitacao,
   centavosParaReais,
   paraCentavos,
+  resolverSituacaoPagamentoQuote,
 } from "./quote-payment.util";
+import {
+  quoteEntrada50Pix,
+  quoteIntegralSemDesconto,
+  quotePagoCaixa,
+  quotePagoPix26809,
+  quoteSemPagamento,
+} from "./__fixtures__/quote-pago.fixture";
 
 describe("paraCentavos / centavosParaReais", () => {
   it("converte numero, string com ponto/virgula e objeto Decimal-like", () => {
@@ -126,5 +134,97 @@ describe("calcularQuitacao", () => {
     const r = calcularQuitacao({ total: 10, desconto: 50, pagoAntes: 0, pagamento: 0 });
     expect(r.devido).toBe(0);
     expect(r.quitado).toBe(true);
+  });
+});
+
+describe("resolverSituacaoPagamentoQuote", () => {
+  it("#26809 pago por PIX: INTEGRAL, origem PIX, sem senha", () => {
+    const r = resolverSituacaoPagamentoQuote(quotePagoPix26809());
+    expect(r).toMatchObject({
+      situacao: "INTEGRAL",
+      origem: "PIX",
+      valorTotal: 173,
+      valorPago: 164.35,
+      desconto: 8.65,
+      valorDevido: 164.35,
+      pendente: 0,
+      valorSugeridoNota: 164.35,
+      valorMaximoNota: 164.35,
+      exigeSenha: false,
+    });
+  });
+
+  it("#26809 no estado legado (desconto 0, sem confirmacao): PARCIAL, pendente 8.65, exige senha", () => {
+    const r = resolverSituacaoPagamentoQuote(
+      quotePagoPix26809({ paymentDiscount: "0.00", paymentConfirmedAt: null }),
+    );
+    expect(r.situacao).toBe("PARCIAL");
+    expect(r.pendente).toBe(8.65);
+    expect(r.exigeSenha).toBe(true);
+  });
+
+  it("entrada 50%: PARCIAL, pendente 86.5, exige senha, sugerido 173", () => {
+    const r = resolverSituacaoPagamentoQuote(quoteEntrada50Pix());
+    expect(r.situacao).toBe("PARCIAL");
+    expect(r.origem).toBe("PIX");
+    expect(r.pendente).toBe(86.5);
+    expect(r.exigeSenha).toBe(true);
+    expect(r.valorSugeridoNota).toBe(173);
+  });
+
+  it("sem pagamento: SEM_PAGAMENTO, origem NENHUMA, exige senha", () => {
+    const r = resolverSituacaoPagamentoQuote(quoteSemPagamento());
+    expect(r.situacao).toBe("SEM_PAGAMENTO");
+    expect(r.origem).toBe("NENHUMA");
+    expect(r.valorPago).toBe(0);
+    expect(r.pendente).toBe(173);
+    expect(r.exigeSenha).toBe(true);
+  });
+
+  it("caixa do Athos (paymentNote, paidTotal 0): INTEGRAL, origem CAIXA, sem senha", () => {
+    const r = resolverSituacaoPagamentoQuote(quotePagoCaixa());
+    expect(r.situacao).toBe("INTEGRAL");
+    expect(r.origem).toBe("CAIXA");
+    expect(r.valorSugeridoNota).toBe(173);
+    expect(r.valorMaximoNota).toBe(173);
+    expect(r.exigeSenha).toBe(false);
+  });
+
+  it("entrada 50% por PIX mais restante no caixa: INTEGRAL, origem CAIXA, valorPago 86.5", () => {
+    const r = resolverSituacaoPagamentoQuote(quoteEntrada50Pix({ paymentNote: "Pagamento feito no caixa" }));
+    expect(r.situacao).toBe("INTEGRAL");
+    expect(r.origem).toBe("CAIXA");
+    expect(r.valorPago).toBe(86.5);
+    expect(r.valorSugeridoNota).toBe(173);
+    expect(r.exigeSenha).toBe(false);
+  });
+
+  it("integral sem desconto (250 pago 250): INTEGRAL PIX, valorMaximoNota 250", () => {
+    const r = resolverSituacaoPagamentoQuote(quoteIntegralSemDesconto(250));
+    expect(r.situacao).toBe("INTEGRAL");
+    expect(r.origem).toBe("PIX");
+    expect(r.valorMaximoNota).toBe(250);
+  });
+
+  it("fronteira: paidTotal 164.32 e PARCIAL; 164.33 e INTEGRAL", () => {
+    expect(resolverSituacaoPagamentoQuote(quotePagoPix26809({ paidTotal: "164.32" })).situacao).toBe("PARCIAL");
+    expect(resolverSituacaoPagamentoQuote(quotePagoPix26809({ paidTotal: "164.33" })).situacao).toBe("INTEGRAL");
+  });
+
+  it("desconto maior que o total nao produz devido negativo", () => {
+    const r = resolverSituacaoPagamentoQuote({ total: "10.00", paymentDiscount: "50.00", paidTotal: "0.00" });
+    expect(r.valorDevido).toBe(0);
+  });
+
+  it("campos ausentes sao tratados como zero/ausentes sem lancar", () => {
+    const r = resolverSituacaoPagamentoQuote({
+      total: "100.00",
+      paymentDiscount: undefined,
+      paidTotal: null,
+      paymentConfirmedAt: null,
+      paymentNote: null,
+    });
+    expect(r.situacao).toBe("SEM_PAGAMENTO");
+    expect(r.valorPago).toBe(0);
   });
 });
