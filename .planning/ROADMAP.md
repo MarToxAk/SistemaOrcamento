@@ -336,6 +336,7 @@ Próximo passo: `/gsd-discuss-phase 41`
 
 - UAT/verificação humana das Fases 32 e 33 (ciclo v2.2, APIs de Produto) ficaram pendentes — diferidas no fechamento do v2.3 (ver STATE.md → Deferred Items). Tratar com `/gsd-audit-uat` num saneamento futuro.
 - Segurança v2.3: ação pré-deploy CR-01 (env vars do painel admin) — ver `999.1-SECURITY.md`.
+- Fase 54 (D-17, diferida): o webhook PIX da EFI (`/api/integrations/efi/webhook/payment/pix` e `/webhook/payment`) está `@Public()` sem `EfiWebhookGuard`; um POST forjado com txid válido marcaria o orçamento como pago (e passaria a postar comprovante). Recomendada fase própria de hardening do webhook EFI (validar origem/mTLS ou segredo). Fora do escopo da Fase 54.
 
 ## Histórico arquivado
 
