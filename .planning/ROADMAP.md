@@ -339,12 +339,23 @@ Plans:
 ### Phase 54: Pagamento PIX efetivo, comprovante EFI e NFS-e no orcamento
 
 **Goal:** Ao receber PIX (webhook EFI) o sistema considera o pagamento efetivo levando em conta o desconto de pagamento (ex.: orcamento #26809, pago R$ 164,35 de R$ 173,00 com desconto nao deve ficar como parcial/restante R$ 8,65); envia o comprovante de pagamento do EFI como nota privada na conversa do Chatwoot (verificar na documentacao EFI se ha comprovante; senao gerar layout proprio); e permite emitir NFS-e na pagina do orcamento identificando o pagamento feito, liberando somente com pagamento integral (50% nao libera); sem confirmacao de pagamento exige senha.
-**Requirements**: TBD
+**Requirements**: P54-PAG, P54-CMP, P54-NFS, P54-IIB, P54-REC
 **Depends on:** Phase 53
-**Plans:** 0 plans
+**Plans:** 12 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 54 to break down)
+- [ ] 54-01-PLAN.md — util puro de quitacao em centavos (tolerancia R$ 0,02), situacao de pagamento do orcamento e fixtures (Wave 0)
+- [ ] 54-02-PLAN.md — webhook PIX: tracer #26809 quitado com desconto, entrada 50% sem desconto, PIX 50/50 sem desconto (D-13)
+- [ ] 54-03-PLAN.md — pecas do comprovante: sendAttachment privado com texto, texto da nota sanitizado, PNG de layout proprio
+- [ ] 54-04-PLAN.md — comprovante no webhook: oficial da EFI, fallback proprio, so texto; nota privada pos-commit sem derrubar o webhook
+- [ ] 54-05-PLAN.md — NFS-e: tabela de auditoria NfseLiberacao (migration aditiva), senha em tempo constante, limitador e DTO
+- [ ] 54-06-PLAN.md — NFS-e: trava de pagamento integral, teto do valor, liberacao por senha com auditoria e GET de pagamento
+- [ ] 54-07-PLAN.md — frontend orcamento/[id]: pagamento identificado, valor pre-preenchido e campo de senha
+- [ ] 54-08-PLAN.md — limpeza iiBrasil (codigo): token fora do boot, /health sem sonda, dependencia soap removida
+- [ ] 54-09-PLAN.md — limpeza iiBrasil (deploy e docs): NFSE_OVERRIDE_PASSWORD vazia nos composes e exemplos, memoria atualizada
+- [ ] 54-10-PLAN.md — script de reconciliacao dos orcamentos antigos (dry-run por padrao; nao executar em producao)
+- [ ] 54-11-PLAN.md — checkpoints humanos: deploy e senha na stack, escopo gn.receipts.read, nota privada no Chatwoot de producao
+- [ ] 54-12-PLAN.md — checkpoints humanos: aprovar reconciliacao e UAT da NFS-e na pagina do orcamento
 
 ---
 
@@ -360,6 +371,7 @@ Próximo passo: `/gsd-discuss-phase 41`
 
 - UAT/verificação humana das Fases 32 e 33 (ciclo v2.2, APIs de Produto) ficaram pendentes — diferidas no fechamento do v2.3 (ver STATE.md → Deferred Items). Tratar com `/gsd-audit-uat` num saneamento futuro.
 - Segurança v2.3: ação pré-deploy CR-01 (env vars do painel admin) — ver `999.1-SECURITY.md`.
+- Fase 54 (D-17, diferida): o webhook PIX da EFI (`/api/integrations/efi/webhook/payment/pix` e `/webhook/payment`) está `@Public()` sem `EfiWebhookGuard`; um POST forjado com txid válido marcaria o orçamento como pago (e passaria a postar comprovante). Recomendada fase própria de hardening do webhook EFI (validar origem/mTLS ou segredo). Fora do escopo da Fase 54.
 
 ## Histórico arquivado
 
