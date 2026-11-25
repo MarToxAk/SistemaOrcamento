@@ -55,6 +55,15 @@ Frontend:
 
 - **Cancelamento:** `POST /nfse/{chaveAcesso}/eventos`, evento `e101101`. **Atenção:** o `Id` do `infPedReg` mudou em 27/12/2025 — não inclui mais `nPedRegEvento` (era `PRE`+chave+tipoEvento+seq, agora é só `PRE`+chave(50)+tipoEvento(6), 59 dígitos). Muita documentação desatualizada por aí ainda mostra o formato antigo.
 
+## Fase 54: trava de pagamento da emissão no orçamento
+
+- A emissão da NFS-e a partir do orçamento só é permitida com **pagamento integral** ou **pagamento confirmado no caixa**. O **valor da nota é limitado ao efetivamente pago** (`paidTotal`).
+- `GET /quotes/:id/nfse/pagamento` informa ao front a situação de pagamento do orçamento (para habilitar/bloquear a emissão e pedir a senha).
+- **Liberação por senha** para emitir sem pagamento integral: senha única da empresa na variável `NFSE_OVERRIDE_PASSWORD`, **definida somente no ambiente de deploy** (stack da VPS). Nos arquivos versionados (`.env.example`, `deploy/stack.env.example`) ela fica sempre vazia, e os composes a repassam com padrão vazio (`${NFSE_OVERRIDE_PASSWORD:-}`); vazia = liberação desligada (falha segura: `LIBERACAO_NAO_CONFIGURADA`). O valor da senha não é registrado em lugar nenhum do repositório nem da memória.
+- Validação **só no backend**: comparação em tempo constante (sha256 + `timingSafeEqual`), **limitador de falhas** (5 por IP e 20 globais por 15 min) e **auditoria** na tabela `NfseLiberacao` (quem, quando, IP, orçamento; sem FK para `Quote`, para a trilha sobreviver à fusão de orçamentos).
+- **Anexo manual de XML segue sem trava** (só a emissão automática exige pagamento/senha).
+- O emissor iiBrasil foi removido (Fase 54) junto com suas variáveis de deploy; ver [[nfse-iibrasil-integracao]] (histórico).
+
 ## Riscos conhecidos / pendências
 
 1. **Certificado real extraído e posto em `deploy/stack.env` local (gitignored) em 27/08/2026.** A1 e-CNPJ `CN=BOM CUSTO…:62391927000157`, validade 31/07/2026→31/07/2027. `.pfx` de origem: `BOM CUSTO…(SENHA 12345678)(2).pfx` (senha `12345678`), extraído com o openssl do `Git/mingw64` (o de `Git/usr/bin` não carrega o provider legacy; o `.pfx` usa AES, então nem precisa de `-legacy`). `CERT_PEM`/`KEY_PEM` gravados em 1 linha com `\n` literal (o `loadPem` faz `replace(/\\n/g,"\n")`); round-trip validado com openssl (par cert+key bate, md5 `ba56dac2…`). Handshake mTLS contra `sefin.nfse.gov.br:443` aceito. **Falta o usuário colar o bloco (linhas 78–86 do stack.env) no editor de env da stack no Portainer de produção.** Os composes **não usam `env_file:`** — cada var é repassada explícita; as 5 `NFSE_NACIONAL_*` foram adicionadas no `environment:` do backend em `docker-compose.vps.yml` e `docker-compose.box.vps.yml` (commit pendente).

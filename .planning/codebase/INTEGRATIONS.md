@@ -3,7 +3,7 @@ _Last updated: 2026-05-15 | Focus: tech_
 
 ## Summary
 
-SistemaOrcamento integrates with five external systems: EFI Bank (Pix payments), Chatwoot (customer messaging), Athos Empresarial (ERP/accounting), a local PDV (point-of-sale) database, and iiBrasil/Prefeitura de Ilhabela (NFS-e electronic invoicing). File storage uses MinIO (S3-compatible). Network access to on-premise systems is tunneled via Tailscale VPN.
+SistemaOrcamento integrates with five external systems: EFI Bank (Pix payments), Chatwoot (customer messaging), Athos Empresarial (ERP/accounting), a local PDV (point-of-sale) database, and NFS-e Nacional (national electronic invoicing; the former iiBrasil emitter is DISCONTINUED). File storage uses MinIO (S3-compatible). Network access to on-premise systems is tunneled via Tailscale VPN.
 
 ---
 
@@ -143,17 +143,19 @@ PDV_DB_READONLY_PASSWORD=
 
 ---
 
-## NFS-e — Electronic Service Invoice (iiBrasil / Prefeitura de Ilhabela)
+## NFS-e — Electronic Service Invoice (NFS-e Nacional; iiBrasil DISCONTINUED)
 
-**Purpose:** Emit NFS-e (Nota Fiscal de Serviços Eletrônica) to the municipal tax authority after quote payment.
+**Status:** the iiBrasil SOAP emitter is DISCONTINUED and its emission code, credentials and env vars were removed in Phase 54. The current emitter is the NFS-e Nacional (ADN/Sefin Nacional, mTLS with an A1 certificate). Manual attachment of an XML to a quote/receivable continues to work, and previously issued iiBrasil notes are still read/parsed (Contas a Receber / Cobranca).
+
+**Purpose:** Emit NFS-e (Nota Fiscal de Serviços Eletrônica) to the national system after quote payment.
 
 **Module:** `apps/backend/src/modules/integrations/nfse/`
-- `nfse.service.ts` — SOAP envelope construction, submission, status polling
-- `nfse.controller.ts` — exposes `/api/nfse/*` endpoints
-- `nfse.discount.test.ts`, `nfse.service.test.ts`
-- `test-homologacao.ts`, `test-integridade.ts` — manual integration test scripts
+- `nfse-nacional.service.ts` — DPS build/sign, submission to Sefin Nacional, cancellation
+- `nfse.service.ts`, `nfse.controller.ts` — quote-level flow and `/api/nfse/*` endpoints
+- `nfse-liberacao.util.ts` — password override (constant-time compare, failure limiter)
+- `nfse-xml-parser.util.ts` — parse of historical (iiBrasil) and national XML
 
-**Protocol:** SOAP over HTTPS (iiBrasil RPS SOAP API)
+**Payment lock (Phase 54):** emission from a quote requires full or cashier-confirmed payment; the note value is capped at what was paid. Emitting without full payment requires the override password `NFSE_OVERRIDE_PASSWORD` (set only in the deploy environment, empty in the repo), audited in table `NfseLiberacao`.
 
 **Service codes supported:**
 | Code | Description |
@@ -163,17 +165,16 @@ PDV_DB_READONLY_PASSWORD=
 | `13.05` | Composição gráfica |
 | `14.08` | Encadernação e acabamento |
 
-**Authentication:**
-- Bearer token: `NFSE_TOKEN`
-- CNPJ and municipal registration: `NFSE_CNPJ_PRESTADOR`, `NFSE_INSCRICAO_MUNICIPAL`
+**Authentication:** mTLS with the A1 e-CNPJ certificate (PEM in `NFSE_NACIONAL_CERT_PEM` / `NFSE_NACIONAL_KEY_PEM`).
 
 **Env vars:**
 ```
-NFSE_TOKEN=
-NFSE_CNPJ_PRESTADOR=
-NFSE_INSCRICAO_MUNICIPAL=
-NFSE_SOAP_URL=https://ilhabela2.iibr.com.br/rps/3520400/1/soap/producao/rps
-NFSE_AUX_URL=https://ilhabela2.iibr.com.br/rps/3520400/2/AUXILIARRPS
+NFSE_NACIONAL_CERT_PEM=
+NFSE_NACIONAL_KEY_PEM=
+NFSE_NACIONAL_CNPJ_PRESTADOR=
+NFSE_NACIONAL_CODIGO_MUNICIPIO=3520400
+NFSE_NACIONAL_AMBIENTE=producao
+NFSE_OVERRIDE_PASSWORD=
 ```
 
 **Data stored in Prisma:**
@@ -328,11 +329,12 @@ interface CaixaPaymentEvent {
 | `MINIO_REGION` | MinIO region | Yes |
 | `MINIO_PUBLIC_BASE_URL` | MinIO public URL | Yes |
 | `MINIO_PATH_PREFIX` | MinIO path prefix | No (default quotes) |
-| `NFSE_TOKEN` | NFS-e auth | Yes (prod) |
-| `NFSE_CNPJ_PRESTADOR` | NFS-e CNPJ | Yes (prod) |
-| `NFSE_INSCRICAO_MUNICIPAL` | NFS-e mun. reg. | Yes (prod) |
-| `NFSE_SOAP_URL` | iiBrasil SOAP prod URL | Yes (prod) |
-| `NFSE_AUX_URL` | iiBrasil aux URL | Yes (prod) |
+| `NFSE_NACIONAL_CERT_PEM` | NFS-e Nacional A1 certificate (PEM) | Yes (prod) |
+| `NFSE_NACIONAL_KEY_PEM` | NFS-e Nacional A1 private key (PEM) | Yes (prod) |
+| `NFSE_NACIONAL_CNPJ_PRESTADOR` | NFS-e provider CNPJ | Yes (prod) |
+| `NFSE_NACIONAL_CODIGO_MUNICIPIO` | NFS-e municipality IBGE code | Yes (prod) |
+| `NFSE_NACIONAL_AMBIENTE` | `producao` or `homologacao` | Yes (prod) |
+| `NFSE_OVERRIDE_PASSWORD` | NFS-e unpaid-emission override password (deploy env only, empty in repo) | No (empty = override disabled) |
 | `TS_AUTHKEY` | Tailscale auth | Yes (prod) |
 | `POSTGRES_USER` | Docker PG service | Yes |
 | `POSTGRES_PASSWORD` | Docker PG service | Yes |
