@@ -523,6 +523,62 @@ export class EfiService implements OnModuleInit {
   }
 
   /**
+   * Fase 54 (D-04): busca o comprovante oficial da EFI (GET /v2/gn/pix/comprovantes, escopo gn.receipts.read).
+   * Nunca lanca: qualquer falha (escopo nao habilitado, 4xx/5xx, timeout, certificado ausente, corpo que nao
+   * seja PNG/JPEG/PDF) devolve null e o chamador cai no comprovante de layout proprio.
+   * O tipo devolvido e derivado dos primeiros bytes, nao do cabecalho da resposta.
+   * Logs so com e2eId e status/mensagem curta (nunca token nem corpo da resposta, T-54-09).
+   */
+  async buscarComprovanteOficial(
+    e2eId: string,
+  ): Promise<{ buffer: Buffer; contentType: string; extensao: "png" | "jpg" | "pdf" } | null> {
+    const id = String(e2eId ?? "").trim();
+    if (!id) return null;
+
+    try {
+      const client = this.getHttpClient();
+      const token = await this.getAccessToken(client);
+
+      const response = await client.get("/v2/gn/pix/comprovantes", {
+        params: { e2eId: id },
+        responseType: "arraybuffer",
+        timeout: 8000,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data: unknown = response?.data;
+      let buffer: Buffer | null = null;
+      if (Buffer.isBuffer(data)) buffer = data;
+      else if (data instanceof ArrayBuffer) buffer = Buffer.from(data);
+      else if (ArrayBuffer.isView(data)) buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+      if (!buffer || buffer.length < 4) {
+        this.logger.warn(`Comprovante oficial EFI sem corpo binario valido e2eId=${id}`);
+        return null;
+      }
+
+      if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+        return { buffer, contentType: "image/png", extensao: "png" };
+      }
+      if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+        return { buffer, contentType: "image/jpeg", extensao: "jpg" };
+      }
+      if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+        return { buffer, contentType: "application/pdf", extensao: "pdf" };
+      }
+
+      this.logger.warn(`Comprovante oficial EFI com formato inesperado e2eId=${id}`);
+      return null;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const motivo = status
+        ? `status=${status}`
+        : `erro=${String(error?.message ?? "desconhecido").slice(0, 120)}`;
+      this.logger.warn(`Comprovante oficial EFI indisponivel e2eId=${id} ${motivo}`);
+      return null;
+    }
+  }
+
+  /**
    * Registra automaticamente a URL do webhook PIX na EFI (PUT /v2/webhook/{chave}).
    * Nunca lanca excecao — nao-bloqueante, o boot da aplicacao nao pode falhar por causa disto.
    */
