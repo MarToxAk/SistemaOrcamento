@@ -44,6 +44,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 51: Chatwoot: etiquetas por fase, cliente frequente e delay humano no fechamento**
 - [ ] **Phase 52: Chatwoot CSAT com recompensa e convite do Google**
 - [ ] **Phase 53: Lançamento automático da venda no caixa do Athos com desconto do cupom**
+- [ ] **Phase 54: Pagamento PIX efetivo, comprovante EFI e NFS-e no orcamento**
 
 ### Phase Details
 
@@ -334,6 +335,16 @@ Plans:
 - [x] 53-01-PLAN.md — montarVenda puro (tracer): rateio do cupom e valores das capturas
 - [x] 53-02-PLAN.md — AthosVendaService: transacao unica, simulacao, travas, teste no athos-teste
 - [x] 53-03-PLAN.md — endpoint admin (simulacao por padrao) e flag de deploy desligada
+
+### Phase 54: Pagamento PIX efetivo, comprovante EFI e NFS-e no orcamento
+
+**Goal:** Ao receber PIX (webhook EFI) o sistema considera o pagamento efetivo levando em conta o desconto de pagamento (ex.: orcamento #26809, pago R$ 164,35 de R$ 173,00 com desconto nao deve ficar como parcial/restante R$ 8,65); envia o comprovante de pagamento do EFI como nota privada na conversa do Chatwoot (verificar na documentacao EFI se ha comprovante; senao gerar layout proprio); e permite emitir NFS-e na pagina do orcamento identificando o pagamento feito, liberando somente com pagamento integral (50% nao libera); sem confirmacao de pagamento exige senha.
+**Requirements**: TBD
+**Depends on:** Phase 53
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 54 to break down)
 
 ---
 
