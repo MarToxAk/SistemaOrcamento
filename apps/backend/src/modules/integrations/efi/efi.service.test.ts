@@ -4,6 +4,7 @@ import { EfiService } from "./efi.service";
 import { PrismaService } from "../../database/prisma.service";
 import { QuotesService } from "../../quotes/quotes.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
+import { calcularPixAvista } from "../../quotes/quote-payment.util";
 
 describe("EfiService - getPixWebhookUrl", () => {
   let service: EfiService;
@@ -173,5 +174,106 @@ describe("EfiService - registerPixWebhook", () => {
     const result = await service.registerPixWebhook();
 
     expect(result).toEqual({ registered: false, reason: "efi_api_error" });
+  });
+});
+
+// Fase 54 (plano 54-02, D-13): PIX 50/50 sem desconto e resolvePaymentOptions via calcularPixAvista.
+describe("EfiService - desconto de PIX (fase 54)", () => {
+  let service: EfiService;
+
+  const mockPrisma = {
+    $transaction: jest.fn(),
+    quote: { findFirst: jest.fn(), update: jest.fn() },
+    paymentTransaction: { findFirst: jest.fn(), create: jest.fn() },
+  };
+  const mockQuotesService = { changeStatus: jest.fn() };
+  const mockChatwootService = { sendOutgoingMessage: jest.fn() };
+
+  const CONFIG: Record<string, string | undefined> = {
+    EFI_PIX_KEY: "chave-teste",
+    EFI_CLIENT_ID: "client-id",
+    EFI_CLIENT_SECRET: "client-secret",
+    EFI_BASE_URL: "https://api-efi-teste.com",
+  };
+
+  let putMock: jest.Mock;
+  let getMock: jest.Mock;
+
+  beforeEach(async () => {
+    const mockConfig = { get: jest.fn().mockImplementation((key: string) => CONFIG[key]) };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EfiService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: QuotesService, useValue: mockQuotesService },
+        { provide: ChatwootService, useValue: mockChatwootService },
+        { provide: ConfigService, useValue: mockConfig },
+      ],
+    }).compile();
+    service = module.get<EfiService>(EfiService);
+
+    putMock = jest.fn().mockResolvedValue({ data: { loc: { id: 77, location: "pix.example/loc/77" } } });
+    getMock = jest.fn().mockResolvedValue({ data: { linkVisualizacao: "https://pix.example/link", qrcode: "000201-copia-e-cola" } });
+    jest.spyOn(service as any, "getHttpClient").mockReturnValue({ put: putMock, get: getMock });
+    jest.spyOn(service as any, "getAccessToken").mockResolvedValue("fake-token");
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  const valorEnviado = (): string => putMock.mock.calls[0][1].valor.original;
+
+  it("createPix5050Link com total 400 cobra a entrada de 200.00 sem o desconto de 5%", async () => {
+    const result = await service.createPix5050Link({ quoteIdentifier: "26809", totalAmount: 400, customerName: "Cliente" });
+
+    expect(valorEnviado()).toBe("200.00");
+    expect(result.halfAmount).toBe(200);
+    expect(result.linkVisualizacao).toBe("https://pix.example/link");
+  });
+
+  it("createPixPaymentLink com amount 400 (sem a opcao) continua gerando 380.00", async () => {
+    const result = await service.createPixPaymentLink({ quoteIdentifier: "26809", amount: 400 });
+
+    expect(valorEnviado()).toBe("380.00");
+    expect(result.discountAmount).toBe(20);
+    expect(result.amount).toBe(380);
+  });
+
+  it("createPixPaymentLink com amount 200 e aplicarDescontoPix false cobra 200.00 e discountAmount 0", async () => {
+    const result = await service.createPixPaymentLink({ quoteIdentifier: "26809", amount: 200, aplicarDescontoPix: false });
+
+    expect(valorEnviado()).toBe("200.00");
+    expect(result.discountAmount).toBe(0);
+    expect(result.amount).toBe(200);
+  });
+
+  it.each([0, 99.9, 150, 150.01, 150.1, 173, 400, 1234.56])(
+    "resolvePaymentOptions(%s): PIX_AVISTA identico a calcularPixAvista e a formula original",
+    (total) => {
+      const pix = service.resolvePaymentOptions(total).options.find((o) => o.code === "PIX_AVISTA") as any;
+
+      // Formula inline original (antes da delegacao ao util).
+      const percentualOriginal = total > 150 ? 5 : 0;
+      const finalOriginal = Number((total * (1 - percentualOriginal / 100)).toFixed(2));
+
+      expect(pix.discountPercent).toBe(percentualOriginal);
+      expect(pix.finalAmount).toBe(finalOriginal);
+      expect(pix.discountPercent).toBe(calcularPixAvista(total).percentual);
+      expect(pix.finalAmount).toBe(calcularPixAvista(total).valorFinal);
+    },
+  );
+
+  it("resolvePaymentOptions mantem CARTAO_2X e ENTRADA_50_LOJA_50 como antes", () => {
+    const abaixo = service.resolvePaymentOptions(100).options;
+    expect(abaixo.find((o) => o.code === "CARTAO_2X")).toMatchObject({ enabled: false, finalAmount: 100 });
+    expect(abaixo.find((o) => o.code === "ENTRADA_50_LOJA_50")).toMatchObject({ enabled: false });
+
+    const acima = service.resolvePaymentOptions(173).options;
+    expect(acima.find((o) => o.code === "CARTAO_2X")).toMatchObject({ enabled: true, discountPercent: 0, finalAmount: 173 });
+    expect(acima.find((o) => o.code === "ENTRADA_50_LOJA_50")).toMatchObject({
+      enabled: true,
+      discountPercent: 0,
+      firstInstallmentAmount: 86.5,
+      secondInstallmentAmount: 86.5,
+    });
   });
 });

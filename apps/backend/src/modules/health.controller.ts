@@ -58,15 +58,17 @@ export class HealthController {
     }
   }
 
+  // Configuracao da NFS-e Nacional (sem rede). A sonda do WSDL do provedor
+  // iiBrasil foi removida na fase 54 (D-11).
   private async checkNfse(): Promise<{ ok: boolean; error?: string }> {
-    const token = this.config.get<string>("NFSE_TOKEN");
-    if (!token) return { ok: false, error: "nao configurado" };
-    try {
-      const url = "https://ilhabela2.iibr.com.br/rps/3520400/1/soap/producao/rps?wsdl";
-      await axios.get(url, { timeout: 4000, validateStatus: () => true });
-      return { ok: true };
-    } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
-    }
+    const has = (key: string) => {
+      const value = this.config.get<string>(key);
+      return typeof value === "string" && value.trim().length > 0;
+    };
+    const certOk = has("NFSE_NACIONAL_CERT_PEM") || has("NFSE_NACIONAL_CERT_PATH");
+    const keyOk = has("NFSE_NACIONAL_KEY_PEM") || has("NFSE_NACIONAL_KEY_PATH");
+    const cnpjOk = has("NFSE_NACIONAL_CNPJ_PRESTADOR");
+    if (!certOk || !keyOk || !cnpjOk) return { ok: false, error: "nao configurado" };
+    return { ok: true };
   }
 }

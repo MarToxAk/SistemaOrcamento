@@ -1,3 +1,4 @@
+import { quoteIntegralSemDesconto } from "../../quotes/__fixtures__/quote-pago.fixture";
 import { NfseService } from "./nfse.service";
 
 function makeService() {
@@ -45,7 +46,7 @@ const dtoBase = {
 describe("NfseService.emitirQuoteNfseAutomatica — entrega do DANFSe pelo Chatwoot", () => {
   it("Teste 1: conversationId presente e Chatwoot saudavel — DANFSe gerado e enviado, envioChatwoot.enviado=true", async () => {
     const { service, prisma, nfseNacionalService, danfseNacionalPdfService, chatwootService } = makeService();
-    prisma.quote.findFirst.mockResolvedValue({ id: "q1", externalQuoteId: 601, internalNumber: null, nfseNumero: null, conversationId: BigInt(999) });
+    prisma.quote.findFirst.mockResolvedValue({ ...quoteIntegralSemDesconto(250), id: "q1", externalQuoteId: 601, internalNumber: null, nfseNumero: null, conversationId: BigInt(999) });
     nfseNacionalService.emitir.mockResolvedValue({ chaveAcesso: "CHV42", nfseXml: "<xml/>" });
     const pdfBuffer = Buffer.from("PDF-BYTES");
     danfseNacionalPdfService.gerar.mockResolvedValue(pdfBuffer);
@@ -62,7 +63,7 @@ describe("NfseService.emitirQuoteNfseAutomatica — entrega do DANFSe pelo Chatw
 
   it("Teste 2: quote sem conversationId — nenhuma chamada ao Chatwoot nem render de PDF, envioChatwoot.enviado=false com motivo", async () => {
     const { service, prisma, nfseNacionalService, danfseNacionalPdfService, chatwootService } = makeService();
-    prisma.quote.findFirst.mockResolvedValue({ id: "q2", externalQuoteId: 602, internalNumber: null, nfseNumero: null, conversationId: null });
+    prisma.quote.findFirst.mockResolvedValue({ ...quoteIntegralSemDesconto(250), id: "q2", externalQuoteId: 602, internalNumber: null, nfseNumero: null, conversationId: null });
     nfseNacionalService.emitir.mockResolvedValue({ chaveAcesso: "CHV42", nfseXml: "<xml/>" });
 
     const resultado = await service.emitirQuoteNfseAutomatica("q2", dtoBase as any);
@@ -78,7 +79,7 @@ describe("NfseService.emitirQuoteNfseAutomatica — entrega do DANFSe pelo Chatw
 
   it("Teste 3: danfseNacionalPdfService.gerar rejeita — emissao continua bem-sucedida, sem excecao propagada", async () => {
     const { service, prisma, nfseNacionalService, danfseNacionalPdfService, chatwootService } = makeService();
-    prisma.quote.findFirst.mockResolvedValue({ id: "q3", externalQuoteId: 603, internalNumber: null, nfseNumero: null, conversationId: BigInt(999) });
+    prisma.quote.findFirst.mockResolvedValue({ ...quoteIntegralSemDesconto(250), id: "q3", externalQuoteId: 603, internalNumber: null, nfseNumero: null, conversationId: BigInt(999) });
     nfseNacionalService.emitir.mockResolvedValue({ chaveAcesso: "CHV42", nfseXml: "<xml/>" });
     danfseNacionalPdfService.gerar.mockRejectedValue(new Error("render falhou"));
 
@@ -94,7 +95,7 @@ describe("NfseService.emitirQuoteNfseAutomatica — entrega do DANFSe pelo Chatw
 
   it("Teste 4: sendAttachment rejeita depois de sendOutgoingMessage — emissao intacta, sem excecao propagada", async () => {
     const { service, prisma, nfseNacionalService, danfseNacionalPdfService, chatwootService } = makeService();
-    prisma.quote.findFirst.mockResolvedValue({ id: "q4", externalQuoteId: 604, internalNumber: null, nfseNumero: null, conversationId: BigInt(999) });
+    prisma.quote.findFirst.mockResolvedValue({ ...quoteIntegralSemDesconto(250), id: "q4", externalQuoteId: 604, internalNumber: null, nfseNumero: null, conversationId: BigInt(999) });
     nfseNacionalService.emitir.mockResolvedValue({ chaveAcesso: "CHV42", nfseXml: "<xml/>" });
     danfseNacionalPdfService.gerar.mockResolvedValue(Buffer.from("PDF-BYTES"));
     chatwootService.sendOutgoingMessage.mockResolvedValue({ enabled: true, response: {} });

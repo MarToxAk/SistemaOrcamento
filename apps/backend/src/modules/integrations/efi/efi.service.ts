@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, InternalServerErrorException, Logger, Inject, forwardRef, OnModuleInit } from "@nestjs/common";
+﻿import { BadRequestException, Injectable, InternalServerErrorException, Logger, Inject, forwardRef, OnModuleInit, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { QuoteStatus } from "@prisma/client";
 import axios, { AxiosInstance } from "axios";
@@ -7,8 +7,11 @@ import * as https from "https";
 import * as path from "path";
 
 import { PrismaService } from "../../database/prisma.service";
+import { calcularPixAvista, calcularQuitacao } from "../../quotes/quote-payment.util";
 import { QuotesService } from "../../quotes/quotes.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
+import { DadosComprovantePix, montarTextoComprovante, nomeArquivoComprovante } from "./pix-comprovante.util";
+import { PixComprovanteService } from "./pix-comprovante.service";
 
 @Injectable()
 export class EfiService implements OnModuleInit {
@@ -21,7 +24,12 @@ export class EfiService implements OnModuleInit {
     @Inject(forwardRef(() => QuotesService))
     private readonly quotesService: QuotesService,
     private readonly chatwootService: ChatwootService,
+    // Fase 54 (D-04): renderizador do comprovante de layout proprio; opcional para nao quebrar modulos de teste antigos.
+    @Optional() private readonly pixComprovanteService?: PixComprovanteService,
   ) {}
+
+  /** Prazo total do bloco do comprovante no webhook (T-54-10); propriedade de instancia para o teste reduzir. */
+  private prazoComprovanteMs = 40_000;
 
   private toMoney(value: unknown): number {
     const parsed = Number(String(value ?? "0").replace(",", "."));
@@ -228,13 +236,18 @@ export class EfiService implements OnModuleInit {
     customerName?: string | null;
     payerMessage?: string | null;
     customerDocument?: string | null;
+    /** Padrao verdadeiro. Falso no PIX 50/50: a entrada e metade do total sem desconto (D-02/D-13). */
+    aplicarDescontoPix?: boolean;
   }) {
     const originalAmount = Number(input.amount);
     if (!Number.isFinite(originalAmount) || originalAmount <= 0) {
       throw new BadRequestException("Valor invalido para gerar cobranca PIX.");
     }
 
-    const pixOption = this.resolvePaymentOptions(originalAmount).options.find((o) => o.code === "PIX_AVISTA");
+    const aplicarDescontoPix = input.aplicarDescontoPix !== false;
+    const pixOption = aplicarDescontoPix
+      ? this.resolvePaymentOptions(originalAmount).options.find((o) => o.code === "PIX_AVISTA")
+      : undefined;
     const finalAmount = Number((pixOption?.finalAmount ?? originalAmount).toFixed(2));
     const discountAmount = Number((originalAmount - finalAmount).toFixed(2));
 
@@ -407,6 +420,7 @@ export class EfiService implements OnModuleInit {
       amount: halfAmount,
       customerName: input.customerName,
       payerMessage: `Entrada 50% - OrÃ§amento #${input.quoteIdentifier}`,
+      aplicarDescontoPix: false,
     });
     return { linkVisualizacao: result.linkVisualizacao, txid: result.txid, halfAmount };
   }
@@ -414,8 +428,7 @@ export class EfiService implements OnModuleInit {
   resolvePaymentOptions(amount: number) {
     const value = Number.isFinite(amount) ? amount : 0;
 
-    const pixDiscountPercent = value > 150 ? 5 : 0;
-    const pixFinalAmount = Number((value * (1 - pixDiscountPercent / 100)).toFixed(2));
+    const { percentual: pixDiscountPercent, valorFinal: pixFinalAmount } = calcularPixAvista(value);
 
     const options = [
       {
@@ -514,6 +527,62 @@ export class EfiService implements OnModuleInit {
     const base = this.config.get<string>("BACKEND_URL") ?? this.config.get<string>("APP_BASE_URL") ?? "http://localhost:4000/api";
     const baseNoTrailing = base.replace(/\/$/, "");
     return `${baseNoTrailing}/integrations/efi/webhook/payment/card`;
+  }
+
+  /**
+   * Fase 54 (D-04): busca o comprovante oficial da EFI (GET /v2/gn/pix/comprovantes, escopo gn.receipts.read).
+   * Nunca lanca: qualquer falha (escopo nao habilitado, 4xx/5xx, timeout, certificado ausente, corpo que nao
+   * seja PNG/JPEG/PDF) devolve null e o chamador cai no comprovante de layout proprio.
+   * O tipo devolvido e derivado dos primeiros bytes, nao do cabecalho da resposta.
+   * Logs so com e2eId e status/mensagem curta (nunca token nem corpo da resposta, T-54-09).
+   */
+  async buscarComprovanteOficial(
+    e2eId: string,
+  ): Promise<{ buffer: Buffer; contentType: string; extensao: "png" | "jpg" | "pdf" } | null> {
+    const id = String(e2eId ?? "").trim();
+    if (!id) return null;
+
+    try {
+      const client = this.getHttpClient();
+      const token = await this.getAccessToken(client);
+
+      const response = await client.get("/v2/gn/pix/comprovantes", {
+        params: { e2eId: id },
+        responseType: "arraybuffer",
+        timeout: 8000,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data: unknown = response?.data;
+      let buffer: Buffer | null = null;
+      if (Buffer.isBuffer(data)) buffer = data;
+      else if (data instanceof ArrayBuffer) buffer = Buffer.from(data);
+      else if (ArrayBuffer.isView(data)) buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+      if (!buffer || buffer.length < 4) {
+        this.logger.warn(`Comprovante oficial EFI sem corpo binario valido e2eId=${id}`);
+        return null;
+      }
+
+      if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+        return { buffer, contentType: "image/png", extensao: "png" };
+      }
+      if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+        return { buffer, contentType: "image/jpeg", extensao: "jpg" };
+      }
+      if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+        return { buffer, contentType: "application/pdf", extensao: "pdf" };
+      }
+
+      this.logger.warn(`Comprovante oficial EFI com formato inesperado e2eId=${id}`);
+      return null;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const motivo = status
+        ? `status=${status}`
+        : `erro=${String(error?.message ?? "desconhecido").slice(0, 120)}`;
+      this.logger.warn(`Comprovante oficial EFI indisponivel e2eId=${id} ${motivo}`);
+      return null;
+    }
   }
 
   /**
@@ -631,11 +700,20 @@ export class EfiService implements OnModuleInit {
         continue;
       }
 
+      // Fase 54 (D-01/D-02): o desconto de PIX a vista so vale no txid da cobranca a vista.
       const quoteTotal = this.toMoney((quote as any).total);
-      const currentPaid = this.toMoney((quote as any).paidTotal);
-      const nextPaid = Number(Math.min(quoteTotal, currentPaid + payment.amount).toFixed(2));
-      const pending = Number(Math.max(quoteTotal - nextPaid, 0).toFixed(2));
-      const fullyPaid = pending <= 0;
+      const ehAvista = payment.txid === (quote as any).paymentExternalId;
+      const descontoPix = ehAvista ? calcularPixAvista(quoteTotal).desconto : 0;
+      const descontoConsiderado = ehAvista ? descontoPix : this.toMoney((quote as any).paymentDiscount);
+      const quitacao = calcularQuitacao({
+        total: quoteTotal,
+        desconto: descontoConsiderado,
+        pagoAntes: (quote as any).paidTotal,
+        pagamento: payment.amount,
+      });
+      const nextPaid = quitacao.pago;
+      const pending = quitacao.pendente;
+      const fullyPaid = quitacao.quitado;
       const nextStatus = this.resolveNextQuoteStatus(quote.status, fullyPaid);
 
       const updated = await this.prisma.$transaction(async (tx) => {
@@ -651,6 +729,11 @@ export class EfiService implements OnModuleInit {
             metadata: {
               txid: payment.txid,
               signature: signature ?? null,
+              desconto: descontoConsiderado,
+              devido: quitacao.devido,
+              horario: (payment.raw as any)?.horario ?? null,
+              infoPagador: (payment.raw as any)?.infoPagador ?? null,
+              pagador: (payment.raw as any)?.gnExtras?.pagador ?? null,
             },
             webhookPayload: payment.raw as any,
           },
@@ -664,6 +747,11 @@ export class EfiService implements OnModuleInit {
             paymentEventId: eventId,
             paidTotal: nextPaid.toFixed(2),
             pendingTotal: pending.toFixed(2),
+            // So no txid a vista com desconto: nunca zera nem sobrescreve em pagamento de outro txid (T-54-05).
+            ...(ehAvista && descontoPix > 0
+              ? { paymentDiscount: descontoPix.toFixed(2), paymentAmount: quitacao.devido.toFixed(2) }
+              : {}),
+            // Somente na quitacao: o util de pagamento classifica paymentConfirmedAt como pagamento integral.
             paymentConfirmedAt: fullyPaid ? new Date() : (quote as any).paymentConfirmedAt,
             status: nextStatus,
             updatedAt: new Date(),
@@ -687,6 +775,10 @@ export class EfiService implements OnModuleInit {
       // Fase 51 (D-03): etiquetas da conversa, depois do commit e so quando o status mudou.
       if (nextStatus !== quote.status) this.dispararEtiquetasChatwoot(quote);
 
+      // Numero do orcamento: declarado fora do try da mensagem para reutilizacao (comprovante, plano 54-04).
+      let numeroOrcamento: unknown = null;
+      let convIdComprovante: string | undefined;
+
       // Envio de mensagem automatica ao cliente via Chatwoot com dados do orcamento
       try {
         const mapped = await this.quotesService.getById(quote.id);
@@ -696,22 +788,26 @@ export class EfiService implements OnModuleInit {
           : (quote as any).conversationId?.toString?.();
 
         if (convId) {
+          convIdComprovante = String(convId);
           const clienteNome = (body.cliente as any)?.nome ?? (quote as any).customer?.fullName ?? "Cliente";
           const numero = (body as any).idorcamento ?? (body as any).idorcamento_interno ?? (quote as any).internalNumber ?? "-";
+          numeroOrcamento = numero;
           const total = Number((body as any).totais?.valor ?? (quote as any).total ?? 0);
           const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
           const halfAmount = Number((Number(total) / 2).toFixed(2));
           const isHalf = Math.abs(payment.amount - halfAmount) < 0.01 || Number((quote as any).firstInstallmentAmount ?? 0) === payment.amount;
 
           let mensagem: string;
-          if (fullyPaid) {
+          if (fullyPaid && ehAvista && descontoPix > 0) {
+            mensagem = `✅ Pagamento PIX recebido, ${clienteNome}!\n\nOrçamento #${numero}\nTotal do orçamento: ${fmt(total)}\nDesconto PIX à vista: ${fmt(descontoPix)}\nValor pago: ${fmt(nextPaid)}\n\nPagamento integral confirmado. Pedido confirmado! 😊`;
+          } else if (fullyPaid) {
             mensagem = `✅ Pagamento PIX recebido, ${clienteNome}!\n\nOrçamento #${numero} — ${fmt(total)}\nComprovante gerado. Pedido confirmado! 😊`;
           } else {
-            const remaining = Number(Math.max(Number(total) - Number(payment.amount), 0).toFixed(2));
+            const remaining = pending;
             if (isHalf) {
               mensagem = `✅ ${clienteNome}, recebemos sua entrada PIX!\n\nOrçamento #${numero}\nEntrada: ${fmt(payment.amount)} — Restante: ${fmt(remaining)} a pagar na loja.\n\nSeu pedido entrará em produção em breve! 😊`;
             } else {
-              mensagem = `⚠️ ${clienteNome}, recebemos um pagamento parcial PIX.\n\nOrçamento #${numero}\nPago: ${fmt(payment.amount)} de ${fmt(total)} — Restam: ${fmt(remaining)}.\n\nAguardamos o pagamento restante.`;
+              mensagem = `⚠️ ${clienteNome}, recebemos um pagamento parcial PIX.\n\nOrçamento #${numero}\nPago: ${fmt(nextPaid)} de ${fmt(quitacao.devido)} — Restam: ${fmt(remaining)}.\n\nAguardamos o pagamento restante.`;
             }
           }
 
@@ -719,6 +815,28 @@ export class EfiService implements OnModuleInit {
         }
       } catch (err) {
         this.logger.warn(`Falha ao notificar cliente via Chatwoot apos pagamento: ${err instanceof Error ? err.message : err}`);
+      }
+
+      // Fase 54 (D-04/D-05): comprovante como nota privada, depois do commit e da mensagem ao cliente.
+      // Bloco independente: falha aqui nunca derruba o webhook (a EFI precisa receber 2xx para nao retentar).
+      try {
+        const convIdNota = convIdComprovante ?? (quote as any).conversationId?.toString?.();
+        if (convIdNota) {
+          await this.postarComprovantePix({
+            quote,
+            convId: String(convIdNota),
+            payment,
+            numeroOrcamento,
+            totalOrcamento: quoteTotal,
+            desconto: descontoPix,
+            valorPago: payment.amount,
+            totalPagoAcumulado: nextPaid,
+            pendente: pending,
+            quitado: fullyPaid,
+          });
+        }
+      } catch (err) {
+        this.logger.warn(`Falha no comprovante PIX quoteId=${quote.id} e2eId=${payment.externalId} ${this.erroCurto(err)}`);
       }
 
       results.push({
@@ -742,6 +860,131 @@ export class EfiService implements OnModuleInit {
       notFound: results.filter((r) => r.status === "quote_not_found").length,
       results,
     };
+  }
+
+  /** Mensagem de erro curta e segura para log (sem payload, token nem corpo de resposta). */
+  private erroCurto(err: unknown): string {
+    const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "erro desconhecido";
+    return String(msg).replace(/\s+/g, " ").slice(0, 120);
+  }
+
+  /**
+   * Fase 54 (D-04/D-05): posta o comprovante do PIX como nota PRIVADA na conversa do Chatwoot.
+   * Nunca lanca e respeita o prazo total prazoComprovanteMs (T-54-10).
+   */
+  private async postarComprovantePix(ctx: {
+    quote: any;
+    convId: string;
+    payment: { txid: string; externalId: string; amount: number; raw: unknown };
+    numeroOrcamento: unknown;
+    totalOrcamento: number;
+    desconto: number;
+    valorPago: number;
+    totalPagoAcumulado: number;
+    pendente: number;
+    quitado: boolean;
+  }): Promise<void> {
+    const quoteId = String(ctx.quote?.id ?? "");
+    const e2eId = ctx.payment.externalId;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const prazo = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("prazo do comprovante excedido")), this.prazoComprovanteMs);
+      });
+      await Promise.race([this.executarComprovantePix(ctx), prazo]);
+    } catch (err) {
+      this.logger.warn(`Falha no comprovante PIX quoteId=${quoteId} e2eId=${e2eId} ${this.erroCurto(err)}`);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  private async executarComprovantePix(ctx: {
+    quote: any;
+    convId: string;
+    payment: { txid: string; externalId: string; amount: number; raw: unknown };
+    numeroOrcamento: unknown;
+    totalOrcamento: number;
+    desconto: number;
+    valorPago: number;
+    totalPagoAcumulado: number;
+    pendente: number;
+    quitado: boolean;
+  }): Promise<void> {
+    const { quote, convId, payment } = ctx;
+    const raw = (payment.raw ?? {}) as any;
+    const pagador = raw?.gnExtras?.pagador ?? {};
+
+    const numeroBruto = ctx.numeroOrcamento;
+    const numero =
+      numeroBruto !== null && numeroBruto !== undefined && String(numeroBruto).trim() !== "" && String(numeroBruto) !== "-"
+        ? String(numeroBruto)
+        : String(quote?.externalQuoteId ?? quote?.internalNumber ?? "");
+
+    const dados: DadosComprovantePix = {
+      numeroOrcamento: numero,
+      valorPago: ctx.valorPago,
+      desconto: ctx.desconto,
+      totalOrcamento: ctx.totalOrcamento,
+      totalPagoAcumulado: ctx.totalPagoAcumulado,
+      pendente: ctx.pendente,
+      quitado: ctx.quitado,
+      e2eId: payment.externalId,
+      txid: payment.txid,
+      horario: typeof raw?.horario === "string" ? raw.horario : null,
+      pagadorNome: typeof pagador?.nome === "string" ? pagador.nome : null,
+      pagadorDocumento:
+        typeof pagador?.cpf === "string" ? pagador.cpf : typeof pagador?.cnpj === "string" ? pagador.cnpj : null,
+      infoPagador: typeof raw?.infoPagador === "string" ? raw.infoPagador : null,
+    };
+    const texto = montarTextoComprovante(dados);
+
+    // 1) comprovante oficial da EFI; 2) layout proprio; 3) somente texto.
+    let anexo: { buffer: Buffer; contentType: string; extensao: "png" | "jpg" | "pdf"; fonte: "oficial" | "proprio" } | null = null;
+    try {
+      const oficial = await this.buscarComprovanteOficial(payment.externalId);
+      if (oficial) anexo = { ...oficial, fonte: "oficial" };
+    } catch {
+      anexo = null;
+    }
+    if (!anexo && typeof this.pixComprovanteService?.gerarPng === "function") {
+      try {
+        const png = await this.pixComprovanteService.gerarPng(dados);
+        if (png && png.length > 0) anexo = { buffer: png, contentType: "image/png", extensao: "png", fonte: "proprio" };
+      } catch (err) {
+        this.logger.warn(`Comprovante PIX layout proprio indisponivel quoteId=${quote?.id} e2eId=${payment.externalId} ${this.erroCurto(err)}`);
+      }
+    }
+
+    let fonte: "oficial" | "proprio" | "apenas-texto" = "apenas-texto";
+    let enviado = false;
+    if (anexo && typeof (this.chatwootService as any)?.sendAttachment === "function") {
+      try {
+        const resposta: any = await this.chatwootService.sendAttachment(
+          convId,
+          anexo.buffer,
+          nomeArquivoComprovante(numero, payment.externalId, anexo.extensao),
+          anexo.contentType,
+          { private: true, content: texto },
+        );
+        // Chatwoot nao configurado devolve { enabled: false } sem lancar: tratar como falha para tentar a nota.
+        enviado = resposta?.enabled !== false;
+        if (enviado) fonte = anexo.fonte;
+      } catch (err) {
+        this.logger.warn(`Comprovante PIX anexo nao enviado quoteId=${quote?.id} e2eId=${payment.externalId} ${this.erroCurto(err)}`);
+      }
+    }
+
+    if (!enviado) {
+      if (typeof (this.chatwootService as any)?.postConversationNote !== "function") {
+        throw new Error("postConversationNote indisponivel");
+      }
+      const resposta: any = await this.chatwootService.postConversationNote(convId, texto);
+      if (resposta?.enabled === false) throw new Error("Chatwoot nao configurado");
+      fonte = "apenas-texto";
+    }
+
+    this.logger.log(`Comprovante PIX postado quoteId=${quote?.id} e2eId=${payment.externalId} fonte=${fonte}`);
   }
 
   /**
