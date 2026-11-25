@@ -34,6 +34,14 @@ Caso de origem: orcamento #26809, total R$ 173,00, PIX pago R$ 164,35 (= 173,00 
 - **D-10:** Manter o fluxo atual do orcamento (Sistema Nacional / Sefin, `/quotes/:id/nfse/emitir`) e apenas adicionar as travas de pagamento e senha.
 - **D-11:** **Remover o emissor iiBrasil** (SOAP), descontinuado. Cuidado de escopo: notas ja emitidas pelo iiBrasil continuam no banco e sao lidas por Contas a Receber/Cobranca (`cobranca-notas.service.ts`, `email-envio.service.ts`, `nfse-xml-parser.util.ts`). Remover o codigo de **emissao/SOAP/credenciais**, preservando leitura/parse de notas historicas. A pesquisa deve mapear o limite exato antes de apagar. Atualizar `.env.example` e a memoria `nfse-iibrasil-integracao.md`. — **Reversibility:** costly — remove cliente SOAP usado por varios modulos; reverter exige restaurar do git.
 
+### Decisoes pos-pesquisa (2026-11-25)
+- **D-12:** Pagamento confirmado no caixa do Athos (`paymentConfirmedAt`/`paymentNote`, sem `paidTotal`) **libera a NFS-e sem senha**.
+- **D-13:** Corrigir nesta fase o desconto indevido do PIX 50/50 (`createPix5050Link` -> `createPixPaymentLink` reaplica 5%): sem desconto nas metades (consistente com D-02). Parametro `aplicarDescontoPix=false` nesse caminho.
+- **D-14:** Criar script de reconciliacao de orcamentos antigos gravados como parciais (incluindo #26809). **Dry-run por padrao**; so grava com flag explicita e aprovacao do usuario. NAO executar em producao dentro desta fase sem aprovacao.
+- **D-15:** O backend recusa `valorServico` maior que o valor efetivamente pago na emissao automatica.
+- **D-16:** A trava de pagamento vale so para a emissao automatica; o anexo manual de XML/PDF fica sem trava.
+- **D-17:** Fora de escopo (registrar como deferred): `webhook/payment/pix` esta `@Public()` sem `EfiWebhookGuard` (risco de POST forjado marcar pago). Recomendar fase propria.
+
 ### Claude's Discretion
 - Formato do comprovante (imagem vs PDF) e biblioteca de geracao (preferir o que o projeto ja usa para PDFs).
 - Estrutura da tabela/campo de auditoria da liberacao por senha.
