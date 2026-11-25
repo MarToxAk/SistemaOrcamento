@@ -16,40 +16,12 @@ import { PdvModule } from "./integrations/pdv/pdv.module";
 import { PesquisaModule } from "./pesquisa/pesquisa.module";
 import { QuotesModule } from "./quotes/quotes.module";
 import { PdfTemplatesModule } from "./pdf-templates/pdf-templates.module";
+import { validateEnv } from "./common/env-validation";
 import { LoggingInterceptor } from "./common/logging.interceptor";
 import { InternalAuthGuard } from "./security/internal-auth.guard";
 import { SecurityModule } from "./security/security.module";
 import { THROTTLE_DEFAULT } from "./security/throttle.config";
 import { CobrancaModule } from "./cobranca/cobranca.module";
-
-const REQUIRED_ENV_VARS = [
-  "DATABASE_URL",
-  "INTERNAL_API_KEY",
-  "CHATWOOT_BASE_URL",
-  "CHATWOOT_API_TOKEN",
-  "CHATWOOT_ACCOUNT_ID",
-  "NFSE_TOKEN",
-  "ATHOS_SISTEMA_USUARIO_ID",
-  "EMPRESA_NOME",
-  "EMPRESA_CNPJ",
-  "EMPRESA_ENDERECO",
-  "EMPRESA_MUNICIPIO_IBGE",
-] as const;
-
-function validateEnv(config: Record<string, unknown>) {
-  const missing = REQUIRED_ENV_VARS.filter((key) => {
-    const value = config[key];
-    return typeof value !== "string" || value.trim().length === 0;
-  });
-
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${missing.join(", ")} — See .env.example for EMPRESA_* setup instructions`,
-    );
-  }
-
-  return config;
-}
 
 @Module({
   imports: [
