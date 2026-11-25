@@ -73,6 +73,12 @@ export class NfseController {
     return this.nfseService.resolverTomadorQuote(quoteId);
   }
 
+  /** Pagamento identificado do orcamento (situacao, valor pago, desconto, data e E2E) para a tela de emissao. */
+  @Get("pagamento")
+  async pagamento(@Param("quoteId") quoteId: string) {
+    return this.nfseService.resolverPagamentoQuote(quoteId);
+  }
+
   /** Download do DANFSe (PDF) gerado localmente a partir do XML, para envio ao cliente. */
   @Get("pdf")
   async baixarPdf(@Param("quoteId") quoteId: string, @Res() res: ExpressResponse) {

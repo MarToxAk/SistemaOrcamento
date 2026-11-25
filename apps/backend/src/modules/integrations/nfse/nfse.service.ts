@@ -19,7 +19,12 @@ import axios from "axios";
 
 import { PrismaService } from "../../database/prisma.service";
 import { findQuoteByIdentifierBasic } from "../../quotes/quote-identifier.util";
-import { paraCentavos, resolverSituacaoPagamentoQuote, SituacaoPagamentoResolvida } from "../../quotes/quote-payment.util";
+import {
+  centavosParaReais,
+  paraCentavos,
+  resolverSituacaoPagamentoQuote,
+  SituacaoPagamentoResolvida,
+} from "../../quotes/quote-payment.util";
 import { AthosService } from "../athos/athos.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
 import { DanfseNacionalPdfService } from "./danfse-nacional-pdf.service";
@@ -44,6 +49,21 @@ export type UploadedXmlFile = {
 };
 
 export type { ParsedNfse };
+
+/** Um PIX identificado do orcamento, na forma exposta a tela (sem payload cru nem dados do pagador). */
+export type PagamentoIdentificadoQuote = {
+  e2eId: string | null;
+  txid: string | null;
+  valor: number;
+  pagoEm: string;
+  metodo: string;
+};
+
+export type PagamentoQuoteResposta = SituacaoPagamentoResolvida & {
+  pagoEm: string | null;
+  pagamentos: PagamentoIdentificadoQuote[];
+  pagamentoCaixa: string | null;
+};
 
 /** Origem da requisicao de emissao (auditoria da liberacao por senha, D-09). */
 export type ContextoEmissaoNfse = { ip?: string; userAgent?: string };
@@ -173,6 +193,59 @@ export class NfseService {
     const quote = await findQuoteByIdentifierBasic(this.prisma, identifier);
     if (!quote) throw new NotFoundException("Orcamento nao encontrado.");
     return quote;
+  }
+
+  /**
+   * Pagamento identificado do orcamento para a tela de NFS-e (D-07, D-08): situacao, valores, desconto,
+   * data e E2E dos PIX. Usa a MESMA regra da trava de emissao (`resolverSituacaoPagamentoQuote`).
+   * Expoe somente e2eId, txid, valor, pagoEm e metodo: nunca o webhookPayload cru nem o pagador.
+   */
+  async resolverPagamentoQuote(quoteId: string): Promise<PagamentoQuoteResposta> {
+    const quote = await this.carregarQuotePorIdentificador(quoteId);
+    const situacao = resolverSituacaoPagamentoQuote(quote);
+
+    const transacoes = await this.prisma.paymentTransaction.findMany({
+      where: { quoteId: quote.id },
+      orderBy: { processedAt: "asc" },
+    });
+
+    const pagamentos: PagamentoIdentificadoQuote[] = transacoes
+      .map((tx) => ({
+        e2eId: tx.eventId ?? tx.externalId ?? null,
+        txid: this.lerTextoJson(tx.metadata, "txid") ?? this.lerTextoJson(tx.webhookPayload, "txid"),
+        valor: centavosParaReais(paraCentavos(tx.amount)),
+        pagoEm: this.resolverDataPagamento(tx),
+        metodo: tx.method,
+      }))
+      .sort((a, b) => a.pagoEm.localeCompare(b.pagoEm));
+
+    const confirmadoEm = quote.paymentConfirmedAt ? quote.paymentConfirmedAt.toISOString() : null;
+    const ultimoPix = pagamentos.length > 0 ? pagamentos[pagamentos.length - 1].pagoEm : null;
+    const caixa = situacao.origem === "CAIXA";
+
+    return {
+      ...situacao,
+      pagoEm: caixa ? (confirmadoEm ?? ultimoPix) : (ultimoPix ?? confirmadoEm),
+      pagamentos,
+      pagamentoCaixa: caixa ? (quote.paymentNote?.trim() || null) : null,
+    };
+  }
+
+  private lerTextoJson(json: unknown, campo: string): string | null {
+    if (!json || typeof json !== "object") return null;
+    const valor = (json as Record<string, unknown>)[campo];
+    return typeof valor === "string" && valor.trim() ? valor.trim() : null;
+  }
+
+  /** Data do PIX: `horario` do webhook (metadata ou payload) quando valido; senao o instante do processamento. */
+  private resolverDataPagamento(tx: { metadata: unknown; webhookPayload: unknown; processedAt: Date }): string {
+    for (const origem of [tx.metadata, tx.webhookPayload]) {
+      const horario = this.lerTextoJson(origem, "horario");
+      if (!horario) continue;
+      const data = new Date(horario);
+      if (!Number.isNaN(data.getTime())) return data.toISOString();
+    }
+    return tx.processedAt.toISOString();
   }
 
   /** Emite a NFS-e automaticamente via API do Sistema Nacional e anexa o resultado ao orcamento. */

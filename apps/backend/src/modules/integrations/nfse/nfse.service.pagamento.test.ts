@@ -205,3 +205,180 @@ describe("NfseService.emitirQuoteNfseAutomatica - trava de pagamento (D-06, D-12
     });
   });
 });
+
+describe("NfseService.resolverPagamentoQuote - pagamento identificado para a tela (D-07, D-08)", () => {
+  function transacao(over: Record<string, unknown> = {}) {
+    return {
+      id: "tx-1",
+      quoteId: "quote-26809",
+      eventId: "E2E-0001",
+      externalId: "E2E-0001",
+      source: "EFI",
+      method: "PIX",
+      status: "PAID",
+      amount: "164.35",
+      metadata: { txid: "txid-26809", signature: "assinatura-secreta" },
+      webhookPayload: {
+        endToEndId: "E2E-0001",
+        txid: "txid-26809",
+        valor: "164.35",
+        horario: "2026-11-20T14:59:50.000Z",
+        infoPagador: "dado do pagador que nao deve vazar",
+      },
+      processedAt: new Date("2026-11-20T15:00:00.000Z"),
+      ...over,
+    };
+  }
+
+  it("#26809 pago por PIX: INTEGRAL, valores, desconto, pagoEm do webhook e um pagamento com E2E e txid", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(quotePagoPix26809());
+    prisma.paymentTransaction.findMany.mockResolvedValue([transacao()]);
+
+    const r = await service.resolverPagamentoQuote("26809");
+
+    expect(r).toMatchObject({
+      situacao: "INTEGRAL",
+      origem: "PIX",
+      exigeSenha: false,
+      valorTotal: 173,
+      valorDevido: 164.35,
+      valorPago: 164.35,
+      desconto: 8.65,
+      pendente: 0,
+      valorSugeridoNota: 164.35,
+      valorMaximoNota: 164.35,
+      pagoEm: "2026-11-20T14:59:50.000Z",
+      pagamentoCaixa: null,
+    });
+    expect(r.pagamentos).toEqual([
+      { e2eId: "E2E-0001", txid: "txid-26809", valor: 164.35, pagoEm: "2026-11-20T14:59:50.000Z", metodo: "PIX" },
+    ]);
+    expect(prisma.paymentTransaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { quoteId: "quote-26809" }, orderBy: { processedAt: "asc" } }),
+    );
+  });
+
+  it("entrada 50%: PARCIAL, exige senha, pendente 86,50, sugerido 173 e o PIX de 86,50", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(quoteEntrada50Pix());
+    prisma.paymentTransaction.findMany.mockResolvedValue([
+      transacao({ amount: "86.50", webhookPayload: { horario: "2026-11-18T10:00:00.000Z", txid: "txid-26809" } }),
+    ]);
+
+    const r = await service.resolverPagamentoQuote("26809");
+
+    expect(r).toMatchObject({
+      situacao: "PARCIAL",
+      exigeSenha: true,
+      pendente: 86.5,
+      valorSugeridoNota: 173,
+      valorPago: 86.5,
+    });
+    expect(r.pagamentos).toHaveLength(1);
+    expect(r.pagamentos[0]).toMatchObject({ valor: 86.5 });
+  });
+
+  it("sem transacoes e sem pagamento: SEM_PAGAMENTO, pagamentos vazio e pagoEm null", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(quoteSemPagamento());
+    prisma.paymentTransaction.findMany.mockResolvedValue([]);
+
+    const r = await service.resolverPagamentoQuote("26809");
+
+    expect(r).toMatchObject({ situacao: "SEM_PAGAMENTO", origem: "NENHUMA", exigeSenha: true, pagamentos: [], pagoEm: null, pagamentoCaixa: null });
+  });
+
+  it("caixa: origem CAIXA, pagamentoCaixa com o texto de paymentNote e pagoEm igual a paymentConfirmedAt", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(quotePagoCaixa({ paymentConfirmedAt: new Date("2026-11-19T12:00:00.000Z") }));
+    prisma.paymentTransaction.findMany.mockResolvedValue([]);
+
+    const r = await service.resolverPagamentoQuote("26809");
+
+    expect(r).toMatchObject({
+      situacao: "INTEGRAL",
+      origem: "CAIXA",
+      exigeSenha: false,
+      pagamentoCaixa: "Pagamento feito no caixa",
+      pagoEm: "2026-11-19T12:00:00.000Z",
+    });
+  });
+
+  it("caixa sem paymentConfirmedAt: pagoEm null", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(quotePagoCaixa());
+    prisma.paymentTransaction.findMany.mockResolvedValue([]);
+
+    const r = await service.resolverPagamentoQuote("26809");
+
+    expect(r.pagoEm).toBeNull();
+  });
+
+  it("dois PIX: pagamentos em ordem cronologica crescente", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(quoteEntrada50Pix({ paidTotal: "173.00", pendingTotal: "0.00" }));
+    prisma.paymentTransaction.findMany.mockResolvedValue([
+      transacao({ eventId: "E2E-B", externalId: "E2E-B", amount: "86.50", webhookPayload: { horario: "2026-11-21T10:00:00.000Z" } }),
+      transacao({ eventId: "E2E-A", externalId: "E2E-A", amount: "86.50", webhookPayload: { horario: "2026-11-20T10:00:00.000Z" } }),
+    ]);
+
+    const r = await service.resolverPagamentoQuote("26809");
+
+    expect(r.pagamentos.map((p) => p.e2eId)).toEqual(["E2E-A", "E2E-B"]);
+    expect(r.pagoEm).toBe("2026-11-21T10:00:00.000Z");
+  });
+
+  it("sem horario valido no webhook, usa processedAt; sem eventId, usa externalId", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(quotePagoPix26809());
+    prisma.paymentTransaction.findMany.mockResolvedValue([
+      transacao({ eventId: null, externalId: "EXT-9", webhookPayload: { horario: "nao e data" }, metadata: {} }),
+    ]);
+
+    const r = await service.resolverPagamentoQuote("26809");
+
+    expect(r.pagamentos[0]).toEqual({
+      e2eId: "EXT-9",
+      txid: null,
+      valor: 164.35,
+      pagoEm: "2026-11-20T15:00:00.000Z",
+      metodo: "PIX",
+    });
+  });
+
+  it("identificador inexistente: NotFoundException 'Orcamento nao encontrado.'", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(null);
+
+    const erro = await capturar(service.resolverPagamentoQuote("999999"));
+
+    expect(erro.getStatus()).toBe(404);
+    expect(erro.message).toBe("Orcamento nao encontrado.");
+  });
+
+  it("o corpo nunca inclui webhookPayload cru, assinatura nem dados do pagador", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(quotePagoPix26809());
+    prisma.paymentTransaction.findMany.mockResolvedValue([transacao()]);
+
+    const r = await service.resolverPagamentoQuote("26809");
+    const json = JSON.stringify(r);
+
+    expect(json).not.toContain("assinatura-secreta");
+    expect(json).not.toContain("infoPagador");
+    expect(json).not.toContain("dado do pagador");
+    expect(Object.keys(r.pagamentos[0]).sort()).toEqual(["e2eId", "metodo", "pagoEm", "txid", "valor"]);
+  });
+
+  it("usa a mesma regra da trava: PARCIAL com pendente 0,03 na fronteira (paidTotal 164,32)", async () => {
+    const { service, prisma } = makeService();
+    prisma.quote.findFirst.mockResolvedValue(quotePagoPix26809({ paidTotal: "164.32", paymentConfirmedAt: null }));
+    prisma.paymentTransaction.findMany.mockResolvedValue([]);
+
+    const r = await service.resolverPagamentoQuote("26809");
+
+    expect(r.situacao).toBe("PARCIAL");
+    expect(r.pendente).toBe(0.03);
+  });
+});
