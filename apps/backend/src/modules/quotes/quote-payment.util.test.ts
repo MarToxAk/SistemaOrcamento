@@ -207,8 +207,14 @@ describe("resolverSituacaoPagamentoQuote", () => {
   });
 
   it("fronteira: paidTotal 164.32 e PARCIAL; 164.33 e INTEGRAL", () => {
-    expect(resolverSituacaoPagamentoQuote(quotePagoPix26809({ paidTotal: "164.32" })).situacao).toBe("PARCIAL");
-    expect(resolverSituacaoPagamentoQuote(quotePagoPix26809({ paidTotal: "164.33" })).situacao).toBe("INTEGRAL");
+    // sem paymentConfirmedAt: a classificacao depende somente do paidTotal (a confirmacao liberaria via CAIXA)
+    const semConfirmacao = { paymentConfirmedAt: null };
+    expect(resolverSituacaoPagamentoQuote(quotePagoPix26809({ ...semConfirmacao, paidTotal: "164.32" })).situacao).toBe(
+      "PARCIAL",
+    );
+    expect(resolverSituacaoPagamentoQuote(quotePagoPix26809({ ...semConfirmacao, paidTotal: "164.33" })).situacao).toBe(
+      "INTEGRAL",
+    );
   });
 
   it("desconto maior que o total nao produz devido negativo", () => {

@@ -75,3 +75,103 @@ export function calcularQuitacao(entrada: EntradaQuitacao): ResultadoQuitacao {
     quitado,
   };
 }
+
+export type SituacaoPagamentoQuote = "INTEGRAL" | "PARCIAL" | "SEM_PAGAMENTO";
+export type OrigemPagamentoQuote = "PIX" | "CAIXA" | "NENHUMA";
+
+export type QuotePagamentoEntrada = {
+  total: unknown;
+  paymentDiscount?: unknown;
+  paidTotal?: unknown;
+  paymentConfirmedAt?: Date | string | null;
+  paymentNote?: string | null;
+};
+
+export type SituacaoPagamentoResolvida = {
+  situacao: SituacaoPagamentoQuote;
+  origem: OrigemPagamentoQuote;
+  valorTotal: number;
+  valorDevido: number;
+  valorPago: number;
+  desconto: number;
+  pendente: number;
+  /** Valor pre-preenchido para a nota (D-07). */
+  valorSugeridoNota: number;
+  /** Teto aceito na emissao automatica (D-15); em PARCIAL/SEM_PAGAMENTO vale so com liberacao por senha. */
+  valorMaximoNota: number;
+  exigeSenha: boolean;
+};
+
+/**
+ * Classifica o pagamento do orcamento (D-06, D-07, D-12, D-15). Reutiliza `calcularQuitacao`,
+ * portanto a tolerancia de R$ 0,02 e a mesma do webhook.
+ */
+export function resolverSituacaoPagamentoQuote(quote: QuotePagamentoEntrada): SituacaoPagamentoResolvida {
+  const totalCent = Math.max(paraCentavos(quote.total), 0);
+  const descontoCent = Math.max(paraCentavos(quote.paymentDiscount), 0);
+  const devidoCent = Math.max(totalCent - descontoCent, 0);
+  const paidCent = Math.max(paraCentavos(quote.paidTotal), 0);
+
+  const quitacao = calcularQuitacao({
+    total: quote.total,
+    desconto: quote.paymentDiscount,
+    pagoAntes: 0,
+    pagamento: quote.paidTotal,
+  });
+
+  const valorTotal = centavosParaReais(totalCent);
+  const desconto = centavosParaReais(descontoCent);
+  const valorDevido = centavosParaReais(devidoCent);
+  const valorPago = quitacao.pago;
+
+  const base = { valorTotal, valorDevido, valorPago, desconto };
+
+  // PIX efetivamente pago cobre o devido (ja com desconto): vale o que foi pago (D-07/D-15).
+  if (paidCent > 0 && quitacao.quitado) {
+    return {
+      ...base,
+      situacao: "INTEGRAL",
+      origem: "PIX",
+      pendente: 0,
+      valorSugeridoNota: valorPago,
+      valorMaximoNota: valorPago,
+      exigeSenha: false,
+    };
+  }
+
+  // Pagamento confirmado no caixa do Athos libera sem senha (D-12).
+  const confirmadoNoCaixa = Boolean(quote.paymentNote && quote.paymentNote.trim()) || Boolean(quote.paymentConfirmedAt);
+  if (confirmadoNoCaixa) {
+    return {
+      ...base,
+      situacao: "INTEGRAL",
+      origem: "CAIXA",
+      pendente: 0,
+      valorSugeridoNota: valorDevido,
+      valorMaximoNota: valorDevido,
+      exigeSenha: false,
+    };
+  }
+
+  if (paidCent > 0) {
+    return {
+      ...base,
+      situacao: "PARCIAL",
+      origem: "PIX",
+      pendente: centavosParaReais(Math.max(devidoCent - paraCentavos(valorPago), 0)),
+      valorSugeridoNota: valorDevido,
+      valorMaximoNota: valorDevido,
+      exigeSenha: true,
+    };
+  }
+
+  return {
+    ...base,
+    situacao: "SEM_PAGAMENTO",
+    origem: "NENHUMA",
+    pendente: valorDevido,
+    valorSugeridoNota: valorDevido,
+    valorMaximoNota: valorDevido,
+    exigeSenha: true,
+  };
+}
