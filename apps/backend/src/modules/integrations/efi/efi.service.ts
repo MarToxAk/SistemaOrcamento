@@ -229,13 +229,18 @@ export class EfiService implements OnModuleInit {
     customerName?: string | null;
     payerMessage?: string | null;
     customerDocument?: string | null;
+    /** Padrao verdadeiro. Falso no PIX 50/50: a entrada e metade do total sem desconto (D-02/D-13). */
+    aplicarDescontoPix?: boolean;
   }) {
     const originalAmount = Number(input.amount);
     if (!Number.isFinite(originalAmount) || originalAmount <= 0) {
       throw new BadRequestException("Valor invalido para gerar cobranca PIX.");
     }
 
-    const pixOption = this.resolvePaymentOptions(originalAmount).options.find((o) => o.code === "PIX_AVISTA");
+    const aplicarDescontoPix = input.aplicarDescontoPix !== false;
+    const pixOption = aplicarDescontoPix
+      ? this.resolvePaymentOptions(originalAmount).options.find((o) => o.code === "PIX_AVISTA")
+      : undefined;
     const finalAmount = Number((pixOption?.finalAmount ?? originalAmount).toFixed(2));
     const discountAmount = Number((originalAmount - finalAmount).toFixed(2));
 
@@ -408,6 +413,7 @@ export class EfiService implements OnModuleInit {
       amount: halfAmount,
       customerName: input.customerName,
       payerMessage: `Entrada 50% - OrÃ§amento #${input.quoteIdentifier}`,
+      aplicarDescontoPix: false,
     });
     return { linkVisualizacao: result.linkVisualizacao, txid: result.txid, halfAmount };
   }
@@ -415,8 +421,7 @@ export class EfiService implements OnModuleInit {
   resolvePaymentOptions(amount: number) {
     const value = Number.isFinite(amount) ? amount : 0;
 
-    const pixDiscountPercent = value > 150 ? 5 : 0;
-    const pixFinalAmount = Number((value * (1 - pixDiscountPercent / 100)).toFixed(2));
+    const { percentual: pixDiscountPercent, valorFinal: pixFinalAmount } = calcularPixAvista(value);
 
     const options = [
       {
