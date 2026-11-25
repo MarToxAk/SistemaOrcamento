@@ -474,5 +474,137 @@ describe("EfiService - processWebhook", () => {
       expect(msg).not.toContain("Restam");
       expect(msg).not.toContain("Comprovante gerado");
     });
+
+    it("fronteira: 164,33 quita (tolerancia de R$ 0,02) e 164,32 nao quita (pendente 0,03)", async () => {
+      await service.processWebhook(payloadPix("164.33", TXID_AVISTA, "E_54_FRONT_1"));
+      expect(txCreateSpy.mock.calls[0][0].data.status).toBe("PAID");
+      expect(txQuoteUpdateSpy.mock.calls[0][0].data.pendingTotal).toBe("0.00");
+
+      txCreateSpy.mockClear();
+      txQuoteUpdateSpy.mockClear();
+      mockChatwootService.sendOutgoingMessage.mockClear();
+
+      await service.processWebhook(payloadPix("164.32", TXID_AVISTA, "E_54_FRONT_2"));
+      expect(txCreateSpy.mock.calls[0][0].data.status).toBe("PARTIAL");
+      const upd = txQuoteUpdateSpy.mock.calls[0][0].data;
+      expect(upd.status).toBe("PAGAMENTO_PARCIAL");
+      expect(upd.pendingTotal).toBe("0.03");
+      expect(upd.paymentConfirmedAt).toBeNull();
+      const msg = mensagemEnviada();
+      expect(msg).toContain("parcial");
+      expect(msg).toContain("0,03");
+    });
+
+    it("entrada 50% (txid de secondInstallmentExternalId, 86,50 de 173,00) continua parcial, sem desconto", async () => {
+      const result = await service.processWebhook(payloadPix("86.50", TXID_ENTRADA, "E_54_ENTRADA"));
+
+      expect((result as any).results[0]).toMatchObject({ paidTotal: 86.5, pendingTotal: 86.5 });
+      expect(txCreateSpy.mock.calls[0][0].data.status).toBe("PARTIAL");
+      const upd = txQuoteUpdateSpy.mock.calls[0][0].data;
+      expect(upd).not.toHaveProperty("paymentDiscount");
+      expect(upd).not.toHaveProperty("paymentAmount");
+      expect(upd.paidTotal).toBe("86.50");
+      expect(upd.pendingTotal).toBe("86.50");
+      expect(upd.status).toBe("PAGAMENTO_PARCIAL");
+      // D-03/achado do 54-01: paymentConfirmedAt nunca e gravado em PIX parcial.
+      expect(upd.paymentConfirmedAt).toBeNull();
+      const msg = mensagemEnviada();
+      expect(msg).toContain("entrada");
+      expect(msg).toContain("86,50");
+    });
+
+    it("total <= 150,00 pago a vista quita sem gravar paymentDiscount", async () => {
+      mockPrisma.quote.findFirst.mockResolvedValue(quoteBase({ total: "150.00", pendingTotal: "150.00" }));
+
+      await service.processWebhook(payloadPix("150.00", TXID_AVISTA, "E_54_150"));
+
+      expect(txCreateSpy.mock.calls[0][0].data.status).toBe("PAID");
+      const upd = txQuoteUpdateSpy.mock.calls[0][0].data;
+      expect(upd).not.toHaveProperty("paymentDiscount");
+      expect(upd).not.toHaveProperty("paymentAmount");
+      expect(upd.pendingTotal).toBe("0.00");
+      expect(upd.status).toBe("APROVADO");
+    });
+
+    it("acumulado: paidTotal 100,00 mais PIX a vista de 64,35 quita e grava o desconto", async () => {
+      mockPrisma.quote.findFirst.mockResolvedValue(
+        quoteBase({ status: "PAGAMENTO_PARCIAL", paidTotal: "100.00", pendingTotal: "64.35" }),
+      );
+
+      await service.processWebhook(payloadPix("64.35", TXID_AVISTA, "E_54_ACUM"));
+
+      expect(txCreateSpy.mock.calls[0][0].data.status).toBe("PAID");
+      const upd = txQuoteUpdateSpy.mock.calls[0][0].data;
+      expect(upd.paidTotal).toBe("164.35");
+      expect(upd.paymentDiscount).toBe("8.65");
+      expect(upd.pendingTotal).toBe("0.00");
+      expect(upd.status).toBe("APROVADO");
+    });
+
+    it("parcial a vista de 100,00: Restam usa o pendente calculado (64,35) e nao 73,00", async () => {
+      await service.processWebhook(payloadPix("100.00", TXID_AVISTA, "E_54_PARC"));
+
+      const upd = txQuoteUpdateSpy.mock.calls[0][0].data;
+      expect(upd.pendingTotal).toBe("64.35");
+      expect(upd.paymentConfirmedAt).toBeNull();
+      const msg = mensagemEnviada();
+      expect(msg).toContain("parcial");
+      expect(msg).toContain("64,35");
+      expect(msg).not.toContain("73,00");
+    });
+
+    it("pagamento posterior em txid diferente reaproveita o paymentDiscount ja gravado e quita", async () => {
+      mockPrisma.quote.findFirst.mockResolvedValue(
+        quoteBase({
+          status: "PAGAMENTO_PARCIAL",
+          paidTotal: "86.50",
+          pendingTotal: "77.85",
+          paymentDiscount: "8.65",
+          secondInstallmentExternalId: TXID_ENTRADA,
+        }),
+      );
+
+      await service.processWebhook(payloadPix("77.85", TXID_ENTRADA, "E_54_POSTERIOR"));
+
+      expect(txCreateSpy.mock.calls[0][0].data.status).toBe("PAID");
+      const upd = txQuoteUpdateSpy.mock.calls[0][0].data;
+      expect(upd.paidTotal).toBe("164.35");
+      expect(upd.pendingTotal).toBe("0.00");
+      expect(upd.status).toBe("APROVADO");
+      // Nunca sobrescreve o desconto ja gravado ao pagar por outro txid (T-54-05).
+      expect(upd).not.toHaveProperty("paymentDiscount");
+    });
+
+    it("metadata do PaymentTransaction guarda txid, signature, desconto, devido, horario, infoPagador e pagador", async () => {
+      await service.processWebhook(
+        payloadPix("164.35", TXID_AVISTA, "E_54_META", {
+          horario: "2026-11-25T11:40:00.000Z",
+          infoPagador: "Pedido 26809",
+          gnExtras: { pagador: { nome: "FULANO DE TAL", cpf: "***.123.456-**", codigoBanco: "00000000" } },
+        }),
+        "assinatura-x",
+      );
+
+      const metadata = txCreateSpy.mock.calls[0][0].data.metadata;
+      expect(metadata).toMatchObject({
+        txid: TXID_AVISTA,
+        signature: "assinatura-x",
+        desconto: 8.65,
+        devido: 164.35,
+        horario: "2026-11-25T11:40:00.000Z",
+        infoPagador: "Pedido 26809",
+        pagador: { nome: "FULANO DE TAL", cpf: "***.123.456-**", codigoBanco: "00000000" },
+      });
+    });
+
+    it("duplicado (paymentTransaction ja existe) nao chama $transaction", async () => {
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({ id: "existing-54" });
+
+      const result = await service.processWebhook(payloadPix("164.35", TXID_AVISTA, "E_54_DUP"));
+
+      expect((result as any).results[0].status).toBe("ignored_duplicate");
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(txCreateSpy).not.toHaveBeenCalled();
+    });
   });
 });
