@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Quote } from "@prisma/client";
 import { Client as MinioClient } from "minio";
@@ -9,6 +17,7 @@ import axios from "axios";
 
 import { PrismaService } from "../../database/prisma.service";
 import { findQuoteByIdentifierBasic } from "../../quotes/quote-identifier.util";
+import { paraCentavos, resolverSituacaoPagamentoQuote, SituacaoPagamentoResolvida } from "../../quotes/quote-payment.util";
 import { AthosService } from "../athos/athos.service";
 import { ChatwootService } from "../chatwoot/chatwoot.service";
 import { DanfseNacionalPdfService } from "./danfse-nacional-pdf.service";
@@ -141,6 +150,10 @@ export class NfseService {
       throw new BadRequestException("Orcamento ja possui NFS-e emitida.");
     }
 
+    // Fase 54 (D-06): trava de pagamento ANTES de qualquer chamada ao Athos ou a SEFIN (D-10: o
+    // restante do fluxo Sistema Nacional/Sefin segue igual). O anexo manual de XML nao passa por aqui (D-16).
+    this.verificarTravaPagamento(quote, dto);
+
     // Precedencia de endereco (D-i7c-01): o endereco digitado manualmente no
     // formulario vence quando completo — logradouro, CEP e codigo do
     // municipio, os tres que a DPS realmente exige (xLgr/CEP/cMun); numero e
@@ -217,6 +230,40 @@ export class NfseService {
       valorServico: parsed.valorServico,
       envioChatwoot,
     };
+  }
+
+  /**
+   * Trava de pagamento da emissao automatica (D-06, D-12, D-15). Decisao exclusivamente do backend,
+   * calculada a partir do Quote (nenhum campo "pago" vem do front). Pagamento integral (PIX com
+   * desconto ou confirmado no caixa) libera; qualquer outro caso nega com 403.
+   */
+  private verificarTravaPagamento(quote: Quote, dto: EmitirNfseNacionalDto): SituacaoPagamentoResolvida {
+    const situacao = resolverSituacaoPagamentoQuote(quote);
+
+    if (situacao.situacao === "INTEGRAL") {
+      this.validarTetoValorNota(dto.valorServico, situacao);
+      return situacao;
+    }
+
+    throw new ForbiddenException({
+      code: "PAGAMENTO_INTEGRAL_NAO_CONFIRMADO",
+      message: "Pagamento integral do orcamento nao confirmado. A emissao da NFS-e esta bloqueada.",
+      situacao: situacao.situacao,
+      valorPago: situacao.valorPago,
+      valorDevido: situacao.valorDevido,
+      exigeSenha: true,
+    });
+  }
+
+  /** D-15: o valor do servico nunca pode superar o valor efetivamente pago (ou devido, na liberacao). Em centavos. */
+  private validarTetoValorNota(valorServico: number, situacao: SituacaoPagamentoResolvida): void {
+    if (paraCentavos(valorServico) > paraCentavos(situacao.valorMaximoNota)) {
+      throw new UnprocessableEntityException({
+        code: "VALOR_ACIMA_DO_PAGO",
+        message: `O valor do servico nao pode ser maior que o valor pago (R$ ${situacao.valorMaximoNota.toFixed(2)}).`,
+        valorMaximo: situacao.valorMaximoNota,
+      });
+    }
   }
 
   /**

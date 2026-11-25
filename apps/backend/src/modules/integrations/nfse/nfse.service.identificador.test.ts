@@ -1,5 +1,6 @@
 import { NotFoundException } from "@nestjs/common";
 
+import { quoteIntegralSemDesconto } from "../../quotes/__fixtures__/quote-pago.fixture";
 import { NfseService } from "./nfse.service";
 
 function makeService() {
@@ -45,6 +46,7 @@ const dtoBase = {
 };
 
 const QUOTE_22764 = {
+  ...quoteIntegralSemDesconto(250),
   id: "uuid-q22764",
   externalQuoteId: null,
   internalNumber: 22764,
