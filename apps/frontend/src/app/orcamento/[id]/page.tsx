@@ -50,6 +50,97 @@ type QuoteDetail = {
   };
 };
 
+// Fase 54 (D-08): resposta de GET /api/quotes/:id/nfse/pagamento (espelha o backend, plano 54-06).
+// A decisao de liberar a emissao e sempre do backend; a tela so reflete a situacao.
+type PagamentoNfse = {
+  situacao: "INTEGRAL" | "PARCIAL" | "SEM_PAGAMENTO";
+  origem: "PIX" | "CAIXA" | "NENHUMA";
+  exigeSenha: boolean;
+  valorTotal: number;
+  valorDevido: number;
+  valorPago: number;
+  desconto: number;
+  pendente: number;
+  valorSugeridoNota: number;
+  valorMaximoNota: number;
+  pagoEm: string | null;
+  pagamentos: Array<{ e2eId: string | null; txid: string | null; valor: number; pagoEm: string; metodo: string }>;
+  pagamentoCaixa: string | null;
+};
+
+const MAX_LIBERADO_POR = 80;
+
+function formatarMoedaBrl(valor: number): string {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatarDataHoraSaoPaulo(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return "—";
+  return data.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+}
+
+const SITUACAO_PAGAMENTO_ROTULO: Record<PagamentoNfse["situacao"], { texto: string; classe: string }> = {
+  INTEGRAL: { texto: "Pagamento integral", classe: "bg-success" },
+  PARCIAL: { texto: "Pagamento parcial", classe: "bg-warning text-dark" },
+  SEM_PAGAMENTO: { texto: "Sem pagamento", classe: "bg-secondary" },
+};
+
+function rotuloOrigemPagamento(origem: PagamentoNfse["origem"]): string {
+  if (origem === "PIX") return "PIX";
+  if (origem === "CAIXA") return "Caixa (confirmado no Athos)";
+  return "—";
+}
+
+// Fase 54 (D-08): bloco "Pagamento identificado" do card de emissao de NFS-e.
+function PagamentoIdentificado({ pagamento }: { pagamento: PagamentoNfse }) {
+  const selo = SITUACAO_PAGAMENTO_ROTULO[pagamento.situacao] ?? SITUACAO_PAGAMENTO_ROTULO.SEM_PAGAMENTO;
+  return (
+    <div className="border rounded p-3 mb-3 bg-light">
+      <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <h6 className="mb-0">Pagamento identificado</h6>
+        <span className={`badge ${selo.classe}`}>{selo.texto}</span>
+      </div>
+      <dl className="row mb-0 small">
+        <dt className="col-sm-5">Valor pago</dt>
+        <dd className="col-sm-7 mb-1">{formatarMoedaBrl(pagamento.valorPago)}</dd>
+        {pagamento.desconto > 0 ? (
+          <>
+            <dt className="col-sm-5">Desconto PIX à vista</dt>
+            <dd className="col-sm-7 mb-1">{formatarMoedaBrl(pagamento.desconto)}</dd>
+          </>
+        ) : null}
+        <dt className="col-sm-5">Total do orçamento</dt>
+        <dd className="col-sm-7 mb-1">{formatarMoedaBrl(pagamento.valorTotal)}</dd>
+        {pagamento.pendente > 0 ? (
+          <>
+            <dt className="col-sm-5">Pendente</dt>
+            <dd className="col-sm-7 mb-1">{formatarMoedaBrl(pagamento.pendente)}</dd>
+          </>
+        ) : null}
+        <dt className="col-sm-5">Data e hora do pagamento</dt>
+        <dd className="col-sm-7 mb-1">{formatarDataHoraSaoPaulo(pagamento.pagoEm)}</dd>
+        <dt className="col-sm-5">Origem</dt>
+        <dd className="col-sm-7 mb-1">
+          {rotuloOrigemPagamento(pagamento.origem)}
+          {pagamento.origem === "CAIXA" && pagamento.pagamentoCaixa ? ` — ${pagamento.pagamentoCaixa}` : ""}
+        </dd>
+        {pagamento.pagamentos.map((pix, indice) => (
+          <div className="col-12" key={`${pix.e2eId ?? "pix"}-${indice}`}>
+            <div className="row">
+              <dt className="col-sm-5">E2E {pagamento.pagamentos.length > 1 ? `(${formatarMoedaBrl(pix.valor)})` : ""}</dt>
+              <dd className="col-sm-7 mb-1">
+                <code className="user-select-all text-break">{pix.e2eId ?? "—"}</code>
+              </dd>
+            </div>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 function parseMaybeNumber(value: unknown): number | undefined {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
@@ -135,6 +226,15 @@ export default function OrcamentoDetailPage() {
   const [emitirPrefillMotivo, setEmitirPrefillMotivo] = useState<string | null>(null);
   const [emitirPrefill, setEmitirPrefill] = useState<"idle" | "carregando" | "pronto" | "sem-cliente">("idle");
 
+  // Fase 54: pagamento identificado e liberacao por senha (D-07, D-08, D-09). O front nunca decide
+  // "pago": so exibe o que o backend devolveu e envia a senha digitada (T-54-20: so em estado local).
+  const [pagamentoNfse, setPagamentoNfse] = useState<PagamentoNfse | null>(null);
+  const [pagamentoNfseEstado, setPagamentoNfseEstado] = useState<"idle" | "carregando" | "pronto" | "erro">("idle");
+  const [emitirSenhaLiberacao, setEmitirSenhaLiberacao] = useState("");
+  const [emitirLiberadoPor, setEmitirLiberadoPor] = useState("");
+  const [emitirForcarSenha, setEmitirForcarSenha] = useState(false);
+  const [emitirErroLiberacao, setEmitirErroLiberacao] = useState("");
+
   function limparCamposEndereco() {
     setEmitirEnderecoLogradouro("");
     setEmitirEnderecoNumero("");
@@ -202,6 +302,41 @@ export default function OrcamentoDetailPage() {
     };
   }, []);
 
+  // Fase 54 (D-08): le o pagamento identificado do orcamento. Devolve null quando nao for possivel
+  // ler (o valor do servico cai entao para o total do orcamento, D-07).
+  async function carregarPagamentoNfse(): Promise<PagamentoNfse | null> {
+    setPagamentoNfseEstado("carregando");
+    try {
+      const res = await fetch(`/api/quotes/${encodeURIComponent(quoteId)}/nfse/pagamento`, { cache: "no-store" });
+      if (!res.ok) throw new Error("pagamento-indisponivel");
+      const data = (await res.json()) as PagamentoNfse;
+      if (!data || typeof data.valorSugeridoNota !== "number" || !Number.isFinite(data.valorSugeridoNota)) {
+        throw new Error("pagamento-invalido");
+      }
+      const pagamento: PagamentoNfse = { ...data, pagamentos: Array.isArray(data.pagamentos) ? data.pagamentos : [] };
+      setPagamentoNfse(pagamento);
+      setPagamentoNfseEstado("pronto");
+      return pagamento;
+    } catch {
+      setPagamentoNfse(null);
+      setPagamentoNfseEstado("erro");
+      return null;
+    }
+  }
+
+  // T-54-20: a senha so existe no estado local do formulario e e apagada em cancelar, fechar, erro e sucesso.
+  function limparSenhaLiberacao() {
+    setEmitirSenhaLiberacao("");
+    setEmitirLiberadoPor("");
+  }
+
+  function fecharFormularioEmissao() {
+    setEmitirFormOpen(false);
+    limparSenhaLiberacao();
+    setEmitirForcarSenha(false);
+    setEmitirErroLiberacao("");
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const externalUrl = params.get("pdfUrl") ?? params.get("nfseUrl") ?? params.get("documentUrl");
@@ -230,7 +365,12 @@ export default function OrcamentoDetailPage() {
         setQuote(data);
         setNfseNumero(data.nfseNumero ?? null);
         setNfseLink(data.nfseLink ?? null);
-        setEmitirValorServico(String(data.body?.totais?.valor ?? ""));
+        // D-07: o valor da nota nasce do valor efetivamente pago; so cai para o total do orcamento
+        // quando o pagamento nao puder ser lido.
+        const pagamento = await carregarPagamentoNfse();
+        setEmitirValorServico(
+          pagamento ? pagamento.valorSugeridoNota.toFixed(2) : String(data.body?.totais?.valor ?? ""),
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Falha ao carregar orçamento.");
       } finally {
@@ -303,11 +443,27 @@ export default function OrcamentoDetailPage() {
   // no cadastro do cliente Athos vinculado (D-01/D-02/D-04).
   function abrirFormularioEmissao() {
     setEmitirFormOpen(true);
+    limparSenhaLiberacao();
+    setEmitirForcarSenha(false);
+    setEmitirErroLiberacao("");
 
+    // D-07: valor sugerido = valor efetivamente pago (cache da carga); total do orcamento so como ultimo recurso.
     const valorTotal = quote?.body?.totais?.valor;
-    if (typeof valorTotal === "number" && Number.isFinite(valorTotal)) {
-      setEmitirValorServico(valorTotal.toFixed(2));
+    let valorSemente: string | null = null;
+    if (pagamentoNfse) {
+      valorSemente = pagamentoNfse.valorSugeridoNota.toFixed(2);
+    } else if (typeof valorTotal === "number" && Number.isFinite(valorTotal)) {
+      valorSemente = valorTotal.toFixed(2);
     }
+    if (valorSemente !== null) setEmitirValorServico(valorSemente);
+
+    // O webhook pode ter confirmado o PIX depois da carga: reconsulta ao abrir e so troca o valor
+    // se o operador ainda nao mexeu no campo.
+    void carregarPagamentoNfse().then((pagamento) => {
+      if (!pagamento) return;
+      const novoValor = pagamento.valorSugeridoNota.toFixed(2);
+      setEmitirValorServico((atual) => (atual === (valorSemente ?? "") ? novoValor : atual));
+    });
 
     const itens = Array.isArray(quote?.body?.itens) ? quote!.body!.itens! : [];
     const descricao = itens
@@ -390,10 +546,16 @@ export default function OrcamentoDetailPage() {
     }
   }
 
+  // D-09: a liberacao por senha so existe quando o backend diz que o pagamento nao esta integral
+  // (exigeSenha na leitura do pagamento) ou quando a emissao foi recusada com PAGAMENTO_INTEGRAL_NAO_CONFIRMADO.
+  const modoLiberacaoSenha = (pagamentoNfse?.exigeSenha ?? false) || emitirForcarSenha;
+  const liberacaoSenhaCompleta = emitirSenhaLiberacao.length > 0 && emitirLiberadoPor.trim().length > 0;
+
   async function handleEmitirNfseAutomatica() {
     setEmitirState("enviando");
     setNfseState("idle");
     setNfseMsg("");
+    setEmitirErroLiberacao("");
     try {
       const documento = emitirDocumentoTomador.replace(/\D/g, "");
       if (documento.length !== 11 && documento.length !== 14) {
@@ -402,6 +564,9 @@ export default function OrcamentoDetailPage() {
       const valor = Number(emitirValorServico.replace(",", "."));
       if (!Number.isFinite(valor) || valor <= 0) {
         throw new Error("Informe um valor de serviço válido.");
+      }
+      if (modoLiberacaoSenha && !liberacaoSenhaCompleta) {
+        throw new Error("Informe a senha de liberação e quem está liberando.");
       }
 
       const descricaoServicoTrimada = emitirDescricaoServico.trim();
@@ -426,6 +591,10 @@ export default function OrcamentoDetailPage() {
           ...(bairroTrimado ? { enderecoBairro: bairroTrimado } : {}),
           ...(cepDigitos ? { enderecoCep: cepDigitos } : {}),
           ...(codigoMunicipioDigitos ? { enderecoCodigoMunicipio: codigoMunicipioDigitos } : {}),
+          // D-09: so no modo de liberacao por senha; o front nunca envia nem calcula "pago".
+          ...(modoLiberacaoSenha
+            ? { senhaLiberacao: emitirSenhaLiberacao, liberadoPor: emitirLiberadoPor.trim().slice(0, MAX_LIBERADO_POR) }
+            : {}),
         }),
       });
       const data = await res.json().catch(() => ({})) as {
@@ -433,9 +602,37 @@ export default function OrcamentoDetailPage() {
         link?: string;
         message?: string;
         error?: string;
+        code?: string;
+        valorMaximo?: number;
         envioChatwoot?: { enviado: boolean; motivo?: string };
       };
-      if (!res.ok) throw new Error(data?.message || data?.error || "Falha ao emitir NFS-e.");
+      if (!res.ok) {
+        const mensagemBackend = data?.message || data?.error || "Falha ao emitir NFS-e.";
+        switch (data?.code) {
+          case "PAGAMENTO_INTEGRAL_NAO_CONFIRMADO":
+            // Abre os campos de senha: a liberacao fica registrada no backend (D-09).
+            setEmitirForcarSenha(true);
+            setEmitirErroLiberacao(mensagemBackend);
+            return;
+          case "SENHA_LIBERACAO_INVALIDA":
+          case "LIBERACAO_BLOQUEADA":
+          case "LIBERACAO_NAO_CONFIGURADA":
+          case "LIBERADO_POR_OBRIGATORIO":
+            if (data.code === "SENHA_LIBERACAO_INVALIDA") setEmitirLiberadoPor("");
+            setEmitirErroLiberacao(mensagemBackend);
+            return;
+          case "VALOR_ACIMA_DO_PAGO":
+            throw new Error(
+              typeof data.valorMaximo === "number" && Number.isFinite(data.valorMaximo)
+                ? `O valor do serviço não pode ser maior que o valor pago (máximo ${formatarMoedaBrl(data.valorMaximo)}).`
+                : mensagemBackend,
+            );
+          default:
+            throw new Error(mensagemBackend);
+        }
+      }
+      limparSenhaLiberacao();
+      setEmitirForcarSenha(false);
       setNfseNumero(data.numero ?? null);
       setNfseLink(data.link ?? null);
       setNfseState("sucesso");
@@ -443,11 +640,13 @@ export default function OrcamentoDetailPage() {
         ? " O DANFSe foi enviado ao cliente pelo Chatwoot."
         : ` A nota foi emitida, mas o envio ao cliente pelo Chatwoot não ocorreu${data.envioChatwoot?.motivo ? ` (${data.envioChatwoot.motivo})` : ""}.`;
       setNfseMsg(`NFS-e emitida automaticamente! Número: ${data.numero}.${entregaMsg}`);
-      setEmitirFormOpen(false);
+      fecharFormularioEmissao();
     } catch (err) {
       setNfseState("erro");
       setNfseMsg(err instanceof Error ? err.message : "Erro ao emitir NFS-e automaticamente.");
     } finally {
+      // T-54-20: a senha digitada nunca sobrevive a uma tentativa, seja qual for o resultado.
+      setEmitirSenhaLiberacao("");
       setEmitirState("idle");
     }
   }
@@ -728,11 +927,25 @@ export default function OrcamentoDetailPage() {
                       <button
                         type="button"
                         className="btn btn-outline-warning mb-0"
-                        onClick={() => (emitirFormOpen ? setEmitirFormOpen(false) : abrirFormularioEmissao())}
+                        onClick={() => (emitirFormOpen ? fecharFormularioEmissao() : abrirFormularioEmissao())}
                       >
                         <i className="bi bi-lightning-charge me-2" />
                         Emitir NFS-e automaticamente
                       </button>
+                      {pagamentoNfse ? (
+                        <span
+                          className={`badge ${SITUACAO_PAGAMENTO_ROTULO[pagamentoNfse.situacao]?.classe ?? "bg-secondary"}`}
+                          title="Pagamento identificado do orçamento"
+                        >
+                          {pagamentoNfse.situacao === "SEM_PAGAMENTO"
+                            ? "Sem pagamento identificado"
+                            : `${formatarMoedaBrl(pagamentoNfse.valorPago)} pago via ${rotuloOrigemPagamento(pagamentoNfse.origem)}${pagamentoNfse.situacao === "PARCIAL" ? " (parcial)" : ""}`}
+                        </span>
+                      ) : pagamentoNfseEstado === "erro" ? (
+                        <span className="badge bg-secondary" title="Não foi possível consultar o pagamento">
+                          Pagamento não consultado
+                        </span>
+                      ) : null}
                     </>
                   ) : nfseNumero ? (
                     <>
@@ -791,6 +1004,20 @@ export default function OrcamentoDetailPage() {
                   <div className="card mt-3">
                     <div className="card-body">
                       <h6 className="card-title">Emitir NFS-e automaticamente</h6>
+
+                      {pagamentoNfse ? (
+                        <PagamentoIdentificado pagamento={pagamentoNfse} />
+                      ) : pagamentoNfseEstado === "carregando" ? (
+                        <div className="small text-muted mb-3">
+                          <span className="spinner-border spinner-border-sm me-2" role="status" />
+                          Consultando pagamento...
+                        </div>
+                      ) : pagamentoNfseEstado === "erro" ? (
+                        <div className="alert alert-secondary py-2 small">
+                          Não foi possível consultar o pagamento deste orçamento. O valor do serviço foi preenchido com o
+                          total do orçamento; o sistema confere o pagamento ao emitir.
+                        </div>
+                      ) : null}
 
                       {emitirPrefillMotivo ? (
                         <div className="alert alert-info py-2 small">
@@ -939,11 +1166,60 @@ export default function OrcamentoDetailPage() {
                           </div>
                         </div>
                       </div>
+                      {modoLiberacaoSenha ? (
+                        <div className="border border-warning rounded p-3 mt-3">
+                          <div className="alert alert-warning py-2 small">
+                            <i className="bi bi-shield-lock me-2" />
+                            Pagamento integral não confirmado. Para emitir mesmo assim, informe a senha de liberação. A
+                            liberação fica registrada (quem, quando e de onde).
+                          </div>
+                          {emitirErroLiberacao ? (
+                            <div className="alert alert-danger py-2 small" role="alert">
+                              {emitirErroLiberacao}
+                            </div>
+                          ) : null}
+                          <div className="row g-2">
+                            <div className="col-md-6">
+                              <label className="form-label small" htmlFor="emitir-liberacao-senha">
+                                Senha de liberação
+                              </label>
+                              <input
+                                id="emitir-liberacao-senha"
+                                type="password"
+                                className="form-control"
+                                autoComplete="new-password"
+                                autoCorrect="off"
+                                autoCapitalize="off"
+                                spellCheck={false}
+                                value={emitirSenhaLiberacao}
+                                onChange={(e) => setEmitirSenhaLiberacao(e.target.value)}
+                                disabled={emitirState === "enviando"}
+                              />
+                            </div>
+                            <div className="col-md-6">
+                              <label className="form-label small" htmlFor="emitir-liberacao-quem">
+                                Quem está liberando
+                              </label>
+                              <input
+                                id="emitir-liberacao-quem"
+                                type="text"
+                                className="form-control"
+                                autoComplete="off"
+                                maxLength={MAX_LIBERADO_POR}
+                                placeholder="Nome de quem autoriza"
+                                value={emitirLiberadoPor}
+                                onChange={(e) => setEmitirLiberadoPor(e.target.value)}
+                                disabled={emitirState === "enviando"}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="d-flex gap-2 mt-3">
                         <button
                           type="button"
                           className="btn btn-warning"
-                          disabled={emitirState === "enviando"}
+                          disabled={emitirState === "enviando" || (modoLiberacaoSenha && !liberacaoSenhaCompleta)}
                           onClick={() => void handleEmitirNfseAutomatica()}
                         >
                           {emitirState === "enviando" ? (
@@ -958,7 +1234,7 @@ export default function OrcamentoDetailPage() {
                             </>
                           )}
                         </button>
-                        <button type="button" className="btn btn-outline-secondary" onClick={() => setEmitirFormOpen(false)}>
+                        <button type="button" className="btn btn-outline-secondary" onClick={() => fecharFormularioEmissao()}>
                           Cancelar
                         </button>
                       </div>
