@@ -275,7 +275,13 @@ export class ChatwootService {
     return { enabled: true };
   }
 
-  async sendAttachment(conversationId: string, buffer: Buffer, fileName: string, contentType: string) {
+  async sendAttachment(
+    conversationId: string,
+    buffer: Buffer,
+    fileName: string,
+    contentType: string,
+    opts?: { private?: boolean; content?: string },
+  ) {
     const baseUrl = this.config.get<string>("CHATWOOT_BASE_URL");
     const accountId = this.config.get<string>("CHATWOOT_ACCOUNT_ID");
     const token = this.config.get<string>("CHATWOOT_API_TOKEN");
@@ -287,22 +293,38 @@ export class ChatwootService {
     const boundary = `----FormBoundary${Date.now()}`;
     const CRLF = "\r\n";
 
+    // fileName e contentType entram crus no cabecalho do multipart: sanitizar (T-54-06).
+    const safeName = (String(fileName ?? "").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 100)) || "arquivo";
+    const safeType = /^[A-Za-z0-9][A-Za-z0-9.+-]*\/[A-Za-z0-9][A-Za-z0-9.+-]*$/.test(String(contentType ?? ""))
+      ? contentType
+      : "application/octet-stream";
+
+    const isPrivate = opts?.private === true;
+    const texto = typeof opts?.content === "string" ? opts.content.trim() : "";
+
+    let trailer =
+      `${CRLF}--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="message_type"${CRLF}${CRLF}` +
+      `outgoing${CRLF}` +
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="private"${CRLF}${CRLF}` +
+      `${String(isPrivate)}${CRLF}`;
+    if (texto) {
+      trailer +=
+        `--${boundary}${CRLF}` +
+        `Content-Disposition: form-data; name="content"${CRLF}${CRLF}` +
+        `${texto}${CRLF}`;
+    }
+    trailer += `--${boundary}--${CRLF}`;
+
     const formParts: Buffer[] = [
       Buffer.from(
         `--${boundary}${CRLF}` +
-          `Content-Disposition: form-data; name="attachments[]"; filename="${fileName}"${CRLF}` +
-          `Content-Type: ${contentType}${CRLF}${CRLF}`,
+          `Content-Disposition: form-data; name="attachments[]"; filename="${safeName}"${CRLF}` +
+          `Content-Type: ${safeType}${CRLF}${CRLF}`,
       ),
       buffer,
-      Buffer.from(
-        `${CRLF}--${boundary}${CRLF}` +
-          `Content-Disposition: form-data; name="message_type"${CRLF}${CRLF}` +
-          `outgoing${CRLF}` +
-          `--${boundary}${CRLF}` +
-          `Content-Disposition: form-data; name="private"${CRLF}${CRLF}` +
-          `false${CRLF}` +
-          `--${boundary}--${CRLF}`,
-      ),
+      Buffer.from(trailer, "utf8"),
     ];
 
     const formData = Buffer.concat(formParts);
@@ -314,6 +336,7 @@ export class ChatwootService {
         "Content-Type": `multipart/form-data; boundary=${boundary}`,
         "Content-Length": String(formData.length),
       },
+      timeout: 30000,
     });
 
     return { enabled: true, response: response.data };
