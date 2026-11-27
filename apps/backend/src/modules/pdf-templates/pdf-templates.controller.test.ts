@@ -7,7 +7,9 @@
 
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
+import { BadRequestException } from "@nestjs/common";
 import { GUARDS_METADATA } from "@nestjs/common/constants";
+import { PdfTemplateFamilia } from "@prisma/client";
 
 import { AdminAuthGuard } from "../security/admin-auth.guard";
 import { QuotesPdfStorageService } from "../quotes/quotes-pdf-storage.service";
@@ -21,6 +23,7 @@ function buildMockPdfTemplatesService() {
     activate: jest.fn(),
     remove: jest.fn(),
     getSource: jest.fn(),
+    getFamilia: jest.fn(),
   } as unknown as PdfTemplatesService;
 }
 
@@ -137,6 +140,116 @@ describe("PdfTemplatesController", () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.any(String) }),
       );
+    });
+  });
+
+  describe("familia de templates (D-22)", () => {
+    it("GET sem parametro lista a familia ORCAMENTO", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      (pdfTemplatesService.list as jest.Mock).mockResolvedValue([]);
+      const controller = await buildController(pdfTemplatesService, buildMockQuotesPdfStorageService());
+
+      await controller.list();
+
+      expect(pdfTemplatesService.list).toHaveBeenCalledWith(PdfTemplateFamilia.ORCAMENTO);
+    });
+
+    it("GET com familia=PROPOSTA lista a familia da proposta", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      (pdfTemplatesService.list as jest.Mock).mockResolvedValue([]);
+      const controller = await buildController(pdfTemplatesService, buildMockQuotesPdfStorageService());
+
+      await controller.list("PROPOSTA");
+
+      expect(pdfTemplatesService.list).toHaveBeenCalledWith(PdfTemplateFamilia.PROPOSTA);
+    });
+
+    it("GET com familia invalida responde 400 (BadRequestException) e nao consulta o servico", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      const controller = await buildController(pdfTemplatesService, buildMockQuotesPdfStorageService());
+
+      expect(() => controller.list("XYZ")).toThrow(BadRequestException);
+      expect(pdfTemplatesService.list).not.toHaveBeenCalled();
+    });
+
+    it("POST sem familia cria ORCAMENTO", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      (pdfTemplatesService.create as jest.Mock).mockResolvedValue({ id: "t1" });
+      const controller = await buildController(pdfTemplatesService, buildMockQuotesPdfStorageService());
+
+      await controller.upload({ name: "Meu", source: "<html></html>" });
+
+      expect(pdfTemplatesService.create).toHaveBeenCalledWith({
+        name: "Meu",
+        source: "<html></html>",
+        familia: PdfTemplateFamilia.ORCAMENTO,
+      });
+    });
+
+    it("POST com familia PROPOSTA cria PROPOSTA", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      (pdfTemplatesService.create as jest.Mock).mockResolvedValue({ id: "t1" });
+      const controller = await buildController(pdfTemplatesService, buildMockQuotesPdfStorageService());
+
+      await controller.upload({ name: "Prop", source: "<html></html>", familia: "PROPOSTA" });
+
+      expect(pdfTemplatesService.create).toHaveBeenCalledWith({
+        name: "Prop",
+        source: "<html></html>",
+        familia: PdfTemplateFamilia.PROPOSTA,
+      });
+    });
+
+    it("POST com familia invalida responde 400 e nada e criado", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      const controller = await buildController(pdfTemplatesService, buildMockQuotesPdfStorageService());
+
+      expect(() => controller.upload({ name: "X", source: "<html></html>", familia: "OUTRA" })).toThrow(
+        BadRequestException,
+      );
+      expect(pdfTemplatesService.create).not.toHaveBeenCalled();
+    });
+
+    it("PATCH :id/activate continua delegando ao servico (escopo por familia fica no servico)", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      (pdfTemplatesService.activate as jest.Mock).mockResolvedValue({ id: "t1" });
+      const controller = await buildController(pdfTemplatesService, buildMockQuotesPdfStorageService());
+
+      await controller.activate("t1");
+
+      expect(pdfTemplatesService.activate).toHaveBeenCalledWith("t1");
+    });
+
+    it("preview com templateId de template PROPOSTA responde 400 orientando o preview de propostas", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      const quotesPdfStorageService = buildMockQuotesPdfStorageService();
+      (pdfTemplatesService.getFamilia as jest.Mock).mockResolvedValue(PdfTemplateFamilia.PROPOSTA);
+      const controller = await buildController(pdfTemplatesService, quotesPdfStorageService);
+      const res = buildMockResponse();
+
+      await controller.preview({ templateId: "tpl-proposta" }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining("/propostas/templates/preview"),
+      });
+      expect(quotesPdfStorageService.renderPreviewPdf).not.toHaveBeenCalled();
+      expect(pdfTemplatesService.getSource).not.toHaveBeenCalled();
+    });
+
+    it("preview com templateId de template ORCAMENTO segue gerando o PDF", async () => {
+      const pdfTemplatesService = buildMockPdfTemplatesService();
+      const quotesPdfStorageService = buildMockQuotesPdfStorageService();
+      (pdfTemplatesService.getFamilia as jest.Mock).mockResolvedValue(PdfTemplateFamilia.ORCAMENTO);
+      (pdfTemplatesService.getSource as jest.Mock).mockResolvedValue("<html>orc</html>");
+      (quotesPdfStorageService.renderPreviewPdf as jest.Mock).mockResolvedValue(Buffer.from("%PDF"));
+      const controller = await buildController(pdfTemplatesService, quotesPdfStorageService);
+      const res = buildMockResponse();
+
+      await controller.preview({ templateId: "tpl-orc" }, res);
+
+      expect(quotesPdfStorageService.renderPreviewPdf).toHaveBeenCalledWith(expect.any(Object), "<html>orc</html>");
+      expect(res.send).toHaveBeenCalled();
     });
   });
 

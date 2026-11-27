@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Res } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+} from "@nestjs/common";
+import { PdfTemplateFamilia } from "@prisma/client";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExpressResponse = any;
 
@@ -46,6 +58,24 @@ const MOCK_QUOTE_PAYLOAD = {
   totais: { valor: 175, desconto: 0, valoracrescimo: 0 },
 };
 
+/**
+ * Converte o texto recebido (query/body) para o enum PdfTemplateFamilia.
+ * Ausente => ORCAMENTO (a tela atual de templates segue igual). Valor fora
+ * do enum => 400 (D-22).
+ */
+function resolverFamilia(valor?: string): PdfTemplateFamilia {
+  if (valor === undefined || valor === null || valor === "") {
+    return PdfTemplateFamilia.ORCAMENTO;
+  }
+  const validas = Object.values(PdfTemplateFamilia) as string[];
+  if (!validas.includes(valor)) {
+    throw new BadRequestException(
+      `Família de template inválida: "${valor}". Use ${validas.join(" ou ")}.`,
+    );
+  }
+  return valor as PdfTemplateFamilia;
+}
+
 @Controller("pdf-templates")
 export class PdfTemplatesController {
   constructor(
@@ -55,14 +85,17 @@ export class PdfTemplatesController {
 
   @Get()
   @AdminOnly()
-  list(): Promise<PdfTemplateSummary[]> {
-    return this.pdfTemplatesService.list();
+  list(@Query("familia") familia?: string): Promise<PdfTemplateSummary[]> {
+    return this.pdfTemplatesService.list(resolverFamilia(familia));
   }
 
   @Post()
   @AdminOnly()
-  upload(@Body() body: { name: string; source: string }): Promise<PdfTemplateSummary> {
-    return this.pdfTemplatesService.create(body);
+  upload(
+    @Body() body: { name: string; source: string; familia?: string },
+  ): Promise<PdfTemplateSummary> {
+    const familia = resolverFamilia(body.familia);
+    return this.pdfTemplatesService.create({ name: body.name, source: body.source, familia });
   }
 
   @Patch(":id/activate")
@@ -92,6 +125,19 @@ export class PdfTemplatesController {
     @Body() body: { source?: string; templateId?: string },
     @Res() res: ExpressResponse,
   ): Promise<void> {
+    // Templates da família PROPOSTA não usam o payload mock de orçamento:
+    // recusa e orienta o preview próprio de propostas (T-55-18).
+    if (body.templateId) {
+      const familia = await this.pdfTemplatesService.getFamilia(body.templateId);
+      if (familia === PdfTemplateFamilia.PROPOSTA) {
+        res.status(400).json({
+          error:
+            "Templates de proposta são pré-visualizados em /propostas/templates/preview; o payload de exemplo de orçamento não se aplica.",
+        });
+        return;
+      }
+    }
+
     const source = body.templateId
       ? await this.pdfTemplatesService.getSource(body.templateId)
       : body.source;

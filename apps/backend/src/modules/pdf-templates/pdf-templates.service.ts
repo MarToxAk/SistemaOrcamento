@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException, Logger } from "@nestjs/common";
-import { PdfTemplateKind } from "@prisma/client";
+import { PdfTemplateFamilia, PdfTemplateKind } from "@prisma/client";
 import sanitizeHtml from "sanitize-html";
 
 import { PrismaService } from "../database/prisma.service";
@@ -81,9 +81,14 @@ export class PdfTemplatesService {
   /**
    * Cria um novo template CUSTOM a partir do upload validado (D-01).
    * Sempre criado com isActive=false — ativação é uma ação explícita
-   * separada (activate).
+   * separada (activate). A família (ORCAMENTO | PROPOSTA) é opcional e o
+   * padrão é ORCAMENTO (D-22).
    */
-  async create(input: { name: string; source: string }): Promise<PdfTemplateSummary> {
+  async create(input: {
+    name: string;
+    source: string;
+    familia?: PdfTemplateFamilia;
+  }): Promise<PdfTemplateSummary> {
     const validatedSource = this.validateUpload(input.source);
 
     const created = await this.prisma.pdfTemplate.create({
@@ -92,6 +97,7 @@ export class PdfTemplatesService {
         slug: this.buildUniqueSlug(input.name),
         source: validatedSource,
         kind: PdfTemplateKind.CUSTOM,
+        familia: input.familia ?? PdfTemplateFamilia.ORCAMENTO,
         isActive: false,
       },
     });
@@ -101,7 +107,8 @@ export class PdfTemplatesService {
 
   /**
    * Ativa um template — swap atômico via transação (D-04 / Pattern 3).
-   * Garante que exatamente um template fique com isActive=true.
+   * Garante que exatamente um template da MESMA família fique com
+   * isActive=true — a outra família não é tocada (D-22, D-30, Pitfall 5).
    */
   async activate(id: string): Promise<PdfTemplateSummary> {
     const template = await this.prisma.pdfTemplate.findUnique({ where: { id } });
@@ -110,20 +117,27 @@ export class PdfTemplatesService {
     }
 
     const [, updated] = await this.prisma.$transaction([
-      this.prisma.pdfTemplate.updateMany({ data: { isActive: false } }),
+      this.prisma.pdfTemplate.updateMany({
+        where: { familia: template.familia },
+        data: { isActive: false },
+      }),
       this.prisma.pdfTemplate.update({ where: { id }, data: { isActive: true } }),
     ]);
 
-    this.logger.log(`Template ${id} (${updated.slug}) ativado — demais desativados.`);
+    this.logger.log(
+      `Template ${id} (${updated.slug}) ativado — demais da família ${template.familia} desativados.`,
+    );
 
     return this.toSummary(updated);
   }
 
   /**
-   * Lista todos os templates (presets + customizados) para a galeria.
+   * Lista os templates (presets + customizados) de uma família para a
+   * galeria. Padrão ORCAMENTO — a tela atual de templates segue igual.
    */
-  async list(): Promise<PdfTemplateSummary[]> {
+  async list(familia: PdfTemplateFamilia = PdfTemplateFamilia.ORCAMENTO): Promise<PdfTemplateSummary[]> {
     const templates = await this.prisma.pdfTemplate.findMany({
+      where: { familia },
       orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
     });
 
@@ -141,6 +155,18 @@ export class PdfTemplatesService {
       throw new NotFoundException(`Template ${id} não encontrado.`);
     }
     return template.source;
+  }
+
+  /**
+   * Devolve a família de um template existente (usado pelo preview genérico
+   * para recusar templates PROPOSTA).
+   */
+  async getFamilia(id: string): Promise<PdfTemplateFamilia> {
+    const template = await this.prisma.pdfTemplate.findUnique({ where: { id } });
+    if (!template) {
+      throw new NotFoundException(`Template ${id} não encontrado.`);
+    }
+    return template.familia;
   }
 
   /**
@@ -190,6 +216,7 @@ export class PdfTemplatesService {
     name: string;
     slug: string;
     kind: PdfTemplateKind;
+    familia: PdfTemplateFamilia;
     isActive: boolean;
     createdAt: Date;
   }): PdfTemplateSummary {
@@ -198,6 +225,7 @@ export class PdfTemplatesService {
       name: template.name,
       slug: template.slug,
       kind: template.kind,
+      familia: template.familia,
       isActive: template.isActive,
       createdAt: template.createdAt,
     };
