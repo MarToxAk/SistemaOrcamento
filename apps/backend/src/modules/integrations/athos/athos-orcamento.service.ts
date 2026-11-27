@@ -3,6 +3,7 @@ import { Pool, PoolClient } from "pg";
 
 import {
   CalcOrcamentoError,
+  LIMITE_LINHA_CENTAVOS,
   LinhaCalcEntrada,
   TotaisOrcamento,
   calcularOrcamento,
@@ -13,6 +14,7 @@ import {
   percentualTexto,
 } from "./athos-orcamento-calc.util";
 import { sanitizarTextoAthos } from "./athos-conta-receber-baixa.service";
+import { CalcPropostaError, calcularLinhasProposta } from "../../propostas/propostas-calc.util";
 
 /**
  * Criacao de orcamento no Athos para agentes de IA (Fase 44, plano 44-01).
@@ -151,6 +153,34 @@ export interface ProdutoPropostaResultado {
   custoUnitario: string;
 }
 
+/** Item da proposta a gravar no Athos (Fase 55). Todos em texto decimal: quantidade ate 3 casas, preco ate 2, custo ate 3. */
+export interface ItemPropostaAthosInput {
+  idproduto: number;
+  quantidade: string;
+  precoUnitario: string;
+  custoUnitario: string;
+}
+
+export interface CriarOrcamentoPropostaInput {
+  idcliente: number;
+  /** 12 caracteres hexadecimais minusculos: identifica a proposta no obs do orcamento (idempotencia). */
+  ref: string;
+  itens: ItemPropostaAthosInput[];
+}
+
+export interface OrcamentoPropostaResultado {
+  idorcamento: number;
+  senhabalcao: number;
+  /** Data do orcamento lida do Athos na mesma transacao (YYYY-MM-DD), para o PDF. */
+  data: string;
+  /** Hora do orcamento lida do Athos na mesma transacao (HH24:MI:SS), para o PDF. */
+  hora: string;
+  /** Total em R$ com 2 casas ("5.80"). */
+  valorTotal: string;
+  /** true quando ja existia orcamento com este ref: nada foi escrito. */
+  recuperado: boolean;
+}
+
 /** Orcamento lido do Athos (44-04). statusorcamento NULL = aberto, true = convertido, false = outro. */
 export interface OrcamentoAthosDetalhe {
   idorcamento: number;
@@ -217,6 +247,25 @@ const SQL_LER_PRODUTOS = `SELECT p.idproduto, p.descricaoproduto, p.statusprodut
          THEN (p.valorcustocaixa / p.quantidadecaixa) + ((p.valorcustocaixa / p.quantidadecaixa) * (p.imposto + p.ipi + p.frete + p.outroimposto) / 100)
          ELSE p.valorcustocaixa + (p.valorcustocaixa * (p.imposto + p.ipi + p.frete + p.outroimposto) / 100) END, 0), 3) AS valorcustounitario
   FROM produto p WHERE p.idproduto = ANY($1::int[])`;
+
+/** Prefixo do obs do orcamento de proposta no Athos (Fase 55, D-21): '[PROPOSTA] ref:<12 hex>', sem texto livre. */
+export const MARCADOR_OBS_PROPOSTA = "[PROPOSTA] ref:";
+const REF_PROPOSTA_REGEX = /^[0-9a-f]{12}$/;
+
+// Fase 55: validacao de produto da proposta. SEM precovendaproduto (o preco ja esta no snapshot da proposta, D-09),
+// sem descontomaximo e sem permitedescontode (a proposta nao grava desconto, D-03).
+const SQL_LER_PRODUTOS_PROPOSTA = `SELECT p.idproduto, p.descricaoproduto, p.statusproduto, COALESCE(p.vendeproduto, true) AS vende,
+       COALESCE(p.permitefracionar, true) AS permitefracionar
+  FROM produto p WHERE p.idproduto = ANY($1::int[])`;
+
+// Idempotencia por ref: o parametro e o marcador + ref + '%'. ref hexadecimal nao tem caracteres especiais do LIKE.
+const SQL_BUSCAR_ORCAMENTO_POR_REF = `SELECT idorcamento, senhabalcao, to_char(dataorcamento, 'YYYY-MM-DD') AS data,
+       to_char(hora, 'HH24:MI:SS') AS hora, valor
+  FROM orcamento WHERE obs LIKE $1 ORDER BY idorcamento DESC LIMIT 1`;
+
+// Data e hora do orcamento recem-inserido, lidas na mesma transacao (Pitfall 13): o PDF mostra o que o Athos gravou.
+const SQL_LER_DATA_HORA_ORCAMENTO = `SELECT to_char(dataorcamento, 'YYYY-MM-DD') AS data, to_char(hora, 'HH24:MI:SS') AS hora
+  FROM orcamento WHERE idorcamento = $1`;
 
 const SQL_INSERIR_ORCAMENTO = `INSERT INTO orcamento (descontors, idvendedor, idcliente, idfuncionariousuario, idterminal, dataorcamento, hora,
                        validadeorcamento, valor, desconto, statusorcamento, obs, idtransportadora, dataentrega,
@@ -339,6 +388,35 @@ export function montarObsOrcamento(obs: string | undefined, ref?: string): strin
 
 function converterErroCalc(err: CalcOrcamentoError): OrcamentoAthosError {
   return new OrcamentoAthosError(err.codigo, err.message, 422, err.indice !== undefined ? { sequenciaitem: err.indice + 1 } : undefined);
+}
+
+/** Erros do util da proposta e do util de calculo viram erro legivel com o numero do item (1-based). */
+function converterErroPropostaCalc(err: CalcPropostaError | CalcOrcamentoError, indiceZero?: number): OrcamentoAthosError {
+  const indice = err.indice !== undefined ? err.indice : indiceZero;
+  const detalhes = indice !== undefined ? { sequenciaitem: indice + 1 } : undefined;
+  const foraDoLimite = err.codigo === "VALOR_FORA_DO_LIMITE";
+  return new OrcamentoAthosError(foraDoLimite ? "VALOR_FORA_DO_LIMITE" : "VALOR_INVALIDO", err.message, 422, detalhes);
+}
+
+/** Valor numeric do Athos ("5.800") em texto com 2 casas ("5.80"); se nao couber em centavos, devolve o texto cru. */
+function valorEmCentavosTexto(bruto: unknown): string {
+  const texto = textoNumerico(bruto, "0");
+  try {
+    return centavosParaTexto(paraCentavos(texto));
+  } catch {
+    return texto;
+  }
+}
+
+/** Maior valor aceito em orcamento_item.valorcustoitem (numeric(9,3)) em milesimos. */
+const LIMITE_CUSTO_MILLI = 1_000_000_000n;
+
+interface ItemPropostaValidado {
+  sequenciaitem: number;
+  idproduto: number;
+  qMilli: bigint;
+  precoC: bigint;
+  custoMilli: bigint;
 }
 
 interface LinhaProduto {
@@ -693,6 +771,252 @@ export class AthosOrcamentoService implements OnModuleDestroy {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Grava a proposta comercial como orcamento no Athos (Fase 55, D-03, D-07, D-30). Metodo NOVO: nao altera
+   * criarOrcamento (Fase 44). O preco final do item vai em valoritem (mesmo abaixo do cadastro), com
+   * valordesconto 0 e orcamentodesconto 0, como o Balcao grava preco alterado. Escreve so com
+   * PROPOSTA_ESCRITA_ATIVA exatamente "true", independente de ATHOS_ORCAMENTO_ESCRITA. Idempotente por ref.
+   * A transacao so tem INSERT/DELETE nas 3 tabelas de orcamento (sem CTE) e nenhum PDF, MinIO ou HTTP:
+   * as regras de orcamento seguram o lock de conf_inicial ate o COMMIT (Pitfall 11).
+   */
+  async criarOrcamentoProposta(input: CriarOrcamentoPropostaInput): Promise<OrcamentoPropostaResultado> {
+    // ---- (a) gate proprio da proposta, antes de qualquer conexao. A flag da IA nao participa.
+    if (process.env.PROPOSTA_ESCRITA_ATIVA !== "true") {
+      throw new OrcamentoAthosError(
+        "ESCRITA_DESABILITADA",
+        "A gravacao de propostas no Athos esta desabilitada neste ambiente (PROPOSTA_ESCRITA_ATIVA diferente de true). Nada foi gravado.",
+        503,
+      );
+    }
+    // So os ids de autor e a forma de pagamento (D-29) interessam; o campo `escrita` (flag da IA) e ignorado.
+    const cfg = resolverConfigOrcamentoAthos(process.env);
+
+    // ---- (b) validacao pura, sem conexao
+    const { itens, totais } = this.validarEntradaProposta(input);
+    const idsProdutos = [...new Set(itens.map((i) => i.idproduto))];
+    const totalTxt = centavosParaTexto(totais.brutoC);
+    const obsProposta = `${MARCADOR_OBS_PROPOSTA}${input.ref}`;
+
+    // ---- (c) trava de host, conexao e transacao
+    this.assertHostPermitido();
+    const pool = this.getPool();
+    let client: PoolClient;
+    try {
+      client = await pool.connect();
+    } catch (err) {
+      this.logger.error(`Proposta Athos: falha ao conectar (${(err as { code?: string })?.code ?? "sem_codigo"}).`);
+      throw new OrcamentoAthosError("ATHOS_INDISPONIVEL", "Nao foi possivel conectar ao Athos. Nada foi gravado.", 503);
+    }
+
+    try {
+      await client.query("BEGIN");
+      await client.query(SQL_STATEMENT_TIMEOUT);
+
+      // ---- (d) leituras e validacoes, todas antes do primeiro INSERT
+      const conf = await client.query<{
+        funcionario_ok: boolean;
+        vendedor_ok: boolean;
+        terminal_ok: boolean;
+        pix_ok: boolean;
+        cliente_ok: boolean;
+      }>(SQL_LER_CONFIG, [cfg.idFuncionario, cfg.idVendedor, cfg.idTerminal, cfg.idFormaPagamento, input.idcliente]);
+      const prods = await client.query<LinhaProduto>(SQL_LER_PRODUTOS_PROPOSTA, [idsProdutos]);
+
+      const c = conf.rows[0];
+      if (!c?.funcionario_ok) {
+        throw new OrcamentoAthosError(
+          "CONFIG_INVALIDA",
+          `ATHOS_ORCAMENTO_ID_FUNCIONARIO (${cfg.idFuncionario}) nao existe em funcionario_usuario no Athos.`,
+          500,
+        );
+      }
+      if (!c.vendedor_ok) {
+        throw new OrcamentoAthosError(
+          "CONFIG_INVALIDA",
+          `ATHOS_ORCAMENTO_ID_VENDEDOR (${cfg.idVendedor}) nao existe em funcionario no Athos.`,
+          500,
+        );
+      }
+      if (!c.terminal_ok) {
+        throw new OrcamentoAthosError(
+          "CONFIG_INVALIDA",
+          `ATHOS_ORCAMENTO_ID_TERMINAL (${cfg.idTerminal}) nao existe em terminal no Athos.`,
+          500,
+        );
+      }
+      if (!c.pix_ok) {
+        throw new OrcamentoAthosError(
+          "FORMA_PAGAMENTO_INVALIDA",
+          `ATHOS_ORCAMENTO_ID_FORMA_PAGAMENTO (${cfg.idFormaPagamento}) nao e uma forma de pagamento ativa de tipo dinheiro/PIX no Athos.`,
+          500,
+        );
+      }
+      if (!c.cliente_ok) {
+        throw new OrcamentoAthosError(
+          "CLIENTE_INEXISTENTE",
+          `Cliente ${input.idcliente} nao existe no Athos. Escolha um cliente cadastrado para lancar a proposta.`,
+          422,
+          { idcliente: input.idcliente },
+        );
+      }
+
+      const porId = new Map<number, LinhaProduto>();
+      for (const p of prods.rows) porId.set(Number(p.idproduto), p);
+      const inexistentes = idsProdutos.filter((id) => !porId.has(id));
+      if (inexistentes.length > 0) {
+        throw new OrcamentoAthosError(
+          "PRODUTO_INEXISTENTE",
+          `Produto(s) inexistente(s) no Athos: ${inexistentes.join(", ")}. Remova ou troque o item antes de lancar a proposta.`,
+          422,
+          { idsInexistentes: inexistentes },
+        );
+      }
+      for (const item of itens) {
+        const p = porId.get(item.idproduto) as LinhaProduto;
+        const det = { idproduto: item.idproduto, sequenciaitem: item.sequenciaitem };
+        if (p.statusproduto !== true || p.vende === false) {
+          throw new OrcamentoAthosError(
+            "PRODUTO_INATIVO",
+            `Produto ${item.idproduto} (item ${item.sequenciaitem}) esta inativo ou nao e vendido. Troque o item antes de lancar a proposta.`,
+            422,
+            det,
+          );
+        }
+        if (item.qMilli % 1000n !== 0n && p.permitefracionar === false) {
+          throw new OrcamentoAthosError(
+            "QUANTIDADE_FRACIONADA",
+            `Produto ${item.idproduto} (item ${item.sequenciaitem}) nao permite quantidade fracionada (${milliParaTexto(item.qMilli)}). Use quantidade inteira.`,
+            422,
+            det,
+          );
+        }
+      }
+
+      // ---- (e) idempotencia: orcamento ja gravado com este ref (COMMIT cujo reconhecimento se perdeu)
+      const orfao = await client.query<Record<string, unknown>>(SQL_BUSCAR_ORCAMENTO_POR_REF, [`${obsProposta}%`]);
+      if (orfao.rows.length > 0) {
+        const o = orfao.rows[0];
+        await client.query("ROLLBACK");
+        this.logger.log(`Proposta Athos recuperada por ref: idorcamento=${Number(o.idorcamento)}`);
+        return {
+          idorcamento: Number(o.idorcamento),
+          senhabalcao: Number(o.senhabalcao),
+          data: String(o.data ?? ""),
+          hora: String(o.hora ?? ""),
+          valorTotal: valorEmCentavosTexto(o.valor),
+          recuperado: true,
+        };
+      }
+
+      // ---- (f) escritas na ordem da Fase 44
+      const cab = await client.query<{ idorcamento: number; senhabalcao: number }>(SQL_INSERIR_ORCAMENTO, [
+        "0.00",
+        cfg.idVendedor,
+        input.idcliente,
+        cfg.idFuncionario,
+        cfg.idTerminal,
+        totalTxt,
+        "0.000",
+        obsProposta,
+      ]);
+      const idorcamento = Number(cab.rows[0].idorcamento);
+      const senhabalcao = Number(cab.rows[0].senhabalcao);
+
+      const dh = await client.query<{ data: string; hora: string }>(SQL_LER_DATA_HORA_ORCAMENTO, [idorcamento]);
+      const data = String(dh.rows[0]?.data ?? "");
+      const hora = String(dh.rows[0]?.hora ?? "");
+
+      for (const [k, item] of itens.entries()) {
+        const linha = totais.linhas[k];
+        await client.query(SQL_INSERIR_ITEM, [
+          idorcamento,
+          item.sequenciaitem,
+          item.idproduto,
+          milliParaTexto(item.qMilli),
+          milliParaTexto(linha.valorItemMilli),
+          milliParaTexto(item.custoMilli),
+          "0.00",
+          centavosParaTexto(linha.finalC),
+        ]);
+      }
+
+      await client.query(SQL_LIMPAR_PAGAMENTO, [idorcamento]);
+      await client.query(SQL_INSERIR_PAGAMENTO, [idorcamento, cfg.idFormaPagamento, totalTxt, totalTxt]);
+
+      await client.query("COMMIT");
+      this.logger.log(`Proposta Athos gravada: idorcamento=${idorcamento} itens=${itens.length}`);
+      return { idorcamento, senhabalcao, data, hora, valorTotal: totalTxt, recuperado: false };
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* conexao ja encerrada: nada a desfazer */
+      }
+      const erro = this.mapearErroPg(err);
+      this.logger.warn(`Proposta Athos nao gravada: codigo=${erro.codigo}`);
+      throw erro;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Validacao pura da proposta (nenhuma conexao): ids, ref, itens e calculo das linhas sem desconto (D-03). */
+  private validarEntradaProposta(input: CriarOrcamentoPropostaInput): {
+    itens: ItemPropostaValidado[];
+    totais: ReturnType<typeof calcularLinhasProposta>;
+  } {
+    if (!Number.isSafeInteger(input?.idcliente) || input.idcliente < 1 || input.idcliente > MAX_INT4) {
+      throw new OrcamentoAthosError("VALOR_INVALIDO", "idcliente invalido: a proposta exige um cliente cadastrado no Athos.", 422);
+    }
+    if (typeof input.ref !== "string" || !REF_PROPOSTA_REGEX.test(input.ref)) {
+      throw new OrcamentoAthosError("VALOR_INVALIDO", "Referencia da proposta invalida: use 12 caracteres hexadecimais minusculos.", 422);
+    }
+    const lista = input.itens;
+    if (!Array.isArray(lista) || lista.length === 0 || lista.length > MAX_ITENS) {
+      throw new OrcamentoAthosError("VALOR_INVALIDO", `Informe entre 1 e ${MAX_ITENS} itens na proposta.`, 422);
+    }
+
+    const itens = lista.map((it, idx): ItemPropostaValidado => {
+      const sequenciaitem = idx + 1;
+      if (!Number.isSafeInteger(it?.idproduto) || it.idproduto < 1 || it.idproduto > MAX_INT4) {
+        throw new OrcamentoAthosError("VALOR_INVALIDO", `idproduto invalido no item ${sequenciaitem}.`, 422, { sequenciaitem });
+      }
+      try {
+        const qMilli = paraMilli(it.quantidade);
+        const precoC = paraCentavos(it.precoUnitario);
+        const custoMilli = paraMilli(it.custoUnitario);
+        if (custoMilli >= LIMITE_CUSTO_MILLI) {
+          throw new OrcamentoAthosError(
+            "VALOR_FORA_DO_LIMITE",
+            `Custo do item ${sequenciaitem} fora do limite aceito pelo Athos (maximo 999999.999).`,
+            422,
+            { sequenciaitem },
+          );
+        }
+        return { sequenciaitem, idproduto: it.idproduto, qMilli, precoC, custoMilli };
+      } catch (err) {
+        if (err instanceof CalcOrcamentoError || err instanceof CalcPropostaError) throw converterErroPropostaCalc(err, idx);
+        throw err;
+      }
+    });
+
+    let totais: ReturnType<typeof calcularLinhasProposta>;
+    try {
+      totais = calcularLinhasProposta(itens.map((i) => ({ qMilli: i.qMilli, precoCentavos: i.precoC })));
+    } catch (err) {
+      if (err instanceof CalcPropostaError) throw converterErroPropostaCalc(err);
+      throw err;
+    }
+    if (totais.brutoC >= LIMITE_LINHA_CENTAVOS) {
+      throw new OrcamentoAthosError(
+        "VALOR_FORA_DO_LIMITE",
+        "O total da proposta excede o limite aceito pelo Athos (maximo 999999.99).",
+        422,
+      );
+    }
+    return { itens, totais };
   }
 
   // -------------------------------------------------------------------------
