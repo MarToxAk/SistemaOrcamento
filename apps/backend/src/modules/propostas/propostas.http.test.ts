@@ -3,6 +3,8 @@
  * @AdminOnly), ValidationPipe igual ao main.ts, Prisma em memoria e Athos simulado.
  */
 import { INestApplication, ValidationPipe } from "@nestjs/common";
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
 import { ConfigService } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
@@ -10,8 +12,10 @@ import { Test } from "@nestjs/testing";
 import { AthosService } from "../integrations/athos/athos.service";
 import { AthosOrcamentoService, OrcamentoAthosError } from "../integrations/athos/athos-orcamento.service";
 import { PrismaService } from "../database/prisma.service";
+import { PdfTemplatesService } from "../pdf-templates/pdf-templates.service";
 import { InternalAuthGuard } from "../security/internal-auth.guard";
 import { criarPrismaPropostaFake } from "./__fixtures__/prisma-proposta.fake";
+import { PreviewTemplatePropostaDto } from "./dto/propostas.dto";
 import { PropostasController } from "./propostas.controller";
 import { PropostasPdfService } from "./propostas-pdf.service";
 import { PropostasService } from "./propostas.service";
@@ -57,6 +61,7 @@ describe("PropostasController (HTTP, tracer 55-06)", () => {
         { provide: AthosOrcamentoService, useValue: { obterProdutoProposta, buscarProdutosProposta } },
         { provide: AthosService, useValue: { buscarClienteParaProposta } },
         { provide: PropostasPdfService, useValue: { capturarSnapshot: jest.fn(), gerarOficial: jest.fn() } },
+        { provide: PdfTemplatesService, useValue: {} },
         { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
         { provide: APP_GUARD, useClass: InternalAuthGuard },
       ],
@@ -282,6 +287,7 @@ describe("PropostasController (HTTP): gerar e recuperar (plano 55-17)", () => {
         },
         { provide: AthosService, useValue: { buscarClienteParaProposta } },
         { provide: PropostasPdfService, useValue: { capturarSnapshot, gerarOficial } },
+        { provide: PdfTemplatesService, useValue: {} },
         { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
         { provide: APP_GUARD, useClass: InternalAuthGuard },
       ],
@@ -426,6 +432,414 @@ describe("PropostasController (HTTP): gerar e recuperar (plano 55-17)", () => {
       const r = await chamar("POST", `/propostas/${id}/recuperar`);
       expect(r.status).toBe(409);
       expect(r.json.codigo).toBe("TRANSICAO_INVALIDA");
+    });
+  });
+});
+
+describe("PropostasController (HTTP): pdf, previa, duplicar e status (plano 55-13)", () => {
+  let app: INestApplication;
+  let base = "";
+  const envAnterior: Record<string, string | undefined> = {};
+  const obterProdutoProposta = jest.fn();
+  const buscarClienteParaProposta = jest.fn();
+  const capturarSnapshot = jest.fn();
+  const gerarOficial = jest.fn();
+  const gerarPrevia = jest.fn();
+  const gerarPreviaTemplate = jest.fn();
+  const baixarOficial = jest.fn();
+  const existeOficial = jest.fn();
+  const getFamilia = jest.fn();
+  const getSource = jest.fn();
+  const validadorReal = new PdfTemplatesService({} as unknown as PrismaService);
+  const prisma = criarPrismaPropostaFake();
+  const UUID_INEXISTENTE = "6f0f3a52-5c6e-4f43-8d3a-0f7a2f5b9c11";
+  const SNAPSHOT = {
+    versao: 1,
+    banco: { bancoNome: "Banco Teste", agencia: "0001", conta: "12345-6", titular: "Empresa Teste Ltda", documentoTitular: "00.000.000/0001-00" },
+    empresa: { nome: "Empresa Teste Ltda", cnpj: "00.000.000/0001-00", endereco: "Rua Teste, 1" },
+    template: { origem: "EMPACOTADO", source: "<html>segredo-do-template</html>" },
+  };
+
+  /** Chamada que devolve o corpo bruto (PDF) em vez de JSON. */
+  async function chamarBruto(
+    metodo: string,
+    caminho: string,
+    corpo?: unknown,
+    chaves: { interna?: string | null; admin?: string | null } = { interna: CHAVE_INTERNA, admin: CHAVE_ADMIN },
+  ) {
+    const h: Record<string, string> = { "content-type": "application/json" };
+    if (chaves.interna) h["x-internal-api-key"] = chaves.interna;
+    if (chaves.admin) h["x-admin-api-key"] = chaves.admin;
+    const res = await fetch(`${base}/api${caminho}`, {
+      method: metodo,
+      headers: h,
+      body: corpo === undefined ? undefined : JSON.stringify(corpo),
+    });
+    const corpoBruto = Buffer.from(await res.arrayBuffer());
+    return { status: res.status, headers: res.headers, corpo: corpoBruto };
+  }
+
+  async function chamar(
+    metodo: string,
+    caminho: string,
+    corpo?: unknown,
+    chaves: { interna?: string | null; admin?: string | null } = { interna: CHAVE_INTERNA, admin: CHAVE_ADMIN },
+  ) {
+    const r = await chamarBruto(metodo, caminho, corpo, chaves);
+    let json: Record<string, any> = {};
+    try {
+      json = JSON.parse(r.corpo.toString("utf-8"));
+    } catch {
+      json = {};
+    }
+    return { status: r.status, json };
+  }
+
+  /** Proposta lancada (ENVIADA, numero proprio) com 1 item, semeada direto no Prisma em memoria. */
+  async function semearLancada(extra: Record<string, unknown> = {}): Promise<string> {
+    const criada: any = await prisma.proposta.create({
+      data: {
+        status: "ENVIADA",
+        idclienteAthos: 5,
+        clienteSnapshot: { idcliente: 5, razaoSocial: "MUNICIPIO DE TESTE" },
+        totalValor: "7.00",
+        idorcamentoAthos: 777 + prisma._propostas.length,
+        senhaBalcao: 12,
+        athosData: "2026-11-27",
+        athosHora: "10:20:30",
+        enviadaEm: new Date(),
+        pdfObjectName: "propostas/teste.pdf",
+        pdfSnapshot: SNAPSHOT,
+        ...extra,
+      },
+    });
+    await prisma.propostaItem.create({
+      data: {
+        propostaId: criada.id,
+        sequencia: 1,
+        idproduto: 60,
+        nomeAthos: "CANETA",
+        nome: "Caneta",
+        quantidade: "2.000",
+        precoBase: "3.500",
+        precoUnitario: "3.50",
+        totalLinha: "7.00",
+        custoUnitario: "1.000",
+      },
+    });
+    return criada.id as string;
+  }
+
+  beforeAll(async () => {
+    for (const k of ["INTERNAL_API_KEY", "ADMIN_API_KEY"]) envAnterior[k] = process.env[k];
+    process.env.INTERNAL_API_KEY = CHAVE_INTERNA;
+    process.env.ADMIN_API_KEY = CHAVE_ADMIN;
+    const modulo = await Test.createTestingModule({
+      controllers: [PropostasController],
+      providers: [
+        PropostasService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: AthosOrcamentoService, useValue: { obterProdutoProposta } },
+        { provide: AthosService, useValue: { buscarClienteParaProposta } },
+        {
+          provide: PropostasPdfService,
+          useValue: { capturarSnapshot, gerarOficial, gerarPrevia, gerarPreviaTemplate, baixarOficial, existeOficial },
+        },
+        // validateUpload REAL (a recusa de source perigoso e comportamento de producao); so a busca no banco e simulada.
+        {
+          provide: PdfTemplatesService,
+          useValue: { validateUpload: (raw: string) => validadorReal.validateUpload(raw), getFamilia, getSource },
+        },
+        { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
+        { provide: APP_GUARD, useClass: InternalAuthGuard },
+      ],
+    }).compile();
+    app = modulo.createNestApplication();
+    app.setGlobalPrefix("api");
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
+    await app.listen(0, "127.0.0.1");
+    base = (await app.getUrl()).replace("[::1]", "127.0.0.1");
+  });
+
+  afterAll(async () => {
+    if (app) await app.close();
+    for (const [k, v] of Object.entries(envAnterior)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  beforeEach(() => {
+    for (const m of [capturarSnapshot, gerarOficial, gerarPrevia, gerarPreviaTemplate, baixarOficial, existeOficial, obterProdutoProposta, buscarClienteParaProposta, getFamilia, getSource]) m.mockReset();
+    gerarPreviaTemplate.mockResolvedValue(Buffer.from("%PDF-1.7 previa de template"));
+    existeOficial.mockResolvedValue(true);
+    baixarOficial.mockResolvedValue(Buffer.from("%PDF-1.7 oficial armazenado"));
+    gerarPrevia.mockResolvedValue(Buffer.from("%PDF-1.7 previa"));
+    gerarOficial.mockResolvedValue({ objectName: "propostas/regerado.pdf" });
+  });
+
+  describe("GET :id/pdf", () => {
+    it("proposta ENVIADA com arquivo armazenado: 200 application/pdf inline com o nome Proposta-<numero>.pdf e sem regenerar", async () => {
+      const id = await semearLancada({ idorcamentoAthos: 4242 });
+
+      const r = await chamarBruto("GET", `/propostas/${id}/pdf`);
+
+      expect(r.status).toBe(200);
+      expect(r.headers.get("content-type")).toContain("application/pdf");
+      expect(r.headers.get("content-disposition")).toBe('inline; filename="Proposta-4242.pdf"');
+      expect(Number(r.headers.get("content-length"))).toBe(r.corpo.length);
+      expect(r.corpo.subarray(0, 4).toString()).toBe("%PDF");
+      expect(gerarOficial).not.toHaveBeenCalled();
+      expect(capturarSnapshot).not.toHaveBeenCalled();
+      expect(buscarClienteParaProposta).not.toHaveBeenCalled();
+    });
+
+    it("arquivo ausente: regenera so do snapshot gravado e devolve o PDF", async () => {
+      const id = await semearLancada({ idorcamentoAthos: 4243 });
+      existeOficial.mockResolvedValue(false);
+      baixarOficial.mockResolvedValue(Buffer.from("%PDF-1.7 regerado"));
+
+      const r = await chamarBruto("GET", `/propostas/${id}/pdf`);
+
+      expect(r.status).toBe(200);
+      expect(r.corpo.toString()).toContain("regerado");
+      expect(gerarOficial).toHaveBeenCalledTimes(1);
+      expect(gerarOficial.mock.calls[0][1]).toEqual(SNAPSHOT);
+      expect(capturarSnapshot).not.toHaveBeenCalled();
+      expect(prisma._propostas.find((p) => p.id === id)!.pdfObjectName).toBe("propostas/regerado.pdf");
+    });
+
+    it("sem pdfSnapshot: 409 PDF_INDISPONIVEL", async () => {
+      const id = await semearLancada({ pdfSnapshot: null, pdfObjectName: null });
+      const r = await chamar("GET", `/propostas/${id}/pdf`);
+      expect(r.status).toBe(409);
+      expect(r.json.codigo).toBe("PDF_INDISPONIVEL");
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["RASCUNHO", { status: "RASCUNHO", idorcamentoAthos: null, pdfObjectName: null, pdfSnapshot: null }],
+      ["LANCANDO", { status: "LANCANDO", idorcamentoAthos: null, pdfObjectName: null }],
+      ["sem idorcamentoAthos", { idorcamentoAthos: null }],
+    ])("%s: 409 PDF_INDISPONIVEL", async (_nome, extra) => {
+      const id = await semearLancada(extra);
+      const r = await chamar("GET", `/propostas/${id}/pdf`);
+      expect(r.status).toBe(409);
+      expect(r.json.codigo).toBe("PDF_INDISPONIVEL");
+    });
+
+    it("inexistente 404, UUID invalido 400 e sem a chave admin 401", async () => {
+      expect((await chamar("GET", `/propostas/${UUID_INEXISTENTE}/pdf`)).status).toBe(404);
+      expect((await chamar("GET", "/propostas/nao-e-uuid/pdf")).status).toBe(400);
+      const id = await semearLancada();
+      expect((await chamar("GET", `/propostas/${id}/pdf`, undefined, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect((await chamar("GET", `/propostas/${id}/pdf`, undefined, { interna: null, admin: CHAVE_ADMIN })).status).toBe(401);
+    });
+  });
+
+  describe("GET :id/previa", () => {
+    it.each(["RASCUNHO", "ENVIADA", "CANCELADA"])("%s com itens: 200 application/pdf, nunca gera o oficial nem armazena", async (status) => {
+      const id = await semearLancada({ status });
+
+      const r = await chamarBruto("GET", `/propostas/${id}/previa`);
+
+      expect(r.status).toBe(200);
+      expect(r.headers.get("content-type")).toContain("application/pdf");
+      expect(r.headers.get("content-disposition")).toBe('inline; filename="Previa-Proposta.pdf"');
+      expect(r.corpo.subarray(0, 4).toString()).toBe("%PDF");
+      expect(gerarPrevia).toHaveBeenCalledTimes(1);
+      expect(gerarOficial).not.toHaveBeenCalled();
+      expect(baixarOficial).not.toHaveBeenCalled();
+    });
+
+    it("sem cliente mas com 1 item: 200", async () => {
+      const id = await semearLancada({ status: "RASCUNHO", idclienteAthos: null, clienteSnapshot: null });
+      const r = await chamarBruto("GET", `/propostas/${id}/previa`);
+      expect(r.status).toBe(200);
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it("sem itens: 422 SEM_ITENS", async () => {
+      const criada: any = await prisma.proposta.create({ data: {} });
+      const r = await chamar("GET", `/propostas/${criada.id}/previa`);
+      expect(r.status).toBe(422);
+      expect(r.json.codigo).toBe("SEM_ITENS");
+      expect(gerarPrevia).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it("inexistente 404, UUID invalido 400 e sem a chave admin 401", async () => {
+      expect((await chamar("GET", `/propostas/${UUID_INEXISTENTE}/previa`)).status).toBe(404);
+      expect((await chamar("GET", "/propostas/nao-e-uuid/previa")).status).toBe(400);
+      const id = await semearLancada({ status: "RASCUNHO" });
+      expect((await chamar("GET", `/propostas/${id}/previa`, undefined, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect(gerarPrevia).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("POST :id/duplicar", () => {
+    it("responde 201 com o detalhe do novo rascunho, sem numero nem PDF, sem tocar no Athos", async () => {
+      const id = await semearLancada({ idorcamentoAthos: 5151 });
+
+      const r = await chamar("POST", `/propostas/${id}/duplicar`);
+
+      expect(r.status).toBe(201);
+      expect(r.json).toMatchObject({ status: "RASCUNHO", duplicadaDeId: id, idorcamentoAthos: null, pdfDisponivel: false, total: "7.00" });
+      expect(r.json.id).not.toBe(id);
+      expect(r.json.itens).toHaveLength(1);
+      expect(JSON.stringify(r.json)).not.toContain("pdfSnapshot");
+      expect(JSON.stringify(r.json)).not.toContain("segredo-do-template");
+      expect(obterProdutoProposta).not.toHaveBeenCalled();
+      expect(buscarClienteParaProposta).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+      // O original segue ENVIADA com o numero.
+      const original = await chamar("GET", `/propostas/${id}`);
+      expect(original.json).toMatchObject({ status: "ENVIADA", idorcamentoAthos: 5151 });
+    });
+
+    it("inexistente 404, UUID invalido 400 e sem a chave admin 401", async () => {
+      expect((await chamar("POST", `/propostas/${UUID_INEXISTENTE}/duplicar`)).status).toBe(404);
+      expect((await chamar("POST", "/propostas/nao-e-uuid/duplicar")).status).toBe(400);
+      const id = await semearLancada();
+      const antes = prisma._propostas.length;
+      expect((await chamar("POST", `/propostas/${id}/duplicar`, undefined, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect(prisma._propostas.length).toBe(antes);
+    });
+  });
+
+  describe("PATCH :id/status", () => {
+    it("ENVIADA para FECHADA responde 200", async () => {
+      const id = await semearLancada();
+      const r = await chamar("PATCH", `/propostas/${id}/status`, { status: "FECHADA" });
+      expect(r.status).toBe(200);
+      expect(r.json).toEqual({ id, status: "FECHADA" });
+    });
+
+    it("cancelar proposta lancada responde 200 com aviso do orcamento aberto no Athos", async () => {
+      const id = await semearLancada({ idorcamentoAthos: 6262 });
+      const r = await chamar("PATCH", `/propostas/${id}/status`, { status: "CANCELADA" });
+      expect(r.status).toBe(200);
+      expect(r.json.status).toBe("CANCELADA");
+      expect(r.json.aviso).toContain("6262");
+    });
+
+    it("transicao invalida responde 409 TRANSICAO_INVALIDA", async () => {
+      const id = await semearLancada({ status: "RASCUNHO", idorcamentoAthos: null, pdfObjectName: null, pdfSnapshot: null });
+      const r = await chamar("PATCH", `/propostas/${id}/status`, { status: "FECHADA" });
+      expect(r.status).toBe(409);
+      expect(r.json.codigo).toBe("TRANSICAO_INVALIDA");
+    });
+
+    it.each([
+      ["ENVIADA", { status: "ENVIADA" }],
+      ["RASCUNHO", { status: "RASCUNHO" }],
+      ["LANCANDO", { status: "LANCANDO" }],
+      ["sem status", {}],
+      ["campo extra", { status: "FECHADA", idorcamentoAthos: 1 }],
+    ])("status invalido (%s) responde 400 e nada muda", async (_nome, corpo) => {
+      const id = await semearLancada();
+      const r = await chamar("PATCH", `/propostas/${id}/status`, corpo);
+      expect(r.status).toBe(400);
+      expect(prisma._propostas.find((p) => p.id === id)!.status).toBe("ENVIADA");
+    });
+
+    it("sem a chave admin 401 e id fora do formato UUID 400", async () => {
+      const id = await semearLancada();
+      expect((await chamar("PATCH", `/propostas/${id}/status`, { status: "FECHADA" }, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect(prisma._propostas.find((p) => p.id === id)!.status).toBe("ENVIADA");
+      expect((await chamar("PATCH", "/propostas/nao-e-uuid/status", { status: "FECHADA" })).status).toBe(400);
+    });
+  });
+
+  describe("POST templates/preview", () => {
+    const SOURCE_VALIDO = "<html><body><h1>Proposta {{numero}}</h1></body></html>";
+
+    it("templateId de template PROPOSTA: 200 application/pdf com getSource e gerarPreviaTemplate; sem oficial nem armazenamento", async () => {
+      getFamilia.mockResolvedValue("PROPOSTA");
+      getSource.mockResolvedValue(SOURCE_VALIDO);
+
+      const r = await chamarBruto("POST", "/propostas/templates/preview", { templateId: "tpl-proposta-1" });
+
+      expect(r.status).toBe(200);
+      expect(r.headers.get("content-type")).toContain("application/pdf");
+      expect(r.corpo.subarray(0, 4).toString()).toBe("%PDF");
+      expect(getFamilia).toHaveBeenCalledWith("tpl-proposta-1");
+      expect(getSource).toHaveBeenCalledWith("tpl-proposta-1");
+      expect(gerarPreviaTemplate).toHaveBeenCalledWith(SOURCE_VALIDO);
+      expect(gerarOficial).not.toHaveBeenCalled();
+      expect(gerarPrevia).not.toHaveBeenCalled();
+      expect(baixarOficial).not.toHaveBeenCalled();
+    });
+
+    it("templateId de template ORCAMENTO: 400 em portugues e nada e renderizado", async () => {
+      getFamilia.mockResolvedValue("ORCAMENTO");
+
+      const r = await chamar("POST", "/propostas/templates/preview", { templateId: "tpl-orcamento-1" });
+
+      expect(r.status).toBe(400);
+      expect(JSON.stringify(r.json)).toMatch(/proposta/i);
+      expect(getSource).not.toHaveBeenCalled();
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it("source direto valido: 200 application/pdf renderizado com os dados de exemplo", async () => {
+      const r = await chamarBruto("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO });
+
+      expect(r.status).toBe(200);
+      expect(r.headers.get("content-type")).toContain("application/pdf");
+      expect(gerarPreviaTemplate).toHaveBeenCalledWith(SOURCE_VALIDO);
+      expect(getFamilia).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["script", "<html><script>alert(1)</script></html>"],
+      ["handler de evento", '<html><body><img src="x" onerror="alert(1)"></body></html>'],
+      ["protocolo javascript", '<a href="javascript:alert(1)">x</a>'],
+    ])("source perigoso (%s): 400 e nada e renderizado", async (_nome, source) => {
+      const r = await chamar("POST", "/propostas/templates/preview", { source });
+
+      expect(r.status).toBe(400);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it("sem source nem templateId: 400", async () => {
+      const r = await chamar("POST", "/propostas/templates/preview", {});
+      expect(r.status).toBe(400);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+    });
+
+    it("source acima do limite do DTO (200000 caracteres) e recusado pela validacao", async () => {
+      const dto = plainToInstance(PreviewTemplatePropostaDto, { source: "a".repeat(200_001) });
+      expect((await validate(dto)).length).toBeGreaterThan(0);
+      expect((await validate(plainToInstance(PreviewTemplatePropostaDto, { source: "a".repeat(200_000) }))).length).toBe(0);
+      expect((await validate(plainToInstance(PreviewTemplatePropostaDto, { templateId: "t".repeat(101) }))).length).toBeGreaterThan(0);
+    });
+
+    it("corpo enorme pela rede e recusado (400 ou 413) e nunca renderizado", async () => {
+      const r = await chamar("POST", "/propostas/templates/preview", { source: "a".repeat(200_001) });
+      expect([400, 413]).toContain(r.status);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+    });
+
+    it("campo desconhecido e recusado (whitelist): 400", async () => {
+      const r = await chamar("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO, proposta: { custo: 1 } });
+      expect(r.status).toBe(400);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+    });
+
+    it("sem a chave admin 401 e sem a chave interna 401", async () => {
+      expect((await chamar("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO }, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect((await chamar("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO }, { interna: null, admin: CHAVE_ADMIN })).status).toBe(401);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+    });
+
+    it("a rota estatica nao e capturada pelas rotas com :id (nao tenta parsear 'templates' como UUID)", async () => {
+      const r = await chamarBruto("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO });
+      expect(r.status).not.toBe(404);
+      expect(r.status).toBe(200);
     });
   });
 });

@@ -170,6 +170,13 @@ const CODIGOS_ATHOS_DEFINITIVOS: ReadonlySet<string> = new Set([
   "PERMISSAO_NEGADA",
 ]);
 
+/** Status em que o PDF oficial existe (proposta lancada no Athos). */
+const STATUS_COM_PDF: readonly string[] = ["ENVIADA", "FECHADA", "CANCELADA"];
+
+/** Transicoes manuais de status (D-06, D-10): status de origem permitidos para cada destino. */
+const TRANSICAO_PARA_FECHADA: readonly string[] = ["ENVIADA"];
+const TRANSICAO_PARA_CANCELADA: readonly string[] = ["RASCUNHO", "ENVIADA", "FECHADA"];
+
 /** Orcamento do Athos achado ou criado para a proposta. */
 interface OrcamentoLancado {
   idorcamento: number;
@@ -341,6 +348,54 @@ export class PropostasService {
    */
   async obterParaPdf(id: string): Promise<PropostaParaPdf> {
     return (await this.carregar(id)) as PropostaParaPdf;
+  }
+
+  /**
+   * PDF OFICIAL da proposta lancada (D-09, D-18). Serve o arquivo armazenado; so quando ele nao existe (ou a
+   * geracao falhou no lancamento) regenera por `gerarOficial` usando EXCLUSIVAMENTE o `pdfSnapshot` gravado no
+   * lancamento. Nunca chama `capturarSnapshot` nem o Athos: proposta sem snapshot responde 409 em vez de
+   * regenerar com dados de agora (o documento deixaria de ser o emitido).
+   */
+  async obterPdf(id: string): Promise<{ buffer: Buffer; nomeArquivo: string }> {
+    const proposta = await this.carregar(id);
+    const emitida = STATUS_COM_PDF.includes(proposta.status) && proposta.idorcamentoAthos != null;
+    if (!emitida) {
+      throw new PropostaError(
+        "PDF_INDISPONIVEL",
+        "O PDF oficial so existe depois de gerar a proposta (lancamento no Athos concluido).",
+        409,
+      );
+    }
+    const nomeArquivo = `Proposta-${proposta.idorcamentoAthos}.pdf`;
+
+    if (proposta.pdfObjectName && (await this.propostasPdf.existeOficial(proposta.pdfObjectName))) {
+      return { buffer: await this.propostasPdf.baixarOficial(proposta.pdfObjectName), nomeArquivo };
+    }
+
+    if (proposta.pdfSnapshot === null || proposta.pdfSnapshot === undefined) {
+      throw new PropostaError(
+        "PDF_INDISPONIVEL",
+        "O arquivo do PDF oficial nao esta disponivel e esta proposta nao guarda o retrato da emissao para regera-lo. Duplique a proposta para emitir um novo documento.",
+        409,
+      );
+    }
+
+    const paraPdf = await this.obterParaPdf(id);
+    const { objectName } = await this.propostasPdf.gerarOficial(paraPdf, proposta.pdfSnapshot as unknown as PdfSnapshotProposta);
+    await this.prisma.proposta.update({ where: { id }, data: { pdfObjectName: objectName, pdfGeradoEm: new Date() } });
+    return { buffer: await this.propostasPdf.baixarOficial(objectName), nomeArquivo };
+  }
+
+  /**
+   * Previa do PDF (marca d'agua, sem numero) para qualquer status e mesmo sem cliente; exige pelo menos 1 item.
+   * Sempre por `gerarPrevia`, nunca por `gerarOficial`, e nada e armazenado.
+   */
+  async obterPrevia(id: string): Promise<Buffer> {
+    const proposta = await this.obterParaPdf(id);
+    if (!proposta.itens || proposta.itens.length === 0) {
+      throw new PropostaError("SEM_ITENS", "Adicione pelo menos um item para visualizar a previa do PDF.", 422);
+    }
+    return this.propostasPdf.gerarPrevia(proposta);
   }
 
   // -------------------------------------------------------------------------
@@ -916,6 +971,98 @@ export class PropostasService {
     }
     const snapshot = (proposta.pdfSnapshot as unknown as PdfSnapshotProposta | null) ?? null;
     return this.finalizarLancamento(id, ref, achado, snapshot);
+  }
+
+  // -------------------------------------------------------------------------
+  // Ciclo depois do lancamento: duplicar e status manual (plano 55-13)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Duplica a proposta (D-08: depois de lancada ela nao e mais editavel) em um novo RASCUNHO com os mesmos
+   * itens, nomes, precos ajustados, cliente, dados de orgao, validade, prazo, observacao e assinante. Copia os
+   * valores GRAVADOS (D-09): nao consulta nem injeta o Athos. Nada do lancamento e copiado (numero, senha, PDF,
+   * pdfSnapshot, datas). Funciona a partir de qualquer status.
+   */
+  async duplicar(id: string): Promise<PropostaDetalhe> {
+    const o = await this.carregar(id);
+    const dados: Prisma.PropostaUncheckedCreateInput = {
+      status: "RASCUNHO",
+      duplicadaDeId: o.id,
+      idclienteAthos: o.idclienteAthos ?? null,
+      numeroProcesso: o.numeroProcesso,
+      setorResponsavel: o.setorResponsavel,
+      contatoEmail: o.contatoEmail,
+      contatoTelefone: o.contatoTelefone,
+      validadeDias: o.validadeDias,
+      prazoEntregaDias: o.prazoEntregaDias,
+      observacao: o.observacao,
+      assinanteNome: o.assinanteNome,
+      assinanteCargo: o.assinanteCargo,
+      assinanteCpf: o.assinanteCpf,
+      totalValor: o.totalValor,
+      // Campos Json nulos sao omitidos (o default da coluna e nulo); nunca null literal.
+      ...(o.clienteSnapshot !== null && o.clienteSnapshot !== undefined
+        ? { clienteSnapshot: o.clienteSnapshot as Prisma.InputJsonValue }
+        : {}),
+      ...(o.clienteOverride !== null && o.clienteOverride !== undefined
+        ? { clienteOverride: o.clienteOverride as Prisma.InputJsonValue }
+        : {}),
+      itens: {
+        create: [...o.itens]
+          .sort((a, b) => a.sequencia - b.sequencia)
+          .map((i) => ({
+            sequencia: i.sequencia,
+            idproduto: i.idproduto,
+            nomeAthos: i.nomeAthos,
+            nome: i.nome,
+            descricaoCurta: i.descricaoCurta,
+            unidade: i.unidade,
+            permiteFracionar: i.permiteFracionar,
+            quantidade: i.quantidade,
+            precoBase: i.precoBase,
+            ajusteTipo: i.ajusteTipo,
+            ajusteValor: i.ajusteValor,
+            precoUnitario: i.precoUnitario,
+            totalLinha: i.totalLinha,
+            custoUnitario: i.custoUnitario,
+          })),
+      },
+    };
+    const criada = await this.prisma.proposta.create({ data: dados, include: { itens: true } });
+    return montarDetalhe(criada as PropostaComItens);
+  }
+
+  /**
+   * Marca FECHADA (so a partir de ENVIADA) ou CANCELADA (de RASCUNHO, ENVIADA ou FECHADA), manualmente (D-06,
+   * D-10). Cancelar uma proposta lancada e SO local: o orcamento continua aberto no Athos e a resposta avisa
+   * que deve ser cancelado pelo Balcao (D-28). A gravacao e condicionada ao status lido (`updateMany`) para nao
+   * correr com `gerar`.
+   */
+  async atualizarStatus(id: string, status: "FECHADA" | "CANCELADA"): Promise<{ id: string; status: string; aviso?: string }> {
+    const proposta = await this.carregar(id);
+    const permitidoDe = status === "FECHADA" ? TRANSICAO_PARA_FECHADA : status === "CANCELADA" ? TRANSICAO_PARA_CANCELADA : [];
+    if (!permitidoDe.includes(proposta.status)) {
+      throw new PropostaError(
+        "TRANSICAO_INVALIDA",
+        `Nao e possivel marcar como ${status === "FECHADA" ? "fechada" : "cancelada"} uma proposta com status ${proposta.status}.`,
+        409,
+      );
+    }
+
+    const agora = new Date();
+    const resultado = await this.prisma.proposta.updateMany({
+      where: { id, status: proposta.status },
+      data: status === "FECHADA" ? { status, fechadaEm: agora } : { status, canceladaEm: agora },
+    });
+    if (resultado.count !== 1) {
+      throw new PropostaError("TRANSICAO_INVALIDA", "O status da proposta mudou durante a operacao. Atualize a pagina e tente novamente.", 409);
+    }
+
+    const resposta: { id: string; status: string; aviso?: string } = { id, status };
+    if (status === "CANCELADA" && proposta.idorcamentoAthos != null) {
+      resposta.aviso = `Proposta cancelada apenas aqui no sistema. O orcamento ${proposta.idorcamentoAthos} continua aberto no Athos e deve ser cancelado pelo Balcao.`;
+    }
+    return resposta;
   }
 
   // -------------------------------------------------------------------------

@@ -27,6 +27,7 @@ import { AthosService } from "../integrations/athos/athos.service";
 import { AthosOrcamentoService, MARCADOR_OBS_PROPOSTA } from "../integrations/athos/athos-orcamento.service";
 import { refDoOrcamento } from "../integrations/athos/athos-orcamento-idempotencia.service";
 import { PdfTemplatesRepository } from "../pdf-templates/pdf-templates.repository";
+import { PdfTemplatesService } from "../pdf-templates/pdf-templates.service";
 import { QuotesPdfStorageService } from "../quotes/quotes-pdf-storage.service";
 import { InternalAuthGuard } from "../security/internal-auth.guard";
 import { criarPrismaPropostaFake } from "./__fixtures__/prisma-proposta.fake";
@@ -164,6 +165,7 @@ rodar("IT clone athos-teste: gerar proposta por HTTP (tracer 55-08)", () => {
         { provide: AthosOrcamentoService, useValue: athosOrcamento },
         { provide: AthosService, useValue: athosService },
         { provide: PropostasPdfService, useValue: propostasPdf },
+        { provide: PdfTemplatesService, useValue: {} },
         { provide: ConfigService, useValue: configService },
         { provide: APP_GUARD, useClass: InternalAuthGuard },
       ],

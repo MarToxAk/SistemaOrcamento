@@ -1,30 +1,42 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  Res,
 } from "@nestjs/common";
 import { ApiHeader, ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger";
+import { PdfTemplateFamilia } from "@prisma/client";
 import { Throttle } from "@nestjs/throttler";
 
+// Resposta crua do Express: a lib de tipos nao e dependencia direta (mesmo padrao do controller de templates).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ExpressResponse = any;
+
+import { PdfTemplatesService } from "../pdf-templates/pdf-templates.service";
 import { BuscarProdutosOrcamentoQueryDto } from "../integrations/athos/dto/buscar-produtos-orcamento.dto";
 import { AdminOnly } from "../security/admin.decorator";
 import { THROTTLE_SENSITIVE } from "../security/throttle.config";
 import {
   AddItemPropostaDto,
   AplicarPercentualDto,
+  AtualizarStatusPropostaDto,
   CreatePropostaDto,
   GerarPropostaDto,
   ListarPropostasQueryDto,
+  PreviewTemplatePropostaDto,
   UpdateItemPropostaDto,
   UpdatePropostaDto,
 } from "./dto/propostas.dto";
+import { PropostasPdfService } from "./propostas-pdf.service";
 import {
   AssinanteRecente,
   PropostaDetalhe,
@@ -47,7 +59,11 @@ import {
 @AdminOnly()
 @Controller("propostas")
 export class PropostasController {
-  constructor(private readonly propostasService: PropostasService) {}
+  constructor(
+    private readonly propostasService: PropostasService,
+    private readonly propostasPdf: PropostasPdfService,
+    private readonly pdfTemplates: PdfTemplatesService,
+  ) {}
 
   // --- Rotas estaticas (antes de :id) ---------------------------------------
 
@@ -79,6 +95,34 @@ export class PropostasController {
   @ApiOperation({ summary: "Criar rascunho de proposta (cabecalho opcional)" })
   async criar(@Body() dto: CreatePropostaDto): Promise<PropostaDetalhe> {
     return this.propostasService.criarRascunho(dto);
+  }
+
+  /**
+   * Preview de template da familia PROPOSTA com dados de exemplo (PROPOSTA_MOCK). `source` direto passa por
+   * validateUpload (T-55-57); `templateId` exige template PROPOSTA. Nunca gera o oficial nem armazena.
+   */
+  @Post("templates/preview")
+  @HttpCode(200)
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @ApiOperation({ summary: "Previa de template da familia PROPOSTA com dados de exemplo (nao armazena)" })
+  async previewTemplate(@Body() dto: PreviewTemplatePropostaDto, @Res() res: ExpressResponse): Promise<void> {
+    let source: string;
+    if (dto.templateId) {
+      const familia = await this.pdfTemplates.getFamilia(dto.templateId);
+      if (familia !== PdfTemplateFamilia.PROPOSTA) {
+        throw new BadRequestException(
+          "Este template e de orcamento. Use o preview de orcamento em /pdf-templates/preview; aqui so templates de proposta.",
+        );
+      }
+      source = await this.pdfTemplates.getSource(dto.templateId);
+    } else if (dto.source) {
+      source = dto.source;
+    } else {
+      throw new BadRequestException("Informe 'source' ou 'templateId' para gerar a previa do template.");
+    }
+    const validado = this.pdfTemplates.validateUpload(source);
+    const buffer = await this.propostasPdf.gerarPreviaTemplate(validado);
+    this.enviarPdf(res, buffer, "Previa-Template-Proposta.pdf");
   }
 
   // --- Rotas parametricas ----------------------------------------------------
@@ -149,5 +193,46 @@ export class PropostasController {
   })
   async recuperar(@Param("id", new ParseUUIDPipe()) id: string): Promise<PropostaRecuperada> {
     return this.propostasService.recuperarLancamento(id);
+  }
+
+  @Post(":id/duplicar")
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @ApiOperation({ summary: "Duplicar a proposta em um novo rascunho (sem consultar o Athos, sem numero nem PDF)" })
+  async duplicar(@Param("id", new ParseUUIDPipe()) id: string): Promise<PropostaDetalhe> {
+    return this.propostasService.duplicar(id);
+  }
+
+  @Patch(":id/status")
+  @ApiOperation({
+    summary: "Marcar FECHADA (so de ENVIADA) ou CANCELADA (de RASCUNHO, ENVIADA ou FECHADA); cancelar e so local",
+  })
+  async atualizarStatus(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: AtualizarStatusPropostaDto,
+  ): Promise<{ id: string; status: string; aviso?: string }> {
+    return this.propostasService.atualizarStatus(id, dto.status);
+  }
+
+  @Get(":id/pdf")
+  @ApiOperation({ summary: "PDF oficial da proposta lancada (armazenado; regenerado so do snapshot gravado no lancamento)" })
+  async baixarPdf(@Param("id", new ParseUUIDPipe()) id: string, @Res() res: ExpressResponse): Promise<void> {
+    const { buffer, nomeArquivo } = await this.propostasService.obterPdf(id);
+    this.enviarPdf(res, buffer, nomeArquivo);
+  }
+
+  @Get(":id/previa")
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @ApiOperation({ summary: "Previa do PDF (marca d'agua, sem numero) em qualquer status; nunca armazenada" })
+  async previa(@Param("id", new ParseUUIDPipe()) id: string, @Res() res: ExpressResponse): Promise<void> {
+    const buffer = await this.propostasService.obterPrevia(id);
+    this.enviarPdf(res, buffer, "Previa-Proposta.pdf");
+  }
+
+  /** PDF inline pelo proprio buffer: sem URL publica (T-55-35). */
+  private enviarPdf(res: ExpressResponse, buffer: Buffer, nomeArquivo: string): void {
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${nomeArquivo}"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
   }
 }
