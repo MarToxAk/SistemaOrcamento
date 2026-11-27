@@ -375,7 +375,7 @@ Plans:
 - Referencias do Athos copiadas para `referencia/` (orcamento e cadastro de produto). Lacunas da captura: cliente, validade e obs no orcamento do Athos, e conversao do orcamento em venda.
 **Requirements**: P55-PRECO, P55-MONT, P55-CLI, P55-CICLO, P55-ATHOS, P55-PDF
 **Depends on:** Phase 54
-**Plans:** 9/18 plans executed
+**Plans:** 11/18 plans executed
 
 Plans:
 **Wave 1**
@@ -394,8 +394,8 @@ Plans:
 - [x] 55-16-PLAN.md — deploy: PROPOSTA_ESCRITA_ATIVA desligada por padrao nos exemplos de env e nos dois compose, com teste de contrato (Wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 55-08-PLAN.md — tracer do lancamento no Athos: gerar com snapshot de PDF capturado antes da reserva, compare-and-set e PDF oficial; IT HTTP no clone (Wave 4)
-- [ ] 55-14-PLAN.md — frontend: montagem de itens (busca de produto, ajuste por item, aplicar %, custo e margem, desabilitado fora de rascunho) (Wave 4)
+- [x] 55-08-PLAN.md — tracer do lancamento no Athos: gerar com snapshot de PDF capturado antes da reserva, compare-and-set e PDF oficial; IT HTTP no clone (Wave 4)
+- [x] 55-14-PLAN.md — frontend: montagem de itens (busca de produto, ajuste por item, aplicar %, custo e margem, desabilitado fora de rascunho) (Wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 55-10-PLAN.md — frontend: cabecalho da proposta (cliente do Athos, orgao, condicoes e assinante), desabilitado fora de rascunho (Wave 5)
