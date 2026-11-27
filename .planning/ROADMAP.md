@@ -375,7 +375,7 @@ Plans:
 - Referencias do Athos copiadas para `referencia/` (orcamento e cadastro de produto). Lacunas da captura: cliente, validade e obs no orcamento do Athos, e conversao do orcamento em venda.
 **Requirements**: P55-PRECO, P55-MONT, P55-CLI, P55-CICLO, P55-ATHOS, P55-PDF
 **Depends on:** Phase 54
-**Plans:** 6/18 plans executed
+**Plans:** 9/18 plans executed
 
 Plans:
 **Wave 1**
@@ -389,9 +389,9 @@ Plans:
 - [x] 55-06-PLAN.md — modulo backend de propostas: rascunho, itens com snapshot, ajuste e aplicar % em todos, cabecalho com cliente do Athos e dados de orgao, rotas AdminOnly (Wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 55-07-PLAN.md — PDF institucional: contexto por lista branca (sem custo), template proposta-institucional, render multipagina hardened, MinIO, snapshot de emissao e previa (servico) (Wave 3)
-- [ ] 55-09-PLAN.md — frontend: proxy com lista permitida (rotas do 55-06), menu, lista, nova proposta e tela da proposta (Wave 3)
-- [ ] 55-16-PLAN.md — deploy: PROPOSTA_ESCRITA_ATIVA desligada por padrao nos exemplos de env e nos dois compose, com teste de contrato (Wave 3)
+- [x] 55-07-PLAN.md — PDF institucional: contexto por lista branca (sem custo), template proposta-institucional, render multipagina hardened, MinIO, snapshot de emissao e previa (servico) (Wave 3)
+- [x] 55-09-PLAN.md — frontend: proxy com lista permitida (rotas do 55-06), menu, lista, nova proposta e tela da proposta (Wave 3)
+- [x] 55-16-PLAN.md — deploy: PROPOSTA_ESCRITA_ATIVA desligada por padrao nos exemplos de env e nos dois compose, com teste de contrato (Wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 55-08-PLAN.md — tracer do lancamento no Athos: gerar com snapshot de PDF capturado antes da reserva, compare-and-set e PDF oficial; IT HTTP no clone (Wave 4)
