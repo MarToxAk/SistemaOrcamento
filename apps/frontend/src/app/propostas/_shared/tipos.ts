@@ -5,12 +5,42 @@
 
 export type PropostaStatus = "RASCUNHO" | "LANCANDO" | "ENVIADA" | "FECHADA" | "CANCELADA";
 
+/** Endereco do snapshot do cliente do Athos: cada campo pode vir ausente (D-25 mostra "não informado"). */
+export interface EnderecoSnapshot {
+  logradouro?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  cep?: string | null;
+}
+
 /** Snapshot do cliente do Athos gravado na proposta (campos usados pelas telas). */
 export interface ClienteSnapshot {
+  idcliente?: number | null;
+  tipoPessoa?: "fisico" | "juridico" | null;
   razaoSocial?: string | null;
   nomeFantasia?: string | null;
+  /** Somente digitos (CPF ou CNPJ). */
   documento?: string | null;
+  endereco?: EnderecoSnapshot | null;
+  email?: string | null;
+  telefone?: string | null;
   [chave: string]: unknown;
+}
+
+/** Sobrescritas de cliente usadas so no PDF (D-16). Somente estas chaves existem; ausente = usa o Athos. */
+export interface ClienteOverride {
+  razaoSocial?: string;
+  documento?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
 }
 
 export interface AjusteItem {
@@ -43,12 +73,42 @@ export interface AssinanteProposta {
   cpf: string | null;
 }
 
+/** Assinante em edicao na tela (texto livre; vazio = nao informado). Gravado so ao gerar a proposta (D-19). */
+export interface Assinante {
+  nome: string;
+  cargo: string;
+  cpf: string;
+}
+
+/** Assinante recente devolvido por GET /api/propostas/assinantes, para reuso (D-19). */
+export interface AssinanteRecente {
+  nome: string;
+  cargo: string | null;
+  cpf: string | null;
+}
+
+/**
+ * Campos do cabecalho aceitos por PATCH /api/propostas/<id> (todos opcionais; null limpa o campo).
+ * O assinante NAO faz parte do PATCH: o servidor o recebe somente em gerar (D-19).
+ */
+export interface CamposCabecalho {
+  idclienteAthos?: number | null;
+  numeroProcesso?: string | null;
+  setorResponsavel?: string | null;
+  contatoEmail?: string | null;
+  contatoTelefone?: string | null;
+  validadeDias?: number;
+  prazoEntregaDias?: number;
+  observacao?: string | null;
+  clienteOverride?: ClienteOverride | null;
+}
+
 export interface PropostaDetalhe {
   id: string;
   status: PropostaStatus;
   idclienteAthos: number | null;
   cliente: ClienteSnapshot | null;
-  clienteOverride: Record<string, unknown> | null;
+  clienteOverride: ClienteOverride | null;
   numeroProcesso: string | null;
   setorResponsavel: string | null;
   contatoEmail: string | null;
