@@ -14,6 +14,7 @@ import { AthosModule } from "./integrations/athos/athos.module";
 import { NfseModule } from "./integrations/nfse/nfse.module";
 import { PdvModule } from "./integrations/pdv/pdv.module";
 import { PesquisaModule } from "./pesquisa/pesquisa.module";
+import { PropostasModule } from "./propostas/propostas.module";
 import { QuotesModule } from "./quotes/quotes.module";
 import { PdfTemplatesModule } from "./pdf-templates/pdf-templates.module";
 import { validateEnv } from "./common/env-validation";
@@ -53,6 +54,7 @@ import { CobrancaModule } from "./cobranca/cobranca.module";
     CobrancaModule,
     PdfTemplatesModule,
     PesquisaModule,
+    PropostasModule,
   ],
   controllers: [HealthController],
   providers: [    {
