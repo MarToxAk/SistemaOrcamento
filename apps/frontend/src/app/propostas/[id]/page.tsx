@@ -5,16 +5,20 @@ import { useParams } from "next/navigation";
 import PasswordGate from "@/components/password-gate";
 import AdminShell from "../../contas-receber/admin-shell";
 import RecursosBootstrap from "../../contas-receber/_shared/recursos-bootstrap";
-import { STATUS_PILL, STATUS_ROTULO, type ErroApi, type PropostaDetalhe } from "../_shared/tipos";
-
-function mensagemDoErro(dados: unknown, padrao: string): string {
-  const e = (dados ?? {}) as ErroApi;
-  return e.mensagem ?? e.error ?? padrao;
-}
+import type { PropostaDetalhe } from "../_shared/tipos";
+import {
+  classeStatus,
+  formatarDinheiro,
+  mensagemDeErro,
+  podeEditar,
+  rotuloStatus,
+} from "../_shared/formatadores";
+import BuscaProduto from "../_componentes/busca-produto";
+import TabelaItens, { type IntencaoItem } from "../_componentes/tabela-itens";
 
 /**
- * Tela da proposta (somente leitura neste plano). O estado e sempre a resposta do servidor: nenhum
- * preco e calculado no navegador. Todo texto vindo da API e renderizado como texto React.
+ * Tela da proposta. O estado e sempre a resposta do servidor: nenhum preco e calculado no navegador (D-02),
+ * so intencoes sao enviadas. Todo texto vindo da API e renderizado como texto React.
  */
 function DetalheProposta({ id }: { id: string }) {
   const [proposta, setProposta] = useState<PropostaDetalhe | null>(null);
@@ -31,7 +35,7 @@ function DetalheProposta({ id }: { id: string }) {
       const dados: unknown = await res.json().catch(() => null);
       if (atual !== requisicao.current) return;
       if (!res.ok) {
-        setErro(mensagemDoErro(dados, "Não foi possível carregar a proposta."));
+        setErro(mensagemDeErro(dados, "Não foi possível carregar a proposta."));
         setProposta(null);
       } else {
         setProposta(dados as PropostaDetalhe);
@@ -48,6 +52,53 @@ function DetalheProposta({ id }: { id: string }) {
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  /**
+   * Envia uma intencao ao servidor (nunca preco final). A resposta completa vira o estado da tela; devolve a
+   * mensagem de erro ou null quando o servidor aceitou.
+   */
+  const enviar = useCallback(
+    async (metodo: "POST" | "PATCH" | "DELETE", caminho: string, corpo: unknown, padrao: string): Promise<string | null> => {
+      try {
+        const res = await fetch(`/api/propostas/${encodeURIComponent(id)}${caminho}`, {
+          method: metodo,
+          headers: corpo === undefined ? undefined : { "Content-Type": "application/json" },
+          body: corpo === undefined ? undefined : JSON.stringify(corpo),
+        });
+        const dados: unknown = await res.json().catch(() => null);
+        if (!res.ok) return mensagemDeErro(dados, padrao);
+        setProposta(dados as PropostaDetalhe);
+        return null;
+      } catch {
+        return padrao;
+      }
+    },
+    [id],
+  );
+
+  const adicionarItem = useCallback(
+    (idproduto: number, quantidade: number) =>
+      enviar("POST", "/itens", { idproduto, quantidade }, "Não foi possível adicionar o item."),
+    [enviar],
+  );
+
+  const editarItem = useCallback(
+    (itemId: string, intencao: IntencaoItem) =>
+      enviar("PATCH", `/itens/${encodeURIComponent(itemId)}`, intencao, "Não foi possível salvar o item."),
+    [enviar],
+  );
+
+  const removerItem = useCallback(
+    (itemId: string) =>
+      enviar("DELETE", `/itens/${encodeURIComponent(itemId)}`, undefined, "Não foi possível remover o item."),
+    [enviar],
+  );
+
+  const aplicarPercentual = useCallback(
+    (percentual: number) =>
+      enviar("POST", "/aplicar-percentual", { percentual }, "Não foi possível aplicar o percentual."),
+    [enviar],
+  );
 
   if (carregando && !proposta) {
     return (
@@ -80,9 +131,7 @@ function DetalheProposta({ id }: { id: string }) {
             <span className="fw-semibold">
               {proposta.idorcamentoAthos != null ? `Proposta ${proposta.idorcamentoAthos}` : "Proposta (rascunho)"}
             </span>
-            <span className={`pa-pill pa-pill-${STATUS_PILL[proposta.status] ?? "secondary"}`}>
-              {STATUS_ROTULO[proposta.status] ?? proposta.status}
-            </span>
+            <span className={`badge ${classeStatus(proposta.status)}`}>{rotuloStatus(proposta.status)}</span>
           </div>
         </div>
         <div className="pa-card-body">
@@ -92,12 +141,24 @@ function DetalheProposta({ id }: { id: string }) {
               <div>{nomeCliente ? String(nomeCliente) : "Sem cliente"}</div>
             </div>
             <div className="col-md-4">
-              <div className="small text-muted">Total (R$)</div>
-              <div className="fw-semibold">{proposta.total}</div>
+              <div className="small text-muted">Total</div>
+              <div className="fw-semibold">{formatarDinheiro(proposta.total)}</div>
             </div>
           </div>
         </div>
       </div>
+
+      {!podeEditar(proposta.status) ? (
+        <div className="alert alert-warning" role="status">
+          Esta proposta já foi lançada e não pode mais ser editada. Só é possível duplicá-la para fazer alterações.
+        </div>
+      ) : (
+        <div className="pa-card mb-3">
+          <div className="pa-card-body">
+            <BuscaProduto onAdicionar={adicionarItem} />
+          </div>
+        </div>
+      )}
 
       <div className="pa-card">
         <div className="pa-card-header">
@@ -105,39 +166,14 @@ function DetalheProposta({ id }: { id: string }) {
           <span className="pa-card-header-count">({proposta.itens.length})</span>
         </div>
         <div className="pa-card-body pa-card-body-flush">
-          {proposta.itens.length === 0 ? (
-            <div className="pa-empty">
-              <span>Esta proposta ainda não tem itens.</span>
-            </div>
-          ) : (
-            <div className="table-responsive">
-              <table className="pa-table">
-                <thead>
-                  <tr>
-                    <th>Código</th>
-                    <th>Nome</th>
-                    <th className="text-end">Quantidade</th>
-                    <th className="text-end">Preço final (R$)</th>
-                    <th className="text-end">Total (R$)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {proposta.itens.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.idproduto}</td>
-                      <td>{item.nome}</td>
-                      <td className="text-end">
-                        {item.quantidade}
-                        {item.unidade ? ` ${item.unidade}` : ""}
-                      </td>
-                      <td className="text-end">{item.precoUnitario}</td>
-                      <td className="text-end">{item.totalLinha}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <TabelaItens
+            itens={proposta.itens}
+            total={proposta.total}
+            desabilitado={!podeEditar(proposta.status)}
+            onEditar={editarItem}
+            onRemover={removerItem}
+            onAplicarPercentual={aplicarPercentual}
+          />
         </div>
       </div>
     </>
