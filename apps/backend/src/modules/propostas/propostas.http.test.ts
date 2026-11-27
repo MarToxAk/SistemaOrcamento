@@ -3,6 +3,8 @@
  * @AdminOnly), ValidationPipe igual ao main.ts, Prisma em memoria e Athos simulado.
  */
 import { INestApplication, ValidationPipe } from "@nestjs/common";
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
 import { ConfigService } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
@@ -10,8 +12,10 @@ import { Test } from "@nestjs/testing";
 import { AthosService } from "../integrations/athos/athos.service";
 import { AthosOrcamentoService, OrcamentoAthosError } from "../integrations/athos/athos-orcamento.service";
 import { PrismaService } from "../database/prisma.service";
+import { PdfTemplatesService } from "../pdf-templates/pdf-templates.service";
 import { InternalAuthGuard } from "../security/internal-auth.guard";
 import { criarPrismaPropostaFake } from "./__fixtures__/prisma-proposta.fake";
+import { PreviewTemplatePropostaDto } from "./dto/propostas.dto";
 import { PropostasController } from "./propostas.controller";
 import { PropostasPdfService } from "./propostas-pdf.service";
 import { PropostasService } from "./propostas.service";
@@ -57,6 +61,7 @@ describe("PropostasController (HTTP, tracer 55-06)", () => {
         { provide: AthosOrcamentoService, useValue: { obterProdutoProposta, buscarProdutosProposta } },
         { provide: AthosService, useValue: { buscarClienteParaProposta } },
         { provide: PropostasPdfService, useValue: { capturarSnapshot: jest.fn(), gerarOficial: jest.fn() } },
+        { provide: PdfTemplatesService, useValue: {} },
         { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
         { provide: APP_GUARD, useClass: InternalAuthGuard },
       ],
@@ -282,6 +287,7 @@ describe("PropostasController (HTTP): gerar e recuperar (plano 55-17)", () => {
         },
         { provide: AthosService, useValue: { buscarClienteParaProposta } },
         { provide: PropostasPdfService, useValue: { capturarSnapshot, gerarOficial } },
+        { provide: PdfTemplatesService, useValue: {} },
         { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
         { provide: APP_GUARD, useClass: InternalAuthGuard },
       ],
@@ -442,6 +448,9 @@ describe("PropostasController (HTTP): pdf, previa, duplicar e status (plano 55-1
   const gerarPreviaTemplate = jest.fn();
   const baixarOficial = jest.fn();
   const existeOficial = jest.fn();
+  const getFamilia = jest.fn();
+  const getSource = jest.fn();
+  const validadorReal = new PdfTemplatesService({} as unknown as PrismaService);
   const prisma = criarPrismaPropostaFake();
   const UUID_INEXISTENTE = "6f0f3a52-5c6e-4f43-8d3a-0f7a2f5b9c11";
   const SNAPSHOT = {
@@ -536,6 +545,11 @@ describe("PropostasController (HTTP): pdf, previa, duplicar e status (plano 55-1
           provide: PropostasPdfService,
           useValue: { capturarSnapshot, gerarOficial, gerarPrevia, gerarPreviaTemplate, baixarOficial, existeOficial },
         },
+        // validateUpload REAL (a recusa de source perigoso e comportamento de producao); so a busca no banco e simulada.
+        {
+          provide: PdfTemplatesService,
+          useValue: { validateUpload: (raw: string) => validadorReal.validateUpload(raw), getFamilia, getSource },
+        },
         { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
         { provide: APP_GUARD, useClass: InternalAuthGuard },
       ],
@@ -556,7 +570,8 @@ describe("PropostasController (HTTP): pdf, previa, duplicar e status (plano 55-1
   });
 
   beforeEach(() => {
-    for (const m of [capturarSnapshot, gerarOficial, gerarPrevia, gerarPreviaTemplate, baixarOficial, existeOficial, obterProdutoProposta, buscarClienteParaProposta]) m.mockReset();
+    for (const m of [capturarSnapshot, gerarOficial, gerarPrevia, gerarPreviaTemplate, baixarOficial, existeOficial, obterProdutoProposta, buscarClienteParaProposta, getFamilia, getSource]) m.mockReset();
+    gerarPreviaTemplate.mockResolvedValue(Buffer.from("%PDF-1.7 previa de template"));
     existeOficial.mockResolvedValue(true);
     baixarOficial.mockResolvedValue(Buffer.from("%PDF-1.7 oficial armazenado"));
     gerarPrevia.mockResolvedValue(Buffer.from("%PDF-1.7 previa"));
@@ -736,5 +751,95 @@ describe("PropostasController (HTTP): pdf, previa, duplicar e status (plano 55-1
     });
   });
 
-  // <<TASK-3-HTTP>>
+  describe("POST templates/preview", () => {
+    const SOURCE_VALIDO = "<html><body><h1>Proposta {{numero}}</h1></body></html>";
+
+    it("templateId de template PROPOSTA: 200 application/pdf com getSource e gerarPreviaTemplate; sem oficial nem armazenamento", async () => {
+      getFamilia.mockResolvedValue("PROPOSTA");
+      getSource.mockResolvedValue(SOURCE_VALIDO);
+
+      const r = await chamarBruto("POST", "/propostas/templates/preview", { templateId: "tpl-proposta-1" });
+
+      expect(r.status).toBe(200);
+      expect(r.headers.get("content-type")).toContain("application/pdf");
+      expect(r.corpo.subarray(0, 4).toString()).toBe("%PDF");
+      expect(getFamilia).toHaveBeenCalledWith("tpl-proposta-1");
+      expect(getSource).toHaveBeenCalledWith("tpl-proposta-1");
+      expect(gerarPreviaTemplate).toHaveBeenCalledWith(SOURCE_VALIDO);
+      expect(gerarOficial).not.toHaveBeenCalled();
+      expect(gerarPrevia).not.toHaveBeenCalled();
+      expect(baixarOficial).not.toHaveBeenCalled();
+    });
+
+    it("templateId de template ORCAMENTO: 400 em portugues e nada e renderizado", async () => {
+      getFamilia.mockResolvedValue("ORCAMENTO");
+
+      const r = await chamar("POST", "/propostas/templates/preview", { templateId: "tpl-orcamento-1" });
+
+      expect(r.status).toBe(400);
+      expect(JSON.stringify(r.json)).toMatch(/proposta/i);
+      expect(getSource).not.toHaveBeenCalled();
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it("source direto valido: 200 application/pdf renderizado com os dados de exemplo", async () => {
+      const r = await chamarBruto("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO });
+
+      expect(r.status).toBe(200);
+      expect(r.headers.get("content-type")).toContain("application/pdf");
+      expect(gerarPreviaTemplate).toHaveBeenCalledWith(SOURCE_VALIDO);
+      expect(getFamilia).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["script", "<html><script>alert(1)</script></html>"],
+      ["handler de evento", '<html><body><img src="x" onerror="alert(1)"></body></html>'],
+      ["protocolo javascript", '<a href="javascript:alert(1)">x</a>'],
+    ])("source perigoso (%s): 400 e nada e renderizado", async (_nome, source) => {
+      const r = await chamar("POST", "/propostas/templates/preview", { source });
+
+      expect(r.status).toBe(400);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it("sem source nem templateId: 400", async () => {
+      const r = await chamar("POST", "/propostas/templates/preview", {});
+      expect(r.status).toBe(400);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+    });
+
+    it("source acima do limite do DTO (200000 caracteres) e recusado pela validacao", async () => {
+      const dto = plainToInstance(PreviewTemplatePropostaDto, { source: "a".repeat(200_001) });
+      expect((await validate(dto)).length).toBeGreaterThan(0);
+      expect((await validate(plainToInstance(PreviewTemplatePropostaDto, { source: "a".repeat(200_000) }))).length).toBe(0);
+      expect((await validate(plainToInstance(PreviewTemplatePropostaDto, { templateId: "t".repeat(101) }))).length).toBeGreaterThan(0);
+    });
+
+    it("corpo enorme pela rede e recusado (400 ou 413) e nunca renderizado", async () => {
+      const r = await chamar("POST", "/propostas/templates/preview", { source: "a".repeat(200_001) });
+      expect([400, 413]).toContain(r.status);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+    });
+
+    it("campo desconhecido e recusado (whitelist): 400", async () => {
+      const r = await chamar("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO, proposta: { custo: 1 } });
+      expect(r.status).toBe(400);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+    });
+
+    it("sem a chave admin 401 e sem a chave interna 401", async () => {
+      expect((await chamar("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO }, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect((await chamar("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO }, { interna: null, admin: CHAVE_ADMIN })).status).toBe(401);
+      expect(gerarPreviaTemplate).not.toHaveBeenCalled();
+    });
+
+    it("a rota estatica nao e capturada pelas rotas com :id (nao tenta parsear 'templates' como UUID)", async () => {
+      const r = await chamarBruto("POST", "/propostas/templates/preview", { source: SOURCE_VALIDO });
+      expect(r.status).not.toBe(404);
+      expect(r.status).toBe(200);
+    });
+  });
 });

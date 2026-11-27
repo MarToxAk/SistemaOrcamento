@@ -157,6 +157,15 @@ export class ListarPropostasQueryDto {
   tamanho?: number;
 }
 
+/**
+ * Preview de template da familia PROPOSTA: `source` direto (validado por validateUpload no controller) ou
+ * `templateId` de um template salvo. Ao menos um dos dois e exigido no controller.
+ */
+export class PreviewTemplatePropostaDto {
+  @IsOptional() @IsString() @MaxLength(200000) source?: string;
+  @IsOptional() @IsString() @MaxLength(100) templateId?: string;
+}
+
 /** Marcar a proposta como FECHADA ou CANCELADA manualmente (D-06). Nenhum outro status e aceito. */
 export class AtualizarStatusPropostaDto {
   @IsIn(["FECHADA", "CANCELADA"], { message: "status deve ser FECHADA ou CANCELADA" })
