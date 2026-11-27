@@ -1,0 +1,220 @@
+{{!
+  Template PDF de PROPOSTA COMERCIAL - proposta-institucional.hbs
+  Familia: PROPOSTA. Preset institucional: sobrio, neutro (escala de cinza) com um unico acento,
+  o teal da marca, usado apenas em linhas e titulos. Sem faixas coloridas e sem elementos decorativos.
+
+  Todo texto de valor (moeda, quantidade, datas, documentos) chega ja formatado pelo servidor:
+  este template apenas imprime. Nao ha helpers; so construcoes nativas do Handlebars.
+
+  Variaveis de empresa:
+    empresaNome, empresaCnpj, empresaEndereco
+    empresaLogoUrl    - logo como data URI (ausente = sem imagem)
+    empresaTelefones, empresaEmail  (ausentes = linha omitida)
+
+  Variaveis da proposta:
+    previa            - verdadeiro na previa (sem numero, com marca d'agua)
+    numero            - numero da proposta (idorcamento do Athos); ausente na previa
+    dataEmissao, horaEmissao
+    validade, prazoEntrega
+    cliente.razaoSocial, cliente.nomeFantasia, cliente.rotuloDocumento, cliente.documento
+    cliente.logradouro, .numero, .complemento, .bairro, .cidade, .uf, .cep
+    orgao.temDados, orgao.numeroProcesso, orgao.setorResponsavel, orgao.contatoEmail, orgao.contatoTelefone
+    itens[].sequencia, .codigo, .nome, .descricaoCurta, .unidade, .quantidade, .valorUnitario, .total
+    totalGeral
+    banco.bancoNome, .agencia, .conta, .titular, .documentoTitular
+    observacao
+    assinante.nome, assinante.cargo, assinante.cpf
+
+  Sem links externos, sem scripts e sem manipuladores de evento: fontes do sistema (Liberation Sans).
+  Margens e rodape com numero de pagina vem do render do servidor.
+}}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Proposta comercial{{#if numero}} Nº {{numero}}{{/if}} - {{empresaNome}}</title>
+<style>
+  @page { size: A4; }
+  :root {
+    --accent:#0e6d73;
+    --ink:#222222;
+    --ink-soft:#555555;
+    --ink-faint:#777777;
+    --line:#cccccc;
+    --line-soft:#e5e5e5;
+    --wash:#f5f5f5;
+  }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  html,body{margin:0;padding:0;font-family:'Liberation Sans',Arial,Helvetica,sans-serif;color:var(--ink);background:#fff;font-size:9.5pt;line-height:1.45}
+  .num{font-variant-numeric:tabular-nums}
+
+  /* Marca d'agua da previa (repete em todas as paginas) */
+  .watermark{position:fixed;top:42%;left:0;right:0;text-align:center;font-size:96pt;font-weight:700;letter-spacing:.08em;color:#e8e8e8;transform:rotate(-30deg);z-index:0;pointer-events:none}
+  .content{position:relative;z-index:1}
+
+  /* Cabecalho */
+  .head{display:flex;gap:14px;align-items:flex-start;padding-bottom:10px;border-bottom:1.5px solid var(--accent);margin-bottom:14px}
+  .head__logo{width:64px;height:64px;object-fit:contain}
+  .head__co{flex:1}
+  .head__co h1{margin:0 0 3px;font-size:13pt;font-weight:700;line-height:1.2}
+  .head__co p{margin:0;font-size:8.5pt;color:var(--ink-soft)}
+
+  .title{display:flex;justify-content:space-between;align-items:baseline;margin:0 0 12px}
+  .title h2{margin:0;font-size:14pt;letter-spacing:.06em;color:var(--accent);font-weight:700}
+  .title__meta{font-size:9pt;color:var(--ink-soft);text-align:right}
+  .title__meta b{color:var(--ink)}
+
+  /* Blocos */
+  .block{margin:0 0 12px;page-break-inside:avoid}
+  .block h3{margin:0 0 5px;padding-bottom:2px;font-size:9pt;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);border-bottom:1px solid var(--line)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 14px}
+  .grid--2{grid-template-columns:repeat(2,1fr)}
+  .field small{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint)}
+  .field span{display:block;word-break:break-word}
+  .span2{grid-column:span 2}
+  .span4{grid-column:span 4}
+
+  /* Tabela de itens */
+  table.itens{width:100%;border-collapse:collapse;margin:0 0 6px}
+  table.itens thead{display:table-header-group}
+  table.itens th{white-space:nowrap;padding:5px 6px;font-size:8pt;text-transform:uppercase;letter-spacing:.04em;text-align:left;color:var(--ink);border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);background:var(--wash)}
+  table.itens td{padding:5px 6px;vertical-align:top;border-bottom:1px solid var(--line-soft)}
+  table.itens tr{page-break-inside:avoid}
+  table.itens .r{text-align:right}
+  table.itens .c{text-align:center}
+  .item__desc{display:block;margin-top:1px;font-size:8pt;color:var(--ink-soft)}
+  .col-cod{width:9%}
+  .col-un{width:7%}
+  .col-qtd{width:11%}
+  .col-vu{width:18%}
+  .col-tot{width:14%}
+
+  .total{display:flex;justify-content:flex-end;margin:0 0 14px;page-break-inside:avoid}
+  .total__box{min-width:210px;padding:6px 10px;border-top:1.5px solid var(--accent);display:flex;justify-content:space-between;gap:24px;font-size:11pt;font-weight:700}
+
+  .obs{white-space:pre-line}
+
+  /* Assinatura */
+  .sign{margin-top:34px;page-break-inside:avoid}
+  .sign__line{width:60%;border-top:1px solid var(--ink);padding-top:4px}
+  .sign__line b{display:block}
+  .sign__line span{display:block;font-size:8.5pt;color:var(--ink-soft)}
+</style>
+</head>
+<body>
+{{#if previa}}<div class="watermark">PRÉVIA</div>{{/if}}
+<div class="content">
+
+  <div class="head">
+    {{#if empresaLogoUrl}}<img class="head__logo" src="{{empresaLogoUrl}}" alt="">{{/if}}
+    <div class="head__co">
+      <h1>{{empresaNome}}</h1>
+      <p>CNPJ {{empresaCnpj}}</p>
+      <p>{{empresaEndereco}}</p>
+      {{#if empresaTelefones}}<p>{{empresaTelefones}}</p>{{/if}}
+      {{#if empresaEmail}}<p>{{empresaEmail}}</p>{{/if}}
+    </div>
+  </div>
+
+  <div class="title">
+    <h2>PROPOSTA COMERCIAL</h2>
+    <div class="title__meta">
+      {{#if numero}}<div>Proposta nº <b class="num">{{numero}}</b></div>{{/if}}
+      <div>Emitida em <b class="num">{{dataEmissao}}</b>{{#if horaEmissao}} às <span class="num">{{horaEmissao}}</span>{{/if}}</div>
+    </div>
+  </div>
+
+  <div class="block">
+    <h3>Cliente</h3>
+    <div class="grid">
+      <div class="field span2"><small>Razão social</small><span>{{cliente.razaoSocial}}</span></div>
+      <div class="field span2"><small>{{cliente.rotuloDocumento}}</small><span class="num">{{cliente.documento}}</span></div>
+      {{#if cliente.nomeFantasia}}<div class="field span4"><small>Nome fantasia</small><span>{{cliente.nomeFantasia}}</span></div>{{/if}}
+      <div class="field span2"><small>Logradouro</small><span>{{cliente.logradouro}}</span></div>
+      <div class="field"><small>Número</small><span>{{cliente.numero}}</span></div>
+      {{#if cliente.complemento}}<div class="field"><small>Complemento</small><span>{{cliente.complemento}}</span></div>{{/if}}
+      <div class="field"><small>Bairro</small><span>{{cliente.bairro}}</span></div>
+      <div class="field"><small>Cidade</small><span>{{cliente.cidade}}</span></div>
+      <div class="field"><small>UF</small><span>{{cliente.uf}}</span></div>
+      <div class="field"><small>CEP</small><span class="num">{{cliente.cep}}</span></div>
+    </div>
+  </div>
+
+  {{#if orgao.temDados}}
+  <div class="block">
+    <h3>Órgão</h3>
+    <div class="grid grid--2">
+      {{#if orgao.numeroProcesso}}<div class="field"><small>Processo / pregão</small><span>{{orgao.numeroProcesso}}</span></div>{{/if}}
+      {{#if orgao.setorResponsavel}}<div class="field"><small>Setor / responsável</small><span>{{orgao.setorResponsavel}}</span></div>{{/if}}
+      {{#if orgao.contatoEmail}}<div class="field"><small>E-mail de contato</small><span>{{orgao.contatoEmail}}</span></div>{{/if}}
+      {{#if orgao.contatoTelefone}}<div class="field"><small>Telefone de contato</small><span>{{orgao.contatoTelefone}}</span></div>{{/if}}
+    </div>
+  </div>
+  {{/if}}
+
+  <table class="itens">
+    <thead>
+      <tr>
+        <th class="col-cod">Código</th>
+        <th>Descrição</th>
+        <th class="col-un c">Un.</th>
+        <th class="col-qtd r">Quantidade</th>
+        <th class="col-vu r">Valor unitário</th>
+        <th class="col-tot r">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each itens}}
+      <tr>
+        <td class="num">{{codigo}}</td>
+        <td>{{nome}}{{#if descricaoCurta}}<span class="item__desc">{{descricaoCurta}}</span>{{/if}}</td>
+        <td class="c">{{unidade}}</td>
+        <td class="r num">{{quantidade}}</td>
+        <td class="r num">{{valorUnitario}}</td>
+        <td class="r num">{{total}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <div class="total"><div class="total__box"><span>Total geral</span><span class="num">{{totalGeral}}</span></div></div>
+
+  <div class="block">
+    <h3>Condições</h3>
+    <div class="grid grid--2">
+      <div class="field"><small>Validade da proposta</small><span>{{validade}}</span></div>
+      <div class="field"><small>Prazo de entrega</small><span>{{prazoEntrega}}</span></div>
+    </div>
+  </div>
+
+  <div class="block">
+    <h3>Dados bancários</h3>
+    <div class="grid">
+      <div class="field"><small>Banco</small><span>{{banco.bancoNome}}</span></div>
+      <div class="field"><small>Agência</small><span class="num">{{banco.agencia}}</span></div>
+      <div class="field"><small>Conta</small><span class="num">{{banco.conta}}</span></div>
+      <div class="field"><small>CNPJ / CPF do titular</small><span class="num">{{banco.documentoTitular}}</span></div>
+      <div class="field span4"><small>Titular</small><span>{{banco.titular}}</span></div>
+    </div>
+  </div>
+
+  {{#if observacao}}
+  <div class="block">
+    <h3>Observações</h3>
+    <div class="obs">{{observacao}}</div>
+  </div>
+  {{/if}}
+
+  {{#if assinante}}
+  <div class="sign">
+    <div class="sign__line">
+      <b>{{assinante.nome}}</b>
+      {{#if assinante.cargo}}<span>{{assinante.cargo}}</span>{{/if}}
+      {{#if assinante.cpf}}<span>CPF {{assinante.cpf}}</span>{{/if}}
+    </div>
+  </div>
+  {{/if}}
+
+</div>
+</body>
+</html>
