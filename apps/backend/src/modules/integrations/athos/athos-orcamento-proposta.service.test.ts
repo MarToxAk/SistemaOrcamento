@@ -1,3 +1,4 @@
+import * as servicoModulo from "./athos-orcamento.service";
 import { AthosOrcamentoService, CriarOrcamentoPropostaInput, OrcamentoAthosError } from "./athos-orcamento.service";
 
 // Seguranca (Fases 44/55): NUNCA conecta ao Athos real. pg e mockado por completo e o host de teste e localhost.
@@ -276,5 +277,291 @@ describe("AthosOrcamentoService.criarOrcamentoProposta (Fase 55, plano 55-04)", 
     }
     // 1 item: INSERT orcamento + INSERT item + DELETE pagamento + INSERT pagamento.
     expect(sqls.filter((s) => /^(INSERT|DELETE)\b/i.test(s))).toHaveLength(4);
+  });
+});
+
+function semConexaoNemEscrita() {
+  expect(mPool.connect).not.toHaveBeenCalled();
+  expect(mClient.query).not.toHaveBeenCalled();
+}
+
+function semEscritaNemCommit() {
+  expect(textosSql().filter(ehEscrita)).toEqual([]);
+  expect(tipos()).not.toContain("COMMIT");
+}
+
+describe("gate PROPOSTA_ESCRITA_ATIVA independente de ATHOS_ORCAMENTO_ESCRITA (D-30)", () => {
+  it.each([
+    ["ausente", undefined],
+    ["false", "false"],
+    ["TRUE (caixa errada)", "TRUE"],
+    ["1", "1"],
+  ])("flag %s lanca ESCRITA_DESABILITADA 503 sem conectar, mesmo com a flag da IA ligada", async (_nome, valor) => {
+    if (valor === undefined) delete process.env.PROPOSTA_ESCRITA_ATIVA;
+    else process.env.PROPOSTA_ESCRITA_ATIVA = valor;
+    process.env.ATHOS_ORCAMENTO_ESCRITA = "true";
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
+    expect(err.codigo).toBe("ESCRITA_DESABILITADA");
+    expect(err.getStatus()).toBe(503);
+    expect(String(err.message)).toContain("PROPOSTA_ESCRITA_ATIVA");
+    semConexaoNemEscrita();
+  });
+
+  it("flag da proposta ligada com a flag da IA ausente grava normalmente", async () => {
+    delete process.env.ATHOS_ORCAMENTO_ESCRITA;
+    const res = await new AthosOrcamentoService().criarOrcamentoProposta(entrada());
+    expect(res.recuperado).toBe(false);
+    expect(tipos()).toContain("COMMIT");
+  });
+
+  it("flag da proposta ligada com a flag da IA 'false' tambem grava", async () => {
+    process.env.ATHOS_ORCAMENTO_ESCRITA = "false";
+    const res = await new AthosOrcamentoService().criarOrcamentoProposta(entrada());
+    expect(res.idorcamento).toBe(25866);
+  });
+
+  it("exigirEscritaPropostaAtiva lanca o mesmo erro quando a flag nao e 'true' e nao lanca quando e", () => {
+    const svc = new AthosOrcamentoService();
+    process.env.PROPOSTA_ESCRITA_ATIVA = "true";
+    expect(() => svc.exigirEscritaPropostaAtiva()).not.toThrow();
+    process.env.PROPOSTA_ESCRITA_ATIVA = "yes";
+    let erro: unknown;
+    try {
+      svc.exigirEscritaPropostaAtiva();
+    } catch (e) {
+      erro = e;
+    }
+    expect(erro).toBeInstanceOf(OrcamentoAthosError);
+    expect((erro as OrcamentoAthosError).codigo).toBe("ESCRITA_DESABILITADA");
+    expect((erro as OrcamentoAthosError).getStatus()).toBe(503);
+    expect(mPool.connect).not.toHaveBeenCalled();
+  });
+});
+
+describe("validacoes puras (nenhuma conexao, nenhum INSERT)", () => {
+  const item = (extra: Partial<CriarOrcamentoPropostaInput["itens"][0]> = {}) => ({
+    idproduto: 101,
+    quantidade: "2.000",
+    precoUnitario: "2.90",
+    custoUnitario: "1.500",
+    ...extra,
+  });
+
+  const casos: Array<[string, () => CriarOrcamentoPropostaInput, string]> = [
+    ["idcliente ausente", () => entrada({ idcliente: undefined as unknown as number }), "VALOR_INVALIDO"],
+    ["idcliente zero", () => entrada({ idcliente: 0 }), "VALOR_INVALIDO"],
+    ["idcliente negativo", () => entrada({ idcliente: -3 }), "VALOR_INVALIDO"],
+    ["idcliente acima de int4", () => entrada({ idcliente: 2147483648 }), "VALOR_INVALIDO"],
+    ["ref com 11 caracteres", () => entrada({ ref: "0123456789a" }), "VALOR_INVALIDO"],
+    ["ref com 13 caracteres", () => entrada({ ref: "0123456789abc" }), "VALOR_INVALIDO"],
+    ["ref com maiuscula", () => entrada({ ref: "0123456789AB" }), "VALOR_INVALIDO"],
+    ["ref nao hexadecimal", () => entrada({ ref: "0123456789zz" }), "VALOR_INVALIDO"],
+    ["lista vazia", () => entrada({ itens: [] }), "VALOR_INVALIDO"],
+    ["mais de 200 itens", () => entrada({ itens: Array.from({ length: 201 }, () => item()) }), "VALOR_INVALIDO"],
+    ["idproduto invalido", () => entrada({ itens: [item({ idproduto: 0 })] }), "VALOR_INVALIDO"],
+    ["preco com 3 casas", () => entrada({ itens: [item({ precoUnitario: "2.905" })] }), "VALOR_INVALIDO"],
+    ["preco zero", () => entrada({ itens: [item({ precoUnitario: "0.00" })] }), "VALOR_INVALIDO"],
+    ["quantidade zero", () => entrada({ itens: [item({ quantidade: "0" })] }), "VALOR_INVALIDO"],
+    ["quantidade negativa", () => entrada({ itens: [item({ quantidade: "-1" })] }), "VALOR_INVALIDO"],
+    ["quantidade acima de 10000", () => entrada({ itens: [item({ quantidade: "10000.001" })] }), "VALOR_INVALIDO"],
+    ["custo negativo", () => entrada({ itens: [item({ custoUnitario: "-0.5" })] }), "VALOR_INVALIDO"],
+    ["custo com 4 casas", () => entrada({ itens: [item({ custoUnitario: "1.5001" })] }), "VALOR_INVALIDO"],
+    [
+      "linha acima do limite de numeric(9,3)",
+      () => entrada({ itens: [item({ quantidade: "10000", precoUnitario: "100.00" })] }),
+      "VALOR_FORA_DO_LIMITE",
+    ],
+    [
+      "total acima do limite de numeric(9,3)",
+      () => entrada({ itens: Array.from({ length: 2 }, () => item({ quantidade: "9000", precoUnitario: "60.00" })) }),
+      "VALOR_FORA_DO_LIMITE",
+    ],
+  ];
+
+  it.each(casos)("%s", async (_nome, montar, codigo) => {
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(montar()));
+    expect(err.codigo).toBe(codigo);
+    expect(err.getStatus()).toBe(422);
+    semConexaoNemEscrita();
+  });
+
+  it("o erro de item traz sequenciaitem 1-based nos detalhes", async () => {
+    const err = await falha(
+      new AthosOrcamentoService().criarOrcamentoProposta(entrada({ itens: [item(), item({ precoUnitario: "2.905" })] })),
+    );
+    expect((err.getResponse() as { detalhes?: { sequenciaitem?: number } }).detalhes?.sequenciaitem).toBe(2);
+  });
+});
+
+describe("validacoes dentro da transacao (sem INSERT)", () => {
+  it("cliente inexistente = CLIENTE_INEXISTENTE 422", async () => {
+    prepararPg({ config: { cliente_ok: false } });
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
+    expect(err.codigo).toBe("CLIENTE_INEXISTENTE");
+    expect(err.getStatus()).toBe(422);
+    semEscritaNemCommit();
+    expect(tipos()).toContain("ROLLBACK");
+    expect(mClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("produto inexistente = PRODUTO_INEXISTENTE com os ids", async () => {
+    prepararPg({ produtos: [produto(101)] });
+    const err = await falha(
+      new AthosOrcamentoService().criarOrcamentoProposta(
+        entrada({
+          itens: [
+            { idproduto: 101, quantidade: "1", precoUnitario: "1.00", custoUnitario: "0.500" },
+            { idproduto: 999, quantidade: "1", precoUnitario: "1.00", custoUnitario: "0.500" },
+          ],
+        }),
+      ),
+    );
+    expect(err.codigo).toBe("PRODUTO_INEXISTENTE");
+    expect((err.getResponse() as { detalhes?: { idsInexistentes?: number[] } }).detalhes?.idsInexistentes).toEqual([999]);
+    semEscritaNemCommit();
+  });
+
+  it.each([
+    ["inativo", { statusproduto: false }],
+    ["nao vendido", { vende: false }],
+  ])("produto %s = PRODUTO_INATIVO", async (_nome, extra) => {
+    prepararPg({ produtos: [produto(101, extra)] });
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
+    expect(err.codigo).toBe("PRODUTO_INATIVO");
+    semEscritaNemCommit();
+  });
+
+  it("quantidade fracionada em produto que nao permite = QUANTIDADE_FRACIONADA; inteira passa", async () => {
+    prepararPg({ produtos: [produto(101, { permitefracionar: false })] });
+    const err = await falha(
+      new AthosOrcamentoService().criarOrcamentoProposta(
+        entrada({ itens: [{ idproduto: 101, quantidade: "1.500", precoUnitario: "2.90", custoUnitario: "1.000" }] }),
+      ),
+    );
+    expect(err.codigo).toBe("QUANTIDADE_FRACIONADA");
+    semEscritaNemCommit();
+
+    prepararPg({ produtos: [produto(101, { permitefracionar: false })] });
+    const ok = await new AthosOrcamentoService().criarOrcamentoProposta(entrada());
+    expect(ok.recuperado).toBe(false);
+  });
+
+  it.each([
+    ["funcionario_ok", "CONFIG_INVALIDA"],
+    ["vendedor_ok", "CONFIG_INVALIDA"],
+    ["terminal_ok", "CONFIG_INVALIDA"],
+    ["pix_ok", "FORMA_PAGAMENTO_INVALIDA"],
+  ])("%s falso = %s", async (campo, codigo) => {
+    prepararPg({ config: { [campo]: false } });
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
+    expect(err.codigo).toBe(codigo);
+    expect(err.getStatus()).toBe(500);
+    semEscritaNemCommit();
+  });
+
+  it("nenhum INSERT e emitido antes de todas as leituras e validacoes passarem", async () => {
+    await new AthosOrcamentoService().criarOrcamentoProposta(entrada());
+    const t = tipos();
+    const primeiraEscrita = t.findIndex((x) => x === "INS_ORC");
+    for (const leitura of ["LER_CONFIG", "LER_PRODUTOS_PROPOSTA", "BUSCA_REF"]) {
+      expect(t.indexOf(leitura)).toBeGreaterThan(-1);
+      expect(t.indexOf(leitura)).toBeLessThan(primeiraEscrita);
+    }
+  });
+});
+
+describe("idempotencia por ref e recuperacao", () => {
+  const ORFAO = { idorcamento: 31000, senhabalcao: 31002, data: "2026-11-20", hora: "09:30:00", valor: "5.800" };
+
+  it("se existe orcamento com o ref devolve recuperado=true, faz ROLLBACK e nao escreve", async () => {
+    prepararPg({ orfao: ORFAO });
+    const res = await new AthosOrcamentoService().criarOrcamentoProposta(entrada());
+    expect(res).toEqual({
+      idorcamento: 31000,
+      senhabalcao: 31002,
+      data: "2026-11-20",
+      hora: "09:30:00",
+      valorTotal: "5.80",
+      recuperado: true,
+    });
+    semEscritaNemCommit();
+    expect(tipos()[tipos().length - 1]).toBe("ROLLBACK");
+    expect(mClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("buscarOrcamentoPorRefProposta devolve a linha em transacao READ ONLY e nao exige a flag de escrita", async () => {
+    prepararPg({ orfao: ORFAO });
+    delete process.env.PROPOSTA_ESCRITA_ATIVA;
+    const res = await new AthosOrcamentoService().buscarOrcamentoPorRefProposta(REF);
+    expect(res).toEqual({ idorcamento: 31000, senhabalcao: 31002, data: "2026-11-20", hora: "09:30:00", valorTotal: "5.80" });
+    expect(tipos()).toEqual(["BEGIN", "SET_RO", "SET_TIMEOUT", "BUSCA_REF", "ROLLBACK"]);
+    expect(params("BUSCA_REF")).toEqual([`[PROPOSTA] ref:${REF}%`]);
+    semEscritaNemCommit();
+  });
+
+  it("buscarOrcamentoPorRefProposta devolve null quando nao ha linha", async () => {
+    prepararPg({ orfao: null });
+    expect(await new AthosOrcamentoService().buscarOrcamentoPorRefProposta(REF)).toBeNull();
+  });
+
+  it.each(["0123", "0123456789AB", "0123456789zz", ""])("buscarOrcamentoPorRefProposta recusa ref %p sem conectar", async (ref) => {
+    const err = await falha(new AthosOrcamentoService().buscarOrcamentoPorRefProposta(ref));
+    expect(err.codigo).toBe("VALOR_INVALIDO");
+    expect(err.getStatus()).toBe(422);
+    semConexaoNemEscrita();
+  });
+});
+
+describe("mapeamento de erros do pg (sem vazar a mensagem original)", () => {
+  it("42501 durante o INSERT = PERMISSAO_NEGADA 500 com ROLLBACK", async () => {
+    prepararPg({ falharEm: "INS_ORC", codigo: "42501" });
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
+    expect(err.codigo).toBe("PERMISSAO_NEGADA");
+    expect(err.getStatus()).toBe(500);
+    expect(tipos()).toContain("ROLLBACK");
+    expect(tipos()).not.toContain("COMMIT");
+  });
+
+  it("57014 = ATHOS_INDISPONIVEL 503", async () => {
+    prepararPg({ falharEm: "INS_ITEM", codigo: "57014" });
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
+    expect(err.codigo).toBe("ATHOS_INDISPONIVEL");
+    expect(err.getStatus()).toBe(503);
+  });
+
+  it("qualquer outro erro = ERRO_BANCO 500 e a mensagem do pg nao aparece", async () => {
+    prepararPg({ falharEm: "INS_PAG", mensagem: "relation orcamento_item violates something secret SQL" });
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
+    expect(err.codigo).toBe("ERRO_BANCO");
+    expect(err.getStatus()).toBe(500);
+    expect(JSON.stringify(err.getResponse())).not.toMatch(/secret|violates|relation/i);
+    expect(tipos()).toContain("ROLLBACK");
+  });
+
+  it("falha ao conectar = ATHOS_INDISPONIVEL 503 sem escrita", async () => {
+    prepararPg({ conexaoFalha: true });
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
+    expect(err.codigo).toBe("ATHOS_INDISPONIVEL");
+    expect(mClient.query).not.toHaveBeenCalled();
+  });
+
+  it("host fora de localhost em NODE_ENV=test e bloqueado antes de conectar", async () => {
+    process.env.ATHOS_PG_HOST = "192.168.33.198";
+    const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
+    expect(err.codigo).toBe("AMBIENTE_TESTE_HOST_REAL");
+    semConexaoNemEscrita();
+  });
+});
+
+describe("constantes SQL exportadas para o IT de ROLLBACK (comportamento da Fase 44 inalterado)", () => {
+  it.each(["SQL_INSERIR_ORCAMENTO", "SQL_INSERIR_ITEM", "SQL_LIMPAR_PAGAMENTO", "SQL_INSERIR_PAGAMENTO"])("exporta %s", (nome) => {
+    const valor = (servicoModulo as unknown as Record<string, unknown>)[nome];
+    expect(typeof valor).toBe("string");
+  });
+
+  it.each(["SQL_LER_PRODUTOS_PROPOSTA", "SQL_BUSCAR_ORCAMENTO_POR_REF", "SQL_LER_DATA_HORA_ORCAMENTO"])("exporta %s sem CTE nem UPDATE", (nome) => {
+    const valor = (servicoModulo as unknown as Record<string, unknown>)[nome];
+    expect(typeof valor).toBe("string");
+    expect(String(valor)).not.toMatch(/^\s*WITH\b|\bUPDATE\b/i);
   });
 });
