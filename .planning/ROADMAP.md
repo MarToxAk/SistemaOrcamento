@@ -375,13 +375,13 @@ Plans:
 - Referencias do Athos copiadas para `referencia/` (orcamento e cadastro de produto). Lacunas da captura: cliente, validade e obs no orcamento do Athos, e conversao do orcamento em venda.
 **Requirements**: P55-PRECO, P55-MONT, P55-CLI, P55-CICLO, P55-ATHOS, P55-PDF
 **Depends on:** Phase 54
-**Plans:** 18 plans
+**Plans:** 3/18 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 55-01-PLAN.md — util puro de preco da proposta em BigInt: preco base com ceil, ajuste por % ou valor digitado, linhas sem desconto, custo e margem (Wave 1)
-- [ ] 55-02-PLAN.md — [BLOCKING] schema: coluna familia em PdfTemplate e tabelas Proposta, PropostaItem e PropostaConfig; snapshot de emissao do PDF (pdfSnapshot) e migrations idempotentes validadas em Postgres descartavel (Wave 1)
-- [ ] 55-03-PLAN.md — leituras do Athos: produto com preco base e custo corrigido (COALESCE por termo) e cliente com razao social real e endereco sem fallback (Wave 1)
+- [x] 55-01-PLAN.md — util puro de preco da proposta em BigInt: preco base com ceil, ajuste por % ou valor digitado, linhas sem desconto, custo e margem (Wave 1)
+- [x] 55-02-PLAN.md — [BLOCKING] schema: coluna familia em PdfTemplate e tabelas Proposta, PropostaItem e PropostaConfig; snapshot de emissao do PDF (pdfSnapshot) e migrations idempotentes validadas em Postgres descartavel (Wave 1)
+- [x] 55-03-PLAN.md — leituras do Athos: produto com preco base e custo corrigido (COALESCE por termo) e cliente com razao social real e endereco sem fallback (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 55-04-PLAN.md — escrita no Athos: criarOrcamentoProposta (preco final sem desconto, cliente obrigatorio, idempotencia por ref, kill-switch PROPOSTA_ESCRITA_ATIVA), IT no clone e regressao da Fase 44 (Wave 2)
