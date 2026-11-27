@@ -129,6 +129,28 @@ export interface ProdutoOrcamentoResultado {
   unidade: string | null;
 }
 
+/**
+ * Produto lido para a montagem da proposta comercial (Fase 55, D-01, D-12, D-24). Inclui custo unitario:
+ * so e exposto por rotas AdminOnly (plano 55-06), nunca pela rota da IA. numeric como texto.
+ */
+export interface ProdutoPropostaResultado {
+  idproduto: number;
+  descricao: string;
+  descricaoCurta: string | null;
+  marca: string | null;
+  referencia: string | null;
+  codigoBarra: string | null;
+  /** Texto de precovendaproduto ("3.456"); null quando o Athos nao tem preco. */
+  preco: string | null;
+  emPromocao: boolean;
+  estoqueLoja: string;
+  estoqueDeposito: string;
+  permiteFracionar: boolean;
+  unidade: string | null;
+  /** Custo unitario com COALESCE por termo (3 casas). */
+  custoUnitario: string;
+}
+
 /** Orcamento lido do Athos (44-04). statusorcamento NULL = aberto, true = convertido, false = outro. */
 export interface OrcamentoAthosDetalhe {
   idorcamento: number;
@@ -220,6 +242,22 @@ const SQL_BUSCA_PRODUTOS_SELECT = `SELECT p.idproduto, p.descricaoproduto, pm.no
        COALESCE(p.estoqueloja, 0) AS estoqueloja, COALESCE(p.estoquedeposito, 0) AS estoquedeposito,
        COALESCE(p.permitefracionar, true) AS permitefracionar, COALESCE(p.descontomaximo, 0) AS descontomaximo,
        pu.sigla AS unidade
+  FROM produto p
+  LEFT JOIN produto_marca pm ON pm.idmarca = p.idmarca
+  LEFT JOIN produto_unidade pu ON pu.idunidade = p.idunidade
+ WHERE p.statusproduto = true AND COALESCE(p.vendeproduto, true) = true`;
+
+// Leitura de produto para a proposta comercial (Fase 55, plano 55-03). Mesmos JOINs e filtros da busca da IA,
+// mas com descricaocurta e custo unitario com COALESCE em CADA termo (D-24): a formula de SQL_LER_PRODUTOS
+// (Fase 44) zera o custo quando qualquer imposto e NULL. Somente parametros $n; PostgreSQL 9.0.5.
+const SQL_PROPOSTA_PRODUTOS_SELECT = `SELECT p.idproduto, p.descricaoproduto, p.descricaocurta, pm.nome AS marca, p.referencia, p.codigobarra1,
+       precovendaproduto(p.idproduto) AS preco, estanapromocao(p.idproduto) AS empromocao,
+       COALESCE(p.estoqueloja, 0) AS estoqueloja, COALESCE(p.estoquedeposito, 0) AS estoquedeposito,
+       COALESCE(p.permitefracionar, true) AS permitefracionar,
+       pu.sigla AS unidade,
+       round(COALESCE(CASE WHEN p.quantidadecaixa > 0
+         THEN (p.valorcustocaixa / p.quantidadecaixa) * (1 + (COALESCE(p.imposto, 0) + COALESCE(p.ipi, 0) + COALESCE(p.frete, 0) + COALESCE(p.outroimposto, 0)) / 100)
+         ELSE p.valorcustocaixa * (1 + (COALESCE(p.imposto, 0) + COALESCE(p.ipi, 0) + COALESCE(p.frete, 0) + COALESCE(p.outroimposto, 0)) / 100) END, 0), 3) AS valorcustounitario
   FROM produto p
   LEFT JOIN produto_marca pm ON pm.idmarca = p.idmarca
   LEFT JOIN produto_unidade pu ON pu.idunidade = p.idunidade
@@ -770,6 +808,79 @@ export class AthosOrcamentoService implements OnModuleDestroy {
       descontoMaximo: textoNumerico(l.descontomaximo, "0"),
       unidade: textoOuNull(l.unidade),
     }));
+  }
+
+  private mapearProdutoProposta(l: Record<string, unknown>): ProdutoPropostaResultado {
+    return {
+      idproduto: Number(l.idproduto),
+      descricao: String(l.descricaoproduto ?? ""),
+      descricaoCurta: textoOuNull(l.descricaocurta),
+      marca: textoOuNull(l.marca),
+      referencia: textoOuNull(l.referencia),
+      codigoBarra: textoOuNull(l.codigobarra1),
+      preco: textoOuNull(l.preco),
+      emPromocao: l.empromocao === true,
+      estoqueLoja: textoNumerico(l.estoqueloja, "0"),
+      estoqueDeposito: textoNumerico(l.estoquedeposito, "0"),
+      permiteFracionar: l.permitefracionar !== false,
+      unidade: textoOuNull(l.unidade),
+      custoUnitario: textoNumerico(l.valorcustounitario, "0"),
+    };
+  }
+
+  /**
+   * Busca produtos vendaveis para a proposta (Fase 55): mesma montagem de busca da Fase 44, com preco base
+   * precovendaproduto (D-01) e custo unitario corrigido (D-24). Somente leitura.
+   */
+  async buscarProdutosProposta(q: string, limit?: number): Promise<ProdutoPropostaResultado[]> {
+    const texto = String(q ?? "").trim();
+    const tokens = texto.split(/\s+/).filter((t) => t.length > 0).slice(0, BUSCA_MAX_TOKENS);
+    if (tokens.length === 0) {
+      throw new OrcamentoAthosError("VALOR_INVALIDO", "Informe o texto de busca (q).", 400);
+    }
+    const lim =
+      typeof limit === "number" && Number.isFinite(limit) && Math.floor(limit) >= 1
+        ? Math.min(Math.floor(limit), BUSCA_LIMITE_MAX)
+        : BUSCA_LIMITE_PADRAO;
+
+    const params: unknown[] = [];
+    const blocos = tokens.map((token) => {
+      params.push(`%${escaparLike(token)}%`);
+      const n = `$${params.length}::text`;
+      return `(p.descricaoproduto ILIKE ${n} OR p.referencia ILIKE ${n} OR p.codigobarra1 ILIKE ${n})`;
+    });
+
+    let compIdProduto = "";
+    if (/^\d+$/.test(texto) && Number(texto) <= MAX_INT4) {
+      params.push(Number(texto));
+      compIdProduto = `p.idproduto = $${params.length}`;
+    }
+    params.push(texto);
+    const exato = `$${params.length}::text`;
+    params.push(lim);
+
+    const sql = `${SQL_PROPOSTA_PRODUTOS_SELECT}
+   AND ( (${blocos.join("\n         AND ")})${compIdProduto ? `\n         OR ${compIdProduto}` : ""} )
+ ORDER BY CASE WHEN (p.codigobarra1 = ${exato} OR p.referencia = ${exato}${compIdProduto ? ` OR ${compIdProduto}` : ""}) THEN 0 ELSE 1 END,
+          p.descricaoproduto
+ LIMIT $${params.length}`;
+
+    const linhas = await this.lerSomenteLeitura(async (client) => {
+      const r = await client.query<Record<string, unknown>>(sql, params);
+      return r.rows;
+    });
+    return linhas.map((l) => this.mapearProdutoProposta(l));
+  }
+
+  /** Le um produto vendavel para a proposta; null quando nao existe, esta inativo ou nao e vendido (D-05). */
+  async obterProdutoProposta(idproduto: number): Promise<ProdutoPropostaResultado | null> {
+    if (!Number.isSafeInteger(idproduto) || idproduto < 1 || idproduto > MAX_INT4) return null;
+    const sql = `${SQL_PROPOSTA_PRODUTOS_SELECT}\n   AND p.idproduto = $1`;
+    const linhas = await this.lerSomenteLeitura(async (client) => {
+      const r = await client.query<Record<string, unknown>>(sql, [idproduto]);
+      return r.rows;
+    });
+    return linhas.length === 0 ? null : this.mapearProdutoProposta(linhas[0]);
   }
 
   /** Le cabecalho, itens e pagamentos de um orcamento do Athos. Inexistente = 404 ORCAMENTO_INEXISTENTE. */

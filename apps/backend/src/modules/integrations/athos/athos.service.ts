@@ -124,6 +124,28 @@ export function resolveItemTotal(totalArmazenado: number, totalCalculado: number
   return totalArmazenado === 0 && totalCalculado !== 0 ? totalCalculado : totalArmazenado;
 }
 
+/** Cliente lido para a proposta comercial (Fase 55, D-14, D-25). Dado ausente = null, nunca preenchimento inventado. */
+export interface ClientePropostaDetalhe {
+  idcliente: number;
+  tipoPessoa: "fisico" | "juridico";
+  /** Juridico: razaosocial real (mesmo com nomefantasia); fisico: o nome. */
+  razaoSocial: string | null;
+  nomeFantasia: string | null;
+  /** Somente digitos (CPF ou CNPJ). */
+  documento: string | null;
+  endereco: {
+    logradouro: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    uf: string | null;
+    cep: string | null;
+  } | null;
+  email: string | null;
+  telefone: string | null;
+}
+
 export type ItemCorrecao = { valorItem: number; valorDesconto: number; valorFinalItem: number };
 
 export type ItemPricingBruto = {
@@ -1253,6 +1275,106 @@ export class AthosService {
     }
   }
 
+  /**
+   * Cliente para a proposta comercial (Fase 55, D-14, D-25): razao social real, endereco por campo e contato.
+   * Campo ausente ou em branco vira null; NUNCA aplica os valores de preenchimento de buscarClientes
+   * (Centro, S/N, SP, 3520400). SELECT unico, parametrizado e somente leitura (PostgreSQL 9.0.5: sem LATERAL).
+   */
+  async buscarClienteParaProposta(idcliente: number): Promise<ClientePropostaDetalhe | null> {
+    if (!Number.isSafeInteger(idcliente) || idcliente < 1 || idcliente > 2147483647) return null;
+    const pool = this.getPool();
+    const client: PoolClient = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT c.idcliente,
+          cf.nome AS nome_fisico,
+          cj.nomefantasia,
+          cj.razaosocial,
+          cf.cpf,
+          cj.cnpj,
+          ce.tipologradouro,
+          ce.logradouro,
+          ce.numero AS end_numero,
+          ce.complemento,
+          ce.bairro,
+          ce.cidade,
+          ce.uf,
+          ce.cep,
+          c.emailcliente,
+          c.dddtelefoneempresa,
+          c.telefoneempresa
+        FROM cliente c
+        LEFT JOIN cliente_fisico cf ON cf.idcliente = c.idcliente
+        LEFT JOIN cliente_juridico cj ON cj.idcliente = c.idcliente
+        LEFT JOIN (
+          SELECT DISTINCT ON (idcliente)
+            idcliente, tipologradouro, logradouro, numero, complemento, bairro, cidade, uf, cep
+          FROM cliente_endereco
+          WHERE idcliente = $1
+          ORDER BY idcliente, idenderecocliente
+        ) ce ON ce.idcliente = c.idcliente
+        WHERE c.idcliente = $1`,
+        [idcliente],
+      );
+      const row = result.rows[0] as Row | undefined;
+      if (!row) return null;
+
+      const texto = (chave: string): string | null => {
+        const v = row[chave];
+        if (v === null || v === undefined) return null;
+        const t = String(v).trim();
+        return t === "" ? null : t;
+      };
+      const digitos = (chave: string): string | null => {
+        const t = texto(chave);
+        const d = t ? t.replace(/\D/g, "") : "";
+        return d === "" ? null : d;
+      };
+
+      const nomeFisico = texto("nome_fisico");
+      const isFisico = nomeFisico !== null;
+      const tipoLogradouro = texto("tipologradouro");
+      const logradouroBruto = texto("logradouro");
+      const logradouro = logradouroBruto
+        ? tipoLogradouro
+          ? `${tipoLogradouro} ${logradouroBruto}`
+          : logradouroBruto
+        : null;
+      const endereco = {
+        logradouro,
+        numero: texto("end_numero"),
+        complemento: texto("complemento"),
+        bairro: texto("bairro"),
+        cidade: texto("cidade"),
+        uf: texto("uf"),
+        cep: digitos("cep"),
+      };
+      const temEndereco = Object.values(endereco).some((v) => v !== null);
+
+      const ddd = digitos("dddtelefoneempresa");
+      const numeroTelefone = texto("telefoneempresa");
+      const telefone = numeroTelefone ? (ddd ? `${ddd}${numeroTelefone}` : numeroTelefone) : null;
+
+      return {
+        idcliente: Number(row["idcliente"]),
+        tipoPessoa: isFisico ? "fisico" : "juridico",
+        razaoSocial: isFisico ? nomeFisico : texto("razaosocial"),
+        nomeFantasia: isFisico ? null : texto("nomefantasia"),
+        documento: isFisico ? digitos("cpf") : digitos("cnpj"),
+        endereco: temEndereco ? endereco : null,
+        email: texto("emailcliente"),
+        telefone,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `Falha ao buscar cliente ${idcliente} para proposta no Athos: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw new InternalServerErrorException("Erro ao buscar cliente no Athos. Tente novamente.");
+    } finally {
+      client.release();
+    }
+  }
+
   async buscarClientes(params: {
     nome?: string;
     documento?: string;
@@ -1267,6 +1389,8 @@ export class AthosService {
       idcliente: number;
       tipoPessoa: "fisico" | "juridico";
       nome: string;
+      /** Razao social real (juridico) ou o proprio nome (fisico); aditivo, nao substitui nome (Fase 55, D-25). */
+      razaoSocial: string | null;
       documento: string | null;
       endereco: {
         logradouro: string;
@@ -1396,6 +1520,7 @@ export class AthosService {
           idcliente: Number(row["idcliente"]),
           tipoPessoa: (isFisico ? "fisico" : "juridico") as "fisico" | "juridico",
           nome,
+          razaoSocial: (isFisico ? pickString(row, ["nome_fisico"]) : pickString(row, ["razaosocial"])) || null,
           documento,
           endereco,
         };
