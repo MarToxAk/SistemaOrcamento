@@ -146,3 +146,38 @@ export function resolverPrecoUnitarioCentavos(entrada: { precoBaseMilli: bigint;
   }
   return centavos;
 }
+
+// ---------------------------------------------------------------------------
+// SKELETON da fase RED da tarefa 2: nada implementado.
+// ---------------------------------------------------------------------------
+
+export const MAX_LINHAS_PROPOSTA = 200;
+
+export type LinhaPropostaEntrada = { qMilli: bigint; precoCentavos: bigint };
+export type LinhaPropostaSaida = { valorItemMilli: bigint; totalC: bigint; descontoC: bigint; finalC: bigint };
+
+export function calcularLinhasProposta(_linhas: LinhaPropostaEntrada[]): {
+  linhas: LinhaPropostaSaida[];
+  brutoC: bigint;
+  descontoC: bigint;
+  liquidoC: bigint;
+  percentualMilli: bigint;
+} {
+  throw new Error("NAO_IMPLEMENTADO");
+}
+
+export function calcularMargem(_entrada: { precoCentavos: bigint; custoMilli: bigint }): {
+  margemMilli: bigint;
+  abaixoDoCusto: boolean;
+} {
+  throw new Error("NAO_IMPLEMENTADO");
+}
+
+export function calcularItemProposta(_entrada: {
+  precoBaseMilli: bigint;
+  ajuste?: AjustePreco | null;
+  qMilli: bigint;
+  custoMilli: bigint;
+}): { precoCentavos: bigint; totalC: bigint; margemMilli: bigint; abaixoDoCusto: boolean } {
+  throw new Error("NAO_IMPLEMENTADO");
+}

@@ -1,6 +1,11 @@
+import { calcularOrcamento } from "../integrations/athos/athos-orcamento-calc.util";
 import {
   CalcPropostaError,
+  MAX_LINHAS_PROPOSTA,
   ajustarPrecoCentavos,
+  calcularItemProposta,
+  calcularLinhasProposta,
+  calcularMargem,
   parsePercentualMilli,
   parsePrecoDigitadoCentavos,
   precoBaseParaCentavos,
@@ -153,6 +158,131 @@ describe("propostas-calc.util", () => {
           resolverPrecoUnitarioCentavos({ precoBaseMilli: 3500n, ajuste: { tipo: "PERCENTUAL", valor: -100 } }),
         ).codigo,
       ).toBe("PERCENTUAL_INVALIDO");
+    });
+  });
+
+  describe("calcularLinhasProposta (D-03)", () => {
+    it("preco final vira valorItem, sem desconto de linha nem de total", () => {
+      const r = calcularLinhasProposta([{ qMilli: 2000n, precoCentavos: 290n }]);
+      expect(r.linhas[0]).toEqual({ valorItemMilli: 2900n, totalC: 580n, descontoC: 0n, finalC: 580n });
+      expect(r.brutoC).toBe(580n);
+      expect(r.descontoC).toBe(0n);
+      expect(r.liquidoC).toBe(580n);
+      expect(r.percentualMilli).toBe(0n);
+    });
+
+    it("contraste com a Fase 44: preco abaixo do cadastro vira desconto em calcularOrcamento, mas nao aqui", () => {
+      const fase44 = calcularOrcamento([{ qMilli: 2000n, precoMilli: 3300n, valorUnitarioMilli: 2900n }], 0n, 100000n);
+      expect(fase44.descontoC > 0n).toBe(true);
+      expect(fase44.linhas[0].valorItemMilli).toBe(3300n);
+
+      const proposta = calcularLinhasProposta([{ qMilli: 2000n, precoCentavos: 290n }]);
+      expect(proposta.linhas[0].descontoC).toBe(0n);
+      expect(proposta.descontoC).toBe(0n);
+      expect(proposta.linhas[0].valorItemMilli).toBe(2900n);
+    });
+
+    it("quantidade fracionada arredonda half-up por linha e o total soma as linhas ja arredondadas", () => {
+      const r = calcularLinhasProposta([
+        { qMilli: 1500n, precoCentavos: 385n },
+        { qMilli: 1000n, precoCentavos: 100n },
+      ]);
+      expect(r.linhas[0].totalC).toBe(578n);
+      expect(r.brutoC).toBe(678n);
+      expect(r.liquidoC).toBe(678n);
+    });
+
+    it("recusa linha maior ou igual a 1.000.000,00 com o indice do item", () => {
+      const r = codigoDe(() =>
+        calcularLinhasProposta([
+          { qMilli: 1000n, precoCentavos: 100n },
+          { qMilli: 1_000_000n, precoCentavos: 100_000n },
+        ]),
+      );
+      expect(r).toEqual({ codigo: "VALOR_FORA_DO_LIMITE", indice: 1 });
+    });
+
+    it("recusa quantidade fora de 0,001 a 10.000,000", () => {
+      expect(codigoDe(() => calcularLinhasProposta([{ qMilli: 0n, precoCentavos: 100n }]))).toEqual({
+        codigo: "QUANTIDADE_INVALIDA",
+        indice: 0,
+      });
+      expect(codigoDe(() => calcularLinhasProposta([{ qMilli: 10_000_001n, precoCentavos: 100n }]))).toEqual({
+        codigo: "QUANTIDADE_INVALIDA",
+        indice: 0,
+      });
+      expect(() => calcularLinhasProposta([{ qMilli: 10_000_000n, precoCentavos: 1n }])).not.toThrow();
+    });
+
+    it("recusa preco menor ou igual a zero", () => {
+      expect(codigoDe(() => calcularLinhasProposta([{ qMilli: 1000n, precoCentavos: 0n }]))).toEqual({
+        codigo: "PRECO_INVALIDO",
+        indice: 0,
+      });
+    });
+
+    it("recusa lista vazia e mais de MAX_LINHAS_PROPOSTA linhas", () => {
+      expect(codigoDe(() => calcularLinhasProposta([])).codigo).toBe("QUANTIDADE_INVALIDA");
+      expect(MAX_LINHAS_PROPOSTA).toBe(200);
+      const linha = { qMilli: 1000n, precoCentavos: 100n };
+      expect(() => calcularLinhasProposta(Array.from({ length: 200 }, () => linha))).not.toThrow();
+      expect(codigoDe(() => calcularLinhasProposta(Array.from({ length: 201 }, () => linha))).codigo).toBe(
+        "LIMITE_ITENS",
+      );
+    });
+  });
+
+  describe("calcularMargem (D-27, D-13)", () => {
+    it("margem liquida (preco - custo) / preco em milesimos de percentual", () => {
+      expect(calcularMargem({ precoCentavos: 385n, custoMilli: 1283n })).toEqual({
+        margemMilli: 66675n,
+        abaixoDoCusto: false,
+      });
+    });
+
+    it("abaixo do custo: margem negativa arredondada half-up afastando de zero e flag verdadeira", () => {
+      expect(calcularMargem({ precoCentavos: 290n, custoMilli: 3000n })).toEqual({
+        margemMilli: -3448n,
+        abaixoDoCusto: true,
+      });
+    });
+
+    it("preco igual ao custo nao destaca", () => {
+      expect(calcularMargem({ precoCentavos: 385n, custoMilli: 3850n })).toEqual({
+        margemMilli: 0n,
+        abaixoDoCusto: false,
+      });
+    });
+
+    it("custo zero da margem de 100%", () => {
+      expect(calcularMargem({ precoCentavos: 385n, custoMilli: 0n })).toEqual({
+        margemMilli: 100000n,
+        abaixoDoCusto: false,
+      });
+    });
+  });
+
+  describe("calcularItemProposta", () => {
+    it("compoe preco resolvido, total da linha e margem", () => {
+      expect(
+        calcularItemProposta({
+          precoBaseMilli: 3500n,
+          ajuste: { tipo: "PERCENTUAL", valor: 10 },
+          qMilli: 2000n,
+          custoMilli: 1283n,
+        }),
+      ).toEqual({ precoCentavos: 385n, totalC: 770n, margemMilli: 66675n, abaixoDoCusto: false });
+    });
+
+    it("valor digitado abaixo do custo marca abaixoDoCusto", () => {
+      const r = calcularItemProposta({
+        precoBaseMilli: 3500n,
+        ajuste: { tipo: "VALOR", valor: "1.00" },
+        qMilli: 1000n,
+        custoMilli: 1283n,
+      });
+      expect(r.precoCentavos).toBe(100n);
+      expect(r.abaixoDoCusto).toBe(true);
     });
   });
 });
