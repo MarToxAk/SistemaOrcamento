@@ -1,4 +1,4 @@
-import { PdfTemplateKind } from '@prisma/client';
+import { PdfTemplateFamilia, PdfTemplateKind } from '@prisma/client';
 
 /**
  * Sumário de um template PDF usado na listagem da galeria.
@@ -9,6 +9,7 @@ export interface PdfTemplateSummary {
   name: string;
   slug: string;
   kind: PdfTemplateKind;
+  familia: PdfTemplateFamilia;
   isActive: boolean;
   createdAt: Date;
 }
@@ -33,3 +34,14 @@ export const PRESET_SLUGS = ['colorful', 'minimal', 'classic'] as const;
  * Preserva o comportamento atual (colorido era o único template).
  */
 export const DEFAULT_ACTIVE_SLUG = 'colorful' as const;
+
+/**
+ * Slugs estáveis dos presets da família PROPOSTA (D-22).
+ * Linha de templates separada da de orçamento da gráfica.
+ */
+export const PROPOSTA_PRESET_SLUGS = ['proposta-institucional'] as const;
+
+/**
+ * Slug do preset de proposta ativo por padrão (aplicado só no create do seed).
+ */
+export const DEFAULT_ACTIVE_PROPOSTA_SLUG = 'proposta-institucional' as const;

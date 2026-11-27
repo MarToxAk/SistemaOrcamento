@@ -1,4 +1,6 @@
 import { Injectable } from "@nestjs/common";
+import { PdfTemplateFamilia } from "@prisma/client";
+
 import { PrismaService } from "../database/prisma.service";
 
 /**
@@ -14,12 +16,18 @@ export class PdfTemplatesRepository {
 
   /**
    * Retorna o `source` Handlebars/HTML do template marcado como ativo
-   * (isActive = true). Retorna null quando não há nenhum ativo —
-   * o chamador usa a cadeia de fallback existente.
+   * (isActive = true) na família informada. Sem argumento, resolve a família
+   * ORCAMENTO — preserva o comportamento do QuotesPdfStorageService.
+   * Retorna null quando não há nenhum ativo — o chamador usa a cadeia de
+   * fallback existente. A ordem por `updatedAt desc` é determinística caso
+   * mais de um esteja marcado ativo por engano.
    */
-  async getActiveSource(): Promise<string | null> {
+  async getActiveSource(
+    familia: PdfTemplateFamilia = PdfTemplateFamilia.ORCAMENTO,
+  ): Promise<string | null> {
     const active = await this.prisma.pdfTemplate.findFirst({
-      where: { isActive: true },
+      where: { isActive: true, familia },
+      orderBy: { updatedAt: "desc" },
       select: { source: true },
     });
 

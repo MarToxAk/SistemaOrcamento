@@ -11,7 +11,7 @@
 
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { PdfTemplateKind } from "@prisma/client";
+import { PdfTemplateFamilia, PdfTemplateKind } from "@prisma/client";
 
 import { PrismaService } from "../database/prisma.service";
 import { PdfTemplatesService } from "./pdf-templates.service";
@@ -101,6 +101,7 @@ describe("PdfTemplatesService", () => {
         name: "Meu Template",
         slug: "meu-template-abc123",
         kind: PdfTemplateKind.CUSTOM,
+        familia: PdfTemplateFamilia.ORCAMENTO,
         isActive: false,
         createdAt: new Date("2026-06-22"),
       });
@@ -113,6 +114,7 @@ describe("PdfTemplatesService", () => {
             name: "Meu Template",
             source: CLEAN_TEMPLATE,
             kind: PdfTemplateKind.CUSTOM,
+            familia: PdfTemplateFamilia.ORCAMENTO,
             isActive: false,
           }),
         }),
@@ -135,6 +137,7 @@ describe("PdfTemplatesService", () => {
         name: "Classico",
         slug: "classic",
         kind: PdfTemplateKind.PRESET,
+        familia: PdfTemplateFamilia.ORCAMENTO,
         isActive: false,
         createdAt: new Date("2026-06-22"),
       });
@@ -146,6 +149,7 @@ describe("PdfTemplatesService", () => {
           name: "Classico",
           slug: "classic",
           kind: PdfTemplateKind.PRESET,
+          familia: PdfTemplateFamilia.ORCAMENTO,
           isActive: true,
           createdAt: new Date("2026-06-22"),
         },
@@ -157,6 +161,10 @@ describe("PdfTemplatesService", () => {
       const transactionArg = prisma.$transaction.mock.calls[0][0];
       expect(Array.isArray(transactionArg)).toBe(true);
       expect(transactionArg).toHaveLength(2);
+      expect(prisma.pdfTemplate.updateMany).toHaveBeenCalledWith({
+        where: { familia: PdfTemplateFamilia.ORCAMENTO },
+        data: { isActive: false },
+      });
     });
 
     it("após ativar, o resultado retornado tem isActive=true", async () => {
@@ -165,6 +173,7 @@ describe("PdfTemplatesService", () => {
         name: "Minimal",
         slug: "minimal",
         kind: PdfTemplateKind.PRESET,
+        familia: PdfTemplateFamilia.ORCAMENTO,
         isActive: false,
         createdAt: new Date("2026-06-22"),
       });
@@ -176,6 +185,7 @@ describe("PdfTemplatesService", () => {
           name: "Minimal",
           slug: "minimal",
           kind: PdfTemplateKind.PRESET,
+          familia: PdfTemplateFamilia.ORCAMENTO,
           isActive: true,
           createdAt: new Date("2026-06-22"),
         },
@@ -202,6 +212,7 @@ describe("PdfTemplatesService", () => {
           name: "Colorido",
           slug: "colorful",
           kind: PdfTemplateKind.PRESET,
+          familia: PdfTemplateFamilia.ORCAMENTO,
           isActive: true,
           createdAt: new Date("2026-06-22"),
         },
@@ -212,6 +223,19 @@ describe("PdfTemplatesService", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).not.toHaveProperty("source");
       expect(result[0].slug).toBe("colorful");
+      expect(prisma.pdfTemplate.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { familia: PdfTemplateFamilia.ORCAMENTO } }),
+      );
+    });
+
+    it("lista a familia PROPOSTA quando informada", async () => {
+      prisma.pdfTemplate.findMany.mockResolvedValue([]);
+
+      await service.list(PdfTemplateFamilia.PROPOSTA);
+
+      expect(prisma.pdfTemplate.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { familia: PdfTemplateFamilia.PROPOSTA } }),
+      );
     });
   });
 
@@ -222,6 +246,7 @@ describe("PdfTemplatesService", () => {
         name: "Colorido",
         slug: "colorful",
         kind: PdfTemplateKind.PRESET,
+        familia: PdfTemplateFamilia.ORCAMENTO,
         isActive: true,
         createdAt: new Date("2026-06-22"),
       });
@@ -236,6 +261,7 @@ describe("PdfTemplatesService", () => {
         name: "Custom",
         slug: "custom-xyz",
         kind: PdfTemplateKind.CUSTOM,
+        familia: PdfTemplateFamilia.ORCAMENTO,
         isActive: false,
         createdAt: new Date("2026-06-22"),
       });
