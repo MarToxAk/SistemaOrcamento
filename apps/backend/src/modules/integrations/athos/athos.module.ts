@@ -37,8 +37,8 @@ import { AthosOrcamentoIdempotenciaService } from "./athos-orcamento-idempotenci
     ProdutoCompostoController, // Phase 39
     AthosOrcamentoController, // Phase 44
   ],
-  exports: [AthosService, AthosProdutoService, AthosDefaultsService, AthosContaReceberBaixaService],
-  // AthosOrcamentoService nao exportado (Phase 44): so o controller proprio o usa
+  exports: [AthosService, AthosProdutoService, AthosDefaultsService, AthosContaReceberBaixaService, AthosOrcamentoService],
+  // AthosOrcamentoService exportado (Phase 55): o modulo de propostas le produto com custo (plano 55-06)
   // AthosProdutoCompostoService nao exportado — nenhum outro modulo precisa dele no v2.5
 })
 export class AthosModule {}
