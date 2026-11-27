@@ -11,18 +11,21 @@ import {
   Query,
 } from "@nestjs/common";
 import { ApiHeader, ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 
 import { BuscarProdutosOrcamentoQueryDto } from "../integrations/athos/dto/buscar-produtos-orcamento.dto";
 import { AdminOnly } from "../security/admin.decorator";
+import { THROTTLE_SENSITIVE } from "../security/throttle.config";
 import {
   AddItemPropostaDto,
   AplicarPercentualDto,
   CreatePropostaDto,
+  GerarPropostaDto,
   ListarPropostasQueryDto,
   UpdateItemPropostaDto,
   UpdatePropostaDto,
 } from "./dto/propostas.dto";
-import { AssinanteRecente, PropostaDetalhe, PropostaListagem, PropostasService } from "./propostas.service";
+import { AssinanteRecente, PropostaDetalhe, PropostaGerada, PropostaListagem, PropostasService } from "./propostas.service";
 
 /**
  * Propostas comerciais para orgaos publicos (Fase 55).
@@ -123,5 +126,12 @@ export class PropostasController {
     @Body() dto: AplicarPercentualDto,
   ): Promise<PropostaDetalhe> {
     return this.propostasService.aplicarPercentualEmTodos(id, dto);
+  }
+
+  @Post(":id/gerar")
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @ApiOperation({ summary: "Gerar a proposta: lanca o orcamento no Athos (one-way) e emite o PDF oficial" })
+  async gerar(@Param("id", new ParseUUIDPipe()) id: string, @Body() dto: GerarPropostaDto): Promise<PropostaGerada> {
+    return this.propostasService.gerar(id, dto);
   }
 }

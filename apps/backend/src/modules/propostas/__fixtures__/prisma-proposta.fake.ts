@@ -200,9 +200,39 @@ export function criarPrismaPropostaFake() {
     },
   };
 
+  // Configuracao bancaria default (dados FICTICIOS de teste; nunca dados reais da empresa). `_config` permite
+  // trocar ou zerar a linha nos testes de "configuracao ausente".
+  const configEstado: { linha: Reg | null } = {
+    linha: {
+      id: "default",
+      bancoNome: "Banco Teste",
+      agencia: "0001",
+      conta: "12345-6",
+      titular: "Empresa Teste Ltda",
+      documentoTitular: "00.000.000/0001-00",
+    },
+  };
+  const propostaConfig = {
+    findUnique: async () => (configEstado.linha ? { ...configEstado.linha } : null),
+  };
+
+  // Sem template ativo no banco: capturarSnapshot cai no template empacotado.
+  const pdfTemplate = {
+    findFirst: async (): Promise<Reg | null> => null,
+  };
+
+  // Sem correcoes de item (usado pelo AthosService real nos ITs).
+  const orcamentoItemCorrecao = {
+    findMany: async (): Promise<Reg[]> => [],
+  };
+
   return {
     proposta,
     propostaItem,
+    propostaConfig,
+    pdfTemplate,
+    orcamentoItemCorrecao,
+    _config: configEstado,
     $transaction: async (operacoes: Array<Promise<unknown>>) => Promise.all(operacoes),
     /**
      * Emula SOMENTE a busca de cliente da listagem (`... ILIKE ${padrao}` sobre razaoSocial e nomeFantasia do

@@ -13,6 +13,7 @@ import { PrismaService } from "../database/prisma.service";
 import { InternalAuthGuard } from "../security/internal-auth.guard";
 import { criarPrismaPropostaFake } from "./__fixtures__/prisma-proposta.fake";
 import { PropostasController } from "./propostas.controller";
+import { PropostasPdfService } from "./propostas-pdf.service";
 import { PropostasService } from "./propostas.service";
 
 const CHAVE_INTERNA = "chave-interna-teste-55";
@@ -55,6 +56,7 @@ describe("PropostasController (HTTP, tracer 55-06)", () => {
         { provide: PrismaService, useValue: criarPrismaPropostaFake() },
         { provide: AthosOrcamentoService, useValue: { obterProdutoProposta, buscarProdutosProposta } },
         { provide: AthosService, useValue: { buscarClienteParaProposta } },
+        { provide: PropostasPdfService, useValue: { capturarSnapshot: jest.fn(), gerarOficial: jest.fn() } },
         { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
         { provide: APP_GUARD, useClass: InternalAuthGuard },
       ],
