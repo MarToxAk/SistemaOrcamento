@@ -25,7 +25,14 @@ import {
   UpdateItemPropostaDto,
   UpdatePropostaDto,
 } from "./dto/propostas.dto";
-import { AssinanteRecente, PropostaDetalhe, PropostaGerada, PropostaListagem, PropostasService } from "./propostas.service";
+import {
+  AssinanteRecente,
+  PropostaDetalhe,
+  PropostaGerada,
+  PropostaListagem,
+  PropostaRecuperada,
+  PropostasService,
+} from "./propostas.service";
 
 /**
  * Propostas comerciais para orgaos publicos (Fase 55).
@@ -133,5 +140,14 @@ export class PropostasController {
   @ApiOperation({ summary: "Gerar a proposta: lanca o orcamento no Athos (one-way) e emite o PDF oficial" })
   async gerar(@Param("id", new ParseUUIDPipe()) id: string, @Body() dto: GerarPropostaDto): Promise<PropostaGerada> {
     return this.propostasService.gerar(id, dto);
+  }
+
+  @Post(":id/recuperar")
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @ApiOperation({
+    summary: "Recuperar proposta presa em lancamento (somente apos 120 s): finaliza pelo marcador ref sem novo INSERT no Athos",
+  })
+  async recuperar(@Param("id", new ParseUUIDPipe()) id: string): Promise<PropostaRecuperada> {
+    return this.propostasService.recuperarLancamento(id);
   }
 }

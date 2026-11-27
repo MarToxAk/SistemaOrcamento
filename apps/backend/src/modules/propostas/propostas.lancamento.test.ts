@@ -277,6 +277,7 @@ describe("PropostasService.gerar - erro ambiguo do Athos (Pitfall 10)", () => {
   });
 
   it("consulta por ref tambem falha: fica LANCANDO e orienta a recuperar", async () => {
+    jest.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
     const ctx = criarContexto();
     const id = await propostaPronta(ctx);
     ctx.athosOrcamento.criarOrcamentoProposta.mockRejectedValueOnce(new OrcamentoAthosError("ATHOS_INDISPONIVEL", "queda", 503));
@@ -287,6 +288,7 @@ describe("PropostasService.gerar - erro ambiguo do Athos (Pitfall 10)", () => {
     expect(String(erro.getResponse().mensagem)).toMatch(/recuper/i);
     expect(linha(ctx, id).status).toBe("LANCANDO");
     expect(linha(ctx, id).pdfSnapshot).toBe(SNAPSHOT);
+    jest.restoreAllMocks();
   });
 });
 
