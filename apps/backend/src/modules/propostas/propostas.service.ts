@@ -170,6 +170,9 @@ const CODIGOS_ATHOS_DEFINITIVOS: ReadonlySet<string> = new Set([
   "PERMISSAO_NEGADA",
 ]);
 
+/** Status em que o PDF oficial existe (proposta lancada no Athos). */
+const STATUS_COM_PDF: readonly string[] = ["ENVIADA", "FECHADA", "CANCELADA"];
+
 /** Orcamento do Athos achado ou criado para a proposta. */
 interface OrcamentoLancado {
   idorcamento: number;
@@ -341,6 +344,54 @@ export class PropostasService {
    */
   async obterParaPdf(id: string): Promise<PropostaParaPdf> {
     return (await this.carregar(id)) as PropostaParaPdf;
+  }
+
+  /**
+   * PDF OFICIAL da proposta lancada (D-09, D-18). Serve o arquivo armazenado; so quando ele nao existe (ou a
+   * geracao falhou no lancamento) regenera por `gerarOficial` usando EXCLUSIVAMENTE o `pdfSnapshot` gravado no
+   * lancamento. Nunca chama `capturarSnapshot` nem o Athos: proposta sem snapshot responde 409 em vez de
+   * regenerar com dados de agora (o documento deixaria de ser o emitido).
+   */
+  async obterPdf(id: string): Promise<{ buffer: Buffer; nomeArquivo: string }> {
+    const proposta = await this.carregar(id);
+    const emitida = STATUS_COM_PDF.includes(proposta.status) && proposta.idorcamentoAthos != null;
+    if (!emitida) {
+      throw new PropostaError(
+        "PDF_INDISPONIVEL",
+        "O PDF oficial so existe depois de gerar a proposta (lancamento no Athos concluido).",
+        409,
+      );
+    }
+    const nomeArquivo = `Proposta-${proposta.idorcamentoAthos}.pdf`;
+
+    if (proposta.pdfObjectName && (await this.propostasPdf.existeOficial(proposta.pdfObjectName))) {
+      return { buffer: await this.propostasPdf.baixarOficial(proposta.pdfObjectName), nomeArquivo };
+    }
+
+    if (proposta.pdfSnapshot === null || proposta.pdfSnapshot === undefined) {
+      throw new PropostaError(
+        "PDF_INDISPONIVEL",
+        "O arquivo do PDF oficial nao esta disponivel e esta proposta nao guarda o retrato da emissao para regera-lo. Duplique a proposta para emitir um novo documento.",
+        409,
+      );
+    }
+
+    const paraPdf = await this.obterParaPdf(id);
+    const { objectName } = await this.propostasPdf.gerarOficial(paraPdf, proposta.pdfSnapshot as unknown as PdfSnapshotProposta);
+    await this.prisma.proposta.update({ where: { id }, data: { pdfObjectName: objectName, pdfGeradoEm: new Date() } });
+    return { buffer: await this.propostasPdf.baixarOficial(objectName), nomeArquivo };
+  }
+
+  /**
+   * Previa do PDF (marca d'agua, sem numero) para qualquer status e mesmo sem cliente; exige pelo menos 1 item.
+   * Sempre por `gerarPrevia`, nunca por `gerarOficial`, e nada e armazenado.
+   */
+  async obterPrevia(id: string): Promise<Buffer> {
+    const proposta = await this.obterParaPdf(id);
+    if (!proposta.itens || proposta.itens.length === 0) {
+      throw new PropostaError("SEM_ITENS", "Adicione pelo menos um item para visualizar a previa do PDF.", 422);
+    }
+    return this.propostasPdf.gerarPrevia(proposta);
   }
 
   // -------------------------------------------------------------------------

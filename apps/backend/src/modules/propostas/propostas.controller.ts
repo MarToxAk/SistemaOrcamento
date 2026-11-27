@@ -9,9 +9,14 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from "@nestjs/common";
 import { ApiHeader, ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
+
+// Resposta crua do Express: a lib de tipos nao e dependencia direta (mesmo padrao do controller de templates).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ExpressResponse = any;
 
 import { BuscarProdutosOrcamentoQueryDto } from "../integrations/athos/dto/buscar-produtos-orcamento.dto";
 import { AdminOnly } from "../security/admin.decorator";
@@ -149,5 +154,28 @@ export class PropostasController {
   })
   async recuperar(@Param("id", new ParseUUIDPipe()) id: string): Promise<PropostaRecuperada> {
     return this.propostasService.recuperarLancamento(id);
+  }
+
+  @Get(":id/pdf")
+  @ApiOperation({ summary: "PDF oficial da proposta lancada (armazenado; regenerado so do snapshot gravado no lancamento)" })
+  async baixarPdf(@Param("id", new ParseUUIDPipe()) id: string, @Res() res: ExpressResponse): Promise<void> {
+    const { buffer, nomeArquivo } = await this.propostasService.obterPdf(id);
+    this.enviarPdf(res, buffer, nomeArquivo);
+  }
+
+  @Get(":id/previa")
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @ApiOperation({ summary: "Previa do PDF (marca d'agua, sem numero) em qualquer status; nunca armazenada" })
+  async previa(@Param("id", new ParseUUIDPipe()) id: string, @Res() res: ExpressResponse): Promise<void> {
+    const buffer = await this.propostasService.obterPrevia(id);
+    this.enviarPdf(res, buffer, "Previa-Proposta.pdf");
+  }
+
+  /** PDF inline pelo proprio buffer: sem URL publica (T-55-35). */
+  private enviarPdf(res: ExpressResponse, buffer: Buffer, nomeArquivo: string): void {
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${nomeArquivo}"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
   }
 }

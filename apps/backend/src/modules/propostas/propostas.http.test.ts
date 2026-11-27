@@ -429,3 +429,238 @@ describe("PropostasController (HTTP): gerar e recuperar (plano 55-17)", () => {
     });
   });
 });
+
+describe("PropostasController (HTTP): pdf, previa, duplicar e status (plano 55-13)", () => {
+  let app: INestApplication;
+  let base = "";
+  const envAnterior: Record<string, string | undefined> = {};
+  const obterProdutoProposta = jest.fn();
+  const buscarClienteParaProposta = jest.fn();
+  const capturarSnapshot = jest.fn();
+  const gerarOficial = jest.fn();
+  const gerarPrevia = jest.fn();
+  const gerarPreviaTemplate = jest.fn();
+  const baixarOficial = jest.fn();
+  const existeOficial = jest.fn();
+  const prisma = criarPrismaPropostaFake();
+  const UUID_INEXISTENTE = "6f0f3a52-5c6e-4f43-8d3a-0f7a2f5b9c11";
+  const SNAPSHOT = {
+    versao: 1,
+    banco: { bancoNome: "Banco Teste", agencia: "0001", conta: "12345-6", titular: "Empresa Teste Ltda", documentoTitular: "00.000.000/0001-00" },
+    empresa: { nome: "Empresa Teste Ltda", cnpj: "00.000.000/0001-00", endereco: "Rua Teste, 1" },
+    template: { origem: "EMPACOTADO", source: "<html>segredo-do-template</html>" },
+  };
+
+  /** Chamada que devolve o corpo bruto (PDF) em vez de JSON. */
+  async function chamarBruto(
+    metodo: string,
+    caminho: string,
+    corpo?: unknown,
+    chaves: { interna?: string | null; admin?: string | null } = { interna: CHAVE_INTERNA, admin: CHAVE_ADMIN },
+  ) {
+    const h: Record<string, string> = { "content-type": "application/json" };
+    if (chaves.interna) h["x-internal-api-key"] = chaves.interna;
+    if (chaves.admin) h["x-admin-api-key"] = chaves.admin;
+    const res = await fetch(`${base}/api${caminho}`, {
+      method: metodo,
+      headers: h,
+      body: corpo === undefined ? undefined : JSON.stringify(corpo),
+    });
+    const corpoBruto = Buffer.from(await res.arrayBuffer());
+    return { status: res.status, headers: res.headers, corpo: corpoBruto };
+  }
+
+  async function chamar(
+    metodo: string,
+    caminho: string,
+    corpo?: unknown,
+    chaves: { interna?: string | null; admin?: string | null } = { interna: CHAVE_INTERNA, admin: CHAVE_ADMIN },
+  ) {
+    const r = await chamarBruto(metodo, caminho, corpo, chaves);
+    let json: Record<string, any> = {};
+    try {
+      json = JSON.parse(r.corpo.toString("utf-8"));
+    } catch {
+      json = {};
+    }
+    return { status: r.status, json };
+  }
+
+  /** Proposta lancada (ENVIADA, numero proprio) com 1 item, semeada direto no Prisma em memoria. */
+  async function semearLancada(extra: Record<string, unknown> = {}): Promise<string> {
+    const criada: any = await prisma.proposta.create({
+      data: {
+        status: "ENVIADA",
+        idclienteAthos: 5,
+        clienteSnapshot: { idcliente: 5, razaoSocial: "MUNICIPIO DE TESTE" },
+        totalValor: "7.00",
+        idorcamentoAthos: 777 + prisma._propostas.length,
+        senhaBalcao: 12,
+        athosData: "2026-11-27",
+        athosHora: "10:20:30",
+        enviadaEm: new Date(),
+        pdfObjectName: "propostas/teste.pdf",
+        pdfSnapshot: SNAPSHOT,
+        ...extra,
+      },
+    });
+    await prisma.propostaItem.create({
+      data: {
+        propostaId: criada.id,
+        sequencia: 1,
+        idproduto: 60,
+        nomeAthos: "CANETA",
+        nome: "Caneta",
+        quantidade: "2.000",
+        precoBase: "3.500",
+        precoUnitario: "3.50",
+        totalLinha: "7.00",
+        custoUnitario: "1.000",
+      },
+    });
+    return criada.id as string;
+  }
+
+  beforeAll(async () => {
+    for (const k of ["INTERNAL_API_KEY", "ADMIN_API_KEY"]) envAnterior[k] = process.env[k];
+    process.env.INTERNAL_API_KEY = CHAVE_INTERNA;
+    process.env.ADMIN_API_KEY = CHAVE_ADMIN;
+    const modulo = await Test.createTestingModule({
+      controllers: [PropostasController],
+      providers: [
+        PropostasService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: AthosOrcamentoService, useValue: { obterProdutoProposta } },
+        { provide: AthosService, useValue: { buscarClienteParaProposta } },
+        {
+          provide: PropostasPdfService,
+          useValue: { capturarSnapshot, gerarOficial, gerarPrevia, gerarPreviaTemplate, baixarOficial, existeOficial },
+        },
+        { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
+        { provide: APP_GUARD, useClass: InternalAuthGuard },
+      ],
+    }).compile();
+    app = modulo.createNestApplication();
+    app.setGlobalPrefix("api");
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
+    await app.listen(0, "127.0.0.1");
+    base = (await app.getUrl()).replace("[::1]", "127.0.0.1");
+  });
+
+  afterAll(async () => {
+    if (app) await app.close();
+    for (const [k, v] of Object.entries(envAnterior)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  beforeEach(() => {
+    for (const m of [capturarSnapshot, gerarOficial, gerarPrevia, gerarPreviaTemplate, baixarOficial, existeOficial, obterProdutoProposta, buscarClienteParaProposta]) m.mockReset();
+    existeOficial.mockResolvedValue(true);
+    baixarOficial.mockResolvedValue(Buffer.from("%PDF-1.7 oficial armazenado"));
+    gerarPrevia.mockResolvedValue(Buffer.from("%PDF-1.7 previa"));
+    gerarOficial.mockResolvedValue({ objectName: "propostas/regerado.pdf" });
+  });
+
+  describe("GET :id/pdf", () => {
+    it("proposta ENVIADA com arquivo armazenado: 200 application/pdf inline com o nome Proposta-<numero>.pdf e sem regenerar", async () => {
+      const id = await semearLancada({ idorcamentoAthos: 4242 });
+
+      const r = await chamarBruto("GET", `/propostas/${id}/pdf`);
+
+      expect(r.status).toBe(200);
+      expect(r.headers.get("content-type")).toContain("application/pdf");
+      expect(r.headers.get("content-disposition")).toBe('inline; filename="Proposta-4242.pdf"');
+      expect(Number(r.headers.get("content-length"))).toBe(r.corpo.length);
+      expect(r.corpo.subarray(0, 4).toString()).toBe("%PDF");
+      expect(gerarOficial).not.toHaveBeenCalled();
+      expect(capturarSnapshot).not.toHaveBeenCalled();
+      expect(buscarClienteParaProposta).not.toHaveBeenCalled();
+    });
+
+    it("arquivo ausente: regenera so do snapshot gravado e devolve o PDF", async () => {
+      const id = await semearLancada({ idorcamentoAthos: 4243 });
+      existeOficial.mockResolvedValue(false);
+      baixarOficial.mockResolvedValue(Buffer.from("%PDF-1.7 regerado"));
+
+      const r = await chamarBruto("GET", `/propostas/${id}/pdf`);
+
+      expect(r.status).toBe(200);
+      expect(r.corpo.toString()).toContain("regerado");
+      expect(gerarOficial).toHaveBeenCalledTimes(1);
+      expect(gerarOficial.mock.calls[0][1]).toEqual(SNAPSHOT);
+      expect(capturarSnapshot).not.toHaveBeenCalled();
+      expect(prisma._propostas.find((p) => p.id === id)!.pdfObjectName).toBe("propostas/regerado.pdf");
+    });
+
+    it("sem pdfSnapshot: 409 PDF_INDISPONIVEL", async () => {
+      const id = await semearLancada({ pdfSnapshot: null, pdfObjectName: null });
+      const r = await chamar("GET", `/propostas/${id}/pdf`);
+      expect(r.status).toBe(409);
+      expect(r.json.codigo).toBe("PDF_INDISPONIVEL");
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["RASCUNHO", { status: "RASCUNHO", idorcamentoAthos: null, pdfObjectName: null, pdfSnapshot: null }],
+      ["LANCANDO", { status: "LANCANDO", idorcamentoAthos: null, pdfObjectName: null }],
+      ["sem idorcamentoAthos", { idorcamentoAthos: null }],
+    ])("%s: 409 PDF_INDISPONIVEL", async (_nome, extra) => {
+      const id = await semearLancada(extra);
+      const r = await chamar("GET", `/propostas/${id}/pdf`);
+      expect(r.status).toBe(409);
+      expect(r.json.codigo).toBe("PDF_INDISPONIVEL");
+    });
+
+    it("inexistente 404, UUID invalido 400 e sem a chave admin 401", async () => {
+      expect((await chamar("GET", `/propostas/${UUID_INEXISTENTE}/pdf`)).status).toBe(404);
+      expect((await chamar("GET", "/propostas/nao-e-uuid/pdf")).status).toBe(400);
+      const id = await semearLancada();
+      expect((await chamar("GET", `/propostas/${id}/pdf`, undefined, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect((await chamar("GET", `/propostas/${id}/pdf`, undefined, { interna: null, admin: CHAVE_ADMIN })).status).toBe(401);
+    });
+  });
+
+  describe("GET :id/previa", () => {
+    it.each(["RASCUNHO", "ENVIADA", "CANCELADA"])("%s com itens: 200 application/pdf, nunca gera o oficial nem armazena", async (status) => {
+      const id = await semearLancada({ status });
+
+      const r = await chamarBruto("GET", `/propostas/${id}/previa`);
+
+      expect(r.status).toBe(200);
+      expect(r.headers.get("content-type")).toContain("application/pdf");
+      expect(r.headers.get("content-disposition")).toBe('inline; filename="Previa-Proposta.pdf"');
+      expect(r.corpo.subarray(0, 4).toString()).toBe("%PDF");
+      expect(gerarPrevia).toHaveBeenCalledTimes(1);
+      expect(gerarOficial).not.toHaveBeenCalled();
+      expect(baixarOficial).not.toHaveBeenCalled();
+    });
+
+    it("sem cliente mas com 1 item: 200", async () => {
+      const id = await semearLancada({ status: "RASCUNHO", idclienteAthos: null, clienteSnapshot: null });
+      const r = await chamarBruto("GET", `/propostas/${id}/previa`);
+      expect(r.status).toBe(200);
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it("sem itens: 422 SEM_ITENS", async () => {
+      const criada: any = await prisma.proposta.create({ data: {} });
+      const r = await chamar("GET", `/propostas/${criada.id}/previa`);
+      expect(r.status).toBe(422);
+      expect(r.json.codigo).toBe("SEM_ITENS");
+      expect(gerarPrevia).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+    });
+
+    it("inexistente 404, UUID invalido 400 e sem a chave admin 401", async () => {
+      expect((await chamar("GET", `/propostas/${UUID_INEXISTENTE}/previa`)).status).toBe(404);
+      expect((await chamar("GET", "/propostas/nao-e-uuid/previa")).status).toBe(400);
+      const id = await semearLancada({ status: "RASCUNHO" });
+      expect((await chamar("GET", `/propostas/${id}/previa`, undefined, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect(gerarPrevia).not.toHaveBeenCalled();
+    });
+  });
+
+  // <<TASK-2-HTTP>>
+});
