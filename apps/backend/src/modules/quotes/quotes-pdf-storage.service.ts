@@ -62,6 +62,15 @@ type StoredPdfResult = {
 // ---------------------------------------------------------------------------
 const KNOWN_HELPERS: Record<string, boolean> = {};
 
+function escapeHtml(valor: string): string {
+  return valor
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 @Injectable()
 export class QuotesPdfStorageService {
   private readonly logger = new Logger(QuotesPdfStorageService.name);
@@ -213,12 +222,13 @@ export class QuotesPdfStorageService {
   // no servidor e devolvemos um data: URI (base64), que o render aceita.
   // EMPRESA_LOGO_URL vem do .env (config do operador, não de input do usuário).
   // Qualquer falha → undefined: o PDF é gerado sem logo (template cai no placeholder).
+  // Público desde a Fase 55: PropostasPdfService resolve o logo na hora do render.
   // ---------------------------------------------------------------------------
   private readonly logoCache = new Map<string, { dataUri: string; expires: number }>();
   private static readonly LOGO_TTL_MS = 5 * 60 * 1000;
   private static readonly LOGO_MAX_BYTES = 5 * 1024 * 1024;
 
-  private async resolveLogoDataUri(logoUrl?: string): Promise<string | undefined> {
+  async resolveLogoDataUri(logoUrl?: string): Promise<string | undefined> {
     const url = logoUrl?.trim();
     if (!url) return undefined;
     if (url.startsWith("data:")) return url; // já inline
@@ -353,6 +363,89 @@ export class QuotesPdfStorageService {
     } finally {
       await browser.close();
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fase 55 — render de documentos multipágina (proposta comercial). ADITIVO:
+  // renderHtml, renderPdfBuffer, generateAndStore e renderPreviewPdf não mudam.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Compila `source` com a MESMA configuração hardened de renderHtml (D-02 / T-999.1-07):
+   * instância isolada, knownHelpersOnly, escape de HTML ligado. O chamador monta `context`
+   * (texto de valor já formatado); nenhum helper é registrado.
+   */
+  renderHtmlFromSource(source: string, context: Record<string, unknown>): string {
+    const hbs = Handlebars.create();
+    const template = hbs.compile(source, {
+      knownHelpers: KNOWN_HELPERS,
+      knownHelpersOnly: true,
+      strict: false,
+      noEscape: false,
+    });
+    return template(context);
+  }
+
+  /**
+   * PDF A4 multipágina legível: SEM fator de escala (o render de uma página só de renderPdfBuffer
+   * encolhe o conteúdo), margens reais, rodapé com `rodape` ESCAPADO e "Página N de M".
+   * Mesmo Chromium hardened: rede bloqueada por shouldAllowRequest, setContent com timeout de 30 s.
+   */
+  async renderPdfMultipagina(html: string, opts: { rodape: string }): Promise<Buffer> {
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        "--no-sandbox", // ASSUNÇÃO A4: ver renderPdfBuffer
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+      ],
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 794, height: 1122, deviceScaleFactor: 1 });
+
+      await page.setRequestInterception(true);
+      page.on("request", (req) => {
+        if (shouldAllowRequest(req.url())) {
+          req.continue();
+        } else {
+          req.abort();
+        }
+      });
+
+      await page.setContent(html, { waitUntil: "load", timeout: 30000 });
+      await new Promise((r) => setTimeout(r, 500));
+
+      const rodape = escapeHtml(opts.rodape);
+      return Buffer.from(
+        await page.pdf({
+          format: "A4",
+          printBackground: true,
+          displayHeaderFooter: true,
+          headerTemplate: "<div></div>",
+          footerTemplate:
+            `<div style="width:100%;padding:0 14mm;font-family:Arial,sans-serif;font-size:8px;color:#555555;display:flex;justify-content:space-between;">` +
+            `<span>${rodape}</span>` +
+            `<span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>` +
+            `</div>`,
+          margin: { top: "16mm", bottom: "18mm", left: "14mm", right: "14mm" },
+        }),
+      );
+    } finally {
+      await browser.close();
+    }
+  }
+
+  /** Grava o PDF no bucket sob `objectName` (Content-Type application/pdf). Nunca monta URL pública. */
+  async armazenarPdf(objectName: string, buffer: Buffer): Promise<{ objectName: string }> {
+    const client = this.buildMinioClient();
+    const bucket = this.requireEnv("MINIO_BUCKET");
+
+    await this.ensureBucket(client, bucket);
+    await client.putObject(bucket, objectName, buffer, buffer.length, { "Content-Type": "application/pdf" });
+
+    return { objectName };
   }
 
   async downloadObjectBuffer(objectName: string): Promise<Buffer> {
