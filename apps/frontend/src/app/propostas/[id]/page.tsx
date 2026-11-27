@@ -18,6 +18,7 @@ import TabelaItens, { type IntencaoItem } from "../_componentes/tabela-itens";
 import ClientePainel from "../_componentes/cliente-painel";
 import OrgaoPainel from "../_componentes/orgao-painel";
 import CondicoesPainel from "../_componentes/condicoes-painel";
+import AcoesProposta from "../_componentes/acoes-proposta";
 
 const ASSINANTE_VAZIO: Assinante = { nome: "", cargo: "", cpf: "" };
 
@@ -40,6 +41,33 @@ function lerAssinanteSalvo(chave: string): Assinante | null {
   } catch {
     return null;
   }
+}
+
+/** Banner de status (D-08): rascunho neutro; lancada/fechada/cancelada somente leitura; LANCANDO em andamento. */
+function BannerStatus({ proposta }: { proposta: PropostaDetalhe }) {
+  if (proposta.status === "RASCUNHO") {
+    return (
+      <div className="alert alert-secondary" role="status">
+        Rascunho: ainda não foi lançado no Athos e pode ser editado.
+      </div>
+    );
+  }
+  if (proposta.status === "LANCANDO") {
+    return (
+      <div className="alert alert-warning" role="status">
+        Lançamento no Athos em andamento. A proposta está bloqueada para edição até o lançamento terminar.
+      </div>
+    );
+  }
+  const texto =
+    proposta.idorcamentoAthos != null
+      ? `Proposta nº ${proposta.idorcamentoAthos} lançada no Athos. Não pode ser editada; duplique para alterar.`
+      : "Proposta cancelada antes de ser lançada. Não pode ser editada; duplique para alterar.";
+  return (
+    <div className="alert alert-warning" role="status">
+      {texto}
+    </div>
+  );
 }
 
 /**
@@ -204,6 +232,15 @@ function DetalheProposta({ id }: { id: string }) {
         </div>
       </div>
 
+      <BannerStatus proposta={proposta} />
+
+      <AcoesProposta
+        proposta={proposta}
+        assinante={assinante}
+        onAssinanteChange={alterarAssinante}
+        onAtualizar={carregar}
+      />
+
       <ClientePainel proposta={proposta} desabilitado={desabilitado} onSalvar={salvarCabecalho} />
       <OrgaoPainel proposta={proposta} desabilitado={desabilitado} onSalvar={salvarCabecalho} />
       <CondicoesPainel
@@ -214,17 +251,13 @@ function DetalheProposta({ id }: { id: string }) {
         onAssinanteChange={alterarAssinante}
       />
 
-      {desabilitado ? (
-        <div className="alert alert-warning" role="status">
-          Esta proposta já foi lançada e não pode mais ser editada. Só é possível duplicá-la para fazer alterações.
-        </div>
-      ) : (
+      {!desabilitado ? (
         <div className="pa-card mb-3">
           <div className="pa-card-body">
             <BuscaProduto onAdicionar={adicionarItem} />
           </div>
         </div>
-      )}
+      ) : null}
 
       <div className="pa-card">
         <div className="pa-card-header">
@@ -267,7 +300,7 @@ export default function PropostaPage() {
           </a>
         }
       >
-        {id ? <DetalheProposta id={id} /> : null}
+        {id ? <DetalheProposta key={id} id={id} /> : null}
       </AdminShell>
     </PasswordGate>
   );

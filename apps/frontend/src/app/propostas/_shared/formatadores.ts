@@ -125,3 +125,37 @@ export function linhaEstado(item: { abaixoDoCusto?: boolean | null }): { classe:
   }
   return { classe: "", alerta: null };
 }
+
+/**
+ * Habilitacao do botao que lanca a proposta no Athos (acao one-way, D-07): exige a ciencia do operador, o
+ * nome do assinante com ao menos um caractere nao espaco e nenhuma chamada pendente (sem duplo disparo).
+ */
+export function podeGerar(entrada: { ciencia: boolean; assinanteNome: string; pendente: boolean }): boolean {
+  return (
+    entrada.ciencia === true &&
+    typeof entrada.assinanteNome === "string" &&
+    entrada.assinanteNome.trim().length > 0 &&
+    entrada.pendente === false
+  );
+}
+
+/**
+ * Acoes que a tela oferece por status, na ordem de exibicao. "gerar" (one-way) so existe em RASCUNHO; "pdf" so
+ * quando o servidor informa PDF disponivel; status desconhecido ou fora do formato exato = nenhuma acao.
+ */
+export function acoesDisponiveis(status: string | null | undefined, pdfDisponivel: boolean): string[] {
+  const pdf = pdfDisponivel === true ? ["pdf"] : [];
+  switch (status) {
+    case "RASCUNHO":
+      return ["previa", "gerar", "cancelar"];
+    case "LANCANDO":
+      return ["recuperar"];
+    case "ENVIADA":
+      return [...pdf, "duplicar", "fechar", "cancelar"];
+    case "FECHADA":
+    case "CANCELADA":
+      return [...pdf, "duplicar"];
+    default:
+      return [];
+  }
+}

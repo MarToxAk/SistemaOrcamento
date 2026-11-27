@@ -141,3 +141,57 @@ caso("linhaEstado nunca devolve indicador de bloqueio", () => {
   const r = f.linhaEstado({ abaixoDoCusto: true });
   assert.deepEqual(Object.keys(r).sort(), ["alerta", "classe"]);
 });
+
+// podeGerar (D-07): ciencia + assinante preenchido + nenhuma chamada pendente
+caso("podeGerar com ciencia, assinante e sem chamada pendente habilita", () => {
+  assert.equal(f.podeGerar({ ciencia: true, assinanteNome: "Maria", pendente: false }), true);
+});
+caso("podeGerar sem ciencia nao habilita", () => {
+  assert.equal(f.podeGerar({ ciencia: false, assinanteNome: "Maria", pendente: false }), false);
+});
+caso("podeGerar com assinante vazio nao habilita", () => {
+  assert.equal(f.podeGerar({ ciencia: true, assinanteNome: "", pendente: false }), false);
+});
+caso("podeGerar com assinante so de espacos nao habilita", () => {
+  assert.equal(f.podeGerar({ ciencia: true, assinanteNome: "   ", pendente: false }), false);
+});
+caso("podeGerar com chamada pendente nao habilita", () => {
+  assert.equal(f.podeGerar({ ciencia: true, assinanteNome: "Maria", pendente: true }), false);
+});
+caso("podeGerar com assinante nao textual nao habilita", () => {
+  assert.equal(f.podeGerar({ ciencia: true, assinanteNome: undefined, pendente: false }), false);
+});
+
+// acoesDisponiveis: a acao one-way "gerar" so existe em RASCUNHO
+caso("acoesDisponiveis RASCUNHO", () => {
+  assert.deepEqual(f.acoesDisponiveis("RASCUNHO", false), ["previa", "gerar", "cancelar"]);
+  assert.deepEqual(f.acoesDisponiveis("RASCUNHO", true), ["previa", "gerar", "cancelar"]);
+});
+caso("acoesDisponiveis LANCANDO", () => {
+  assert.deepEqual(f.acoesDisponiveis("LANCANDO", false), ["recuperar"]);
+  assert.deepEqual(f.acoesDisponiveis("LANCANDO", true), ["recuperar"]);
+});
+caso("acoesDisponiveis ENVIADA com PDF", () => {
+  assert.deepEqual(f.acoesDisponiveis("ENVIADA", true), ["pdf", "duplicar", "fechar", "cancelar"]);
+});
+caso("acoesDisponiveis ENVIADA sem PDF omite pdf", () => {
+  assert.deepEqual(f.acoesDisponiveis("ENVIADA", false), ["duplicar", "fechar", "cancelar"]);
+});
+for (const s of ["FECHADA", "CANCELADA"]) {
+  caso(`acoesDisponiveis ${s} com PDF`, () => assert.deepEqual(f.acoesDisponiveis(s, true), ["pdf", "duplicar"]));
+  caso(`acoesDisponiveis ${s} sem PDF omite pdf`, () => assert.deepEqual(f.acoesDisponiveis(s, false), ["duplicar"]));
+}
+for (const s of ["OUTRO", "", null, undefined, "rascunho", "Rascunho", " RASCUNHO"]) {
+  caso(`acoesDisponiveis status desconhecido ${JSON.stringify(s)} = lista vazia`, () => {
+    assert.deepEqual(f.acoesDisponiveis(s, true), []);
+    assert.deepEqual(f.acoesDisponiveis(s, false), []);
+  });
+}
+caso("acoesDisponiveis: gerar nao esta em nenhum status alem de RASCUNHO", () => {
+  for (const s of ["LANCANDO", "ENVIADA", "FECHADA", "CANCELADA", "OUTRO", "", null, undefined, "rascunho"]) {
+    for (const pdf of [true, false]) {
+      assert.equal(f.acoesDisponiveis(s, pdf).includes("gerar"), false, `gerar em ${JSON.stringify(s)}`);
+    }
+  }
+  assert.equal(f.acoesDisponiveis("RASCUNHO", false).includes("gerar"), true);
+});

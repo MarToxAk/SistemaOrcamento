@@ -4,8 +4,9 @@
  * Modulo PURO e sem imports: roda no Next e tambem direto no Node (type stripping) pela checagem
  * executavel `scripts/checar-propostas-rotas.mjs`. A rota do Next so chama `decidirAcessoProxy`.
  *
- * Somente as rotas que o backend ja tem apos o plano 55-06 estao liberadas. As de gerar, recuperar,
- * duplicar, status, pdf e previa entram no plano 55-18 e a de templates/preview no plano 55-15.
+ * Somente as rotas que o backend ja tem estao liberadas: as do plano 55-06 (cabecalho e itens) e, a partir do
+ * plano 55-18, as de ciclo de vida e PDF (gerar do 55-08, recuperar do 55-17, duplicar, status, pdf e previa do
+ * 55-13). A de templates/preview entra no plano 55-15.
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -38,6 +39,10 @@ export function rotaPropostaPermitida(metodo: string, segmentos: string[]): bool
     if (a === "clientes") return m === "GET" && ehInteiro(b);
     if (ehUuid(a) && b === "itens") return m === "POST";
     if (ehUuid(a) && b === "aplicar-percentual") return m === "POST";
+    // Ciclo de vida da proposta (plano 55-18): cada rota com UM metodo.
+    if (ehUuid(a) && (b === "gerar" || b === "recuperar" || b === "duplicar")) return m === "POST";
+    if (ehUuid(a) && b === "status") return m === "PATCH";
+    if (ehUuid(a) && (b === "pdf" || b === "previa")) return m === "GET";
     return false;
   }
 
