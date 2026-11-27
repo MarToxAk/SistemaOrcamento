@@ -10,7 +10,7 @@ import {
   paraCentavos,
   paraMilli,
 } from "../integrations/athos/athos-orcamento-calc.util";
-import { AthosOrcamentoService } from "../integrations/athos/athos-orcamento.service";
+import { AthosOrcamentoService, OrcamentoAthosError } from "../integrations/athos/athos-orcamento.service";
 import { refDoOrcamento } from "../integrations/athos/athos-orcamento-idempotencia.service";
 import { PrismaService } from "../database/prisma.service";
 import {
@@ -136,6 +136,9 @@ export interface PropostaGerada {
   aviso?: string;
 }
 
+/** Resposta de recuperarLancamento: finalizada como ENVIADA, ou devolvida a RASCUNHO quando o Athos nao tem o orcamento. */
+export type PropostaRecuperada = PropostaGerada | { id: string; status: "RASCUNHO"; mensagem: string };
+
 export interface AssinanteRecente {
   nome: string;
   cargo: string | null;
@@ -147,6 +150,33 @@ const TAMANHO_MAXIMO = 100;
 const ASSINANTES_MAX = 10;
 const ASSINANTES_CONSULTA = 50;
 const INT4_MAX = 2147483647;
+/** Tempo minimo em LANCANDO antes de recuperarLancamento agir (T-55-62): o lancamento original ja terminou ou morreu. */
+const RECUPERACAO_APOS_MS = 120_000;
+
+/**
+ * Codigos do Athos cuja transacao foi REVERTIDA (nada gravado): a proposta volta a RASCUNHO. Qualquer outro
+ * erro (timeout, queda, ERRO_BANCO, desconhecido) e ambiguo: o COMMIT pode ter ocorrido.
+ */
+const CODIGOS_ATHOS_DEFINITIVOS: ReadonlySet<string> = new Set([
+  "ESCRITA_DESABILITADA",
+  "VALOR_INVALIDO",
+  "VALOR_FORA_DO_LIMITE",
+  "CLIENTE_INEXISTENTE",
+  "PRODUTO_INEXISTENTE",
+  "PRODUTO_INATIVO",
+  "QUANTIDADE_FRACIONADA",
+  "CONFIG_INVALIDA",
+  "FORMA_PAGAMENTO_INVALIDA",
+  "PERMISSAO_NEGADA",
+]);
+
+/** Orcamento do Athos achado ou criado para a proposta. */
+interface OrcamentoLancado {
+  idorcamento: number;
+  senhabalcao: number;
+  data: string;
+  hora: string;
+}
 
 // ---------------------------------------------------------------------------
 // Conversoes Decimal -> texto (o Prisma devolve Decimal; o fake de teste devolve texto ou numero)
@@ -643,9 +673,9 @@ export class PropostasService {
    * Tudo que pode falhar por configuracao ou entrada acontece ANTES da reserva ou reverte a reserva, para
    * nenhuma proposta ficar presa em LANCANDO por motivo previsivel.
    *
-   * TRACER (plano 55-08): cobre o fluxo feliz e as reversoes triviais. Erro definitivo ou ambiguo do Athos,
-   * recuperacao de orfao, falha de persistencia depois do COMMIT e concorrencia simultanea sao do plano 55-17:
-   * ate la, um erro do proprio passo de chamada ao Athos deixa a proposta em LANCANDO e a flag segue desligada.
+   * Plano 55-17: erro definitivo do Athos reverte para RASCUNHO; erro ambiguo consulta o Athos pelo ref antes de
+   * decidir (achou: sucesso sem novo INSERT; nao achou: RASCUNHO; consulta falhou: segue LANCANDO e orienta a
+   * recuperar); falha local depois do COMMIT nunca esconde o orcamento; falha de PDF nao relanca.
    */
   async gerar(id: string, dto: GerarPropostaDto): Promise<PropostaGerada> {
     // 1. Carregar e conferir o status.
@@ -734,28 +764,98 @@ export class PropostasService {
       );
     }
 
-    // 6. Athos. Em sucesso, finaliza a proposta como ENVIADA com o numero, a senha e a data/hora do Athos.
-    const lancado = await this.athosOrcamento.criarOrcamentoProposta(entrada);
-    const final = await this.prisma.proposta.updateMany({
-      where: { id, status: { in: ["LANCANDO", "RASCUNHO"] } },
-      data: {
-        status: "ENVIADA",
-        idorcamentoAthos: lancado.idorcamento,
-        senhaBalcao: lancado.senhabalcao,
-        athosData: lancado.data,
-        athosHora: lancado.hora,
-        enviadaEm: new Date(),
-        totalValor: totalFinal,
-      },
-    });
-    if (final.count !== 1) {
-      this.logger.error(`Proposta ${id}: orcamento ${lancado.idorcamento} lancado no Athos, mas a finalizacao nao atualizou a proposta.`);
+    // 6. Athos. Erro definitivo reverte; erro ambiguo consulta o Athos pelo marcador ref (Pitfall 10).
+    let lancado: OrcamentoLancado;
+    try {
+      lancado = await this.athosOrcamento.criarOrcamentoProposta(entrada);
+    } catch (err) {
+      lancado = await this.resolverErroDoAthos(id, entrada.ref, err);
     }
 
-    // 7. PDF oficial FORA de qualquer transacao, com o MESMO snapshot gravado na reserva (nunca recapturar).
+    // 7. Finalizacao compartilhada com recuperarLancamento: ENVIADA e PDF oficial a partir do MESMO snapshot.
+    return this.finalizarLancamento(id, entrada.ref, lancado, snapshot, totalFinal);
+  }
+
+  /**
+   * Classifica o erro do Athos. Definitivo: reverte para RASCUNHO e repassa. Ambiguo: procura o orcamento pelo
+   * ref; achando, devolve-o (a proposta termina como sucesso, sem novo INSERT); nao achando, reverte e repassa
+   * o erro original; se a propria consulta falhar, a proposta fica LANCANDO e o usuario e orientado a recuperar.
+   */
+  private async resolverErroDoAthos(id: string, ref: string, err: unknown): Promise<OrcamentoLancado> {
+    if (err instanceof OrcamentoAthosError && CODIGOS_ATHOS_DEFINITIVOS.has(err.codigo)) {
+      await this.reverterReserva(id);
+      throw err;
+    }
+
+    let achado: Awaited<ReturnType<AthosOrcamentoService["buscarOrcamentoPorRefProposta"]>>;
+    try {
+      achado = await this.athosOrcamento.buscarOrcamentoPorRefProposta(ref);
+    } catch (consultaErr) {
+      this.logger.error(
+        `Proposta ${id} (ref ${ref}): resposta ambigua do Athos e a consulta por ref tambem falhou (${
+          consultaErr instanceof Error ? consultaErr.message : String(consultaErr)
+        }). Mantida em LANCANDO.`,
+      );
+      throw new PropostaError(
+        "LANCAMENTO_EM_ANDAMENTO",
+        "Nao foi possivel confirmar se o orcamento foi gravado no Athos. A proposta ficou em lancamento: aguarde alguns minutos e use a recuperacao para conferir pelo marcador da proposta, sem lancar de novo.",
+        409,
+      );
+    }
+    if (!achado) {
+      await this.reverterReserva(id);
+      throw err;
+    }
+    return achado;
+  }
+
+  /**
+   * Finaliza um lancamento ja confirmado no Athos (COMMIT feito): grava ENVIADA e os dados do orcamento por
+   * updateMany condicionado a LANCANDO, depois gera o PDF oficial com o snapshot recebido, fora de transacao e
+   * sem relancar no Athos. Se a gravacao local falhar, a proposta segue LANCANDO e o erro cita o numero do
+   * orcamento (nunca esconde o orcamento fantasma, D-07). Compartilhado por `gerar` e `recuperarLancamento`.
+   */
+  private async finalizarLancamento(
+    id: string,
+    ref: string,
+    lancado: OrcamentoLancado,
+    snapshot: PdfSnapshotProposta | null,
+    totalFinal?: string,
+  ): Promise<PropostaGerada> {
+    const dados: Prisma.PropostaUncheckedUpdateManyInput = {
+      status: "ENVIADA",
+      idorcamentoAthos: lancado.idorcamento,
+      senhaBalcao: lancado.senhabalcao,
+      athosData: lancado.data,
+      athosHora: lancado.hora,
+      enviadaEm: new Date(),
+      ...(totalFinal !== undefined ? { totalValor: totalFinal } : {}),
+    };
+
+    let atualizadas: number;
+    try {
+      atualizadas = (await this.prisma.proposta.updateMany({ where: { id, status: "LANCANDO" }, data: dados })).count;
+    } catch (err) {
+      this.logger.error(
+        `Proposta ${id}: orcamento ${lancado.idorcamento} (ref ${ref}) gravado no Athos, mas a finalizacao local falhou: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      throw this.erroFinalizacaoLocal(lancado.idorcamento);
+    }
+    if (atualizadas !== 1) {
+      this.logger.error(
+        `Proposta ${id}: orcamento ${lancado.idorcamento} (ref ${ref}) gravado no Athos, mas a finalizacao nao atualizou a proposta (status inesperado).`,
+      );
+      throw this.erroFinalizacaoLocal(lancado.idorcamento);
+    }
+
     let pdfDisponivel = false;
     let aviso: string | undefined;
     try {
+      if (!snapshot) {
+        throw new Error("pdfSnapshot ausente na proposta");
+      }
       const paraPdf = await this.obterParaPdf(id);
       const { objectName } = await this.propostasPdf.gerarOficial(paraPdf, snapshot);
       await this.prisma.proposta.update({ where: { id }, data: { pdfObjectName: objectName, pdfGeradoEm: new Date() } });
@@ -767,7 +867,6 @@ export class PropostasService {
       aviso = "A proposta foi lancada no Athos, mas o PDF oficial nao pode ser gerado agora. Tente gerar o PDF novamente mais tarde.";
     }
 
-    // 8. Resposta.
     return {
       id,
       status: "ENVIADA",
@@ -776,6 +875,47 @@ export class PropostasService {
       pdfDisponivel,
       ...(aviso ? { aviso } : {}),
     };
+  }
+
+  private erroFinalizacaoLocal(idorcamento: number): PropostaError {
+    return new PropostaError(
+      "LANCAMENTO_EM_ANDAMENTO",
+      `O orcamento ${idorcamento} foi gravado no Athos, mas nao foi possivel concluir a proposta aqui. Ela ficou em lancamento: aguarde 2 minutos e use a recuperacao para finalizar sem lancar de novo.`,
+      409,
+    );
+  }
+
+  /**
+   * Recupera uma proposta presa em LANCANDO (D-07, T-55-62): so apos 120 s, procura o orcamento pelo marcador
+   * ref derivado do id da proposta. Achando, finaliza como ENVIADA com o pdfSnapshot JA gravado (nunca
+   * recaptura); nao achando, devolve a RASCUNHO. NUNCA chama criarOrcamentoProposta.
+   */
+  async recuperarLancamento(id: string): Promise<PropostaRecuperada> {
+    const proposta = await this.carregar(id);
+    if (proposta.status !== "LANCANDO") {
+      throw new PropostaError("TRANSICAO_INVALIDA", "Somente uma proposta em lancamento pode ser recuperada.", 409);
+    }
+    const desde = proposta.lancandoEm ? new Date(proposta.lancandoEm).getTime() : 0;
+    if (Date.now() - desde < RECUPERACAO_APOS_MS) {
+      throw new PropostaError(
+        "LANCAMENTO_EM_ANDAMENTO",
+        "O lancamento desta proposta ainda pode estar em andamento. Aguarde 2 minutos antes de tentar a recuperacao.",
+        409,
+      );
+    }
+
+    const ref = refDoOrcamento(id);
+    const achado = await this.athosOrcamento.buscarOrcamentoPorRefProposta(ref);
+    if (!achado) {
+      await this.reverterReserva(id);
+      return {
+        id,
+        status: "RASCUNHO",
+        mensagem: "Nenhum orcamento desta proposta foi encontrado no Athos. A proposta voltou a rascunho e pode ser gerada novamente.",
+      };
+    }
+    const snapshot = (proposta.pdfSnapshot as unknown as PdfSnapshotProposta | null) ?? null;
+    return this.finalizarLancamento(id, ref, achado, snapshot);
   }
 
   // -------------------------------------------------------------------------
