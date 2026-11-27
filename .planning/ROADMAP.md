@@ -373,12 +373,23 @@ Plans:
 - Promocao: usar o preco promocional so quando valida - `precovendaproduto` ja faz isso (promocaostatus + data atual entre iniciopromocao e terminopromocao; senao usa o preco de `precousado`).
 - Validado (2026-11-27): a captura do Balcao (referencia/athos-orcamento.md, captura 2) mostra que o proprio Athos grava preco alterado na linha como `valoritem` com `valordesconto = 0` e `orcamentoDesconto = 0`. Teste no clone athos-teste (com ROLLBACK): orcamento com produto 60 a 2,90 (cadastro 3,30), desconto 0, aceito sem erro. `orcamento` tem rules DO ALSO (atualizardatahora*): nao usar INSERT dentro de CTE, usar RETURNING em statement separado.
 - Referencias do Athos copiadas para `referencia/` (orcamento e cadastro de produto). Lacunas da captura: cliente, validade e obs no orcamento do Athos, e conversao do orcamento em venda.
-**Requirements**: TBD
+**Requirements**: P55-PRECO, P55-MONT, P55-CLI, P55-CICLO, P55-ATHOS, P55-PDF
 **Depends on:** Phase 54
-**Plans:** 0 plans
+**Plans:** 12 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 55 to break down)
+- [ ] 55-01-PLAN.md — util puro de preco da proposta em BigInt: preco base com ceil, ajuste por % ou valor digitado, linhas sem desconto, custo e margem (Wave 1)
+- [ ] 55-02-PLAN.md — [BLOCKING] schema: coluna familia em PdfTemplate e tabelas Proposta, PropostaItem e PropostaConfig; migrations idempotentes validadas em Postgres descartavel (Wave 1)
+- [ ] 55-03-PLAN.md — leituras do Athos: produto com preco base e custo corrigido (COALESCE por termo) e cliente com razao social real e endereco sem fallback (Wave 1)
+- [ ] 55-04-PLAN.md — escrita no Athos: criarOrcamentoProposta (preco final sem desconto, cliente obrigatorio, idempotencia por ref, kill-switch PROPOSTA_ESCRITA_ATIVA), IT no clone e flag desligada no deploy (Wave 2)
+- [ ] 55-05-PLAN.md — templates de PDF por familia (ORCAMENTO | PROPOSTA): ativacao isolada, resolucao por familia e seed com isActive so no create (Wave 2)
+- [ ] 55-06-PLAN.md — modulo backend de propostas: rascunho, itens com snapshot, ajuste e aplicar % em todos, cabecalho com cliente do Athos e dados de orgao, rotas AdminOnly (Wave 2)
+- [ ] 55-07-PLAN.md — PDF institucional: contexto por lista branca (sem custo), template proposta-institucional, render multipagina hardened, MinIO e previa (Wave 3)
+- [ ] 55-08-PLAN.md — lancar no Athos com compare-and-set e recuperacao de orfao, PDF oficial, duplicar, fechar e cancelar local; IT HTTP no clone (Wave 4)
+- [ ] 55-09-PLAN.md — frontend: menu, lista, proxy com lista permitida e montagem de itens (busca, ajuste, aplicar %, custo e margem) (Wave 3)
+- [ ] 55-10-PLAN.md — frontend: cliente, orgao, condicoes, assinante, previa, gerar com confirmacao, PDF oficial, duplicar, status e templates por familia (Wave 5)
+- [ ] 55-11-PLAN.md — regressao completa, roteiro de ativacao e checkpoints humanos: deploy com escrita desligada e verificacao visual (Wave 6)
+- [ ] 55-12-PLAN.md — checkpoints humanos: decisao one-way de ligar PROPOSTA_ESCRITA_ATIVA e conferencia do primeiro lancamento no Balcao (Wave 7)
 
 ---
 

@@ -48,6 +48,17 @@ ver custo para comparacao durante a montagem, gerar um PDF institucional serio (
 - **D-21:** Campo de observacao livre na proposta, impresso no PDF.
 - **D-22:** PDF com perfil institucional/serio (nao o visual colorido da grafica), via sistema de templates (`pdf-templates`), com linha propria de templates de proposta separada dos templates de orcamento da grafica. Colunas: codigo, descricao (alterada), unidade, quantidade, valor unitario, total. Sem marca, valor por extenso ou declaracoes (nao pedidos).
 
+### Decisoes pos-pesquisa (2026-11-27, respostas do usuario as open questions do 55-RESEARCH.md)
+- **D-23:** Preco-base com mais de 2 casas (ex: 3,456): arredondar **para cima no centavo** tambem quando nao ha ajuste. Toda conta de preco em centavos/milesimos com BigInt (nunca Math.ceil em float).
+- **D-24:** Custo unitario: tratar `imposto`/`ipi`/`frete`/`outroimposto` NULL como 0 (COALESCE por termo), em vez de zerar o custo como a formula atual da Fase 44.
+- **D-25:** PDF usa a **razao social** do cliente (`razaosocial`, mesmo com `nomefantasia` preenchida); campos de endereco ausentes aparecem como "nao informado" (nunca os fallbacks inventados `Centro`/`S/N`/`SP`).
+- **D-26:** Produto que nao existe e cadastrado no **Athos desktop** (nao ha tela de cadastro de produto no frontend; nada a construir para isso).
+- **D-27:** Margem exibida na montagem = margem liquida igual ao Athos: `(preco - custo) / preco` (mesmo conceito de `margemliquidavenda1`).
+- **D-28:** Orcamento lancado por engano fica aberto no Athos e e cancelado pelo Balcao; no sistema so cancelamento local + duplicar (aceito pelo usuario).
+- **D-29:** Forma de pagamento do orcamento lancado = a mesma configurada para a Fase 44 (`ATHOS_ORCAMENTO_ID_FORMA_PAGAMENTO`).
+- **D-30 (Claude):** Kill-switch proprio para a escrita de propostas no Athos (ex: `PROPOSTA_ESCRITA_ATIVA`, desligado por padrao), separado de `ATHOS_ORCAMENTO_ESCRITA`. Templates de proposta ficam na tabela `PdfTemplate` com coluna de familia e ativacao escopada por familia; seed grava `isActive` so no create. Gravacao no Athos via funcao/metodo novos (`calcularLinhasProposta` / `criarOrcamentoProposta`), sem alterar `criarOrcamento` da Fase 44.
+- **Debito registrado (fora do escopo):** `SQL_LER_PRODUTOS` da Fase 44 zera custo quando imposto e NULL — corrigir em fase propria.
+
 ### Claude's Discretion
 - Layout e navegacao das telas (menu "Propostas", lista com filtro por status, tela de montagem).
 - Modelo de dados local (tabelas novas para proposta/itens/config) e se reaproveita `Customer`.
