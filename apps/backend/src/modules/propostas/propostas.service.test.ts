@@ -31,8 +31,9 @@ function criarContexto() {
   const prisma = criarPrismaPropostaFake();
   const athosOrcamento = { obterProdutoProposta: jest.fn(), buscarProdutosProposta: jest.fn() };
   const athos = { buscarClienteParaProposta: jest.fn() };
-  const service = new PropostasService(prisma as any, athosOrcamento as any, athos as any);
-  return { prisma, athosOrcamento, athos, service };
+  const propostasPdf = { capturarSnapshot: jest.fn(), gerarOficial: jest.fn() };
+  const service = new PropostasService(prisma as any, athosOrcamento as any, athos as any, propostasPdf as any);
+  return { prisma, athosOrcamento, athos, propostasPdf, service };
 }
 
 type Ctx = ReturnType<typeof criarContexto>;

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type { Proposta, PropostaItem } from "@prisma/client";
 
@@ -11,16 +11,20 @@ import {
   paraMilli,
 } from "../integrations/athos/athos-orcamento-calc.util";
 import { AthosOrcamentoService } from "../integrations/athos/athos-orcamento.service";
+import { refDoOrcamento } from "../integrations/athos/athos-orcamento-idempotencia.service";
 import { PrismaService } from "../database/prisma.service";
 import {
   AddItemPropostaDto,
   AplicarPercentualDto,
   CreatePropostaDto,
+  GerarPropostaDto,
   ListarPropostasQueryDto,
   UpdateItemPropostaDto,
   UpdatePropostaDto,
 } from "./dto/propostas.dto";
 import { PropostaError } from "./propostas.errors";
+import { PropostasPdfService } from "./propostas-pdf.service";
+import type { PdfSnapshotProposta, PropostaParaPdf } from "./propostas-pdf.util";
 import {
   CalcPropostaError,
   MAX_LINHAS_PROPOSTA,
@@ -119,6 +123,17 @@ export interface PropostaListagem {
   total: number;
   pagina: number;
   tamanho: number;
+}
+
+/** Resposta de gerar: proposta ENVIADA, numero do Athos e se o PDF oficial ficou disponivel. */
+export interface PropostaGerada {
+  id: string;
+  status: "ENVIADA";
+  idorcamentoAthos: number;
+  senhaBalcao: number;
+  pdfDisponivel: boolean;
+  /** Presente quando o lancamento ocorreu mas o PDF nao foi gerado (o snapshot segue gravado para regerar). */
+  aviso?: string;
 }
 
 export interface AssinanteRecente {
@@ -252,10 +267,13 @@ function diasValidos(v: number | undefined, campo: string): number | undefined {
 
 @Injectable()
 export class PropostasService {
+  private readonly logger = new Logger(PropostasService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly athosOrcamento: AthosOrcamentoService,
     private readonly athos: AthosService,
+    private readonly propostasPdf: PropostasPdfService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -285,6 +303,14 @@ export class PropostasService {
 
   async obter(id: string): Promise<PropostaDetalhe> {
     return montarDetalhe(await this.carregar(id));
+  }
+
+  /**
+   * Proposta com itens ordenados no formato do PDF (usado por `gerar` e pelas rotas de PDF do plano 55-13).
+   * Entrega as linhas do Prisma: a lista branca de campos e feita por `montarContextoProposta` (D-12).
+   */
+  async obterParaPdf(id: string): Promise<PropostaParaPdf> {
+    return (await this.carregar(id)) as PropostaParaPdf;
   }
 
   // -------------------------------------------------------------------------
@@ -595,6 +621,161 @@ export class PropostasService {
       this.prisma.proposta.update({ where: { id }, data: { totalValor: centavosParaTexto(total) } }),
     ]);
     return this.obter(id);
+  }
+
+  // -------------------------------------------------------------------------
+  // Lancamento (D-06, D-07): unica acao one-way da fase
+  // -------------------------------------------------------------------------
+
+  /** Volta a proposta de LANCANDO para RASCUNHO. So e usada ANTES de qualquer chamada ao Athos. */
+  private async reverterReserva(id: string): Promise<void> {
+    await this.prisma.proposta.updateMany({
+      where: { id, status: "LANCANDO" },
+      data: { status: "RASCUNHO", lancandoEm: null, pdfSnapshot: Prisma.DbNull },
+    });
+  }
+
+  /**
+   * Gera a proposta: lanca o orcamento no Athos e emite o PDF oficial a partir de um snapshot de emissao.
+   *
+   * Ordem (T-55-31, T-55-55): validar; flag de escrita ligada; capturar o snapshot do PDF; reservar por
+   * compare-and-set RASCUNHO -> LANCANDO (snapshot gravado na MESMA atualizacao); so entao chamar o Athos.
+   * Tudo que pode falhar por configuracao ou entrada acontece ANTES da reserva ou reverte a reserva, para
+   * nenhuma proposta ficar presa em LANCANDO por motivo previsivel.
+   *
+   * TRACER (plano 55-08): cobre o fluxo feliz e as reversoes triviais. Erro definitivo ou ambiguo do Athos,
+   * recuperacao de orfao, falha de persistencia depois do COMMIT e concorrencia simultanea sao do plano 55-17:
+   * ate la, um erro do proprio passo de chamada ao Athos deixa a proposta em LANCANDO e a flag segue desligada.
+   */
+  async gerar(id: string, dto: GerarPropostaDto): Promise<PropostaGerada> {
+    // 1. Carregar e conferir o status.
+    const proposta = await this.carregar(id);
+    if (proposta.status === "LANCANDO") {
+      throw new PropostaError("LANCAMENTO_EM_ANDAMENTO", "Esta proposta esta sendo lancada no Athos neste momento.", 409);
+    }
+    if (proposta.status !== "RASCUNHO") {
+      throw new PropostaError("TRANSICAO_INVALIDA", "Esta proposta ja foi lancada e nao pode ser gerada novamente.", 409);
+    }
+
+    // 2. Validacoes de negocio (sem efeito colateral).
+    if (proposta.idclienteAthos === null || proposta.idclienteAthos === undefined) {
+      throw new PropostaError(
+        "CLIENTE_OBRIGATORIO",
+        "Associe um cliente do Athos a proposta antes de gerar. Se o cliente ainda nao existe, cadastre-o primeiro no Athos.",
+        422,
+      );
+    }
+    if (proposta.itens.length === 0) {
+      throw new PropostaError("SEM_ITENS", "Adicione pelo menos um item antes de gerar a proposta.", 422);
+    }
+    const assinanteNome = textoOpcional(dto.assinanteNome);
+    if (!assinanteNome) {
+      throw new PropostaError("ASSINANTE_OBRIGATORIO", "Informe o nome do assinante da proposta.", 422);
+    }
+    const assinanteCargo = textoOpcional(dto.assinanteCargo) ?? null;
+    const assinanteCpf = textoOpcional(dto.assinanteCpf) ?? null;
+
+    // 3. Flag de escrita e snapshot do PDF, ambos ANTES de reservar: flag desligada ou PDF sem configuracao
+    //    deixam o status em RASCUNHO e o Athos intocado (D-09, D-18, D-30).
+    this.athosOrcamento.exigirEscritaPropostaAtiva();
+    const snapshot: PdfSnapshotProposta = await this.propostasPdf.capturarSnapshot();
+
+    // 4. Compare-and-set: o snapshot e gravado na mesma atualizacao atomica da reserva. NADA do Athos antes.
+    const reserva = await this.prisma.proposta.updateMany({
+      where: { id, status: "RASCUNHO" },
+      data: {
+        status: "LANCANDO",
+        lancandoEm: new Date(),
+        assinanteNome,
+        assinanteCargo,
+        assinanteCpf,
+        pdfSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+      },
+    });
+    if (reserva.count !== 1) {
+      throw new PropostaError("LANCAMENTO_EM_ANDAMENTO", "Esta proposta esta sendo lancada no Athos neste momento.", 409);
+    }
+
+    // 5. Entrada do Athos: SOMENTE idproduto, quantidade, preco final e custo do snapshot (D-04, D-09).
+    //    Qualquer falha aqui acontece antes da chamada e reverte a reserva.
+    let entrada: {
+      idcliente: number;
+      ref: string;
+      itens: Array<{ idproduto: number; quantidade: string; precoUnitario: string; custoUnitario: string }>;
+    };
+    let totalFinal: string;
+    try {
+      const ordenados = [...proposta.itens].sort((a, b) => a.sequencia - b.sequencia);
+      entrada = {
+        idcliente: proposta.idclienteAthos,
+        ref: refDoOrcamento(id),
+        itens: ordenados.map((i) => ({
+          idproduto: i.idproduto,
+          quantidade: milliParaTexto(milliDe(i.quantidade)),
+          precoUnitario: centavosParaTexto(centavosDe(i.precoUnitario)),
+          custoUnitario: milliParaTexto(milliDe(i.custoUnitario)),
+        })),
+      };
+      const recalculado = this.totalCentavos(ordenados);
+      if (recalculado !== centavosDe(proposta.totalValor)) {
+        throw new Error(
+          `Total gravado (${centavosParaTexto(centavosDe(proposta.totalValor))}) difere da soma dos itens (${centavosParaTexto(recalculado)}).`,
+        );
+      }
+      totalFinal = centavosParaTexto(recalculado);
+    } catch (err) {
+      await this.reverterReserva(id);
+      if (err instanceof PropostaError) throw err;
+      this.logger.error(`Proposta ${id}: preparacao do lancamento falhou antes do Athos: ${err instanceof Error ? err.message : String(err)}`);
+      throw new PropostaError(
+        "VALOR_INVALIDO",
+        "O total da proposta nao confere com a soma dos itens. Nada foi lancado no Athos; revise os itens e tente novamente.",
+        422,
+      );
+    }
+
+    // 6. Athos. Em sucesso, finaliza a proposta como ENVIADA com o numero, a senha e a data/hora do Athos.
+    const lancado = await this.athosOrcamento.criarOrcamentoProposta(entrada);
+    const final = await this.prisma.proposta.updateMany({
+      where: { id, status: { in: ["LANCANDO", "RASCUNHO"] } },
+      data: {
+        status: "ENVIADA",
+        idorcamentoAthos: lancado.idorcamento,
+        senhaBalcao: lancado.senhabalcao,
+        athosData: lancado.data,
+        athosHora: lancado.hora,
+        enviadaEm: new Date(),
+        totalValor: totalFinal,
+      },
+    });
+    if (final.count !== 1) {
+      this.logger.error(`Proposta ${id}: orcamento ${lancado.idorcamento} lancado no Athos, mas a finalizacao nao atualizou a proposta.`);
+    }
+
+    // 7. PDF oficial FORA de qualquer transacao, com o MESMO snapshot gravado na reserva (nunca recapturar).
+    let pdfDisponivel = false;
+    let aviso: string | undefined;
+    try {
+      const paraPdf = await this.obterParaPdf(id);
+      const { objectName } = await this.propostasPdf.gerarOficial(paraPdf, snapshot);
+      await this.prisma.proposta.update({ where: { id }, data: { pdfObjectName: objectName, pdfGeradoEm: new Date() } });
+      pdfDisponivel = true;
+    } catch (err) {
+      this.logger.error(
+        `Proposta ${id}: orcamento ${lancado.idorcamento} lancado, mas o PDF oficial falhou: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      aviso = "A proposta foi lancada no Athos, mas o PDF oficial nao pode ser gerado agora. Tente gerar o PDF novamente mais tarde.";
+    }
+
+    // 8. Resposta.
+    return {
+      id,
+      status: "ENVIADA",
+      idorcamentoAthos: lancado.idorcamento,
+      senhaBalcao: lancado.senhabalcao,
+      pdfDisponivel,
+      ...(aviso ? { aviso } : {}),
+    };
   }
 
   // -------------------------------------------------------------------------

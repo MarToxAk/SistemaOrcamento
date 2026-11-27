@@ -1,6 +1,19 @@
 import { Type } from "class-transformer";
 import { PropostaStatus } from "@prisma/client";
-import { IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
+import {
+  Equals,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from "class-validator";
 
 /**
  * DTOs do modulo de propostas (Fase 55). Nenhum DTO aceita preco final: o servidor recalcula o preco de
@@ -142,4 +155,21 @@ export class ListarPropostasQueryDto {
   @Min(1)
   @Max(100)
   tamanho?: number;
+}
+
+/**
+ * Gerar a proposta (lancar no Athos + PDF oficial, D-07). `confirmar` e a confirmacao explicita do botao
+ * "Gerar proposta e lancar no Athos" e tambem e exigida no servidor. Assinante do documento (D-19).
+ */
+export class GerarPropostaDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  assinanteNome!: string;
+
+  @IsOptional() @IsString() @MaxLength(120) assinanteCargo?: string;
+  @IsOptional() @IsString() @MaxLength(20) assinanteCpf?: string;
+
+  @Equals(true, { message: "confirmar deve ser true: a geracao lanca o orcamento no Athos e nao pode ser desfeita" })
+  confirmar!: boolean;
 }
