@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { useEmpresa } from "@/lib/empresa";
+import { rotaPreviewTemplate } from "@/lib/propostas-rotas";
 
 type TemplateKind = "PRESET" | "CUSTOM";
 
@@ -177,14 +178,16 @@ export default function TemplatesManager() {
     setPreviewingId(template.id);
     setErro("");
     try {
-      const response = await fetch("/api/admin/templates/preview", {
+      const url = rotaPreviewTemplate(familia);
+      if (!url) throw new Error("Familia de template invalida para a previa.");
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ templateId: template.id }),
       });
       if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data?.error || "Falha ao gerar preview.");
+        const data = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
+        throw new Error(data?.error || data?.message || "Falha ao gerar preview.");
       }
       const blob = await response.blob();
       abrirPdfBlob(blob);
@@ -203,14 +206,16 @@ export default function TemplatesManager() {
     }
     setPreviewUploadLoading(true);
     try {
-      const response = await fetch("/api/admin/templates/preview", {
+      const url = rotaPreviewTemplate(familia);
+      if (!url) throw new Error("Familia de template invalida para a previa.");
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source: uploadSource }),
       });
       if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data?.error || "Falha ao gerar preview do template enviado.");
+        const data = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
+        throw new Error(data?.error || data?.message || "Falha ao gerar preview do template enviado.");
       }
       const blob = await response.blob();
       abrirPdfBlob(blob);

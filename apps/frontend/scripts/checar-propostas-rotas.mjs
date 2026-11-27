@@ -36,6 +36,7 @@ const aceitos = [
   ["PATCH", [U1, "status"]],
   ["GET", [U1, "pdf"]],
   ["GET", [U1, "previa"]],
+  ["POST", ["templates", "preview"]],
 ];
 
 for (const [metodo, segmentos] of aceitos) {
@@ -76,6 +77,10 @@ const recusados = [
   ["pdf com uuid em maiuscula", "GET", [U1.toUpperCase(), "pdf"]],
   ["4 segmentos desconhecidos", "GET", [U1, "itens", U2, "extra"]],
   ["4 segmentos genericos", "GET", ["a", "b", "c", "d"]],
+  ["GET em templates/preview", "GET", ["templates", "preview"]],
+  ["POST em templates sozinho", "POST", ["templates"]],
+  ["POST templates/preview com segmento extra", "POST", ["templates", "preview", "x"]],
+  ["POST em templates/outro", "POST", ["templates", "outro"]],
   ["metodo vazio", "", []],
 ];
 
@@ -119,6 +124,29 @@ for (const [nome, valor] of familiasInvalidas) {
     assert.equal(r.familiaTemplateValida(valor), null);
   });
 }
+
+// Previa por familia (plano 55-15, T-55-46): PROPOSTA pelo proxy de propostas, ORCAMENTO pela rota admin atual.
+caso("rotaPreviewTemplate PROPOSTA usa a rota de propostas", () => {
+  assert.equal(r.rotaPreviewTemplate("PROPOSTA"), "/api/propostas/templates/preview");
+});
+caso("rotaPreviewTemplate ORCAMENTO usa a rota admin atual", () => {
+  assert.equal(r.rotaPreviewTemplate("ORCAMENTO"), "/api/admin/templates/preview");
+});
+for (const [nome, valor] of [
+  ["minuscula", "proposta"],
+  ["vazio", ""],
+  ["null", null],
+  ["undefined", undefined],
+  ["texto com espaco", "PROPOSTA "],
+]) {
+  caso(`rotaPreviewTemplate familia invalida (${nome}) nao tem rota`, () => {
+    assert.equal(r.rotaPreviewTemplate(valor), null);
+  });
+}
+caso("decidirAcessoProxy POST templates/preview com sessao devolve /propostas/templates/preview", () => {
+  const d = r.decidirAcessoProxy({ temSessao: true, metodo: "POST", segmentos: ["templates", "preview"], search: "" });
+  assert.deepEqual(d, { ok: true, caminho: "/propostas/templates/preview" });
+});
 
 const metodos = ["GET", "POST", "PATCH", "DELETE"];
 const listado = { GET: [U1], POST: [U1, "itens"], PATCH: [U1], DELETE: [U1, "itens", U2] };
