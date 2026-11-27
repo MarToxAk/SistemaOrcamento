@@ -6,7 +6,7 @@
  *
  * Somente as rotas que o backend ja tem estao liberadas: as do plano 55-06 (cabecalho e itens) e, a partir do
  * plano 55-18, as de ciclo de vida e PDF (gerar do 55-08, recuperar do 55-17, duplicar, status, pdf e previa do
- * 55-13). A de templates/preview entra no plano 55-15.
+ * 55-13). A de templates/preview entra no plano 55-15 (somente POST templates/preview).
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -43,6 +43,8 @@ export function rotaPropostaPermitida(metodo: string, segmentos: string[]): bool
     if (ehUuid(a) && (b === "gerar" || b === "recuperar" || b === "duplicar")) return m === "POST";
     if (ehUuid(a) && b === "status") return m === "PATCH";
     if (ehUuid(a) && (b === "pdf" || b === "previa")) return m === "GET";
+    // Previa de template de proposta (plano 55-15): unica rota de templates liberada, so POST.
+    if (a === "templates" && b === "preview") return m === "POST";
     return false;
   }
 
@@ -53,6 +55,24 @@ export function rotaPropostaPermitida(metodo: string, segmentos: string[]): bool
   }
 
   return false;
+}
+
+export type FamiliaTemplate = "ORCAMENTO" | "PROPOSTA";
+
+/**
+ * Familia de template aceita pelo proxy admin de templates (Fase 55, T-55-46): SOMENTE os textos exatos
+ * "ORCAMENTO" e "PROPOSTA"; qualquer outra coisa (minuscula, espaco, lista, caminho) vira null.
+ */
+export function familiaTemplateValida(valor: unknown): FamiliaTemplate | null {
+  return valor === "ORCAMENTO" || valor === "PROPOSTA" ? valor : null;
+}
+
+/** Rota de previa de template por familia; familia invalida nao tem rota (null). */
+export function rotaPreviewTemplate(familia: unknown): string | null {
+  const f = familiaTemplateValida(familia);
+  if (f === "PROPOSTA") return "/api/propostas/templates/preview";
+  if (f === "ORCAMENTO") return "/api/admin/templates/preview";
+  return null;
 }
 
 // Caracteres seguros de uma query string ja codificada pelo navegador (sem "#", espaco ou controle).
