@@ -145,14 +145,15 @@ Nenhum pacote externo novo e recomendado. O gate de legitimidade nao se aplica a
      +-- rascunho / duplicar ---------> PropostasService --> Prisma (Proposta, PropostaItem)
      |
      +-- GERAR (lancar) ---------------> PropostasService
-            1. CAS no Prisma: RASCUNHO -> LANCANDO  (se count != 1: conflito, nada e gravado)
+            0. capturarSnapshot do PDF (banco, empresa, fonte do template): falha aqui = RASCUNHO intacto, Athos intocado
+            1. CAS no Prisma: RASCUNHO -> LANCANDO + pdfSnapshot  (se count != 1: conflito, nada e gravado)
             2. calcularLinhasProposta (funcao pura, inteiros, sem D-04)
             3. criarOrcamentoProposta: BEGIN; SET TRANSACTION READ WRITE (padrao); INSERT orcamento
                RETURNING idorcamento; INSERT itens; DELETE+INSERT pagamento; COMMIT  -> Athos (producao)
             4. Prisma: idorcamentoAthos, status ENVIADA  (se falhar: recuperar por obs LIKE '[PROPOSTA] ref:<ref>%')
-            5. PropostasPdfService: HTML (familia PROPOSTA) -> Puppeteer multipagina (sem scale)
+            5. PropostasPdfService: HTML (familia PROPOSTA) so pelo pdfSnapshot -> Puppeteer multipagina (sem scale)
             6. MinIO prefixo "propostas/" -> Prisma: pdfObjectName
-            (falha em 5-6 NAO relanca no Athos: so repete o PDF)
+            (falha em 5-6 NAO relanca no Athos: so repete o PDF, regenerado do mesmo pdfSnapshot)
 ```
 
 Os passos 3 e 5 nao podem estar na mesma transacao. O INSERT em `orcamento` dispara uma regra que atualiza `conf_inicial` (ver Pitfall 11), e o PDF nao deve segurar esse lock.
@@ -407,38 +408,40 @@ cd /root/SistemaOrcamento/apps/backend && npx jest --no-coverage propostas-calc
 
 **If this table is empty:** nao se aplica; ha 10 itens.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Arredondamento do preco-base com sub-centavo (303 produtos no clone).**
+> Todas resolvidas pelo usuario em 2026-11-27 — ver 55-CONTEXT.md D-23..D-30.
+
+1. **Arredondamento do preco-base com sub-centavo (303 produtos no clone).** **RESOLVED: D-23.**
    - O que sabemos: `precovendaproduto` devolve 3 casas; o PDF mostra centavos (D-22); D-02 manda ceil no centavo no ajuste.
    - O que nao sabemos: se o preco sem ajuste deve ser arredondado (e para cima, como o ajuste) ou mantido com 3 casas.
    - Recomendacao: aplicar ceil no centavo ao snapshot tambem sem ajuste, de modo que PDF, snapshot e Athos somem o mesmo valor. Confirmar com o usuario, porque altera D-01 na pratica.
 
-2. **Custo com imposto NULL: qual valor mostrar e gravar?**
+2. **Custo com imposto NULL: qual valor mostrar e gravar?** **RESOLVED: D-24.**
    - Recomendacao: mostrar e gravar o custo com COALESCE por termo (Pitfall 2). Confirmar se o Balcao (captura futura, com produto de imposto NULL) grava 0 ou o valor real; se gravar 0, decidir se a proposta grava o valor corrigido em `valorcustoitem` (recomendado: sim, custo e informativo).
 
-3. **Razao social no PDF do orgao.**
+3. **Razao social no PDF do orgao.** **RESOLVED: D-25.**
    - D-16 diz que razao social vem do cadastro do Athos. O cadastro tem `razaosocial` separado de `nomefantasia`. Confirmar que o PDF deve usar `razaosocial` mesmo quando `nomefantasia` estiver preenchida, e que endereco ausente deve aparecer como "nao informado" (sem fallback).
 
-4. **Onde fica a "tela de produto existente" (D-05)?**
+4. **Onde fica a "tela de produto existente" (D-05)?** **RESOLVED: D-26.**
    - Nao ha tela de produto no frontend. Ha API `athos/produtos` sem UI. Confirmar se o cadastro de produto que falta e feito no Athos desktop (`referencia/athos-cadastro-produto.md`).
 
-5. **Kill-switch separado para propostas?**
+5. **Kill-switch separado para propostas?** **RESOLVED: D-30.**
    - `ATHOS_ORCAMENTO_ESCRITA` liga a escrita da IA (Fase 44) e nao deve ser o unico controle de propostas. Recomendacao: env nova `PROPOSTA_ESCRITA_ATIVA` (default desligada), validada antes de qualquer conexao, no mesmo padrao de `ESCRITA_DESABILITADA` (`athos-orcamento.service.ts:431`).
 
-6. **Familia de template: coluna ou tabela?**
+6. **Familia de template: coluna ou tabela?** **RESOLVED: D-30.**
    - Recomendacao: coluna `familia` em `PdfTemplate` com backfill (reaproveita galeria, upload, preview e validacao). Alternativa: tabela separada (isola regressao, duplica codigo). Escolher antes do plano de templates.
 
-7. **Margem exibida (D-12).**
+7. **Margem exibida (D-12).** **RESOLVED: D-27.**
    - O Athos define `margemliquidavenda1 = (venda − custo) / venda` (`referencia/athos-cadastro-produto.md:46`), e a margem de markup `venda/custo − 1`. Recomendacao: exibir margem liquida, com o mesmo nome do campo do Athos, para nao confundir com markup.
 
-8. **Proposta lancada com erro.**
+8. **Proposta lancada com erro.** **RESOLVED: D-28.**
    - Sem cancelamento no Athos (D-10), a unica correcao e duplicar. Confirmar que o operador aceita um orcamento "fantasma" aberto no Balcao nesse caso (Pitfall 15).
 
-9. **Forma de pagamento gravada (`idformapagamento`).**
+9. **Forma de pagamento gravada (`idformapagamento`).** **RESOLVED: D-29.**
    - A escrita grava uma linha PIX (Fase 44). Confirmar o id em producao (A3).
 
-10. **Bug de custo da Fase 44 (Pitfall 17).** Corrigir em fase propria ou registrar como debito.
+10. **Bug de custo da Fase 44 (Pitfall 17).** **RESOLVED: D-30 (debito registrado, fora do escopo).** Corrigir em fase propria ou registrar como debito.
 
 ## Environment Availability
 

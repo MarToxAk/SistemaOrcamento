@@ -46,7 +46,7 @@ ver custo para comparacao durante a montagem, gerar um PDF institucional serio (
 - **D-19:** Assinante escolhido na hora de gerar (nome + cargo/CPF opcional); lista de assinantes salvos para reuso fica a criterio do Claude.
 - **D-20:** Validade padrao **1 dia**; prazo de entrega padrao **15 dias**. Ambos vem preenchidos e sao editaveis por proposta.
 - **D-21:** Campo de observacao livre na proposta, impresso no PDF.
-- **D-22:** PDF com perfil institucional/serio (nao o visual colorido da grafica), via sistema de templates (`pdf-templates`), com linha propria de templates de proposta separada dos templates de orcamento da grafica. Colunas: codigo, descricao (alterada), unidade, quantidade, valor unitario, total. Sem marca, valor por extenso ou declaracoes (nao pedidos).
+- **D-22:** PDF com perfil institucional/serio (nao o visual colorido da grafica), via sistema de templates (`pdf-templates`), com linha propria de templates de proposta separada dos templates de orcamento da grafica. Colunas: codigo, descricao (alterada), unidade, quantidade, valor unitario, total. Sem coluna de **marca do produto** (`produto_marca`), sem valor por extenso e sem declaracoes (nao pedidos). "Marca" aqui e a marca do PRODUTO, nao a identidade da empresa: o cabecalho institucional pode ter o logo da Bom Custo (via `EMPRESA_LOGO_URL`, opcional) junto com razao social e CNPJ.
 
 ### Decisoes pos-pesquisa (2026-11-27, respostas do usuario as open questions do 55-RESEARCH.md)
 - **D-23:** Preco-base com mais de 2 casas (ex: 3,456): arredondar **para cima no centavo** tambem quando nao ha ajuste. Toda conta de preco em centavos/milesimos com BigInt (nunca Math.ceil em float).
