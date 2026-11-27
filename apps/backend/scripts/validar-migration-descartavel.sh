@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Valida uma migration SQL aditiva num Postgres Docker DESCARTAVEL (127.0.0.1 apenas).
-# Uso: validar-migration-descartavel.sh <pasta-da-migration> <tabela> <num-colunas-esperado>
+# Uso: validar-migration-descartavel.sh <pasta-da-migration> <tabela> <num-colunas-esperado> [pasta-prerequisito ...]
 # Aplica o migration.sql DUAS vezes (idempotencia) e confere a contagem de colunas.
+# Cada pasta pre-requisito (4o argumento em diante) e aplicada UMA vez, na ordem dada, antes das
+# duas aplicacoes da migration alvo: so cria o terreno (ex.: a tabela que um ALTER TABLE altera) e
+# nao e testada quanto a idempotencia.
 # Nunca le DATABASE_URL e nunca conecta em outro host (nem Athos, nem producao).
 set -euo pipefail
 
-if [ "$#" -ne 3 ]; then
-  echo "uso: $0 <pasta-da-migration> <tabela> <num-colunas-esperado>" >&2
+if [ "$#" -lt 3 ]; then
+  echo "uso: $0 <pasta-da-migration> <tabela> <num-colunas-esperado> [pasta-prerequisito ...]" >&2
   exit 2
 fi
 
@@ -15,6 +18,11 @@ TABELA="$2"
 ESPERADO="$3"
 SQL="$PASTA/migration.sql"
 [ -f "$SQL" ] || { echo "migration.sql nao encontrado em $PASTA" >&2; exit 2; }
+# Pre-requisitos opcionais (4o argumento em diante): validados ANTES de subir o container.
+PREREQS=("${@:4}")
+for PRE in "${PREREQS[@]+"${PREREQS[@]}"}"; do
+  [ -f "$PRE/migration.sql" ] || { echo "migration.sql de pre-requisito nao encontrado em $PRE" >&2; exit 2; }
+done
 
 NOME="pg54-validacao"
 PORTA="55454"
@@ -43,6 +51,11 @@ done
 [ "$PRONTO" = "1" ] || { echo "Postgres descartavel nao ficou pronto" >&2; exit 1; }
 
 PSQL=(docker exec -i "$NOME" psql -h 127.0.0.1 -U postgres -d validacao -v ON_ERROR_STOP=1 -q)
+
+for PRE in "${PREREQS[@]+"${PREREQS[@]}"}"; do
+  echo "Pre-requisito: $PRE"
+  "${PSQL[@]}" < "$PRE/migration.sql"
+done
 
 echo "Aplicacao 1/2"
 "${PSQL[@]}" < "$SQL"
