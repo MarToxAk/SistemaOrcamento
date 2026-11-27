@@ -406,6 +406,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [x] 55-18-PLAN.md — frontend: acoes da proposta: previa, gerar com confirmacao explicita, PDF oficial, duplicar, fechar, cancelar e recuperar; libera as rotas de ciclo de vida no proxy (Wave 7)
+- [x] 55-19-PLAN.md — (retroativo) dados bancarios fora do repositorio publico e pagina Configuracoes > Dados bancarios (propostas)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 - [x] 55-15-PLAN.md — frontend: galeria de templates por familia (Orcamento | Proposta) e previa de template de proposta (Wave 8)

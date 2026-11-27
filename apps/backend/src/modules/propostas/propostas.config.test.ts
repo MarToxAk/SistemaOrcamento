@@ -55,7 +55,7 @@ const VALIDO = {
   agencia: "1234",
   conta: "98765-4",
   titular: "Empresa Ficticia Ltda",
-  documentoTitular: "00.000.000/0001-00",
+  documentoTitular: "11.222.333/0001-81",
 };
 
 describe("PropostasController config bancaria (HTTP)", () => {
@@ -150,10 +150,27 @@ describe("PropostasController config bancaria (HTTP)", () => {
     ["conta com script", { conta: "<script>" }],
     ["documento curto", { documentoTitular: "123" }],
     ["titular vazio", { titular: "" }],
+    ["agencia terminando em hifen", { agencia: "1234-" }],
+    ["conta terminando em hifen", { conta: "98765-" }],
+    ["conta com hifen no meio", { conta: "12-34-5" }],
+    ["CNPJ com digito errado", { documentoTitular: "11.222.333/0001-82" }],
+    ["CPF com 10 digitos", { documentoTitular: "123.456.789-0" }],
+    ["documento so com pontos", { documentoTitular: "..........." }],
+    ["documento repetido", { documentoTitular: "11111111111" }],
   ])("PATCH recusa %s com 400 sem gravar", async (_nome, troca) => {
     const r = await chamar("PATCH", { ...VALIDO, ...troca });
     expect(r.status).toBe(400);
     expect(prisma._tabela.size).toBe(0);
+  });
+
+  it.each([
+    ["agencia com digito", { agencia: "1234-5" }],
+    ["conta com X minusculo", { conta: "123456-x" }],
+    ["CPF valido", { documentoTitular: "529.982.247-25" }],
+  ])("PATCH aceita %s", async (_nome, troca) => {
+    const r = await chamar("PATCH", { ...VALIDO, ...troca });
+    expect(r.status).toBe(200);
+    if ("conta" in troca) expect(r.json.conta).toBe("123456-X");
   });
 
   it("PATCH recusa campo fora da lista (forbidNonWhitelisted)", async () => {

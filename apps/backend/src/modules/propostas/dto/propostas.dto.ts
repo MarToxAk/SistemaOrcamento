@@ -13,6 +13,8 @@ import {
   Min,
   Matches,
   MinLength,
+  ValidationArguments,
+  registerDecorator,
   ValidateNested,
 } from "class-validator";
 
@@ -195,11 +197,49 @@ export class GerarPropostaDto {
  * Ficam SO no banco do Sistema (o repositorio e publico); nunca em migration, seed ou codigo.
  */
 const aparar = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
+const apararMaiusculo = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim().replace(/\s+/g, "").toUpperCase() : value;
+
+/** CPF (11 digitos) ou CNPJ (14 digitos) com digitos verificadores validos; pontuacao opcional. */
+export function documentoCpfCnpjValido(valor: unknown): boolean {
+  if (typeof valor !== "string" || !/^[0-9./\- ]+$/.test(valor)) return false;
+  const d = valor.replace(/\D/g, "");
+  if (/^(\d)\1+$/.test(d)) return false;
+  const dv = (base: string, pesos: number[]) => {
+    const soma = pesos.reduce((acc, p, i) => acc + Number(base[i]) * p, 0);
+    const r = soma % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  if (d.length === 11) {
+    const p1 = [10, 9, 8, 7, 6, 5, 4, 3, 2];
+    const p2 = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2];
+    return dv(d, p1) === Number(d[9]) && dv(d, p2) === Number(d[10]);
+  }
+  if (d.length === 14) {
+    const p1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const p2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    return dv(d, p1) === Number(d[12]) && dv(d, p2) === Number(d[13]);
+  }
+  return false;
+}
+
+function IsCpfCnpj() {
+  return (alvo: object, propriedade: string) =>
+    registerDecorator({
+      name: "isCpfCnpj",
+      target: alvo.constructor,
+      propertyName: propriedade,
+      options: { message: (a: ValidationArguments) => `${a.property}: CPF ou CNPJ invalido` },
+      validator: { validate: (v: unknown) => documentoCpfCnpjValido(v) },
+    });
+}
 
 export class SalvarConfigBancariaDto {
   @Transform(aparar) @IsString() @MinLength(2) @MaxLength(80) bancoNome!: string;
-  @Transform(aparar) @IsString() @Matches(/^[0-9][0-9.\- ]{0,14}[0-9Xx]?$/, { message: "agencia invalida" }) @MaxLength(16) agencia!: string;
-  @Transform(aparar) @IsString() @Matches(/^[0-9][0-9.\- ]{0,22}[0-9Xx]?$/, { message: "conta invalida" }) @MaxLength(24) conta!: string;
+  /** Agencia: 3 a 6 digitos, opcionalmente com digito verificador (ex. 1234 ou 1234-5). */
+  @Transform(apararMaiusculo) @IsString() @Matches(/^\d{3,6}(-?[0-9X])?$/, { message: "agencia invalida" }) agencia!: string;
+  /** Conta: 3 a 13 digitos, opcionalmente com digito verificador (ex. 13005559-4 ou 123456-X). */
+  @Transform(apararMaiusculo) @IsString() @Matches(/^\d{3,13}(-?[0-9X])?$/, { message: "conta invalida" }) conta!: string;
   @Transform(aparar) @IsString() @MinLength(2) @MaxLength(200) titular!: string;
-  @Transform(aparar) @IsString() @Matches(/^[0-9./\- ]{11,20}$/, { message: "CPF ou CNPJ invalido" }) documentoTitular!: string;
+  @Transform(aparar) @IsString() @MaxLength(20) @IsCpfCnpj() documentoTitular!: string;
 }
