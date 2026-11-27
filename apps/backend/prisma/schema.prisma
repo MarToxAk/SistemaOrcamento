@@ -402,16 +402,26 @@ enum PdfTemplateKind {
 // no serviço (Plano 05), não por constraint de banco — Postgres não tem partial unique
 // trivial via Prisma para campo boolean.
 model PdfTemplate {
-  id        String          @id @default(cuid())
+  id        String             @id @default(cuid())
   name      String
-  slug      String          @unique
-  source    String          @db.Text
+  slug      String             @unique
+  source    String             @db.Text
   kind      PdfTemplateKind
-  isActive  Boolean         @default(false)
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  isActive  Boolean            @default(false)
+  /// Fase 55 (D-22, D-30): familia do template. A unicidade do ativo passa a valer POR familia,
+  /// para ativar um template de proposta nao desativar o de orcamento. Linhas existentes = ORCAMENTO.
+  familia   PdfTemplateFamilia @default(ORCAMENTO)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
 
   @@index([isActive])
+  @@index([familia, isActive])
+}
+
+/// Fase 55 (D-22, D-30): familia do template de PDF (orcamento comum ou proposta comercial).
+enum PdfTemplateFamilia {
+  ORCAMENTO
+  PROPOSTA
 }
 
 // OrcamentoItemCorrecao: correcao manual de item de orcamento vindo do Athos (PDV).
@@ -601,4 +611,111 @@ model NfseLiberacao {
 
   @@index([quoteId, criadoEm])
   @@index([criadoEm])
+}
+
+/// Fase 55 (D-06): status da proposta comercial. LANCANDO e DECISAO DE IMPLEMENTACAO, nao um
+/// quinto status de negocio: e um estado interno e transitorio que reserva a proposta
+/// (compare-and-set RASCUNHO para LANCANDO, plano 55-08) ANTES de qualquer escrita no Athos.
+/// Nunca e escolhido pelo operador e nunca e estado final (termina em ENVIADA, ou volta a
+/// RASCUNHO, ou fica preso so quando a recuperacao pelo marcador ref e necessaria).
+enum PropostaStatus {
+  RASCUNHO
+  LANCANDO
+  ENVIADA
+  FECHADA
+  CANCELADA
+}
+
+/// Fase 55 (D-04, D-06, D-09, D-16..D-21): proposta comercial (atacado/revenda para orgaos
+/// publicos). Cliente do Athos sem FK (o Athos e externo e somente leitura para o Sistema).
+model Proposta {
+  id               String         @id @default(uuid())
+  status           PropostaStatus @default(RASCUNHO)
+  /// Cliente do Athos (sem FK). clienteSnapshot = cadastro no momento da associacao;
+  /// clienteOverride = sobrescritas para o PDF (D-16).
+  idclienteAthos   Int?
+  clienteSnapshot  Json?
+  clienteOverride  Json?
+  /// Dados de orgao publico (D-16).
+  numeroProcesso   String?
+  setorResponsavel String?
+  contatoEmail     String?
+  contatoTelefone  String?
+  /// D-20: validade de 1 dia e prazo de entrega de 15 dias por padrao.
+  validadeDias     Int            @default(1)
+  prazoEntregaDias Int            @default(15)
+  /// D-21: observacao livre.
+  observacao       String?        @db.Text
+  /// D-19: assinante do documento.
+  assinanteNome    String?
+  assinanteCargo   String?
+  assinanteCpf     String?
+  totalValor       Decimal        @default(0) @db.Decimal(12, 2)
+  /// D-17: orcamento lancado no Athos (numero unico) e senha do balcao; data e hora lidas do
+  /// Athos na mesma transacao (texto YYYY-MM-DD e HH:MM:SS).
+  idorcamentoAthos Int?           @unique
+  senhaBalcao      Int?
+  athosData        String?
+  athosHora        String?
+  lancandoEm       DateTime?
+  enviadaEm        DateTime?
+  fechadaEm        DateTime?
+  canceladaEm      DateTime?
+  pdfObjectName    String?
+  pdfGeradoEm      DateTime?
+  /// Snapshot de emissao do PDF oficial (dados bancarios, dados da empresa e fonte do template),
+  /// gravado na reserva do lancamento e lido para regenerar um PDF identico ao emitido
+  /// (D-09, D-18). Nunca devolvido nas respostas da API.
+  pdfSnapshot      Json?
+  /// Rastro da duplicacao (D-08), sem FK.
+  duplicadaDeId    String?
+  criadoEm         DateTime       @default(now())
+  atualizadoEm     DateTime       @updatedAt
+  itens            PropostaItem[]
+
+  @@index([status, atualizadoEm])
+  @@index([idclienteAthos])
+}
+
+/// Fase 55 (D-01, D-03, D-04, D-09, D-12): item da proposta com snapshot de preco e custo.
+model PropostaItem {
+  id               String   @id @default(uuid())
+  propostaId       String
+  sequencia        Int
+  idproduto        Int
+  /// Descricao original do Athos (snapshot) e nome usado na proposta (D-04).
+  nomeAthos        String
+  nome             String
+  descricaoCurta   String?
+  unidade          String?
+  permiteFracionar Boolean  @default(true)
+  quantidade       Decimal  @db.Decimal(12, 3)
+  /// precovendaproduto no momento da montagem (D-01, D-09).
+  precoBase        Decimal  @db.Decimal(12, 3)
+  /// Ajuste: "PERCENTUAL" ou "VALOR".
+  ajusteTipo       String?
+  ajusteValor      Decimal? @db.Decimal(12, 3)
+  /// Preco final arredondado em centavos (D-03).
+  precoUnitario    Decimal  @db.Decimal(12, 2)
+  totalLinha       Decimal  @db.Decimal(12, 2)
+  /// Custo no momento da montagem (snapshot, D-12).
+  custoUnitario    Decimal  @default(0) @db.Decimal(12, 3)
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
+  proposta         Proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+
+  /// Sem unique: a renumeracao apos remover item nao pode violar constraint.
+  @@index([propostaId, sequencia])
+}
+
+/// Fase 55 (D-18): dados bancarios do PDF da proposta (singleton id "default", semeado pela
+/// migration). Dados da empresa continuam em env (EMPRESA_*). Sem segredo (T-55-05).
+model PropostaConfig {
+  id               String   @id @default("default")
+  bancoNome        String
+  agencia          String
+  conta            String
+  titular          String
+  documentoTitular String
+  atualizadoEm     DateTime @updatedAt
 }
