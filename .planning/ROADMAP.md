@@ -378,24 +378,43 @@ Plans:
 **Plans:** 18 plans
 
 Plans:
+**Wave 1**
 - [ ] 55-01-PLAN.md — util puro de preco da proposta em BigInt: preco base com ceil, ajuste por % ou valor digitado, linhas sem desconto, custo e margem (Wave 1)
 - [ ] 55-02-PLAN.md — [BLOCKING] schema: coluna familia em PdfTemplate e tabelas Proposta, PropostaItem e PropostaConfig; snapshot de emissao do PDF (pdfSnapshot) e migrations idempotentes validadas em Postgres descartavel (Wave 1)
 - [ ] 55-03-PLAN.md — leituras do Athos: produto com preco base e custo corrigido (COALESCE por termo) e cliente com razao social real e endereco sem fallback (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 55-04-PLAN.md — escrita no Athos: criarOrcamentoProposta (preco final sem desconto, cliente obrigatorio, idempotencia por ref, kill-switch PROPOSTA_ESCRITA_ATIVA), IT no clone e regressao da Fase 44 (Wave 2)
 - [ ] 55-05-PLAN.md — templates de PDF por familia (ORCAMENTO | PROPOSTA): ativacao isolada, resolucao por familia e seed com isActive so no create (Wave 2)
 - [ ] 55-06-PLAN.md — modulo backend de propostas: rascunho, itens com snapshot, ajuste e aplicar % em todos, cabecalho com cliente do Athos e dados de orgao, rotas AdminOnly (Wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 55-07-PLAN.md — PDF institucional: contexto por lista branca (sem custo), template proposta-institucional, render multipagina hardened, MinIO, snapshot de emissao e previa (servico) (Wave 3)
-- [ ] 55-08-PLAN.md — tracer do lancamento no Athos: gerar com snapshot de PDF capturado antes da reserva, compare-and-set e PDF oficial; IT HTTP no clone (Wave 4)
 - [ ] 55-09-PLAN.md — frontend: proxy com lista permitida (rotas do 55-06), menu, lista, nova proposta e tela da proposta (Wave 3)
-- [ ] 55-10-PLAN.md — frontend: cabecalho da proposta (cliente do Athos, orgao, condicoes e assinante), desabilitado fora de rascunho (Wave 5)
-- [ ] 55-11-PLAN.md — regressao completa, roteiro de ativacao e checkpoints humanos: deploy com escrita desligada e verificacao visual (Wave 9)
-- [ ] 55-12-PLAN.md — checkpoints humanos: decisao one-way de ligar PROPOSTA_ESCRITA_ATIVA e conferencia do primeiro lancamento no Balcao (Wave 10)
-- [ ] 55-13-PLAN.md — backend: PDF oficial armazenado ou regenerado do snapshot, previa, preview de template, duplicar, fechar e cancelar local; regressao ampla (Wave 6)
-- [ ] 55-14-PLAN.md — frontend: montagem de itens (busca de produto, ajuste por item, aplicar %, custo e margem, desabilitado fora de rascunho) (Wave 4)
-- [ ] 55-15-PLAN.md — frontend: galeria de templates por familia (Orcamento | Proposta) e previa de template de proposta (Wave 8)
 - [ ] 55-16-PLAN.md — deploy: PROPOSTA_ESCRITA_ATIVA desligada por padrao nos exemplos de env e nos dois compose, com teste de contrato (Wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 55-08-PLAN.md — tracer do lancamento no Athos: gerar com snapshot de PDF capturado antes da reserva, compare-and-set e PDF oficial; IT HTTP no clone (Wave 4)
+- [ ] 55-14-PLAN.md — frontend: montagem de itens (busca de produto, ajuste por item, aplicar %, custo e margem, desabilitado fora de rascunho) (Wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 55-10-PLAN.md — frontend: cabecalho da proposta (cliente do Athos, orgao, condicoes e assinante), desabilitado fora de rascunho (Wave 5)
 - [ ] 55-17-PLAN.md — backend: expansao do lancamento: erro definitivo e ambiguo do Athos, recuperacao de orfao (rota recuperar), concorrencia, ordem do snapshot e falha de PDF sem relancar (Wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 55-13-PLAN.md — backend: PDF oficial armazenado ou regenerado do snapshot, previa, preview de template, duplicar, fechar e cancelar local; regressao ampla (Wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 55-18-PLAN.md — frontend: acoes da proposta: previa, gerar com confirmacao explicita, PDF oficial, duplicar, fechar, cancelar e recuperar; libera as rotas de ciclo de vida no proxy (Wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 55-15-PLAN.md — frontend: galeria de templates por familia (Orcamento | Proposta) e previa de template de proposta (Wave 8)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 55-11-PLAN.md — regressao completa, roteiro de ativacao e checkpoints humanos: deploy com escrita desligada e verificacao visual (Wave 9)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 55-12-PLAN.md — checkpoints humanos: decisao one-way de ligar PROPOSTA_ESCRITA_ATIVA e conferencia do primeiro lancamento no Balcao (Wave 10)
 
 ---
 
