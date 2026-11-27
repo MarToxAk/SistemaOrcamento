@@ -5,16 +5,20 @@ import { useParams } from "next/navigation";
 import PasswordGate from "@/components/password-gate";
 import AdminShell from "../../contas-receber/admin-shell";
 import RecursosBootstrap from "../../contas-receber/_shared/recursos-bootstrap";
-import { STATUS_PILL, STATUS_ROTULO, type ErroApi, type PropostaDetalhe } from "../_shared/tipos";
-
-function mensagemDoErro(dados: unknown, padrao: string): string {
-  const e = (dados ?? {}) as ErroApi;
-  return e.mensagem ?? e.error ?? padrao;
-}
+import type { PropostaDetalhe } from "../_shared/tipos";
+import {
+  classeStatus,
+  formatarDinheiro,
+  formatarQuantidade,
+  mensagemDeErro,
+  podeEditar,
+  rotuloStatus,
+} from "../_shared/formatadores";
+import BuscaProduto from "../_componentes/busca-produto";
 
 /**
- * Tela da proposta (somente leitura neste plano). O estado e sempre a resposta do servidor: nenhum
- * preco e calculado no navegador. Todo texto vindo da API e renderizado como texto React.
+ * Tela da proposta. O estado e sempre a resposta do servidor: nenhum preco e calculado no navegador (D-02),
+ * so intencoes sao enviadas. Todo texto vindo da API e renderizado como texto React.
  */
 function DetalheProposta({ id }: { id: string }) {
   const [proposta, setProposta] = useState<PropostaDetalhe | null>(null);
@@ -31,7 +35,7 @@ function DetalheProposta({ id }: { id: string }) {
       const dados: unknown = await res.json().catch(() => null);
       if (atual !== requisicao.current) return;
       if (!res.ok) {
-        setErro(mensagemDoErro(dados, "Não foi possível carregar a proposta."));
+        setErro(mensagemDeErro(dados, "Não foi possível carregar a proposta."));
         setProposta(null);
       } else {
         setProposta(dados as PropostaDetalhe);
@@ -48,6 +52,26 @@ function DetalheProposta({ id }: { id: string }) {
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  /** Adiciona um item (so produto e quantidade); a resposta completa do servidor vira o estado. */
+  const adicionarItem = useCallback(
+    async (idproduto: number, quantidade: number): Promise<string | null> => {
+      try {
+        const res = await fetch(`/api/propostas/${encodeURIComponent(id)}/itens`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idproduto, quantidade }),
+        });
+        const dados: unknown = await res.json().catch(() => null);
+        if (!res.ok) return mensagemDeErro(dados, "Não foi possível adicionar o item.");
+        setProposta(dados as PropostaDetalhe);
+        return null;
+      } catch {
+        return "Não foi possível adicionar o item.";
+      }
+    },
+    [id],
+  );
 
   if (carregando && !proposta) {
     return (
@@ -80,9 +104,7 @@ function DetalheProposta({ id }: { id: string }) {
             <span className="fw-semibold">
               {proposta.idorcamentoAthos != null ? `Proposta ${proposta.idorcamentoAthos}` : "Proposta (rascunho)"}
             </span>
-            <span className={`pa-pill pa-pill-${STATUS_PILL[proposta.status] ?? "secondary"}`}>
-              {STATUS_ROTULO[proposta.status] ?? proposta.status}
-            </span>
+            <span className={`badge ${classeStatus(proposta.status)}`}>{rotuloStatus(proposta.status)}</span>
           </div>
         </div>
         <div className="pa-card-body">
@@ -92,12 +114,20 @@ function DetalheProposta({ id }: { id: string }) {
               <div>{nomeCliente ? String(nomeCliente) : "Sem cliente"}</div>
             </div>
             <div className="col-md-4">
-              <div className="small text-muted">Total (R$)</div>
-              <div className="fw-semibold">{proposta.total}</div>
+              <div className="small text-muted">Total</div>
+              <div className="fw-semibold">{formatarDinheiro(proposta.total)}</div>
             </div>
           </div>
         </div>
       </div>
+
+      {podeEditar(proposta.status) ? (
+        <div className="pa-card mb-3">
+          <div className="pa-card-body">
+            <BuscaProduto onAdicionar={adicionarItem} />
+          </div>
+        </div>
+      ) : null}
 
       <div className="pa-card">
         <div className="pa-card-header">
@@ -117,8 +147,8 @@ function DetalheProposta({ id }: { id: string }) {
                     <th>Código</th>
                     <th>Nome</th>
                     <th className="text-end">Quantidade</th>
-                    <th className="text-end">Preço final (R$)</th>
-                    <th className="text-end">Total (R$)</th>
+                    <th className="text-end">Preço final</th>
+                    <th className="text-end">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -127,11 +157,11 @@ function DetalheProposta({ id }: { id: string }) {
                       <td>{item.idproduto}</td>
                       <td>{item.nome}</td>
                       <td className="text-end">
-                        {item.quantidade}
+                        {formatarQuantidade(item.quantidade)}
                         {item.unidade ? ` ${item.unidade}` : ""}
                       </td>
-                      <td className="text-end">{item.precoUnitario}</td>
-                      <td className="text-end">{item.totalLinha}</td>
+                      <td className="text-end">{formatarDinheiro(item.precoUnitario)}</td>
+                      <td className="text-end">{formatarDinheiro(item.totalLinha)}</td>
                     </tr>
                   ))}
                 </tbody>
