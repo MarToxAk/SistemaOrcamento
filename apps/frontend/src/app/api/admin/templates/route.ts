@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { adminBackendFetch } from "@/lib/admin-backend-client";
 import { requireAdminSession } from "@/lib/admin-session";
+import { familiaTemplateValida } from "@/lib/propostas-rotas";
 
 function unauthorized() {
   return NextResponse.json({ error: "Sessao expirada ou nao autenticada." }, { status: 401 });
@@ -10,7 +11,10 @@ function unauthorized() {
 export async function GET(req: NextRequest) {
   if (!requireAdminSession(req)) return unauthorized();
   try {
-    const res = await adminBackendFetch("/pdf-templates");
+    // Fase 55 (D-22, T-55-46): repassa a familia somente se for ORCAMENTO ou PROPOSTA; outro valor e descartado.
+    const familia = familiaTemplateValida(req.nextUrl.searchParams.get("familia"));
+    const caminho = familia ? `/pdf-templates?familia=${familia}` : "/pdf-templates";
+    const res = await adminBackendFetch(caminho);
     const data = await res.json().catch(() => ({ error: "Resposta invalida do backend." }));
     if (!res.ok) return NextResponse.json(data, { status: res.status });
     return NextResponse.json(data, { status: 200 });

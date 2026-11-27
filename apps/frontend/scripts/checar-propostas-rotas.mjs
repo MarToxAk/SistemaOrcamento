@@ -94,6 +94,32 @@ caso("montarCaminhoBackend junta /propostas, segmentos e query validada", () => 
   assert.equal(r.montarCaminhoBackend([], "?q=x#frag"), "/propostas");
 });
 
+// Familia de template (plano 55-15, T-55-46): so "ORCAMENTO" e "PROPOSTA" exatos passam.
+for (const familia of ["ORCAMENTO", "PROPOSTA"]) {
+  caso(`familiaTemplateValida aceita ${familia}`, () => {
+    assert.equal(r.familiaTemplateValida(familia), familia);
+  });
+}
+
+const familiasInvalidas = [
+  ["minuscula proposta", "proposta"],
+  ["minuscula orcamento", "orcamento"],
+  ["vazio", ""],
+  ["null", null],
+  ["undefined", undefined],
+  ["numero", 1],
+  ["lista ORCAMENTO,PROPOSTA", "ORCAMENTO,PROPOSTA"],
+  ["PROPOSTA com espaco", "PROPOSTA "],
+  ["caminho ../x", "../x"],
+  ["array", ["PROPOSTA"]],
+];
+
+for (const [nome, valor] of familiasInvalidas) {
+  caso(`familiaTemplateValida recusa ${nome}`, () => {
+    assert.equal(r.familiaTemplateValida(valor), null);
+  });
+}
+
 const metodos = ["GET", "POST", "PATCH", "DELETE"];
 const listado = { GET: [U1], POST: [U1, "itens"], PATCH: [U1], DELETE: [U1, "itens", U2] };
 const naoListado = ["segredo", "outra", U1, "nada"];

@@ -55,6 +55,16 @@ export function rotaPropostaPermitida(metodo: string, segmentos: string[]): bool
   return false;
 }
 
+export type FamiliaTemplate = "ORCAMENTO" | "PROPOSTA";
+
+/**
+ * Familia de template aceita pelo proxy admin de templates (Fase 55, T-55-46): SOMENTE os textos exatos
+ * "ORCAMENTO" e "PROPOSTA"; qualquer outra coisa (minuscula, espaco, lista, caminho) vira null.
+ */
+export function familiaTemplateValida(valor: unknown): FamiliaTemplate | null {
+  return valor === "ORCAMENTO" || valor === "PROPOSTA" ? valor : null;
+}
+
 // Caracteres seguros de uma query string ja codificada pelo navegador (sem "#", espaco ou controle).
 const QUERY_SEGURA = /^\?[A-Za-z0-9._~%&=+,:@!*'()-]*$/;
 

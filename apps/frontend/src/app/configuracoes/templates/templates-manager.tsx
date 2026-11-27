@@ -1,16 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { useEmpresa } from "@/lib/empresa";
 
 type TemplateKind = "PRESET" | "CUSTOM";
+
+// Fase 55 (D-22, D-30): a galeria e separada por familia de template.
+type FamiliaTemplate = "ORCAMENTO" | "PROPOSTA";
+
+const FAMILIAS: { valor: FamiliaTemplate; rotulo: string }[] = [
+  { valor: "ORCAMENTO", rotulo: "Orçamento" },
+  { valor: "PROPOSTA", rotulo: "Proposta" },
+];
 
 type PdfTemplateSummary = {
   id: string;
   name: string;
   slug: string;
   kind: TemplateKind;
+  familia?: FamiliaTemplate;
   isActive: boolean;
   createdAt: string;
 };
@@ -21,6 +30,7 @@ function kindLabel(kind: TemplateKind): string {
 
 export default function TemplatesManager() {
   const { EMPRESA_NOME, EMPRESA_LOGO_URL } = useEmpresa();
+  const [familia, setFamilia] = useState<FamiliaTemplate>("ORCAMENTO");
   const [templates, setTemplates] = useState<PdfTemplateSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
@@ -40,11 +50,15 @@ export default function TemplatesManager() {
   const [passwordErro, setPasswordErro] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // Evita que a resposta atrasada de uma familia sobrescreva a lista da familia atual.
+  const requisicaoAtual = useRef(0);
+
   const fetchTemplates = useCallback(async () => {
+    const requisicao = ++requisicaoAtual.current;
     setLoading(true);
     setErro("");
     try {
-      const response = await fetch("/api/admin/templates", { cache: "no-store" });
+      const response = await fetch(`/api/admin/templates?familia=${familia}`, { cache: "no-store" });
       const data = (await response.json().catch(() => ({}))) as unknown;
       if (!response.ok) {
         if (response.status === 401) {
@@ -55,13 +69,15 @@ export default function TemplatesManager() {
         const message = (data as { error?: string })?.error || "Erro ao carregar templates.";
         throw new Error(message);
       }
+      if (requisicao !== requisicaoAtual.current) return;
       setTemplates(Array.isArray(data) ? (data as PdfTemplateSummary[]) : []);
     } catch (error) {
+      if (requisicao !== requisicaoAtual.current) return;
       setErro(error instanceof Error ? error.message : "Nao foi possivel carregar os templates.");
     } finally {
-      setLoading(false);
+      if (requisicao === requisicaoAtual.current) setLoading(false);
     }
-  }, []);
+  }, [familia]);
 
   // Checa o status da sessao na entrada — decide entre prompt de senha e a tela.
   useEffect(() => {
@@ -217,7 +233,7 @@ export default function TemplatesManager() {
       const response = await fetch("/api/admin/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: uploadName.trim(), source: uploadSource }),
+        body: JSON.stringify({ name: uploadName.trim(), source: uploadSource, familia }),
       });
       const data = (await response.json().catch(() => ({}))) as unknown;
       if (!response.ok) {
@@ -416,6 +432,35 @@ export default function TemplatesManager() {
           Escolha um modelo pronto ou suba um template personalizado (.hbs/HTML). Sempre pre-visualize
           antes de ativar — a troca entra em vigor imediatamente, sem reiniciar o servidor.
         </p>
+
+        <ul className="nav nav-tabs mb-3" role="tablist" aria-label="Familia de template">
+          {FAMILIAS.map((item) => (
+            <li className="nav-item" role="presentation" key={item.valor}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={familia === item.valor}
+                className={`nav-link ${familia === item.valor ? "active" : ""}`}
+                onClick={() => {
+                  if (item.valor !== familia) {
+                    setTemplates([]);
+                    setFamilia(item.valor);
+                  }
+                }}
+              >
+                {item.rotulo}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        {familia === "PROPOSTA" && (
+          <p className="text-muted small mb-3">
+            O template de proposta usa variaveis proprias (numero, cliente, itens, banco, assinante) e nao as
+            variaveis do orcamento. A ativacao vale somente para as propostas; o template de orcamento da grafica
+            nao e alterado.
+          </p>
+        )}
 
         {erro && (
           <div className="alert alert-danger" role="alert">
