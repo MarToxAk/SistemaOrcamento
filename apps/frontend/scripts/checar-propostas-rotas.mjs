@@ -37,6 +37,8 @@ const aceitos = [
   ["GET", [U1, "pdf"]],
   ["GET", [U1, "previa"]],
   ["POST", ["templates", "preview"]],
+  ["GET", ["config"]],
+  ["PATCH", ["config"]],
 ];
 
 for (const [metodo, segmentos] of aceitos) {
@@ -47,6 +49,11 @@ for (const [metodo, segmentos] of aceitos) {
 
 const recusados = [
   ["DELETE no uuid sozinho", "DELETE", [U1]],
+  ["POST em config", "POST", ["config"]],
+  ["DELETE em config", "DELETE", ["config"]],
+  ["PUT em config", "PUT", ["config"]],
+  ["config com segmento extra", "PATCH", ["config", "x"]],
+  ["config em maiuscula", "GET", ["CONFIG"]],
   ["PUT no uuid", "PUT", [U1]],
   ["GET em uuid/itens", "GET", [U1, "itens"]],
   ["segmento ..", "GET", [".."]],

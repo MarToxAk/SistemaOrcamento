@@ -33,6 +33,7 @@ export const PA_NAV_ITEMS: PaNavItem[] = [
       { href: "/configuracoes/templates", label: "Templates de PDF", icon: "file-earmark-richtext" },
       { href: "/configuracoes/cobranca", label: "Juros e multa", icon: "percent" },
       { href: "/configuracoes/pesquisa", label: "Pesquisa e recompensa", icon: "star-half" },
+      { href: "/configuracoes/propostas", label: "Dados bancários (propostas)", icon: "bank" },
     ],
   },
 ];

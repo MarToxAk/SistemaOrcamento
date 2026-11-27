@@ -33,12 +33,14 @@ import {
   GerarPropostaDto,
   ListarPropostasQueryDto,
   PreviewTemplatePropostaDto,
+  SalvarConfigBancariaDto,
   UpdateItemPropostaDto,
   UpdatePropostaDto,
 } from "./dto/propostas.dto";
 import { PropostasPdfService } from "./propostas-pdf.service";
 import {
   AssinanteRecente,
+  ConfigBancariaProposta,
   PropostaDetalhe,
   PropostaGerada,
   PropostaListagem,
@@ -71,6 +73,19 @@ export class PropostasController {
   @ApiOperation({ summary: "Buscar produtos do Athos com preco e custo (montagem da proposta)" })
   async buscarProdutos(@Query() query: BuscarProdutosOrcamentoQueryDto) {
     return this.propostasService.buscarProdutos(query.q, query.limit);
+  }
+
+  @Get("config")
+  @ApiOperation({ summary: "Dados bancarios impressos no PDF da proposta (Configuracoes > Propostas)" })
+  async obterConfig(): Promise<ConfigBancariaProposta> {
+    return this.propostasService.obterConfigBancaria();
+  }
+
+  @Patch("config")
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @ApiOperation({ summary: "Gravar os dados bancarios do PDF da proposta (somente no banco do Sistema)" })
+  async salvarConfig(@Body() dto: SalvarConfigBancariaDto): Promise<ConfigBancariaProposta> {
+    return this.propostasService.salvarConfigBancaria(dto);
   }
 
   @Get("assinantes")

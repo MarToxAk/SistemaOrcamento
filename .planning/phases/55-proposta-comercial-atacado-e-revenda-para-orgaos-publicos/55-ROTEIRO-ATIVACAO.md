@@ -79,19 +79,14 @@ Dados bancarios da proposta (esperado: **uma** linha default com Santander, agen
 SELECT * FROM "PropostaConfig";
 ```
 
-**Preencher agencia e conta (unica escrita manual desta fase, no banco do Sistema, NAO no Athos).**
-O repositorio e publico, por isso a migration cria a linha com agencia e conta vazias. Rode uma vez em producao,
-digitando os numeros reais so no terminal do banco (nunca em commit, issue ou chat):
+**Preencher agencia e conta pela tela (sem SQL).**
+O repositorio e publico, por isso a migration cria a linha com agencia e conta vazias. Depois do deploy, entre em
+**Configuracoes > Dados bancarios (propostas)** (`/configuracoes/propostas`, senha de configuracoes), preencha banco,
+agencia, conta, titular e CNPJ do titular e clique em Salvar. Os dados ficam so no banco do Sistema.
 
-```sql
-UPDATE "PropostaConfig"
-   SET "agencia" = '<AGENCIA>', "conta" = '<CONTA>', "atualizadoEm" = CURRENT_TIMESTAMP
- WHERE "id" = 'default';
-```
-
-Enquanto agencia ou conta estiverem vazias, "Gerar proposta e lancar no Athos" responde PDF_INDISPONIVEL
-**antes** de qualquer escrita no Athos, e a "Previa do PDF" tambem responde PDF_INDISPONIVEL. Por isso o UPDATE vem antes da verificacao visual. Confira de novo com o
-`SELECT * FROM "PropostaConfig"` acima.
+Enquanto agencia ou conta estiverem vazias, a tela mostra o aviso amarelo, e tanto a "Previa do PDF" quanto
+"Gerar proposta e lancar no Athos" respondem PDF_INDISPONIVEL **antes** de qualquer escrita no Athos. Por isso esse
+passo vem antes da verificacao visual. Confira de novo com o `SELECT * FROM "PropostaConfig"` acima.
 
 Nenhuma proposta criada ainda (esperado `0`):
 

@@ -19,6 +19,7 @@ import {
   CreatePropostaDto,
   GerarPropostaDto,
   ListarPropostasQueryDto,
+  SalvarConfigBancariaDto,
   UpdateItemPropostaDto,
   UpdatePropostaDto,
 } from "./dto/propostas.dto";
@@ -138,6 +139,18 @@ export interface PropostaGerada {
 
 /** Resposta de recuperarLancamento: finalizada como ENVIADA, ou devolvida a RASCUNHO quando o Athos nao tem o orcamento. */
 export type PropostaRecuperada = PropostaGerada | { id: string; status: "RASCUNHO"; mensagem: string };
+
+/** Dados bancarios da proposta (D-18) como a tela de configuracao le e grava. */
+export interface ConfigBancariaProposta {
+  bancoNome: string;
+  agencia: string;
+  conta: string;
+  titular: string;
+  documentoTitular: string;
+  /** true quando agencia e conta estao preenchidas (sem isso o PDF responde PDF_INDISPONIVEL). */
+  completa: boolean;
+  atualizadoEm: string | null;
+}
 
 export interface AssinanteRecente {
   nome: string;
@@ -1171,4 +1184,51 @@ export class PropostasService {
     }
     return cliente;
   }
+
+  // -------------------------------------------------------------------------
+  // Configuracao bancaria (Configuracoes > Propostas)
+  // -------------------------------------------------------------------------
+
+  /** Le o registro unico `default`; sem registro, devolve campos vazios (completa=false). */
+  async obterConfigBancaria(): Promise<ConfigBancariaProposta> {
+    const linha = await this.prisma.propostaConfig.findUnique({ where: { id: "default" } });
+    return paraConfigBancaria(linha);
+  }
+
+  /** Grava (upsert) o registro unico `default`. Valores ja validados pelo DTO; aqui so aparo espacos. */
+  async salvarConfigBancaria(dto: SalvarConfigBancariaDto): Promise<ConfigBancariaProposta> {
+    const dados = {
+      bancoNome: dto.bancoNome.trim(),
+      agencia: dto.agencia.trim(),
+      conta: dto.conta.trim(),
+      titular: dto.titular.trim(),
+      documentoTitular: dto.documentoTitular.trim(),
+    };
+    const linha = await this.prisma.propostaConfig.upsert({
+      where: { id: "default" },
+      create: { id: "default", ...dados },
+      update: dados,
+    });
+    return paraConfigBancaria(linha);
+  }
+}
+
+function paraConfigBancaria(
+  linha: { bancoNome: string; agencia: string; conta: string; titular: string; documentoTitular: string; atualizadoEm: Date } | null,
+): ConfigBancariaProposta {
+  const bancoNome = linha?.bancoNome ?? "";
+  const agencia = linha?.agencia ?? "";
+  const conta = linha?.conta ?? "";
+  const titular = linha?.titular ?? "";
+  const documentoTitular = linha?.documentoTitular ?? "";
+  const completa = [bancoNome, agencia, conta, titular, documentoTitular].every((v) => v.trim().length > 0);
+  return {
+    bancoNome,
+    agencia,
+    conta,
+    titular,
+    documentoTitular,
+    completa,
+    atualizadoEm: linha ? linha.atualizadoEm.toISOString() : null,
+  };
 }

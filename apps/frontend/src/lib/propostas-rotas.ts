@@ -30,6 +30,8 @@ export function rotaPropostaPermitida(metodo: string, segmentos: string[]): bool
   if (n === 1) {
     const [a] = segmentos;
     if (m === "GET" && (a === "produtos" || a === "assinantes")) return true;
+    // Dados bancarios do PDF (Configuracoes > Propostas): leitura e gravacao, sem DELETE nem POST.
+    if (a === "config") return m === "GET" || m === "PATCH";
     if (ehUuid(a)) return m === "GET" || m === "PATCH";
     return false;
   }

@@ -108,7 +108,7 @@ END
 $$;
 
 -- Seed (D-18): registro unico da configuracao bancaria, com agencia e conta VAZIAS de proposito
--- (o repositorio e publico). Preencher em producao com UPDATE direto (ver 55-ROTEIRO-ATIVACAO.md).
+-- (o repositorio e publico). Preencher em producao pela tela Configuracoes > Dados bancarios (propostas).
 -- Enquanto agencia/conta estiverem vazias, gerar proposta falha com PDF_INDISPONIVEL antes de
 -- qualquer escrita no Athos (validarSnapshot em propostas-pdf.util.ts).
 INSERT INTO "PropostaConfig" ("id", "bancoNome", "agencia", "conta", "titular", "documentoTitular", "atualizadoEm")

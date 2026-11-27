@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import { PropostaStatus } from "@prisma/client";
 import {
   Equals,
@@ -11,6 +11,7 @@ import {
   Max,
   MaxLength,
   Min,
+  Matches,
   MinLength,
   ValidateNested,
 } from "class-validator";
@@ -187,4 +188,18 @@ export class GerarPropostaDto {
 
   @Equals(true, { message: "confirmar deve ser true: a geracao lanca o orcamento no Athos e nao pode ser desfeita" })
   confirmar!: boolean;
+}
+
+/**
+ * Dados bancarios impressos no PDF da proposta (D-18), editados em Configuracoes > Propostas.
+ * Ficam SO no banco do Sistema (o repositorio e publico); nunca em migration, seed ou codigo.
+ */
+const aparar = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
+
+export class SalvarConfigBancariaDto {
+  @Transform(aparar) @IsString() @MinLength(2) @MaxLength(80) bancoNome!: string;
+  @Transform(aparar) @IsString() @Matches(/^[0-9][0-9.\- ]{0,14}[0-9Xx]?$/, { message: "agencia invalida" }) @MaxLength(16) agencia!: string;
+  @Transform(aparar) @IsString() @Matches(/^[0-9][0-9.\- ]{0,22}[0-9Xx]?$/, { message: "conta invalida" }) @MaxLength(24) conta!: string;
+  @Transform(aparar) @IsString() @MinLength(2) @MaxLength(200) titular!: string;
+  @Transform(aparar) @IsString() @Matches(/^[0-9./\- ]{11,20}$/, { message: "CPF ou CNPJ invalido" }) documentoTitular!: string;
 }
