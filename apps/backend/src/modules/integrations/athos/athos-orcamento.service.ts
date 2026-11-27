@@ -254,33 +254,33 @@ const REF_PROPOSTA_REGEX = /^[0-9a-f]{12}$/;
 
 // Fase 55: validacao de produto da proposta. SEM precovendaproduto (o preco ja esta no snapshot da proposta, D-09),
 // sem descontomaximo e sem permitedescontode (a proposta nao grava desconto, D-03).
-const SQL_LER_PRODUTOS_PROPOSTA = `SELECT p.idproduto, p.descricaoproduto, p.statusproduto, COALESCE(p.vendeproduto, true) AS vende,
+export const SQL_LER_PRODUTOS_PROPOSTA = `SELECT p.idproduto, p.descricaoproduto, p.statusproduto, COALESCE(p.vendeproduto, true) AS vende,
        COALESCE(p.permitefracionar, true) AS permitefracionar
   FROM produto p WHERE p.idproduto = ANY($1::int[])`;
 
 // Idempotencia por ref: o parametro e o marcador + ref + '%'. ref hexadecimal nao tem caracteres especiais do LIKE.
-const SQL_BUSCAR_ORCAMENTO_POR_REF = `SELECT idorcamento, senhabalcao, to_char(dataorcamento, 'YYYY-MM-DD') AS data,
+export const SQL_BUSCAR_ORCAMENTO_POR_REF = `SELECT idorcamento, senhabalcao, to_char(dataorcamento, 'YYYY-MM-DD') AS data,
        to_char(hora, 'HH24:MI:SS') AS hora, valor
   FROM orcamento WHERE obs LIKE $1 ORDER BY idorcamento DESC LIMIT 1`;
 
 // Data e hora do orcamento recem-inserido, lidas na mesma transacao (Pitfall 13): o PDF mostra o que o Athos gravou.
-const SQL_LER_DATA_HORA_ORCAMENTO = `SELECT to_char(dataorcamento, 'YYYY-MM-DD') AS data, to_char(hora, 'HH24:MI:SS') AS hora
+export const SQL_LER_DATA_HORA_ORCAMENTO = `SELECT to_char(dataorcamento, 'YYYY-MM-DD') AS data, to_char(hora, 'HH24:MI:SS') AS hora
   FROM orcamento WHERE idorcamento = $1`;
 
-const SQL_INSERIR_ORCAMENTO = `INSERT INTO orcamento (descontors, idvendedor, idcliente, idfuncionariousuario, idterminal, dataorcamento, hora,
+export const SQL_INSERIR_ORCAMENTO = `INSERT INTO orcamento (descontors, idvendedor, idcliente, idfuncionariousuario, idterminal, dataorcamento, hora,
                        validadeorcamento, valor, desconto, statusorcamento, obs, idtransportadora, dataentrega,
                        idenderecocliente, valoracrescimo, statusimpressao)
 VALUES ($1, $2, $3, $4, $5, current_date, cast(current_time(0) as time), NULL, $6, $7, NULL, $8, NULL, NULL, 0, 0, false)
 RETURNING idorcamento, senhabalcao`;
 
-const SQL_INSERIR_ITEM = `INSERT INTO orcamento_item (idorcamento, sequenciaitem, idproduto, quantidadeitem, valoritem, valordesconto,
+export const SQL_INSERIR_ITEM = `INSERT INTO orcamento_item (idorcamento, sequenciaitem, idproduto, quantidadeitem, valoritem, valordesconto,
                             valorcustoitem, valorcomissao, codigovariante, comprimento, pesoliquido, pesobruto,
                             observacao, depositoloja, orcamentodesconto, orcamentovalorfinalitem)
 VALUES ($1, $2, $3, $4, $5, 0, $6, 0, '', 0, 0, 0, '', false, $7, $8)`;
 
-const SQL_LIMPAR_PAGAMENTO = "DELETE FROM orcamento_forma_pagamento WHERE idorcamento = $1";
+export const SQL_LIMPAR_PAGAMENTO = "DELETE FROM orcamento_forma_pagamento WHERE idorcamento = $1";
 
-const SQL_INSERIR_PAGAMENTO = `INSERT INTO orcamento_forma_pagamento (idorcamento, idformapagamento, valor, valorrecebido, idcondicaopagamento)
+export const SQL_INSERIR_PAGAMENTO = `INSERT INTO orcamento_forma_pagamento (idorcamento, idformapagamento, valor, valorrecebido, idcondicaopagamento)
 VALUES ($1, $2, $3, $4, 0)`;
 
 // Leituras (44-04). Todo texto do usuario entra como parametro; nenhuma clausula de escape literal
@@ -774,6 +774,46 @@ export class AthosOrcamentoService implements OnModuleDestroy {
   }
 
   /**
+   * Kill-switch da escrita de propostas (D-30): so o texto exato "true" em PROPOSTA_ESCRITA_ATIVA libera.
+   * Independente de ATHOS_ORCAMENTO_ESCRITA (flag da IA) nos dois sentidos. Publico para o lancamento
+   * (plano 55-08) chamar ANTES de reservar a proposta, de modo que flag desligada nunca a deixe presa em LANCANDO.
+   */
+  exigirEscritaPropostaAtiva(): void {
+    if (process.env.PROPOSTA_ESCRITA_ATIVA !== "true") {
+      throw new OrcamentoAthosError(
+        "ESCRITA_DESABILITADA",
+        "A gravacao de propostas no Athos esta desabilitada neste ambiente (PROPOSTA_ESCRITA_ATIVA diferente de true). Nada foi gravado.",
+        503,
+      );
+    }
+  }
+
+  /**
+   * Procura o orcamento ja gravado para um ref de proposta (recuperacao depois de um COMMIT cujo reconhecimento
+   * se perdeu, plano 55-08). Somente leitura (transacao READ ONLY); nao exige a flag de escrita.
+   */
+  async buscarOrcamentoPorRefProposta(
+    ref: string,
+  ): Promise<{ idorcamento: number; senhabalcao: number; data: string; hora: string; valorTotal: string } | null> {
+    if (typeof ref !== "string" || !REF_PROPOSTA_REGEX.test(ref)) {
+      throw new OrcamentoAthosError("VALOR_INVALIDO", "Referencia da proposta invalida: use 12 caracteres hexadecimais minusculos.", 422);
+    }
+    const linhas = await this.lerSomenteLeitura(async (client) => {
+      const r = await client.query<Record<string, unknown>>(SQL_BUSCAR_ORCAMENTO_POR_REF, [`${MARCADOR_OBS_PROPOSTA}${ref}%`]);
+      return r.rows;
+    });
+    if (linhas.length === 0) return null;
+    const o = linhas[0];
+    return {
+      idorcamento: Number(o.idorcamento),
+      senhabalcao: Number(o.senhabalcao),
+      data: String(o.data ?? ""),
+      hora: String(o.hora ?? ""),
+      valorTotal: valorEmCentavosTexto(o.valor),
+    };
+  }
+
+  /**
    * Grava a proposta comercial como orcamento no Athos (Fase 55, D-03, D-07, D-30). Metodo NOVO: nao altera
    * criarOrcamento (Fase 44). O preco final do item vai em valoritem (mesmo abaixo do cadastro), com
    * valordesconto 0 e orcamentodesconto 0, como o Balcao grava preco alterado. Escreve so com
@@ -783,13 +823,7 @@ export class AthosOrcamentoService implements OnModuleDestroy {
    */
   async criarOrcamentoProposta(input: CriarOrcamentoPropostaInput): Promise<OrcamentoPropostaResultado> {
     // ---- (a) gate proprio da proposta, antes de qualquer conexao. A flag da IA nao participa.
-    if (process.env.PROPOSTA_ESCRITA_ATIVA !== "true") {
-      throw new OrcamentoAthosError(
-        "ESCRITA_DESABILITADA",
-        "A gravacao de propostas no Athos esta desabilitada neste ambiente (PROPOSTA_ESCRITA_ATIVA diferente de true). Nada foi gravado.",
-        503,
-      );
-    }
+    this.exigirEscritaPropostaAtiva();
     // So os ids de autor e a forma de pagamento (D-29) interessam; o campo `escrita` (flag da IA) e ignorado.
     const cfg = resolverConfigOrcamentoAthos(process.env);
 

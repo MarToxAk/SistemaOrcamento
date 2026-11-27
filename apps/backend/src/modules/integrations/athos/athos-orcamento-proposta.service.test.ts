@@ -303,7 +303,7 @@ describe("gate PROPOSTA_ESCRITA_ATIVA independente de ATHOS_ORCAMENTO_ESCRITA (D
     const err = await falha(new AthosOrcamentoService().criarOrcamentoProposta(entrada()));
     expect(err.codigo).toBe("ESCRITA_DESABILITADA");
     expect(err.getStatus()).toBe(503);
-    expect(String(err.message)).toContain("PROPOSTA_ESCRITA_ATIVA");
+    expect((err.getResponse() as { mensagem: string }).mensagem).toContain("PROPOSTA_ESCRITA_ATIVA");
     semConexaoNemEscrita();
   });
 
