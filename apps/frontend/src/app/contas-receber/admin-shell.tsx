@@ -22,6 +22,7 @@ export const PA_NAV_ITEMS: PaNavItem[] = [
     ],
   },
   { href: "/orcamento", label: "Orçamentos", icon: "file-earmark-text" },
+  { href: "/propostas", label: "Propostas", icon: "file-earmark-ruled" },
   { href: "/status", label: "Produção", icon: "kanban" },
   { href: "/cupons", label: "Cupons", icon: "ticket-perforated" },
   {
