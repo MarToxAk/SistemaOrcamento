@@ -375,7 +375,7 @@ Plans:
 - Referencias do Athos copiadas para `referencia/` (orcamento e cadastro de produto). Lacunas da captura: cliente, validade e obs no orcamento do Athos, e conversao do orcamento em venda.
 **Requirements**: P55-PRECO, P55-MONT, P55-CLI, P55-CICLO, P55-ATHOS, P55-PDF
 **Depends on:** Phase 54
-**Plans:** 3/18 plans executed
+**Plans:** 6/18 plans executed
 
 Plans:
 **Wave 1**
@@ -384,9 +384,9 @@ Plans:
 - [x] 55-03-PLAN.md — leituras do Athos: produto com preco base e custo corrigido (COALESCE por termo) e cliente com razao social real e endereco sem fallback (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 55-04-PLAN.md — escrita no Athos: criarOrcamentoProposta (preco final sem desconto, cliente obrigatorio, idempotencia por ref, kill-switch PROPOSTA_ESCRITA_ATIVA), IT no clone e regressao da Fase 44 (Wave 2)
-- [ ] 55-05-PLAN.md — templates de PDF por familia (ORCAMENTO | PROPOSTA): ativacao isolada, resolucao por familia e seed com isActive so no create (Wave 2)
-- [ ] 55-06-PLAN.md — modulo backend de propostas: rascunho, itens com snapshot, ajuste e aplicar % em todos, cabecalho com cliente do Athos e dados de orgao, rotas AdminOnly (Wave 2)
+- [x] 55-04-PLAN.md — escrita no Athos: criarOrcamentoProposta (preco final sem desconto, cliente obrigatorio, idempotencia por ref, kill-switch PROPOSTA_ESCRITA_ATIVA), IT no clone e regressao da Fase 44 (Wave 2)
+- [x] 55-05-PLAN.md — templates de PDF por familia (ORCAMENTO | PROPOSTA): ativacao isolada, resolucao por familia e seed com isActive so no create (Wave 2)
+- [x] 55-06-PLAN.md — modulo backend de propostas: rascunho, itens com snapshot, ajuste e aplicar % em todos, cabecalho com cliente do Athos e dados de orgao, rotas AdminOnly (Wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 55-07-PLAN.md — PDF institucional: contexto por lista branca (sem custo), template proposta-institucional, render multipagina hardened, MinIO, snapshot de emissao e previa (servico) (Wave 3)
