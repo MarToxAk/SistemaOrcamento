@@ -662,5 +662,79 @@ describe("PropostasController (HTTP): pdf, previa, duplicar e status (plano 55-1
     });
   });
 
-  // <<TASK-2-HTTP>>
+  describe("POST :id/duplicar", () => {
+    it("responde 201 com o detalhe do novo rascunho, sem numero nem PDF, sem tocar no Athos", async () => {
+      const id = await semearLancada({ idorcamentoAthos: 5151 });
+
+      const r = await chamar("POST", `/propostas/${id}/duplicar`);
+
+      expect(r.status).toBe(201);
+      expect(r.json).toMatchObject({ status: "RASCUNHO", duplicadaDeId: id, idorcamentoAthos: null, pdfDisponivel: false, total: "7.00" });
+      expect(r.json.id).not.toBe(id);
+      expect(r.json.itens).toHaveLength(1);
+      expect(JSON.stringify(r.json)).not.toContain("pdfSnapshot");
+      expect(JSON.stringify(r.json)).not.toContain("segredo-do-template");
+      expect(obterProdutoProposta).not.toHaveBeenCalled();
+      expect(buscarClienteParaProposta).not.toHaveBeenCalled();
+      expect(gerarOficial).not.toHaveBeenCalled();
+      // O original segue ENVIADA com o numero.
+      const original = await chamar("GET", `/propostas/${id}`);
+      expect(original.json).toMatchObject({ status: "ENVIADA", idorcamentoAthos: 5151 });
+    });
+
+    it("inexistente 404, UUID invalido 400 e sem a chave admin 401", async () => {
+      expect((await chamar("POST", `/propostas/${UUID_INEXISTENTE}/duplicar`)).status).toBe(404);
+      expect((await chamar("POST", "/propostas/nao-e-uuid/duplicar")).status).toBe(400);
+      const id = await semearLancada();
+      const antes = prisma._propostas.length;
+      expect((await chamar("POST", `/propostas/${id}/duplicar`, undefined, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect(prisma._propostas.length).toBe(antes);
+    });
+  });
+
+  describe("PATCH :id/status", () => {
+    it("ENVIADA para FECHADA responde 200", async () => {
+      const id = await semearLancada();
+      const r = await chamar("PATCH", `/propostas/${id}/status`, { status: "FECHADA" });
+      expect(r.status).toBe(200);
+      expect(r.json).toEqual({ id, status: "FECHADA" });
+    });
+
+    it("cancelar proposta lancada responde 200 com aviso do orcamento aberto no Athos", async () => {
+      const id = await semearLancada({ idorcamentoAthos: 6262 });
+      const r = await chamar("PATCH", `/propostas/${id}/status`, { status: "CANCELADA" });
+      expect(r.status).toBe(200);
+      expect(r.json.status).toBe("CANCELADA");
+      expect(r.json.aviso).toContain("6262");
+    });
+
+    it("transicao invalida responde 409 TRANSICAO_INVALIDA", async () => {
+      const id = await semearLancada({ status: "RASCUNHO", idorcamentoAthos: null, pdfObjectName: null, pdfSnapshot: null });
+      const r = await chamar("PATCH", `/propostas/${id}/status`, { status: "FECHADA" });
+      expect(r.status).toBe(409);
+      expect(r.json.codigo).toBe("TRANSICAO_INVALIDA");
+    });
+
+    it.each([
+      ["ENVIADA", { status: "ENVIADA" }],
+      ["RASCUNHO", { status: "RASCUNHO" }],
+      ["LANCANDO", { status: "LANCANDO" }],
+      ["sem status", {}],
+      ["campo extra", { status: "FECHADA", idorcamentoAthos: 1 }],
+    ])("status invalido (%s) responde 400 e nada muda", async (_nome, corpo) => {
+      const id = await semearLancada();
+      const r = await chamar("PATCH", `/propostas/${id}/status`, corpo);
+      expect(r.status).toBe(400);
+      expect(prisma._propostas.find((p) => p.id === id)!.status).toBe("ENVIADA");
+    });
+
+    it("sem a chave admin 401 e id fora do formato UUID 400", async () => {
+      const id = await semearLancada();
+      expect((await chamar("PATCH", `/propostas/${id}/status`, { status: "FECHADA" }, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect(prisma._propostas.find((p) => p.id === id)!.status).toBe("ENVIADA");
+      expect((await chamar("PATCH", "/propostas/nao-e-uuid/status", { status: "FECHADA" })).status).toBe(400);
+    });
+  });
+
+  // <<TASK-3-HTTP>>
 });

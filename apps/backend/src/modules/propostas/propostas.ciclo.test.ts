@@ -285,3 +285,211 @@ describe("PropostasService.obterPrevia (55-13, D-12)", () => {
     await esperarErro(ctx.service.obterPrevia("6f0f3a52-5c6e-4f43-8d3a-0f7a2f5b9c11"), "PROPOSTA_NAO_ENCONTRADA", 404);
   });
 });
+
+describe("PropostasService.duplicar (55-13, D-08, D-09)", () => {
+  it.each(["RASCUNHO", "LANCANDO", "ENVIADA", "FECHADA", "CANCELADA"])(
+    "a partir de %s cria novo RASCUNHO com os mesmos valores, sem consultar o Athos",
+    async (status) => {
+      const ctx = criarContexto();
+      const origem = await semear(ctx, { status, itens: 2 });
+
+      const novo = await ctx.service.duplicar(origem);
+
+      expect(novo.id).not.toBe(origem);
+      expect(novo.status).toBe("RASCUNHO");
+      expect(novo.duplicadaDeId).toBe(origem);
+      expect(chamadasAoAthos(ctx)).toBe(0);
+      expect(ctx.propostasPdf.gerarOficial).not.toHaveBeenCalled();
+      expect(ctx.propostasPdf.capturarSnapshot).not.toHaveBeenCalled();
+
+      const copia = linha(ctx, novo.id);
+      const original = linha(ctx, origem);
+      for (const campo of [
+        "idclienteAthos",
+        "clienteSnapshot",
+        "numeroProcesso",
+        "setorResponsavel",
+        "contatoEmail",
+        "contatoTelefone",
+        "validadeDias",
+        "prazoEntregaDias",
+        "observacao",
+        "assinanteNome",
+        "assinanteCargo",
+        "assinanteCpf",
+        "totalValor",
+      ]) {
+        expect([campo, copia[campo]]).toEqual([campo, original[campo]]);
+      }
+      // Nada do lancamento e copiado.
+      for (const campo of [
+        "idorcamentoAthos",
+        "senhaBalcao",
+        "athosData",
+        "athosHora",
+        "pdfObjectName",
+        "pdfGeradoEm",
+        "pdfSnapshot",
+        "lancandoEm",
+        "enviadaEm",
+        "fechadaEm",
+        "canceladaEm",
+      ]) {
+        expect([campo, copia[campo] ?? null]).toEqual([campo, null]);
+      }
+    },
+  );
+
+  it("copia itens com nomes, descricoes curtas, ajustes, precos, quantidades e custos na mesma ordem", async () => {
+    const ctx = criarContexto();
+    const origem = await semear(ctx, { itens: 2 });
+
+    const novo = await ctx.service.duplicar(origem);
+
+    expect(novo.itens).toHaveLength(2);
+    const itensNovos = ctx.prisma._itens.filter((i) => i.propostaId === novo.id).sort((a, b) => a.sequencia - b.sequencia);
+    const itensOrigem = ctx.prisma._itens.filter((i) => i.propostaId === origem).sort((a, b) => a.sequencia - b.sequencia);
+    expect(itensNovos).toHaveLength(2);
+    itensNovos.forEach((copia, idx) => {
+      const original = itensOrigem[idx];
+      expect(copia.id).not.toBe(original.id);
+      for (const campo of [
+        "sequencia",
+        "idproduto",
+        "nomeAthos",
+        "nome",
+        "descricaoCurta",
+        "unidade",
+        "permiteFracionar",
+        "quantidade",
+        "precoBase",
+        "ajusteTipo",
+        "ajusteValor",
+        "precoUnitario",
+        "totalLinha",
+        "custoUnitario",
+      ]) {
+        expect([campo, copia[campo]]).toEqual([campo, original[campo]]);
+      }
+    });
+    expect(novo.itens[0]).toMatchObject({ nome: "Nome na proposta 1", ajuste: { tipo: "VALOR", valor: "3.50" }, precoUnitario: "3.50", quantidade: "2.000" });
+    expect(novo.pdfDisponivel).toBe(false);
+  });
+
+  it("copia a sobrescrita de cliente quando existe e omite os Json nulos", async () => {
+    const ctx = criarContexto();
+    const comOverride = await semear(ctx);
+    linha(ctx, comOverride).clienteOverride = { razaoSocial: "NOME PARA O PDF" };
+    const copiaCom = await ctx.service.duplicar(comOverride);
+    expect(linha(ctx, copiaCom.id).clienteOverride).toEqual({ razaoSocial: "NOME PARA O PDF" });
+
+    const semCliente = await semear(ctx, { status: "RASCUNHO", cliente: false });
+    const copiaSem = await ctx.service.duplicar(semCliente);
+    expect(linha(ctx, copiaSem.id).clienteSnapshot).toBeNull();
+    expect(linha(ctx, copiaSem.id).clienteOverride).toBeNull();
+    expect(linha(ctx, copiaSem.id).idclienteAthos).toBeNull();
+  });
+
+  it("o original nao e alterado e a copia pode ser editada", async () => {
+    const ctx = criarContexto();
+    const origem = await semear(ctx);
+    const antes = JSON.stringify(linha(ctx, origem));
+
+    const novo = await ctx.service.duplicar(origem);
+    await ctx.service.atualizarCabecalho(novo.id, { observacao: "Nova observacao" });
+
+    expect(JSON.stringify(linha(ctx, origem))).toBe(antes);
+    expect(linha(ctx, novo.id).observacao).toBe("Nova observacao");
+  });
+
+  it("inexistente: 404", async () => {
+    const ctx = criarContexto();
+    await esperarErro(ctx.service.duplicar("6f0f3a52-5c6e-4f43-8d3a-0f7a2f5b9c11"), "PROPOSTA_NAO_ENCONTRADA", 404);
+  });
+});
+
+describe("PropostasService.atualizarStatus (55-13, D-06, D-10, D-28)", () => {
+  it("ENVIADA para FECHADA preenche fechadaEm e nao traz aviso", async () => {
+    const ctx = criarContexto();
+    const id = await semear(ctx, { status: "ENVIADA" });
+
+    const r = await ctx.service.atualizarStatus(id, "FECHADA");
+
+    expect(r).toEqual({ id, status: "FECHADA" });
+    expect(linha(ctx, id).status).toBe("FECHADA");
+    expect(linha(ctx, id).fechadaEm).toBeInstanceOf(Date);
+    expect(linha(ctx, id).canceladaEm).toBeNull();
+    expect(chamadasAoAthos(ctx)).toBe(0);
+  });
+
+  it.each(["ENVIADA", "FECHADA"])("cancelar %s e SO local e o aviso informa o numero do orcamento aberto no Athos", async (status) => {
+    const ctx = criarContexto();
+    const id = await semear(ctx, { status, idorcamentoAthos: 4321 });
+
+    const r = await ctx.service.atualizarStatus(id, "CANCELADA");
+
+    expect(r.status).toBe("CANCELADA");
+    expect(r.aviso).toContain("4321");
+    expect(r.aviso).toMatch(/Athos/);
+    expect(r.aviso).toMatch(/Balcao/);
+    expect(linha(ctx, id).status).toBe("CANCELADA");
+    expect(linha(ctx, id).canceladaEm).toBeInstanceOf(Date);
+    expect(chamadasAoAthos(ctx)).toBe(0);
+  });
+
+  it("cancelar RASCUNHO preenche canceladaEm e nao traz aviso", async () => {
+    const ctx = criarContexto();
+    const id = await semear(ctx, { status: "RASCUNHO" });
+
+    const r = await ctx.service.atualizarStatus(id, "CANCELADA");
+
+    expect(r).toEqual({ id, status: "CANCELADA" });
+    expect(r.aviso).toBeUndefined();
+    expect(linha(ctx, id).canceladaEm).toBeInstanceOf(Date);
+  });
+
+  it.each([
+    ["RASCUNHO", "FECHADA"],
+    ["LANCANDO", "FECHADA"],
+    ["LANCANDO", "CANCELADA"],
+    ["CANCELADA", "FECHADA"],
+    ["CANCELADA", "CANCELADA"],
+    ["FECHADA", "FECHADA"],
+  ] as const)("%s para %s responde 409 TRANSICAO_INVALIDA e nada muda", async (origem, destino) => {
+    const ctx = criarContexto();
+    const id = await semear(ctx, { status: origem });
+
+    await esperarErro(ctx.service.atualizarStatus(id, destino), "TRANSICAO_INVALIDA", 409);
+
+    expect(linha(ctx, id).status).toBe(origem);
+  });
+
+  it("status fora de FECHADA e CANCELADA e recusado no servico tambem", async () => {
+    const ctx = criarContexto();
+    const id = await semear(ctx, { status: "RASCUNHO" });
+    await esperarErro(ctx.service.atualizarStatus(id, "ENVIADA" as any), "TRANSICAO_INVALIDA", 409);
+    await esperarErro(ctx.service.atualizarStatus(id, "RASCUNHO" as any), "TRANSICAO_INVALIDA", 409);
+  });
+
+  it("corrida: se o status mudou entre a leitura e a gravacao, 409 e a gravacao concorrente prevalece", async () => {
+    const ctx = criarContexto();
+    const id = await semear(ctx, { status: "RASCUNHO" });
+    const original = ctx.prisma.proposta.findUnique;
+    // Simula um gerar concorrente que reserva a proposta logo depois da leitura do servico.
+    (ctx.prisma.proposta as any).findUnique = async (args: any) => {
+      const lida = await original(args);
+      linha(ctx, id).status = "LANCANDO";
+      return lida;
+    };
+
+    await esperarErro(ctx.service.atualizarStatus(id, "CANCELADA"), "TRANSICAO_INVALIDA", 409);
+
+    expect(linha(ctx, id).status).toBe("LANCANDO");
+    expect(linha(ctx, id).canceladaEm).toBeNull();
+  });
+
+  it("inexistente: 404", async () => {
+    const ctx = criarContexto();
+    await esperarErro(ctx.service.atualizarStatus("6f0f3a52-5c6e-4f43-8d3a-0f7a2f5b9c11", "FECHADA"), "PROPOSTA_NAO_ENCONTRADA", 404);
+  });
+});

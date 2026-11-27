@@ -24,6 +24,7 @@ import { THROTTLE_SENSITIVE } from "../security/throttle.config";
 import {
   AddItemPropostaDto,
   AplicarPercentualDto,
+  AtualizarStatusPropostaDto,
   CreatePropostaDto,
   GerarPropostaDto,
   ListarPropostasQueryDto,
@@ -154,6 +155,24 @@ export class PropostasController {
   })
   async recuperar(@Param("id", new ParseUUIDPipe()) id: string): Promise<PropostaRecuperada> {
     return this.propostasService.recuperarLancamento(id);
+  }
+
+  @Post(":id/duplicar")
+  @Throttle({ default: THROTTLE_SENSITIVE })
+  @ApiOperation({ summary: "Duplicar a proposta em um novo rascunho (sem consultar o Athos, sem numero nem PDF)" })
+  async duplicar(@Param("id", new ParseUUIDPipe()) id: string): Promise<PropostaDetalhe> {
+    return this.propostasService.duplicar(id);
+  }
+
+  @Patch(":id/status")
+  @ApiOperation({
+    summary: "Marcar FECHADA (so de ENVIADA) ou CANCELADA (de RASCUNHO, ENVIADA ou FECHADA); cancelar e so local",
+  })
+  async atualizarStatus(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: AtualizarStatusPropostaDto,
+  ): Promise<{ id: string; status: string; aviso?: string }> {
+    return this.propostasService.atualizarStatus(id, dto.status);
   }
 
   @Get(":id/pdf")

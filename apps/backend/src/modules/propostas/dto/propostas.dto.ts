@@ -157,6 +157,12 @@ export class ListarPropostasQueryDto {
   tamanho?: number;
 }
 
+/** Marcar a proposta como FECHADA ou CANCELADA manualmente (D-06). Nenhum outro status e aceito. */
+export class AtualizarStatusPropostaDto {
+  @IsIn(["FECHADA", "CANCELADA"], { message: "status deve ser FECHADA ou CANCELADA" })
+  status!: "FECHADA" | "CANCELADA";
+}
+
 /**
  * Gerar a proposta (lancar no Athos + PDF oficial, D-07). `confirmar` e a confirmacao explicita do botao
  * "Gerar proposta e lancar no Athos" e tambem e exigida no servidor. Assinante do documento (D-19).
