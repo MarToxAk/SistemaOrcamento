@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
-import { IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from "class-validator";
+import { PropostaStatus } from "@prisma/client";
+import { IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
 
 /**
  * DTOs do modulo de propostas (Fase 55). Nenhum DTO aceita preco final: o servidor recalcula o preco de
@@ -60,4 +61,85 @@ export class AddItemPropostaDto {
   @Min(0.001)
   @Max(10000)
   quantidade!: number;
+}
+
+/** Atualizacao parcial do cabecalho (rascunho): mesmos campos da criacao; null limpa o campo. */
+export class UpdatePropostaDto extends CreatePropostaDto {}
+
+/**
+ * Ajuste de preco de um item. PERCENTUAL: porcentagem sobre o preco base (-99.999 a 1000). VALOR: o novo preco
+ * unitario final em reais (substitui o preco base, nao e acrescimo, D-02a). NENHUM: volta ao preco base.
+ */
+export class AjusteItemDto {
+  @IsIn(["PERCENTUAL", "VALOR", "NENHUM"])
+  tipo!: "PERCENTUAL" | "VALOR" | "NENHUM";
+
+  @IsOptional()
+  @IsNumber(
+    { maxDecimalPlaces: 3 },
+    { message: "valor deve ser numero: percentual (ate 3 casas) ou preco unitario em reais (ate 2 casas)" },
+  )
+  @Min(-99.999, { message: "valor abaixo do minimo: percentual maior que -100 ou preco unitario maior que zero" })
+  @Max(1000000, { message: "valor acima do maximo aceito para percentual ou preco unitario" })
+  valor?: number;
+}
+
+/** Edicao de item em rascunho: nunca recebe preco final (T-55-20). */
+export class UpdateItemPropostaDto {
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
+  @Max(10000)
+  quantidade?: number;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  nome?: string;
+
+  /** Vazio ou null limpa a descricao curta. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  descricaoCurta?: string | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AjusteItemDto)
+  ajuste?: AjusteItemDto;
+}
+
+/** Aplicar a mesma porcentagem ao preco base de todos os itens (D-11). 0 limpa os ajustes. */
+export class AplicarPercentualDto {
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(-99.999)
+  @Max(1000)
+  percentual!: number;
+}
+
+/** Filtros da listagem (paginada, tamanho maximo 100). */
+export class ListarPropostasQueryDto {
+  @IsOptional()
+  @IsEnum(PropostaStatus)
+  status?: PropostaStatus;
+
+  /** Numero do orcamento (numerico) ou nome do cliente. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  pagina?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  tamanho?: number;
 }

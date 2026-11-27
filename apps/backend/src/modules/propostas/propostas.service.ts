@@ -12,7 +12,14 @@ import {
 } from "../integrations/athos/athos-orcamento-calc.util";
 import { AthosOrcamentoService } from "../integrations/athos/athos-orcamento.service";
 import { PrismaService } from "../database/prisma.service";
-import { AddItemPropostaDto, CreatePropostaDto } from "./dto/propostas.dto";
+import {
+  AddItemPropostaDto,
+  AplicarPercentualDto,
+  CreatePropostaDto,
+  ListarPropostasQueryDto,
+  UpdateItemPropostaDto,
+  UpdatePropostaDto,
+} from "./dto/propostas.dto";
 import { PropostaError } from "./propostas.errors";
 import {
   CalcPropostaError,
@@ -389,5 +396,30 @@ export class PropostasService {
     ]);
 
     return this.obter(id);
+  }
+  // Stubs da fase RED (tarefa 2): implementados no commit GREEN.
+  async atualizarItem(_id: string, _itemId: string, _dto: UpdateItemPropostaDto): Promise<PropostaDetalhe> {
+    throw new Error("not implemented");
+  }
+  async removerItem(_id: string, _itemId: string): Promise<PropostaDetalhe> {
+    throw new Error("not implemented");
+  }
+  async aplicarPercentualEmTodos(_id: string, _dto: AplicarPercentualDto): Promise<PropostaDetalhe> {
+    throw new Error("not implemented");
+  }
+  async atualizarCabecalho(_id: string, _dto: UpdatePropostaDto): Promise<PropostaDetalhe> {
+    throw new Error("not implemented");
+  }
+  async listar(_query: ListarPropostasQueryDto): Promise<unknown> {
+    throw new Error("not implemented");
+  }
+  async listarAssinantesRecentes(): Promise<unknown> {
+    throw new Error("not implemented");
+  }
+  async buscarProdutos(_q: string, _limit?: number): Promise<unknown> {
+    throw new Error("not implemented");
+  }
+  async buscarCliente(_idcliente: number): Promise<unknown> {
+    throw new Error("not implemented");
   }
 }
