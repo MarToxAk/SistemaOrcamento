@@ -375,7 +375,7 @@ Plans:
 - Referencias do Athos copiadas para `referencia/` (orcamento e cadastro de produto). Lacunas da captura: cliente, validade e obs no orcamento do Athos, e conversao do orcamento em venda.
 **Requirements**: P55-PRECO, P55-MONT, P55-CLI, P55-CICLO, P55-ATHOS, P55-PDF
 **Depends on:** Phase 54
-**Plans:** 14/18 plans executed
+**Plans:** 15/18 plans executed
 
 Plans:
 **Wave 1**
@@ -405,7 +405,7 @@ Plans:
 - [x] 55-13-PLAN.md — backend: PDF oficial armazenado ou regenerado do snapshot, previa, preview de template, duplicar, fechar e cancelar local; regressao ampla (Wave 6)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 55-18-PLAN.md — frontend: acoes da proposta: previa, gerar com confirmacao explicita, PDF oficial, duplicar, fechar, cancelar e recuperar; libera as rotas de ciclo de vida no proxy (Wave 7)
+- [x] 55-18-PLAN.md — frontend: acoes da proposta: previa, gerar com confirmacao explicita, PDF oficial, duplicar, fechar, cancelar e recuperar; libera as rotas de ciclo de vida no proxy (Wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 - [ ] 55-15-PLAN.md — frontend: galeria de templates por familia (Orcamento | Proposta) e previa de template de proposta (Wave 8)
