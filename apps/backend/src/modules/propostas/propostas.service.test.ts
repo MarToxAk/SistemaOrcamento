@@ -404,15 +404,28 @@ describe("PropostasService - listar", () => {
   it("q texto filtra por razaoSocial ou nomeFantasia do snapshot sem diferenciar maiusculas", async () => {
     const ctx = criarContexto();
     await semear(ctx);
+    const bruto = jest.spyOn(ctx.prisma, "$queryRaw");
     const espiao = jest.spyOn(ctx.prisma.proposta, "findMany");
     const r = (await ctx.service.listar({ q: "prefeitura" })) as any;
     expect(r.total).toBe(2);
-    expect(espiao.mock.calls[0][0]!.where).toEqual({
-      OR: [
-        { clienteSnapshot: { path: ["razaoSocial"], string_contains: "prefeitura", mode: "insensitive" } },
-        { clienteSnapshot: { path: ["nomeFantasia"], string_contains: "prefeitura", mode: "insensitive" } },
-      ],
-    });
+    expect(r.itens.map((i: any) => i.clienteNome).sort()).toEqual(["PREFEITURA DE UBATUBA", "Prefeitura de Ilhabela"]);
+
+    // Busca parametrizada com ILIKE (o filtro JSON do Prisma 5 nao tem modo insensitive).
+    const sql = bruto.mock.calls[0][0] as any;
+    expect(sql.strings.join("?")).toMatch(/ILIKE \?.*ILIKE \?/);
+    expect(sql.values).toEqual(["%prefeitura%", "%prefeitura%"]);
+    expect(espiao.mock.calls[0][0]!.where).toMatchObject({ id: { in: expect.any(Array) } });
+  });
+
+  it("q texto escapa coringas do LIKE e nao interpola o texto no SQL", async () => {
+    const ctx = criarContexto();
+    await semear(ctx);
+    const bruto = jest.spyOn(ctx.prisma, "$queryRaw");
+    const r = (await ctx.service.listar({ q: "100%_x'; DROP TABLE" })) as any;
+    expect(r.total).toBe(0);
+    const sql = bruto.mock.calls[0][0] as any;
+    expect(sql.values[0]).toBe("%100\\%\\_x'; DROP TABLE%");
+    expect(sql.strings.join("?")).not.toContain("DROP");
   });
 
   it("tamanho maximo 100", async () => {

@@ -1,9 +1,28 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { ApiHeader, ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger";
 
+import { BuscarProdutosOrcamentoQueryDto } from "../integrations/athos/dto/buscar-produtos-orcamento.dto";
 import { AdminOnly } from "../security/admin.decorator";
-import { AddItemPropostaDto, CreatePropostaDto } from "./dto/propostas.dto";
-import { PropostaDetalhe, PropostasService } from "./propostas.service";
+import {
+  AddItemPropostaDto,
+  AplicarPercentualDto,
+  CreatePropostaDto,
+  ListarPropostasQueryDto,
+  UpdateItemPropostaDto,
+  UpdatePropostaDto,
+} from "./dto/propostas.dto";
+import { AssinanteRecente, PropostaDetalhe, PropostaListagem, PropostasService } from "./propostas.service";
 
 /**
  * Propostas comerciais para orgaos publicos (Fase 55).
@@ -20,16 +39,57 @@ import { PropostaDetalhe, PropostasService } from "./propostas.service";
 export class PropostasController {
   constructor(private readonly propostasService: PropostasService) {}
 
+  // --- Rotas estaticas (antes de :id) ---------------------------------------
+
+  @Get("produtos")
+  @ApiOperation({ summary: "Buscar produtos do Athos com preco e custo (montagem da proposta)" })
+  async buscarProdutos(@Query() query: BuscarProdutosOrcamentoQueryDto) {
+    return this.propostasService.buscarProdutos(query.q, query.limit);
+  }
+
+  @Get("assinantes")
+  @ApiOperation({ summary: "Assinantes recentes distintos para reuso (D-19)" })
+  async listarAssinantes(): Promise<AssinanteRecente[]> {
+    return this.propostasService.listarAssinantesRecentes();
+  }
+
+  @Get("clientes/:idcliente")
+  @ApiOperation({ summary: "Cliente do Athos com razao social real e endereco por campo" })
+  async buscarCliente(@Param("idcliente", ParseIntPipe) idcliente: number) {
+    return this.propostasService.buscarCliente(idcliente);
+  }
+
+  @Get()
+  @ApiOperation({ summary: "Listar propostas (filtro por status, busca por numero do orcamento ou cliente, paginada)" })
+  async listar(@Query() query: ListarPropostasQueryDto): Promise<PropostaListagem> {
+    return this.propostasService.listar(query);
+  }
+
   @Post()
   @ApiOperation({ summary: "Criar rascunho de proposta (cabecalho opcional)" })
   async criar(@Body() dto: CreatePropostaDto): Promise<PropostaDetalhe> {
     return this.propostasService.criarRascunho(dto);
   }
 
+  // --- Rotas parametricas ----------------------------------------------------
+
+  @Get(":id")
+  @ApiOperation({ summary: "Detalhe da proposta com itens, total, custo e margem" })
+  async obter(@Param("id", new ParseUUIDPipe()) id: string): Promise<PropostaDetalhe> {
+    return this.propostasService.obter(id);
+  }
+
+  @Patch(":id")
+  @ApiOperation({ summary: "Atualizar cabecalho (cliente do Athos, dados de orgao, validade, prazo, observacao)" })
+  async atualizarCabecalho(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdatePropostaDto,
+  ): Promise<PropostaDetalhe> {
+    return this.propostasService.atualizarCabecalho(id, dto);
+  }
+
   @Post(":id/itens")
-  @ApiOperation({
-    summary: "Adicionar item (idproduto e quantidade); o servidor busca preco e custo no Athos",
-  })
+  @ApiOperation({ summary: "Adicionar item (idproduto e quantidade); o servidor busca preco e custo no Athos" })
   async adicionarItem(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() dto: AddItemPropostaDto,
@@ -37,9 +97,31 @@ export class PropostasController {
     return this.propostasService.adicionarItem(id, dto);
   }
 
-  @Get(":id")
-  @ApiOperation({ summary: "Detalhe da proposta com itens, total, custo e margem" })
-  async obter(@Param("id", new ParseUUIDPipe()) id: string): Promise<PropostaDetalhe> {
-    return this.propostasService.obter(id);
+  @Patch(":id/itens/:itemId")
+  @ApiOperation({ summary: "Editar item: quantidade, nome, descricao curta e ajuste (preco recalculado no servidor)" })
+  async atualizarItem(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("itemId", new ParseUUIDPipe()) itemId: string,
+    @Body() dto: UpdateItemPropostaDto,
+  ): Promise<PropostaDetalhe> {
+    return this.propostasService.atualizarItem(id, itemId, dto);
+  }
+
+  @Delete(":id/itens/:itemId")
+  @ApiOperation({ summary: "Remover item e renumerar a sequencia" })
+  async removerItem(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("itemId", new ParseUUIDPipe()) itemId: string,
+  ): Promise<PropostaDetalhe> {
+    return this.propostasService.removerItem(id, itemId);
+  }
+
+  @Post(":id/aplicar-percentual")
+  @ApiOperation({ summary: "Aplicar a mesma porcentagem ao preco base de todos os itens (0 limpa os ajustes)" })
+  async aplicarPercentual(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: AplicarPercentualDto,
+  ): Promise<PropostaDetalhe> {
+    return this.propostasService.aplicarPercentualEmTodos(id, dto);
   }
 }

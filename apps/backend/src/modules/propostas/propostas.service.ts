@@ -28,6 +28,8 @@ import {
   calcularLinhasProposta,
   calcularMargem,
   parsePercentualMilli,
+  parsePrecoDigitadoCentavos,
+  AjustePreco,
 } from "./propostas-calc.util";
 
 // ---------------------------------------------------------------------------
@@ -91,6 +93,46 @@ export interface PropostaDetalhe {
 
 export type PropostaComItens = Proposta & { itens: PropostaItem[] };
 
+/** Linha da listagem: sem itens, custo ou margem. */
+export interface PropostaResumo {
+  id: string;
+  status: string;
+  idclienteAthos: number | null;
+  /** razaoSocial (ou nomeFantasia) do snapshot do cliente. */
+  clienteNome: string | null;
+  numeroProcesso: string | null;
+  /** "123.45" */
+  total: string;
+  quantidadeItens: number;
+  idorcamentoAthos: number | null;
+  senhaBalcao: number | null;
+  pdfDisponivel: boolean;
+  criadoEm: Date;
+  atualizadoEm: Date;
+  enviadaEm: Date | null;
+  fechadaEm: Date | null;
+  canceladaEm: Date | null;
+}
+
+export interface PropostaListagem {
+  itens: PropostaResumo[];
+  total: number;
+  pagina: number;
+  tamanho: number;
+}
+
+export interface AssinanteRecente {
+  nome: string;
+  cargo: string | null;
+  cpf: string | null;
+}
+
+const TAMANHO_PADRAO = 20;
+const TAMANHO_MAXIMO = 100;
+const ASSINANTES_MAX = 10;
+const ASSINANTES_CONSULTA = 50;
+const INT4_MAX = 2147483647;
+
 // ---------------------------------------------------------------------------
 // Conversoes Decimal -> texto (o Prisma devolve Decimal; o fake de teste devolve texto ou numero)
 // ---------------------------------------------------------------------------
@@ -105,7 +147,8 @@ function centavosDe(v: unknown): bigint {
   return paraCentavos(dec(v));
 }
 
-function ajusteParaDetalhe(item: PropostaItem): PropostaItemDetalhe["ajuste"] {
+/** Ajuste guardado no item (tipo e valor em texto canonico) ou null quando nao ha ajuste. */
+function ajusteArmazenado(item: PropostaItem): { tipo: "PERCENTUAL" | "VALOR"; valor: string } | null {
   if (item.ajusteTipo !== "PERCENTUAL" && item.ajusteTipo !== "VALOR") return null;
   if (item.ajusteValor === null || item.ajusteValor === undefined) return null;
   const valor =
@@ -130,7 +173,7 @@ function itemParaDetalhe(item: PropostaItem): PropostaItemDetalhe {
     permiteFracionar: item.permiteFracionar,
     quantidade: milliParaTexto(milliDe(item.quantidade)),
     precoBase: milliParaTexto(milliDe(item.precoBase)),
-    ajuste: ajusteParaDetalhe(item),
+    ajuste: ajusteArmazenado(item),
     precoUnitario: centavosParaTexto(precoCentavos),
     totalLinha: centavosParaTexto(centavosDe(item.totalLinha)),
     custoUnitario: milliParaTexto(custoMilli),
@@ -397,29 +440,267 @@ export class PropostasService {
 
     return this.obter(id);
   }
-  // Stubs da fase RED (tarefa 2): implementados no commit GREEN.
-  async atualizarItem(_id: string, _itemId: string, _dto: UpdateItemPropostaDto): Promise<PropostaDetalhe> {
-    throw new Error("not implemented");
+  /** Item da proposta em RASCUNHO; item de outra proposta (ou inexistente) responde 404. */
+  private async carregarItemEditavel(id: string, itemId: string): Promise<{ proposta: PropostaComItens; item: PropostaItem }> {
+    const proposta = await this.carregarEditavel(id);
+    const item = proposta.itens.find((i) => i.id === itemId);
+    if (!item) {
+      throw new PropostaError("PROPOSTA_NAO_ENCONTRADA", "Item nao encontrado nesta proposta.", 404);
+    }
+    return { proposta, item };
   }
-  async removerItem(_id: string, _itemId: string): Promise<PropostaDetalhe> {
-    throw new Error("not implemented");
+
+  /**
+   * Converte o ajuste do DTO na entrada do calculo e nos valores a gravar. NENHUM limpa o ajuste.
+   * PERCENTUAL: porcentagem sobre o preco base; VALOR: novo preco unitario final em reais (D-02a).
+   */
+  private resolverAjuste(entrada: { tipo: "PERCENTUAL" | "VALOR" | "NENHUM"; valor?: number | null }): {
+    ajuste: AjustePreco | null;
+    tipo: string | null;
+    valor: string | null;
+  } {
+    if (entrada.tipo === "NENHUM") return { ajuste: null, tipo: null, valor: null };
+    if (entrada.valor === undefined || entrada.valor === null) {
+      throw new PropostaError("VALOR_INVALIDO", "Informe o valor do ajuste.", 422);
+    }
+    try {
+      const valor =
+        entrada.tipo === "PERCENTUAL"
+          ? milliParaTexto(parsePercentualMilli(entrada.valor))
+          : centavosParaTexto(parsePrecoDigitadoCentavos(entrada.valor));
+      return { ajuste: { tipo: entrada.tipo, valor }, tipo: entrada.tipo, valor };
+    } catch (err) {
+      return converterErroCalculo(err);
+    }
   }
-  async aplicarPercentualEmTodos(_id: string, _dto: AplicarPercentualDto): Promise<PropostaDetalhe> {
-    throw new Error("not implemented");
+
+  /** Recalcula SEMPRE no servidor a partir do snapshot do preco base e do custo (D-09, T-55-20). */
+  private recalcularItem(item: PropostaItem, qMilli: bigint, ajuste: AjustePreco | null) {
+    try {
+      return calcularItemProposta({
+        precoBaseMilli: milliDe(item.precoBase),
+        ajuste,
+        qMilli,
+        custoMilli: milliDe(item.custoUnitario),
+      });
+    } catch (err) {
+      return converterErroCalculo(err);
+    }
   }
-  async atualizarCabecalho(_id: string, _dto: UpdatePropostaDto): Promise<PropostaDetalhe> {
-    throw new Error("not implemented");
+
+  async atualizarItem(id: string, itemId: string, dto: UpdateItemPropostaDto): Promise<PropostaDetalhe> {
+    const { proposta, item } = await this.carregarItemEditavel(id, itemId);
+    const dados: Record<string, unknown> = {};
+
+    let qMilli = milliDe(item.quantidade);
+    if (dto.quantidade !== undefined) {
+      try {
+        qMilli = paraMilli(dto.quantidade);
+      } catch (err) {
+        return converterErroCalculo(err);
+      }
+      if (!item.permiteFracionar && qMilli % 1000n !== 0n) {
+        throw new PropostaError("QUANTIDADE_FRACIONADA", "Este produto so permite quantidade inteira.", 422);
+      }
+      dados.quantidade = milliParaTexto(qMilli);
+    }
+
+    if (dto.nome !== undefined) {
+      const nome = dto.nome.trim();
+      if (nome.length < 1 || nome.length > 200) {
+        throw new PropostaError("VALOR_INVALIDO", "O nome do item deve ter de 1 a 200 caracteres.", 422);
+      }
+      dados.nome = nome;
+    }
+
+    if (dto.descricaoCurta !== undefined) {
+      const descricao = textoOpcional(dto.descricaoCurta);
+      if (descricao && descricao.length > 300) {
+        throw new PropostaError("VALOR_INVALIDO", "A descricao curta aceita no maximo 300 caracteres.", 422);
+      }
+      dados.descricaoCurta = descricao;
+    }
+
+    let ajuste: AjustePreco | null = ajusteArmazenado(item);
+    if (dto.ajuste !== undefined) {
+      const resolvido = this.resolverAjuste(dto.ajuste);
+      ajuste = resolvido.ajuste;
+      dados.ajusteTipo = resolvido.tipo;
+      dados.ajusteValor = resolvido.valor;
+    }
+
+    const calculo = this.recalcularItem(item, qMilli, ajuste);
+    const precoUnitario = centavosParaTexto(calculo.precoCentavos);
+    dados.precoUnitario = precoUnitario;
+    dados.totalLinha = centavosParaTexto(calculo.totalC);
+
+    const total = this.totalCentavos(
+      proposta.itens.map((i) => (i.id === item.id ? { quantidade: milliParaTexto(qMilli), precoUnitario } : i)),
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.propostaItem.update({ where: { id: item.id }, data: dados }),
+      this.prisma.proposta.update({ where: { id }, data: { totalValor: centavosParaTexto(total) } }),
+    ]);
+    return this.obter(id);
   }
-  async listar(_query: ListarPropostasQueryDto): Promise<unknown> {
-    throw new Error("not implemented");
+
+  async removerItem(id: string, itemId: string): Promise<PropostaDetalhe> {
+    const { proposta, item } = await this.carregarItemEditavel(id, itemId);
+    const restantes = proposta.itens.filter((i) => i.id !== item.id).sort((a, b) => a.sequencia - b.sequencia);
+    const renumeracao = restantes.flatMap((i, idx) =>
+      i.sequencia === idx + 1 ? [] : [this.prisma.propostaItem.update({ where: { id: i.id }, data: { sequencia: idx + 1 } })],
+    );
+    const total = this.totalCentavos(restantes);
+
+    await this.prisma.$transaction([
+      this.prisma.propostaItem.delete({ where: { id: item.id } }),
+      ...renumeracao,
+      this.prisma.proposta.update({ where: { id }, data: { totalValor: centavosParaTexto(total) } }),
+    ]);
+    return this.obter(id);
   }
-  async listarAssinantesRecentes(): Promise<unknown> {
-    throw new Error("not implemented");
+
+  /** Aplica a mesma porcentagem ao preco base de cada item, substituindo ajustes individuais; 0 limpa (D-11). */
+  async aplicarPercentualEmTodos(id: string, dto: AplicarPercentualDto): Promise<PropostaDetalhe> {
+    const proposta = await this.carregarEditavel(id);
+    let pctMilli: bigint;
+    try {
+      pctMilli = parsePercentualMilli(dto.percentual);
+    } catch (err) {
+      return converterErroCalculo(err);
+    }
+    const limpar = pctMilli === 0n;
+    const valor = milliParaTexto(pctMilli);
+    const ajuste: AjustePreco | null = limpar ? null : { tipo: "PERCENTUAL", valor };
+
+    const atualizados = proposta.itens.map((item) => {
+      const calculo = this.recalcularItem(item, milliDe(item.quantidade), ajuste);
+      return { item, precoUnitario: centavosParaTexto(calculo.precoCentavos), totalLinha: centavosParaTexto(calculo.totalC) };
+    });
+    const total = this.totalCentavos(atualizados.map((a) => ({ quantidade: a.item.quantidade, precoUnitario: a.precoUnitario })));
+
+    await this.prisma.$transaction([
+      ...atualizados.map((a) =>
+        this.prisma.propostaItem.update({
+          where: { id: a.item.id },
+          data: {
+            ajusteTipo: limpar ? null : "PERCENTUAL",
+            ajusteValor: limpar ? null : valor,
+            precoUnitario: a.precoUnitario,
+            totalLinha: a.totalLinha,
+          },
+        }),
+      ),
+      this.prisma.proposta.update({ where: { id }, data: { totalValor: centavosParaTexto(total) } }),
+    ]);
+    return this.obter(id);
   }
-  async buscarProdutos(_q: string, _limit?: number): Promise<unknown> {
-    throw new Error("not implemented");
+
+  // -------------------------------------------------------------------------
+  // Cabecalho (edicao), listagem e apoio
+  // -------------------------------------------------------------------------
+
+  async atualizarCabecalho(id: string, dto: UpdatePropostaDto): Promise<PropostaDetalhe> {
+    await this.carregarEditavel(id);
+    const dados = await this.montarDadosCabecalho(dto ?? {});
+    if (Object.keys(dados).length > 0) {
+      await this.prisma.proposta.update({ where: { id }, data: dados });
+    }
+    return this.obter(id);
   }
-  async buscarCliente(_idcliente: number): Promise<unknown> {
-    throw new Error("not implemented");
+
+  async listar(query: ListarPropostasQueryDto): Promise<PropostaListagem> {
+    const tamanho = Math.min(Math.max(Math.trunc(query.tamanho ?? TAMANHO_PADRAO), 1), TAMANHO_MAXIMO);
+    const pagina = Math.max(Math.trunc(query.pagina ?? 1), 1);
+
+    const where: Prisma.PropostaWhereInput = {};
+    if (query.status) where.status = query.status;
+    const q = query.q?.trim();
+    if (q) {
+      if (/^\d+$/.test(q) && Number(q) <= INT4_MAX) {
+        where.idorcamentoAthos = Number(q);
+      } else {
+        // O filtro JSON do Prisma 5 (string_contains) nao tem `mode: "insensitive"`; a busca sem diferenciar
+        // maiusculas usa ILIKE parametrizado (coringas de q escapados) e filtra a listagem pelos ids achados.
+        const padrao = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+        const achadas = await this.prisma.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`SELECT "id" FROM "Proposta" WHERE "clienteSnapshot"->>'razaoSocial' ILIKE ${padrao} OR "clienteSnapshot"->>'nomeFantasia' ILIKE ${padrao}`,
+        );
+        where.id = { in: achadas.map((a) => a.id) };
+      }
+    }
+
+    const [linhas, total] = await Promise.all([
+      this.prisma.proposta.findMany({
+        where,
+        orderBy: { atualizadoEm: "desc" },
+        skip: (pagina - 1) * tamanho,
+        take: tamanho,
+        include: { _count: { select: { itens: true } } },
+      }),
+      this.prisma.proposta.count({ where }),
+    ]);
+
+    return {
+      itens: linhas.map((p) => {
+        const snapshot = (p.clienteSnapshot as Record<string, unknown> | null) ?? null;
+        const nome = snapshot?.razaoSocial ?? snapshot?.nomeFantasia;
+        return {
+          id: p.id,
+          status: p.status,
+          idclienteAthos: p.idclienteAthos ?? null,
+          clienteNome: typeof nome === "string" ? nome : null,
+          numeroProcesso: p.numeroProcesso ?? null,
+          total: centavosParaTexto(centavosDe(p.totalValor)),
+          quantidadeItens: p._count.itens,
+          idorcamentoAthos: p.idorcamentoAthos ?? null,
+          senhaBalcao: p.senhaBalcao ?? null,
+          pdfDisponivel: !!p.pdfObjectName,
+          criadoEm: p.criadoEm,
+          atualizadoEm: p.atualizadoEm,
+          enviadaEm: p.enviadaEm ?? null,
+          fechadaEm: p.fechadaEm ?? null,
+          canceladaEm: p.canceladaEm ?? null,
+        };
+      }),
+      total,
+      pagina,
+      tamanho,
+    };
+  }
+
+  /** Assinantes distintos (nome, cargo, cpf) das propostas mais recentes, para reuso (D-19). */
+  async listarAssinantesRecentes(): Promise<AssinanteRecente[]> {
+    const linhas = await this.prisma.proposta.findMany({
+      where: { assinanteNome: { not: null } },
+      orderBy: { atualizadoEm: "desc" },
+      take: ASSINANTES_CONSULTA,
+    });
+    const vistos = new Set<string>();
+    const saida: AssinanteRecente[] = [];
+    for (const p of linhas) {
+      if (!p.assinanteNome) continue;
+      const chave = `${p.assinanteNome}|${p.assinanteCargo ?? ""}|${p.assinanteCpf ?? ""}`;
+      if (vistos.has(chave)) continue;
+      vistos.add(chave);
+      saida.push({ nome: p.assinanteNome, cargo: p.assinanteCargo ?? null, cpf: p.assinanteCpf ?? null });
+      if (saida.length >= ASSINANTES_MAX) break;
+    }
+    return saida;
+  }
+
+  /** Busca de produtos do Athos com custo (rota AdminOnly). */
+  async buscarProdutos(q: string, limit?: number) {
+    return this.athosOrcamento.buscarProdutosProposta(q, limit);
+  }
+
+  /** Cliente do Athos com razao social real e endereco por campo (rota AdminOnly). */
+  async buscarCliente(idcliente: number): Promise<ClientePropostaDetalhe> {
+    const cliente = await this.athos.buscarClienteParaProposta(idcliente);
+    if (!cliente) {
+      throw new PropostaError("CLIENTE_INEXISTENTE", "Cliente nao encontrado no Athos.", 404);
+    }
+    return cliente;
   }
 }

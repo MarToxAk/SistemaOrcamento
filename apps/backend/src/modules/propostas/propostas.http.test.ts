@@ -156,6 +156,65 @@ describe("PropostasController (HTTP, tracer 55-06)", () => {
     expect(r.json.codigo).toBe("PRODUTO_INEXISTENTE");
   });
 
+  it("rotas estaticas (produtos, assinantes, clientes/:id, listagem) nao sao capturadas por :id", async () => {
+    buscarProdutosProposta.mockReset().mockResolvedValue([{ idproduto: 60, descricao: "CANETA", custoUnitario: "1.000" }]);
+    buscarClienteParaProposta.mockReset().mockResolvedValue({ idcliente: 5, razaoSocial: "MUNICIPIO DE ILHABELA", endereco: null });
+
+    const produtos = await chamar("GET", "/propostas/produtos?q=caneta&limit=5");
+    expect(produtos.status).toBe(200);
+    expect(buscarProdutosProposta).toHaveBeenCalledWith("caneta", 5);
+
+    const cliente = await chamar("GET", "/propostas/clientes/5");
+    expect(cliente.status).toBe(200);
+    expect(cliente.json.razaoSocial).toBe("MUNICIPIO DE ILHABELA");
+    buscarClienteParaProposta.mockResolvedValueOnce(null);
+    expect((await chamar("GET", "/propostas/clientes/6")).status).toBe(404);
+
+    const assinantes = await chamar("GET", "/propostas/assinantes");
+    expect(assinantes.status).toBe(200);
+    expect(Array.isArray(assinantes.json)).toBe(true);
+
+    const lista = await chamar("GET", "/propostas?tamanho=5");
+    expect(lista.status).toBe(200);
+    expect(lista.json).toMatchObject({ pagina: 1, tamanho: 5 });
+    expect((await chamar("GET", "/propostas?tamanho=101")).status).toBe(400);
+    expect((await chamar("GET", "/propostas?status=INEXISTENTE")).status).toBe(400);
+
+    // Todas exigem a chave admin.
+    for (const caminho of ["/propostas/produtos?q=x", "/propostas/assinantes", "/propostas/clientes/5", "/propostas"]) {
+      expect((await chamar("GET", caminho, undefined, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+    }
+  });
+
+  it("edita item (ajuste VALOR, nome), aplica percentual, remove item e edita cabecalho por HTTP", async () => {
+    buscarClienteParaProposta.mockReset().mockResolvedValue({ idcliente: 5, razaoSocial: "MUNICIPIO DE ILHABELA", endereco: null });
+    const criado = await chamar("POST", "/propostas", { numeroProcesso: "Pregao 1/2026", validadeDias: 5 });
+    expect(criado.json).toMatchObject({ numeroProcesso: "Pregao 1/2026", validadeDias: 5 });
+    const id = criado.json.id as string;
+    const add = await chamar("POST", `/propostas/${id}/itens`, { idproduto: 60, quantidade: 2 });
+    const itemId = add.json.itens[0].id as string;
+
+    const ajustado = await chamar("PATCH", `/propostas/${id}/itens/${itemId}`, { nome: "Caneta azul", ajuste: { tipo: "VALOR", valor: 2.9 } });
+    expect(ajustado.status).toBe(200);
+    expect(ajustado.json.itens[0]).toMatchObject({ nome: "Caneta azul", precoUnitario: "2.90", totalLinha: "5.80" });
+
+    // Preco final nunca vem do navegador.
+    expect((await chamar("PATCH", `/propostas/${id}/itens/${itemId}`, { precoUnitario: 1 })).status).toBe(400);
+    expect((await chamar("PATCH", `/propostas/${id}/itens/${itemId}`, { ajuste: { tipo: "PERCENTUAL", valor: 10.5555 } })).status).toBe(400);
+
+    const percentual = await chamar("POST", `/propostas/${id}/aplicar-percentual`, { percentual: 10 });
+    expect(percentual.status).toBe(201);
+    expect(percentual.json.itens[0].precoUnitario).toBe("3.81");
+
+    const cab = await chamar("PATCH", `/propostas/${id}`, { idclienteAthos: 5, observacao: "Entregar no almoxarifado" });
+    expect(cab.status).toBe(200);
+    expect(cab.json.cliente).toMatchObject({ razaoSocial: "MUNICIPIO DE ILHABELA" });
+
+    const removido = await chamar("DELETE", `/propostas/${id}/itens/${itemId}`);
+    expect(removido.status).toBe(200);
+    expect(removido.json).toMatchObject({ itens: [], total: "0.00" });
+  });
+
   it("proposta inexistente -> 404 PROPOSTA_NAO_ENCONTRADA", async () => {
     const r = await chamar("GET", "/propostas/6f0f3a52-5c6e-4f43-8d3a-0f7a2f5b9c11");
     expect(r.status).toBe(404);

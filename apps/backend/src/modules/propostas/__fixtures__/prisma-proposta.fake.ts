@@ -204,6 +204,23 @@ export function criarPrismaPropostaFake() {
     proposta,
     propostaItem,
     $transaction: async (operacoes: Array<Promise<unknown>>) => Promise.all(operacoes),
+    /**
+     * Emula SOMENTE a busca de cliente da listagem (`... ILIKE ${padrao}` sobre razaoSocial e nomeFantasia do
+     * clienteSnapshot): `Prisma.sql` expoe os parametros em `values`, e o primeiro e o padrao `%texto%` com
+     * coringas escapados por barra invertida.
+     */
+    $queryRaw: async (sql: { values: unknown[] }) => {
+      const padrao = String(sql.values[0] ?? "");
+      const termo = padrao.replace(/^%|%$/g, "").replace(/\\(.)/g, "$1").toLowerCase();
+      return propostas
+        .filter((p) =>
+          ["razaoSocial", "nomeFantasia"].some((campo) => {
+            const v = (p.clienteSnapshot as Reg | null)?.[campo];
+            return typeof v === "string" && v.toLowerCase().includes(termo);
+          }),
+        )
+        .map((p) => ({ id: p.id }));
+    },
     /** Acesso direto ao armazenamento, para semear e inspecionar estado nos testes. */
     _propostas: propostas,
     _itens: itens,
