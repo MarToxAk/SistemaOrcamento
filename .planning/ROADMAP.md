@@ -45,6 +45,7 @@ Detalhes completos de cada milestone arquivados em `.planning/milestones/v{X.Y}-
 - [ ] **Phase 52: Chatwoot CSAT com recompensa e convite do Google**
 - [ ] **Phase 53: Lançamento automático da venda no caixa do Athos com desconto do cupom**
 - [ ] **Phase 54: Pagamento PIX efetivo, comprovante EFI e NFS-e no orcamento**
+- [ ] **Phase 55: Proposta comercial atacado e revenda para orgaos publicos**
 
 ### Phase Details
 
@@ -356,6 +357,28 @@ Plans:
 - [x] 54-10-PLAN.md — script de reconciliacao dos orcamentos antigos (dry-run por padrao; nao executar em producao)
 - [ ] 54-11-PLAN.md — checkpoints humanos: deploy e senha na stack, escopo gn.receipts.read, nota privada no Chatwoot de producao
 - [ ] 54-12-PLAN.md — checkpoints humanos: aprovar reconciliacao e UAT da NFS-e na pagina do orcamento
+
+### Phase 55: Proposta comercial atacado e revenda para orgaos publicos
+
+**Goal:** Modulo separado do fluxo da grafica para montar propostas de atacado/revenda aceitas por orgaos publicos: buscar produtos do cadastro do Athos, ajustar nome/descricao e preco so na proposta, associar o cliente, gerar PDF institucional por template e, ao fechar, lancar como orcamento no Athos.
+
+**Decisoes ja tomadas com o usuario (2026-11-27):**
+- Preco base = preco padrao do Athos (`precovendaproduto(idproduto)`, o mesmo da busca da Fase 44); sem tabelas separadas de atacado/revenda.
+- Ajuste de preco por % (sempre arredonda para CIMA no centavo) ou digitado. O ajuste NAO e desconto: valor unitario do item = preco ajustado, desconto 0 (no PDF e no Athos). Nao usar a regra D-04 da Fase 44 (preco abaixo do cadastro vira desconto implicito).
+- Nome e descricao curta editaveis so na proposta: o Athos recebe o nome original; o PDF mostra o nome alterado + codigo do produto.
+- Produto precisa existir no Athos (sem item avulso); se faltar, cadastrar pela tela de produto existente.
+- Cliente associado (Athos ou cadastro local) com dados de orgao publico todos opcionais (CNPJ, razao social, endereco, setor/responsavel, numero do processo/pregao).
+- Ao fechar: lanca como orcamento no Athos (reaproveitar a escrita/idempotencia da Fase 44; testar so no clone athos-teste).
+- PDF institucional serio via `pdf-templates`, com prazo de entrega, dados bancarios, assinatura do responsavel e validade da proposta.
+- Promocao: usar o preco promocional so quando valida - `precovendaproduto` ja faz isso (promocaostatus + data atual entre iniciopromocao e terminopromocao; senao usa o preco de `precousado`).
+- Validado (2026-11-27): a captura do Balcao (referencia/athos-orcamento.md, captura 2) mostra que o proprio Athos grava preco alterado na linha como `valoritem` com `valordesconto = 0` e `orcamentoDesconto = 0`. Teste no clone athos-teste (com ROLLBACK): orcamento com produto 60 a 2,90 (cadastro 3,30), desconto 0, aceito sem erro. `orcamento` tem rules DO ALSO (atualizardatahora*): nao usar INSERT dentro de CTE, usar RETURNING em statement separado.
+- Referencias do Athos copiadas para `referencia/` (orcamento e cadastro de produto). Lacunas da captura: cliente, validade e obs no orcamento do Athos, e conversao do orcamento em venda.
+**Requirements**: TBD
+**Depends on:** Phase 54
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 55 to break down)
 
 ---
 

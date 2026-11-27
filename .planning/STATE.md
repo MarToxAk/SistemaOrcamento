@@ -5,17 +5,17 @@ milestone_name: API de Produtos Compostos (Kits) no Athos
 current_phase: 52
 current_phase_name: Chatwoot CSAT com recompensa e convite do Google
 status: executing
-stopped_at: Phase 52 UI-SPEC approved
-last_updated: "2026-11-22T23:13:37.257Z"
+stopped_at: Phase 55 context gathered
+last_updated: "2026-11-27T14:49:55.674Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 52 execution started
-state_head: 9be4ac8baa2d5dfea231fad6107a28b68bce51ab
+state_head: "0b0ccfab8b159529920556e34f4f116163255676"
 progress:
-  total_phases: 14
+  total_phases: 17
   completed_phases: 4
-  total_plans: 63
-  completed_plans: 62
-  percent: 29
+  total_plans: 78
+  completed_plans: 76
+  percent: 24
 ---
 
 # STATE.md - Sistema de Orcamento BomCusto
@@ -33,7 +33,7 @@ Plan: 13 of 13
 Status: Executing Phase 52
 Last activity: 2026-11-22 — Phase 52 execution started
 
-Progress: [███░░░░░░░] 29% (2/2 phases complete)
+Progress: [██░░░░░░░░] 24% (2/2 phases complete)
 
 ## Planning Gate Overrides
 
@@ -288,6 +288,7 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ### Roadmap Evolution
 
+- Phase 55 added (2026-11-27): Proposta comercial atacado e revenda para orgaos publicos (produtos do Athos com nome/preco ajustaveis so na proposta, ajuste nao e desconto, PDF institucional por template, fechamento lanca orcamento no Athos).
 - Phase 54 execucao (2026-11-25): planos 54-01..54-10 concluidos e mesclados (ondas 1-3); gate backend 1951 testes verdes, tsc backend/frontend limpos. Pendentes: 54-11 e 54-12 (checkpoints humanos: NFSE_OVERRIDE_PASSWORD no deploy, escopo gn.receipts.read na EFI, nota privada no Chatwoot de producao, reconciliacao #26809, UAT NFS-e).
 - Phase 54 added (2026-11-25): Pagamento PIX efetivo considerando desconto (caso #26809), comprovante EFI na conversa privada do Chatwoot e emissao de NFS-e no orcamento (so pagamento integral; sem confirmacao exige senha).
 - Phase 53 added (2026-11-23): Lançamento automático da venda no caixa do Athos com desconto do cupom (investigação e planejamento a partir das capturas Frida do PDV; escrita só no clone athos-teste).
@@ -338,9 +339,9 @@ Motivo do deferimento: pertencem ao ciclo v2.2 (não ao v2.3 White-Label). São 
 
 ## Session
 
-**Last session:** 2026-11-22T13:21:22.320Z
-**Stopped at:** Phase 52 UI-SPEC approved
-**Resume file:** .planning/phases/52-chatwoot-csat-com-recompensa-e-convite-do-google/52-UI-SPEC.md
+**Last session:** 2026-11-27T14:49:52.892Z
+**Stopped at:** Phase 55 context gathered
+**Resume file:** .planning/phases/55-proposta-comercial-atacado-e-revenda-para-orgaos-publicos/55-CONTEXT.md
 
 ## Decisions
 

@@ -22,3 +22,4 @@
 - [Athos roda PostgreSQL 9.0.5](athos_postgres_9_0_5.md) — versão antiga; usar pg_catalog, sem pg_sequence_last_value
 - [URLs do projeto](project_urls.md) — VPS orcamentoapi.bomcustoilhabela.com.br primeiro, fallback localhost:4000
 - [Fase 52 CSAT + recompensa](project_fase52_csat_recompensa.md) — decisoes tomadas (2026-11-22); fase criada no roadmap, proximo: /gsd-discuss-phase 52
+- [Proposta atacado/orgao publico](project_proposta_atacado_orgao_publico.md) — nova funcao pedida 2026-11-27; preco ajustado substitui o valor (nao e desconto)
