@@ -8,7 +8,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 
 import { AthosService } from "../integrations/athos/athos.service";
-import { AthosOrcamentoService } from "../integrations/athos/athos-orcamento.service";
+import { AthosOrcamentoService, OrcamentoAthosError } from "../integrations/athos/athos-orcamento.service";
 import { PrismaService } from "../database/prisma.service";
 import { InternalAuthGuard } from "../security/internal-auth.guard";
 import { criarPrismaPropostaFake } from "./__fixtures__/prisma-proposta.fake";
@@ -221,5 +221,211 @@ describe("PropostasController (HTTP, tracer 55-06)", () => {
     const r = await chamar("GET", "/propostas/6f0f3a52-5c6e-4f43-8d3a-0f7a2f5b9c11");
     expect(r.status).toBe(404);
     expect(r.json.codigo).toBe("PROPOSTA_NAO_ENCONTRADA");
+  });
+});
+
+describe("PropostasController (HTTP): gerar e recuperar (plano 55-17)", () => {
+  let app: INestApplication;
+  let base = "";
+  const envAnterior: Record<string, string | undefined> = {};
+  const obterProdutoProposta = jest.fn();
+  const buscarClienteParaProposta = jest.fn();
+  const exigirEscritaPropostaAtiva = jest.fn();
+  const criarOrcamentoProposta = jest.fn();
+  const buscarOrcamentoPorRefProposta = jest.fn();
+  const capturarSnapshot = jest.fn();
+  const gerarOficial = jest.fn();
+  const prisma = criarPrismaPropostaFake();
+  let propostasService: PropostasService;
+  const UUID_INEXISTENTE = "6f0f3a52-5c6e-4f43-8d3a-0f7a2f5b9c11";
+  const CORPO_GERAR = { assinanteNome: "Fulano de Tal", confirmar: true };
+
+  async function chamar(
+    metodo: string,
+    caminho: string,
+    corpo?: unknown,
+    chaves: { interna?: string | null; admin?: string | null } = { interna: CHAVE_INTERNA, admin: CHAVE_ADMIN },
+  ) {
+    const h: Record<string, string> = { "content-type": "application/json" };
+    if (chaves.interna) h["x-internal-api-key"] = chaves.interna;
+    if (chaves.admin) h["x-admin-api-key"] = chaves.admin;
+    const res = await fetch(`${base}/api${caminho}`, {
+      method: metodo,
+      headers: h,
+      body: corpo === undefined ? undefined : JSON.stringify(corpo),
+    });
+    const json = (await res.json()) as Record<string, any>;
+    return { status: res.status, json };
+  }
+
+  /** Rascunho com cliente e um item, criado por HTTP; devolve o id. */
+  async function propostaPronta(): Promise<string> {
+    const criado = await chamar("POST", "/propostas", { idclienteAthos: 5 });
+    const id = criado.json.id as string;
+    const add = await chamar("POST", `/propostas/${id}/itens`, { idproduto: 60, quantidade: 2 });
+    expect(add.status).toBe(201);
+    return id;
+  }
+
+  beforeAll(async () => {
+    for (const k of ["INTERNAL_API_KEY", "ADMIN_API_KEY"]) envAnterior[k] = process.env[k];
+    process.env.INTERNAL_API_KEY = CHAVE_INTERNA;
+    process.env.ADMIN_API_KEY = CHAVE_ADMIN;
+    const modulo = await Test.createTestingModule({
+      controllers: [PropostasController],
+      providers: [
+        PropostasService,
+        { provide: PrismaService, useValue: prisma },
+        {
+          provide: AthosOrcamentoService,
+          useValue: { obterProdutoProposta, exigirEscritaPropostaAtiva, criarOrcamentoProposta, buscarOrcamentoPorRefProposta },
+        },
+        { provide: AthosService, useValue: { buscarClienteParaProposta } },
+        { provide: PropostasPdfService, useValue: { capturarSnapshot, gerarOficial } },
+        { provide: ConfigService, useValue: { get: (k: string) => process.env[k] } },
+        { provide: APP_GUARD, useClass: InternalAuthGuard },
+      ],
+    }).compile();
+    propostasService = modulo.get(PropostasService);
+    app = modulo.createNestApplication();
+    app.setGlobalPrefix("api");
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
+    await app.listen(0, "127.0.0.1");
+    base = (await app.getUrl()).replace("[::1]", "127.0.0.1");
+  });
+
+  afterAll(async () => {
+    if (app) await app.close();
+    for (const [k, v] of Object.entries(envAnterior)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  beforeEach(() => {
+    jest.restoreAllMocks();
+    for (const m of [exigirEscritaPropostaAtiva, criarOrcamentoProposta, buscarOrcamentoPorRefProposta, capturarSnapshot, gerarOficial]) m.mockReset();
+    buscarClienteParaProposta.mockReset().mockResolvedValue({ idcliente: 5, razaoSocial: "MUNICIPIO DE TESTE", endereco: null });
+    obterProdutoProposta.mockReset().mockResolvedValue({
+      idproduto: 60,
+      descricao: "CANETA ESFEROGRAFICA AZUL",
+      descricaoCurta: "Caneta azul",
+      marca: "BIC",
+      referencia: null,
+      codigoBarra: null,
+      preco: "3.500",
+      emPromocao: false,
+      estoqueLoja: "10.000",
+      estoqueDeposito: "0.000",
+      permiteFracionar: true,
+      unidade: "UN",
+      custoUnitario: "1.000",
+    });
+    capturarSnapshot.mockResolvedValue({
+      versao: 1,
+      banco: { banco: "Banco Teste", agencia: "0001", conta: "12345-6", titular: "Empresa Teste Ltda", documentoTitular: "00.000.000/0001-00" },
+      empresa: { nome: "Empresa Teste Ltda", cnpj: "00.000.000/0001-00", endereco: "Rua Teste, 1" },
+      template: { origem: "EMPACOTADO", source: "<html>segredo-do-template</html>" },
+    });
+    gerarOficial.mockResolvedValue({ objectName: "propostas/teste.pdf" });
+    criarOrcamentoProposta.mockResolvedValue({ idorcamento: 555, senhabalcao: 12, data: "2026-11-27", hora: "09:00:00", valorTotal: "7.00", recuperado: false });
+  });
+
+  describe("POST :id/gerar", () => {
+    it.each([
+      ["sem confirmar", { assinanteNome: "Fulano" }],
+      ["confirmar false", { assinanteNome: "Fulano", confirmar: false }],
+      ["confirmar como texto", { assinanteNome: "Fulano", confirmar: "true" }],
+      ["sem assinanteNome", { confirmar: true }],
+      ["assinanteNome vazio", { assinanteNome: "", confirmar: true }],
+    ])("%s responde 400 e nao chama o servico", async (_nome, corpo) => {
+      const gerar = jest.spyOn(propostasService, "gerar");
+      const r = await chamar("POST", `/propostas/${UUID_INEXISTENTE}/gerar`, corpo);
+      expect(r.status).toBe(400);
+      expect(gerar).not.toHaveBeenCalled();
+      expect(criarOrcamentoProposta).not.toHaveBeenCalled();
+    });
+
+    it("sem as chaves responde 401 e nao chama o servico", async () => {
+      const gerar = jest.spyOn(propostasService, "gerar");
+      expect((await chamar("POST", `/propostas/${UUID_INEXISTENTE}/gerar`, CORPO_GERAR, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect((await chamar("POST", `/propostas/${UUID_INEXISTENTE}/gerar`, CORPO_GERAR, { interna: null, admin: CHAVE_ADMIN })).status).toBe(401);
+      expect((await chamar("POST", `/propostas/${UUID_INEXISTENTE}/gerar`, CORPO_GERAR, { interna: null, admin: null })).status).toBe(401);
+      expect(gerar).not.toHaveBeenCalled();
+    });
+
+    it("id fora do formato UUID responde 400 e nao chama o servico", async () => {
+      const gerar = jest.spyOn(propostasService, "gerar");
+      const r = await chamar("POST", "/propostas/nao-e-uuid/gerar", CORPO_GERAR);
+      expect(r.status).toBe(400);
+      expect(gerar).not.toHaveBeenCalled();
+    });
+
+    it("flag desligada propaga 503 com codigo ESCRITA_DESABILITADA e a proposta segue RASCUNHO", async () => {
+      const id = await propostaPronta();
+      exigirEscritaPropostaAtiva.mockImplementation(() => {
+        throw new OrcamentoAthosError("ESCRITA_DESABILITADA", "A gravacao de propostas no Athos esta desabilitada.", 503);
+      });
+
+      const r = await chamar("POST", `/propostas/${id}/gerar`, CORPO_GERAR);
+
+      expect(r.status).toBe(503);
+      expect(r.json.codigo).toBe("ESCRITA_DESABILITADA");
+      expect(criarOrcamentoProposta).not.toHaveBeenCalled();
+      expect((await chamar("GET", `/propostas/${id}`)).json.status).toBe("RASCUNHO");
+    });
+
+    it("gerar valido responde 201 ENVIADA e o detalhe seguinte nao contem pdfSnapshot", async () => {
+      const id = await propostaPronta();
+
+      const r = await chamar("POST", `/propostas/${id}/gerar`, CORPO_GERAR);
+
+      expect(r.status).toBe(201);
+      expect(r.json).toMatchObject({ id, status: "ENVIADA", idorcamentoAthos: 555, senhaBalcao: 12, pdfDisponivel: true });
+      const linha = prisma._propostas.find((p) => p.id === id)!;
+      expect(linha.pdfSnapshot).not.toBeNull();
+
+      const detalhe = await chamar("GET", `/propostas/${id}`);
+      expect(detalhe.status).toBe(200);
+      expect(detalhe.json).toMatchObject({ status: "ENVIADA", idorcamentoAthos: 555 });
+      const texto = JSON.stringify(detalhe.json);
+      expect(texto).not.toContain("pdfSnapshot");
+      expect(texto).not.toContain("segredo-do-template");
+      expect(JSON.stringify(r.json)).not.toContain("pdfSnapshot");
+    });
+  });
+
+  describe("POST :id/recuperar", () => {
+    it("com id valido chama recuperarLancamento e devolve o corpo", async () => {
+      const resposta = { id: UUID_INEXISTENTE, status: "RASCUNHO" as const, mensagem: "Nenhum orcamento encontrado." };
+      const recuperar = jest.spyOn(propostasService, "recuperarLancamento").mockResolvedValueOnce(resposta);
+
+      const r = await chamar("POST", `/propostas/${UUID_INEXISTENTE}/recuperar`);
+
+      expect(r.status).toBe(201);
+      expect(r.json).toEqual(resposta);
+      expect(recuperar).toHaveBeenCalledTimes(1);
+      expect(recuperar).toHaveBeenCalledWith(UUID_INEXISTENTE);
+    });
+
+    it("sem as chaves responde 401 e nao chama o servico", async () => {
+      const recuperar = jest.spyOn(propostasService, "recuperarLancamento");
+      expect((await chamar("POST", `/propostas/${UUID_INEXISTENTE}/recuperar`, undefined, { interna: CHAVE_INTERNA, admin: null })).status).toBe(401);
+      expect((await chamar("POST", `/propostas/${UUID_INEXISTENTE}/recuperar`, undefined, { interna: null, admin: CHAVE_ADMIN })).status).toBe(401);
+      expect(recuperar).not.toHaveBeenCalled();
+    });
+
+    it("id fora do formato UUID responde 400 e nao chama o servico", async () => {
+      const recuperar = jest.spyOn(propostasService, "recuperarLancamento");
+      expect((await chamar("POST", "/propostas/nao-e-uuid/recuperar")).status).toBe(400);
+      expect(recuperar).not.toHaveBeenCalled();
+    });
+
+    it("proposta que nao esta em LANCANDO responde 409 TRANSICAO_INVALIDA pela rota", async () => {
+      const id = await propostaPronta();
+      const r = await chamar("POST", `/propostas/${id}/recuperar`);
+      expect(r.status).toBe(409);
+      expect(r.json.codigo).toBe("TRANSICAO_INVALIDA");
+    });
   });
 });
