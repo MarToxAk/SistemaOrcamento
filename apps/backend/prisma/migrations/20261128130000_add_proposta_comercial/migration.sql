@@ -107,8 +107,10 @@ BEGIN
 END
 $$;
 
--- Seed (D-18): dados bancarios do Santander, registro unico. Sem segredo (agencia, conta e CNPJ
--- constam no documento enviado ao cliente).
+-- Seed (D-18): registro unico da configuracao bancaria, com agencia e conta VAZIAS de proposito
+-- (o repositorio e publico). Preencher em producao com UPDATE direto (ver 55-ROTEIRO-ATIVACAO.md).
+-- Enquanto agencia/conta estiverem vazias, gerar proposta falha com PDF_INDISPONIVEL antes de
+-- qualquer escrita no Athos (validarSnapshot em propostas-pdf.util.ts).
 INSERT INTO "PropostaConfig" ("id", "bancoNome", "agencia", "conta", "titular", "documentoTitular", "atualizadoEm")
-VALUES ('default', 'Santander', '<AGENCIA>', '<CONTA>', 'Bom Custo Papelaria & Gráfica Rápida Ltda', '62.391.927/0001-57', CURRENT_TIMESTAMP)
+VALUES ('default', 'Santander', '', '', 'Bom Custo Papelaria & Gráfica Rápida Ltda', '62.391.927/0001-57', CURRENT_TIMESTAMP)
 ON CONFLICT ("id") DO NOTHING;

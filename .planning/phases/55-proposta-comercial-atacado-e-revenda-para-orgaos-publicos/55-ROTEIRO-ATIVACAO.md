@@ -73,11 +73,25 @@ PROPOSTA**):
 SELECT slug, familia, "isActive" FROM "PdfTemplate" ORDER BY familia, slug;
 ```
 
-Dados bancarios da proposta (esperado: **uma** linha default com Santander, agencia <AGENCIA>, conta <CONTA>):
+Dados bancarios da proposta (esperado: **uma** linha default com Santander, agencia e conta vazias ate o UPDATE de producao):
 
 ```sql
 SELECT * FROM "PropostaConfig";
 ```
+
+**Preencher agencia e conta (unica escrita manual desta fase, no banco do Sistema, NAO no Athos).**
+O repositorio e publico, por isso a migration cria a linha com agencia e conta vazias. Rode uma vez em producao,
+digitando os numeros reais so no terminal do banco (nunca em commit, issue ou chat):
+
+```sql
+UPDATE "PropostaConfig"
+   SET "agencia" = '<AGENCIA>', "conta" = '<CONTA>', "atualizadoEm" = CURRENT_TIMESTAMP
+ WHERE "id" = 'default';
+```
+
+Enquanto agencia ou conta estiverem vazias, "Gerar proposta e lancar no Athos" responde PDF_INDISPONIVEL
+**antes** de qualquer escrita no Athos, e a "Previa do PDF" tambem responde PDF_INDISPONIVEL. Por isso o UPDATE vem antes da verificacao visual. Confira de novo com o
+`SELECT * FROM "PropostaConfig"` acima.
 
 Nenhuma proposta criada ainda (esperado `0`):
 

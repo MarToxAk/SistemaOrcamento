@@ -43,7 +43,7 @@ ver custo para comparacao durante a montagem, gerar um PDF institucional serio (
 
 ### Conteudo do PDF
 - **D-17:** Numero da proposta = `idorcamento` do Athos (D-07).
-- **D-18:** Dados bancarios: **Santander** (Ag <AGENCIA> / Cc <CONTA>, Bom Custo Papelaria & Grafica Rapida Ltda, CNPJ 62.391.927/0001-57). Guardar em configuracao, nao hardcoded no template.
+- **D-18:** Dados bancarios: **Santander** (agencia e conta preenchidas em producao, Bom Custo Papelaria & Grafica Rapida Ltda, CNPJ 62.391.927/0001-57). Guardar em configuracao, nao hardcoded no template.
 - **D-19:** Assinante escolhido na hora de gerar (nome + cargo/CPF opcional); lista de assinantes salvos para reuso fica a criterio do Claude.
 - **D-20:** Validade padrao **1 dia**; prazo de entrega padrao **15 dias**. Ambos vem preenchidos e sao editaveis por proposta.
 - **D-21:** Campo de observacao livre na proposta, impresso no PDF.
