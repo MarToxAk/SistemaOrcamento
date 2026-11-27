@@ -9,7 +9,13 @@
  * Nenhuma conta de preco usa funcao de arredondamento do JS (D-23): o ceil e feito em BigInt.
  */
 
-import { CalcOrcamentoError, paraCentavos } from "../integrations/athos/athos-orcamento-calc.util";
+import {
+  CalcOrcamentoError,
+  LIMITE_LINHA_CENTAVOS,
+  centavosParaTexto,
+  linhaCentavos,
+  paraCentavos,
+} from "../integrations/athos/athos-orcamento-calc.util";
 
 export type CalcPropostaCodigo =
   | "PRECO_INVALIDO"
@@ -148,36 +154,104 @@ export function resolverPrecoUnitarioCentavos(entrada: { precoBaseMilli: bigint;
 }
 
 // ---------------------------------------------------------------------------
-// SKELETON da fase RED da tarefa 2: nada implementado.
+// Linhas, total, custo e margem
 // ---------------------------------------------------------------------------
 
+/** Mesmo teto da Fase 44. */
 export const MAX_LINHAS_PROPOSTA = 200;
 
+/** Quantidade aceita por linha: 0,001 a 10.000,000 (em milesimos). */
+const QTD_MAX_MILLI = 10_000_000n;
+
 export type LinhaPropostaEntrada = { qMilli: bigint; precoCentavos: bigint };
+
+/** Mesmos nomes de campo de `LinhaCalcSaida` (Fase 44), para o lancamento no Athos reaproveitar a leitura. */
 export type LinhaPropostaSaida = { valorItemMilli: bigint; totalC: bigint; descontoC: bigint; finalC: bigint };
 
-export function calcularLinhasProposta(_linhas: LinhaPropostaEntrada[]): {
+export type TotaisProposta = {
   linhas: LinhaPropostaSaida[];
   brutoC: bigint;
   descontoC: bigint;
   liquidoC: bigint;
   percentualMilli: bigint;
-} {
-  throw new Error("NAO_IMPLEMENTADO");
+};
+
+/**
+ * Linhas e total da proposta SEM desconto (D-03): o preco final do item e o valorItem gravado, o total
+ * e a soma das linhas arredondadas half-up em centavos. Diferente de `calcularOrcamento` (Fase 44), nao
+ * transforma preco abaixo do cadastro em desconto, nao rateia e nao consulta permitedescontode.
+ */
+export function calcularLinhasProposta(linhas: LinhaPropostaEntrada[]): TotaisProposta {
+  if (linhas.length === 0) {
+    throw new CalcPropostaError("QUANTIDADE_INVALIDA", "Informe ao menos um item na proposta.");
+  }
+  if (linhas.length > MAX_LINHAS_PROPOSTA) {
+    throw new CalcPropostaError(
+      "LIMITE_ITENS",
+      `A proposta aceita no maximo ${MAX_LINHAS_PROPOSTA} itens (recebidos ${linhas.length}).`,
+    );
+  }
+
+  const saida = linhas.map((l, indice): LinhaPropostaSaida => {
+    const numero = indice + 1;
+    if (l.qMilli < 1n || l.qMilli > QTD_MAX_MILLI) {
+      throw new CalcPropostaError(
+        "QUANTIDADE_INVALIDA",
+        `Quantidade do item ${numero} fora do intervalo aceito (0.001 a 10000.000).`,
+        indice,
+      );
+    }
+    if (l.precoCentavos <= 0n) {
+      throw new CalcPropostaError("PRECO_INVALIDO", `Preco do item ${numero} deve ser maior que zero.`, indice);
+    }
+    const valorItemMilli = l.precoCentavos * 10n;
+    const totalC = linhaCentavos(l.qMilli, valorItemMilli);
+    if (totalC <= 0n || totalC >= LIMITE_LINHA_CENTAVOS) {
+      throw new CalcPropostaError(
+        "VALOR_FORA_DO_LIMITE",
+        `Total do item ${numero} (${centavosParaTexto(totalC)}) fora do limite aceito: deve ser maior que zero e menor que ${centavosParaTexto(LIMITE_LINHA_CENTAVOS)}.`,
+        indice,
+      );
+    }
+    return { valorItemMilli, totalC, descontoC: 0n, finalC: totalC };
+  });
+
+  const brutoC = saida.reduce((acc, l) => acc + l.totalC, 0n);
+  return { linhas: saida, brutoC, descontoC: 0n, liquidoC: brutoC, percentualMilli: 0n };
 }
 
-export function calcularMargem(_entrada: { precoCentavos: bigint; custoMilli: bigint }): {
+/**
+ * Margem liquida (preco - custo) / preco em milesimos de percentual (D-27), half-up afastando de zero
+ * (tambem para margem negativa). `abaixoDoCusto` so quando preco < custo; igual nao destaca (D-13).
+ * O preco e sempre positivo, entao nao ha divisao por zero.
+ */
+export function calcularMargem(entrada: { precoCentavos: bigint; custoMilli: bigint }): {
   margemMilli: bigint;
   abaixoDoCusto: boolean;
 } {
-  throw new Error("NAO_IMPLEMENTADO");
+  const precoMilli = entrada.precoCentavos * 10n;
+  if (precoMilli <= 0n) {
+    throw new CalcPropostaError("PRECO_INVALIDO", "Preco deve ser maior que zero para calcular a margem.");
+  }
+  const numerador = (precoMilli - entrada.custoMilli) * 100000n;
+  const negativo = numerador < 0n;
+  const modulo = negativo ? -numerador : numerador;
+  const arredondado = (modulo * 2n + precoMilli) / (precoMilli * 2n);
+  return { margemMilli: negativo ? -arredondado : arredondado, abaixoDoCusto: precoMilli < entrada.custoMilli };
 }
 
-export function calcularItemProposta(_entrada: {
+/**
+ * Ponto de entrada do servico de propostas: recalcula o item no servidor (nunca confia em preco do
+ * navegador) compondo preco resolvido, total da linha e margem.
+ */
+export function calcularItemProposta(entrada: {
   precoBaseMilli: bigint;
   ajuste?: AjustePreco | null;
   qMilli: bigint;
   custoMilli: bigint;
 }): { precoCentavos: bigint; totalC: bigint; margemMilli: bigint; abaixoDoCusto: boolean } {
-  throw new Error("NAO_IMPLEMENTADO");
+  const precoCentavos = resolverPrecoUnitarioCentavos({ precoBaseMilli: entrada.precoBaseMilli, ajuste: entrada.ajuste });
+  const { linhas } = calcularLinhasProposta([{ qMilli: entrada.qMilli, precoCentavos }]);
+  const { margemMilli, abaixoDoCusto } = calcularMargem({ precoCentavos, custoMilli: entrada.custoMilli });
+  return { precoCentavos, totalC: linhas[0].totalC, margemMilli, abaixoDoCusto };
 }
